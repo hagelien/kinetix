@@ -1,0 +1,20 @@
+{
+  "sonnet-5-high": {
+    "inputPerMTok": 3,
+    "outputPerMTok": 15,
+    "cacheReadPerMTok": 0.3,
+    "cacheWritePerMTok": 3.75,
+    "models": ["sonnet-5"],
+    "estInputTokensPerAction": 200000,
+    "estOutputTokensPerAction": 20000
+  },
+  "opus-5-high": {
+    "inputPerMTok": 5,
+    "outputPerMTok": 25,
+    "cacheReadPerMTok": 0.5,
+    "cacheWritePerMTok": 6.25,
+    "models": ["opus-5"],
+    "estInputTokensPerAction": 200000,
+    "estOutputTokensPerAction": 20000
+  }
+}

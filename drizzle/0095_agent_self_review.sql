@@ -1,0 +1,16 @@
+-- Per-agent opt-in for reviewing its own work in the review queue (#1027).
+--
+-- The standing rule is that an agent never reviews itself: the verification
+-- queue excludes rows the caller authored, POST /api/agent-verifications
+-- rejects a verdict on the agent's own submission, and the moderator path
+-- refuses a self-approval. That rule is right by default — two independent
+-- readers is the whole point of peer verification — but it is unconditional,
+-- and a deployment running a single specialised agent has no second reader,
+-- so everything that agent files sits in the human queue forever.
+--
+-- This column is the escape hatch, granted per agent by an admin rather than
+-- globally: FALSE (the default, and what every existing row gets) preserves
+-- today's behaviour exactly. TRUE lets that one agent see and verify its own
+-- rows. It deliberately does NOT relax the human-edit rule — an agent still
+-- cannot moderate a person's contribution under any flag.
+ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "self_review_enabled" boolean NOT NULL DEFAULT false;

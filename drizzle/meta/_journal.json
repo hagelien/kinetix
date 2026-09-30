@@ -1,0 +1,965 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1771507242195,
+      "tag": "0000_wooden_gideon",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1775736459594,
+      "tag": "0001_harsh_triathlon",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1775910760538,
+      "tag": "0002_cheerful_lady_mastermind",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1776172800000,
+      "tag": "0003_drop_ranges_metabolism",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1776172900000,
+      "tag": "0004_add_name_short",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1776259200000,
+      "tag": "0005_pending_edits",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1776305299544,
+      "tag": "0006_magic_link_attempt_limits",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1776400000000,
+      "tag": "0007_multi_reference",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1776902901762,
+      "tag": "0008_drug_search_trgm",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1776902901763,
+      "tag": "0009_reference_concentrations",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1777334400000,
+      "tag": "0010_verification_log",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1777593600000,
+      "tag": "0011_cmax_tmax_pka",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1777680000000,
+      "tag": "0012_user_preferences",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1777766400000,
+      "tag": "0013_drug_names_jsonb",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1777852800000,
+      "tag": "0014_rejection_reason_and_priority_flags",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1777939200000,
+      "tag": "0015_pending_edit_fact_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1778025600000,
+      "tag": "0016_enabled_concentration_units",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1778112000000,
+      "tag": "0017_role_authenticated_contributor",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1778198400000,
+      "tag": "0018_drug_parameters_table",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1778284800000,
+      "tag": "0019_user_favorite_parameters",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1778371200000,
+      "tag": "0020_agents_table",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1778457600000,
+      "tag": "0021_wiki_fts_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1778544000000,
+      "tag": "0022_approval_stamps",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1778630400000,
+      "tag": "0023_reference_concentrations_to_parameters",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1778716800000,
+      "tag": "0024_agent_status_workflow",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1778803200000,
+      "tag": "0025_agent_hook_runs",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1778889600000,
+      "tag": "0026_agent_pre_suspension_role",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1778976000000,
+      "tag": "0027_user_groups",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1779062400000,
+      "tag": "0028_agent_hooks_opt_in",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1779148800000,
+      "tag": "0029_receptor_targets",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1779235200000,
+      "tag": "0030_metabolism_model",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1779321600000,
+      "tag": "0031_agent_tokens",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1779408000000,
+      "tag": "0032_paper_reviews",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1779494400000,
+      "tag": "0033_backfill_wiki_page_revisions",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1779580800000,
+      "tag": "0034_pdf_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1779667200000,
+      "tag": "0035_unique_pending_paper_reviews",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1779753600000,
+      "tag": "0036_widen_discussion_parameter",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1779840000000,
+      "tag": "0037_paper_review_read_in_full",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1779926400000,
+      "tag": "0038_wiki_fts_include_title",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1780012800000,
+      "tag": "0039_wiki_search_tsvector",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1780099200000,
+      "tag": "0040_drop_search_key_btree_idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1780185600000,
+      "tag": "0041_pending_edits_status_sort_idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1780272000000,
+      "tag": "0042_wiki_pages_parent_id_idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1780358400000,
+      "tag": "0043_agent_hook_runs_event_idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1780444800000,
+      "tag": "0044_user_role_history",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1780531200000,
+      "tag": "0045_drug_source",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1780617600000,
+      "tag": "0046_agent_verifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1780704000000,
+      "tag": "0047_drop_drug_category",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1780790400000,
+      "tag": "0048_drop_case_templates_evidence_sections",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1780876800000,
+      "tag": "0049_agent_focus_config",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1780963200000,
+      "tag": "0050_method_matrices_and_limits",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1781049600000,
+      "tag": "0051_topic_fact_discussions",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1781136000000,
+      "tag": "0052_agent_run_stats",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1781222400000,
+      "tag": "0053_agent_quota_calibration",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1781308800000,
+      "tag": "0054_agent_focus_methods",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1781395200000,
+      "tag": "0055_method_component_mkk",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1781481600000,
+      "tag": "0056_drop_pd_parameters",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1781568000000,
+      "tag": "0057_receptor_target_tier",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1781654400000,
+      "tag": "0058_learning_units",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1781740800000,
+      "tag": "0059_drug_parameters_mw_sort_idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1781827200000,
+      "tag": "0060_disputes_and_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1781913600000,
+      "tag": "0061_enzyme_entity",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1782000000000,
+      "tag": "0062_learning_progress",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1782086400000,
+      "tag": "0063_learning_unit_kind",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1782172800000,
+      "tag": "0064_bio_entities",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1782259200000,
+      "tag": "0065_edge_bio_entity_fk",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1782345600000,
+      "tag": "0066_entity_monograph",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1782432000000,
+      "tag": "0067_cyp_hierarchy",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1782518400000,
+      "tag": "0068_receptor_target_nullable",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1782604800000,
+      "tag": "0069_drug_enzyme_interactions",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1782691200000,
+      "tag": "0070_pending_edit_open_parameter_idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1782777600000,
+      "tag": "0071_drug_parameters_value_to_median",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1782864000000,
+      "tag": "0072_metabolism_fraction_ranges",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1782950400000,
+      "tag": "0073_paper_review_revisions",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1783036800000,
+      "tag": "0074_enforce_bio_entity_invariant",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1783123200000,
+      "tag": "0075_drop_learn_preferences",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1783209600000,
+      "tag": "0076_drop_legacy_edge_fks",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1783296000000,
+      "tag": "0077_drop_legacy_registries",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1783382400000,
+      "tag": "0078_parameter_entries",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1783468800000,
+      "tag": "0079_pending_edit_open_entry_idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1783555200000,
+      "tag": "0080_grandfather_qualifier_fix",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1783641600000,
+      "tag": "0081_bio_entity_lookup_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1783728000000,
+      "tag": "0082_pending_edit_rejection_scan_idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1783814400000,
+      "tag": "0083_agent_verification_queue_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1783900800000,
+      "tag": "0084_drop_agent_run_telemetry",
+      "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1783987200000,
+      "tag": "0085_parameter_entry_matrix_optional",
+      "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1784073600000,
+      "tag": "0086_reference_search_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1784160000000,
+      "tag": "0087_citation_authors_array",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1784246400000,
+      "tag": "0088_citation_haystack_authors_text",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1784332800000,
+      "tag": "0089_paper_extraction_jobs",
+      "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1784419200000,
+      "tag": "0090_pdf_request_replacement",
+      "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1784505600000,
+      "tag": "0091_permission_overrides",
+      "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1784592000000,
+      "tag": "0092_pd_assay_species",
+      "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1784678400000,
+      "tag": "0093_citation_alt_ids_haystack",
+      "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1784764800000,
+      "tag": "0094_citation_alt_id_lookup_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1784851200000,
+      "tag": "0095_agent_self_review",
+      "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1784937600000,
+      "tag": "0096_site_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1785024000000,
+      "tag": "0097_parameter_applicability",
+      "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1785110400000,
+      "tag": "0098_split_blood_oral_fluid_detection_window",
+      "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1785196800000,
+      "tag": "0099_metabolite_substance_identity",
+      "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1785283200000,
+      "tag": "0100_pm_concentration_distributions",
+      "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1785369600000,
+      "tag": "0101_farmakologiportalen_link",
+      "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1785456000000,
+      "tag": "0102_metabolism_completeness_markers",
+      "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1785542400000,
+      "tag": "0103_efedrin_racemate_cid",
+      "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1786579200000,
+      "tag": "0104_pubchem_identity_repoints",
+      "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1786608000000,
+      "tag": "0105_pattern_reference_cohorts",
+      "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1786694400000,
+      "tag": "0106_pattern_reference_cases",
+      "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1786780800000,
+      "tag": "0107_citation_work_kind",
+      "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "7",
+      "when": 1786867200000,
+      "tag": "0108_reference_cohort_admission",
+      "breakpoints": true
+    },
+    {
+      "idx": 109,
+      "version": "7",
+      "when": 1786953600000,
+      "tag": "0109_model_structure_axes",
+      "breakpoints": true
+    },
+    {
+      "idx": 110,
+      "version": "7",
+      "when": 1787040000000,
+      "tag": "0110_drug_ionization_constants",
+      "breakpoints": true
+    },
+    {
+      "idx": 111,
+      "version": "7",
+      "when": 1787126400000,
+      "tag": "0111_route_scoped_parameter_entries",
+      "breakpoints": true
+    },
+    {
+      "idx": 112,
+      "version": "7",
+      "when": 1787212800000,
+      "tag": "0112_agent_model_tier",
+      "breakpoints": true
+    },
+    {
+      "idx": 113,
+      "version": "7",
+      "when": 1787299200000,
+      "tag": "0113_agent_verification_verifier_tier",
+      "breakpoints": true
+    },
+    {
+      "idx": 114,
+      "version": "7",
+      "when": 1787385600000,
+      "tag": "0114_knowledge_governance_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 115,
+      "version": "7",
+      "when": 1787472000000,
+      "tag": "0115_knowledge_governance_migration_state",
+      "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1787558400000,
+      "tag": "0116_normalize_percent_fraction_parameters",
+      "breakpoints": true
+    },
+    {
+      "idx": 117,
+      "version": "7",
+      "when": 1787644800000,
+      "tag": "0117_drop_unit_invalid_volume_of_distribution",
+      "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "7",
+      "when": 1788480000000,
+      "tag": "0118_clear_free_text_parameter_qualifiers",
+      "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "7",
+      "when": 1788566400000,
+      "tag": "0119_parameter_entry_source_quote",
+      "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "7",
+      "when": 1788652800000,
+      "tag": "0120_parameter_entry_observation_context",
+      "breakpoints": true
+    },
+    {
+      "idx": 121,
+      "version": "7",
+      "when": 1788739200000,
+      "tag": "0121_clear_dormant_methods_focus_parameters",
+      "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "7",
+      "when": 1788825600000,
+      "tag": "0122_methods_focus_parameters_opt_in",
+      "breakpoints": true
+    },
+    {
+      "idx": 123,
+      "version": "7",
+      "when": 1788912000000,
+      "tag": "0123_pdf_inbox",
+      "breakpoints": true
+    },
+    {
+      "idx": 124,
+      "version": "7",
+      "when": 1788998400000,
+      "tag": "0124_pdf_inbox_blob_cleanup",
+      "breakpoints": true
+    },
+    {
+      "idx": 125,
+      "version": "7",
+      "when": 1789084800000,
+      "tag": "0125_agent_focus_skip_wiki_content",
+      "breakpoints": true
+    },
+    {
+      "idx": 126,
+      "version": "7",
+      "when": 1789171200000,
+      "tag": "0126_disputes_target_version",
+      "breakpoints": true
+    },
+    {
+      "idx": 127,
+      "version": "7",
+      "when": 1789257600000,
+      "tag": "0127_parameter_entries_dose_context",
+      "breakpoints": true
+    },
+    {
+      "idx": 128,
+      "version": "7",
+      "when": 1789344000000,
+      "tag": "0128_drug_parameter_revision_source_diff",
+      "breakpoints": true
+    },
+    {
+      "idx": 129,
+      "version": "7",
+      "when": 1789430400000,
+      "tag": "0129_parameter_entries_dose_context_checks",
+      "breakpoints": true
+    },
+    {
+      "idx": 130,
+      "version": "7",
+      "when": 1789516800000,
+      "tag": "0130_agent_verdict_reconsiderations",
+      "breakpoints": true
+    },
+    {
+      "idx": 131,
+      "version": "7",
+      "when": 1789603200000,
+      "tag": "0131_pending_edits_last_apply_failure",
+      "breakpoints": true
+    },
+    {
+      "idx": 132,
+      "version": "7",
+      "when": 1789689600000,
+      "tag": "0132_disputes_escalated_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 133,
+      "version": "7",
+      "when": 1789776000000,
+      "tag": "0133_notification_email_delivery",
+      "breakpoints": true
+    },
+    {
+      "idx": 134,
+      "version": "7",
+      "when": 1789862400000,
+      "tag": "0134_agent_run_usage",
+      "breakpoints": true
+    },
+    {
+      "idx": 135,
+      "version": "7",
+      "when": 1789948800000,
+      "tag": "0135_parameter_entries_reported_statistic",
+      "breakpoints": true
+    },
+    {
+      "idx": 136,
+      "version": "7",
+      "when": 1790035200000,
+      "tag": "0136_refs_detection_guidelines",
+      "breakpoints": true
+    }
+  ]
+}

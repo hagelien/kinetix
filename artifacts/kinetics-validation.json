@@ -1,0 +1,122 @@
+{
+  "suiteVersion": "1.0.0",
+  "coreVersion": "1.10.0",
+  "registryVersion": "0.9.0",
+  "registryChecksum": "adcc1cec",
+  "generatedAtIso": "2026-08-26T00:00:00.000Z",
+  "results": [
+    {
+      "modelId": "2cb-one-comp-v1",
+      "fixtureId": "2cb-sanity",
+      "endpoint": "dimensional-consistency",
+      "passed": true,
+      "detail": "model=2cb-one-comp-v1; unit=mg/L; ordered finite mg/L curve=true",
+      "externallyValidated": false
+    },
+    {
+      "modelId": "amphetamine-one-comp-v1",
+      "fixtureId": "amphetamine-sanity",
+      "endpoint": "dimensional-consistency",
+      "passed": true,
+      "detail": "model=amphetamine-one-comp-v1; unit=mg/L; ordered finite mg/L curve=true",
+      "externallyValidated": false
+    },
+    {
+      "modelId": "cocaine-one-comp-v2",
+      "fixtureId": "cocaine-iv-jeffcoat-1989",
+      "endpoint": "dimensional-consistency",
+      "passed": true,
+      "detail": "model=cocaine-one-comp-v2; unit=mg/L; ordered finite mg/L curve=true",
+      "externallyValidated": false
+    },
+    {
+      "modelId": "cocaine-one-comp-v2",
+      "fixtureId": "cocaine-iv-jeffcoat-1989",
+      "endpoint": "mass-balance",
+      "passed": true,
+      "detail": "model=cocaine-one-comp-v2; endpoint=mass at 0h; expected=100mg; recovered=100mg",
+      "externallyValidated": false
+    },
+    {
+      "modelId": "cocaine-one-comp-v2",
+      "fixtureId": "cocaine-iv-jeffcoat-1989",
+      "endpoint": "literature-landmark",
+      "passed": true,
+      "detail": "model=cocaine-one-comp-v2; endpoint=terminalHalfLifeHours; expected=1.225; computed=1.5000000000000038",
+      "externallyValidated": true
+    },
+    {
+      "modelId": "ethanol-michaelis-menten-v1",
+      "fixtureId": "ethanol-sanity",
+      "endpoint": "dimensional-consistency",
+      "passed": true,
+      "detail": "model=ethanol-michaelis-menten-v1; unit=mg/L; ordered finite mg/L curve=true",
+      "externallyValidated": false
+    },
+    {
+      "modelId": "ghb-michaelis-menten-v1",
+      "fixtureId": "ghb-sanity",
+      "endpoint": "dimensional-consistency",
+      "passed": true,
+      "detail": "model=ghb-michaelis-menten-v1; unit=mg/L; ordered finite mg/L curve=true",
+      "externallyValidated": false
+    },
+    {
+      "modelId": "ketamine-one-comp-v1",
+      "fixtureId": "ketamine-sanity",
+      "endpoint": "dimensional-consistency",
+      "passed": true,
+      "detail": "model=ketamine-one-comp-v1; unit=mg/L; ordered finite mg/L curve=true",
+      "externallyValidated": false
+    },
+    {
+      "modelId": "lisdexamfetamine-one-comp-v1",
+      "fixtureId": "lisdexamfetamine-sanity",
+      "endpoint": "dimensional-consistency",
+      "passed": true,
+      "detail": "model=lisdexamfetamine-one-comp-v1; unit=mg/L; ordered finite mg/L curve=true",
+      "externallyValidated": false
+    },
+    {
+      "modelId": "lsd-one-comp-v1",
+      "fixtureId": "lsd-sanity",
+      "endpoint": "dimensional-consistency",
+      "passed": true,
+      "detail": "model=lsd-one-comp-v1; unit=mg/L; ordered finite mg/L curve=true",
+      "externallyValidated": false
+    },
+    {
+      "modelId": "mdma-michaelis-menten-v1",
+      "fixtureId": "mdma-sanity",
+      "endpoint": "dimensional-consistency",
+      "passed": true,
+      "detail": "model=mdma-michaelis-menten-v1; unit=mg/L; ordered finite mg/L curve=true",
+      "externallyValidated": false
+    },
+    {
+      "modelId": "methylphenidate-one-comp-v1",
+      "fixtureId": "methylphenidate-sanity",
+      "endpoint": "dimensional-consistency",
+      "passed": true,
+      "detail": "model=methylphenidate-one-comp-v1; unit=mg/L; ordered finite mg/L curve=true",
+      "externallyValidated": false
+    },
+    {
+      "modelId": "psilocybin-one-comp-v1",
+      "fixtureId": "psilocybin-sanity",
+      "endpoint": "dimensional-consistency",
+      "passed": true,
+      "detail": "model=psilocybin-one-comp-v1; unit=mg/L; ordered finite mg/L curve=true",
+      "externallyValidated": false
+    },
+    {
+      "modelId": "thc-two-comp-v1",
+      "fixtureId": "thc-sanity",
+      "endpoint": "dimensional-consistency",
+      "passed": true,
+      "detail": "model=thc-two-comp-v1; unit=mg/L; ordered finite mg/L curve=true",
+      "externallyValidated": false
+    }
+  ],
+  "passed": true
+}

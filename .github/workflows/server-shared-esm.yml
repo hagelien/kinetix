@@ -1,0 +1,53 @@
+name: server-shared-esm
+
+# Serverless functions under `api/` run on Vercel under Node's native ESM
+# loader, which requires explicit file extensions on runtime relative imports.
+# `scripts-typecheck` only typechecks maintenance scripts, and `vercel build`
+# runs in bundler mode (which accepts extensionless specifiers), so nothing
+# else gates this: an extensionless import reachable from `api/` can otherwise
+# merge and 500 in production (ERR_MODULE_NOT_FOUND). This job runs the two
+# ESM-specifier guard tests whenever the server-shared surface changes.
+# The guard traverses the import graph from `api/`, which currently reaches
+# `src/**`, `db/**`, and `data/**` as well as `api/**`. Path filters narrower
+# than what the graph can reach would let an extensionless import in an
+# unlisted tree merge unguarded, so trigger on every tree that holds importable
+# TypeScript rather than on individual subtrees.
+# Merges to `main` no longer re-run this workflow: a pull request is tested
+# against its merge commit, so the post-merge run re-executed a verdict the pull
+# request had already produced (~500 billed minutes a month across this
+# repository's workflows). The trade-off is that two pull requests which pass
+# alone but break each other are caught by the next pull request to touch the
+# area rather than at the merge; a merge queue is how to get that signal back.
+on:
+  pull_request:
+    paths:
+      - 'api/**'
+      - 'src/**'
+      - 'db/**'
+      - 'data/**'
+      - 'tests/server-shared-esm-specifiers.test.ts'
+      - 'tests/kinetics-core-esm-specifiers.test.ts'
+      - '.github/workflows/server-shared-esm.yml'
+
+# Supersede an in-flight run when a newer commit lands on the same PR. Every
+# trigger here is now a pull request, so there is no default-branch run left to
+# protect from cancellation.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  server-shared-esm:
+    runs-on: ubuntu-latest
+    # Hang guard only; real runs finish in well under a minute.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install deps
+        run: npm ci
+      - name: ESM runtime-specifier guards
+        run: npx vitest run tests/server-shared-esm-specifiers.test.ts tests/kinetics-core-esm-specifiers.test.ts

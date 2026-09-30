@@ -1,0 +1,139 @@
+{
+  "schemaVersion": "kinetix-conversation-ingestion-v1",
+  "idempotencyKey": "conv-morphine-pk-forensic-01",
+  "mode": "auto",
+  "conversationDigest": "3f8a1c9d2e5b7046a8c31d9f4e620b75d83a1f6c092e4b8d71a5c3e09f2d6b48",
+  "createdAt": "2026-08-06T09:12:00Z",
+  "sources": [
+    {
+      "key": "S1",
+      "type": "pmid",
+      "identifier": "2719903",
+      "altIds": {
+        "doi": "10.1111/j.1365-2125.1989.tb05399.x",
+        "pmcid": "PMC1379730"
+      },
+      "metadata": {
+        "title": "The bioavailability and pharmacokinetics of morphine after intravenous, oral and buccal administration in healthy volunteers.",
+        "authors": ["Hoskin PJ", "Hanks GW", "Aherne GW"],
+        "journal": "Br J Clin Pharmacol",
+        "year": 1989
+      },
+      "verification": {
+        "readInFull": true,
+        "locator": "Results, p. 501-502; Table 2",
+        "evidenceSummary": "Seks friske frivillige fikk morfin intravenøst og som vandig løsning peroralt, som depottablett peroralt og som bukkal depottablett. Absolutt biotilgjengelighet var 23,9 % for den vandige løsningen, 22,4 % for depottabletten og 18,7 % bukkalt; maksimal plasmakonsentrasjon kom 45 minutter etter den vandige løsningen.",
+        "reviewMarkdown": "Overkrysningsstudie av absolutt biotilgjengelighet hos seks friske voksne frivillige. Morfin og morfin-6-glukuronid ble målt med differensiell radioimmunoassay, som er mindre spesifikk enn dagens LC-MS/MS og kan kryssreagere med konjugater; den intravenøse referansearmen og designet med hver deltaker som sin egen kontroll gjør likevel estimatene for relativ biotilgjengelighet brukbare. Lavt antall deltakere, ett senter, ingen egen rapportering etter kjønn.",
+        "reviewConfidence": "medium",
+        "overallScore": 68
+      },
+      "pdfRequestNeeded": false
+    },
+    {
+      "key": "S2",
+      "type": "pmid",
+      "identifier": "34773819",
+      "altIds": { "doi": "10.1016/j.forsciint.2021.111094" },
+      "metadata": {
+        "title": "Postmortem redistribution of morphine in humans: Important variables that might be influencing the central blood/peripheral blood ratio.",
+        "authors": ["Kamphuis AEM", "Borra LCP", "Bosman IJ"],
+        "journal": "Forensic Sci Int",
+        "year": 2021
+      },
+      "verification": {
+        "readInFull": true,
+        "locator": "Results and Discussion; morphine quantified in femoral and cardiac blood in 103 cases",
+        "evidenceSummary": "Retrospektiv gjennomgang av 103 postmortale saker med påvist morfin, med parvise prøver fra hjerteblod og femoralblod. Forråtnelsesgrad ved obduksjon, likets stilling da det ble funnet, administrasjonsvei og forsøk på gjenoppliving var hver for seg assosiert med forholdet mellom hjerteblod og perifert blod, og administrasjonsvei ga størst utslag.",
+        "reviewMarkdown": "Retrospektiv kasusserie fra ett institutt (Netherlands Forensic Institute, 2010–2020) med parvise prøvetakingssteder, som er riktig design for et C/P-spørsmål. Assosiasjonene er univariate med Bonferroni-korreksjon, og bare forråtnelsesgrad når den korrigerte terskelen, så de tre øvrige variablene er antydninger snarere enn etablerte funn. Det er ikke justert for postmortalt intervall.",
+        "reviewConfidence": "medium",
+        "overallScore": 71
+      },
+      "pdfRequestNeeded": false
+    },
+    {
+      "key": "S3",
+      "type": "pmid",
+      "identifier": "10201674",
+      "altIds": { "doi": "10.1097/00000542-199904000-00016" },
+      "metadata": {
+        "title": "Pharmacokinetic modeling of M6G formation after oral administration of morphine in healthy volunteers.",
+        "authors": ["Lötsch J", "Weiss M", "Ahne G", "Kobal G", "Geisslinger G"],
+        "journal": "Anesthesiology",
+        "year": 1999
+      },
+      "verification": {
+        "readInFull": true,
+        "locator": "Results; gut absorption and oral bioavailability of morphine",
+        "evidenceSummary": "Fem friske mannlige frivillige fikk én depottablett med 90 mg morfinsulfat (tilsvarende 67,8 mg morfin), med plasmaprøver i 14 timer og urinprøver i 36 timer. Andelen morfin absorbert fra tarmen var 82 ± 14 %, hvorav 42 ± 8 % passerte leveren, noe som gir en oral biotilgjengelighet for morfin på 34 ± 9 %.",
+        "reviewMarkdown": "Modellbasert estimat, ikke et direkte AUC-forhold: biotilgjengeligheten faller ut av en kompartmentmodell tilpasset konsentrasjonsforløpene for morfin og morfin-6-glukuronid, og den intravenøse referansekinetikken er hentet fra en tidligere undersøkelse framfor en samtidig overkrysningsarm. Bare fem mannlige deltakere, depotformulering og ingen kvinnelige deltakere — estimatet hviler altså på få personer, gjelder én formulering og ligger over de omtrent 24 % som vanligvis rapporteres for hurtigvirkende peroral morfin.",
+        "reviewConfidence": "medium",
+        "overallScore": 62
+      },
+      "pdfRequestNeeded": false
+    }
+  ],
+  "items": [
+    {
+      "type": "wiki_fact",
+      "target": {
+        "pageType": "monograph",
+        "drug": { "drugName": "Morphine", "pubchemCid": 5288826 },
+        "sectionId": "pk"
+      },
+      "operation": "add",
+      "statement": "Absolutt oral biotilgjengelighet av morfin hos seks friske frivillige var 23,9 % fra vandig løsning, 22,4 % fra depottablett og 18,7 % bukkalt.",
+      "sourceKeys": ["S1"],
+      "editSummary": "Punktestimater for oral biotilgjengelighet per formulering; ingen spredning er rapportert, så tallene står som prosa og ikke som parameterobservasjon (bioavailability krever low og high, se blockedCandidates)."
+    },
+    {
+      "type": "wiki_fact",
+      "target": {
+        "pageType": "monograph",
+        "drug": { "drugName": "Morphine", "pubchemCid": 5288826 },
+        "sectionId": "pk"
+      },
+      "operation": "add",
+      "statement": "En kompartmentmodellbasert analyse hos fem friske mannlige frivillige anslo oral biotilgjengelighet av morfin fra depottablett til 34 % (± 9 % SD).",
+      "sourceKeys": ["S3"],
+      "editSummary": "Modellbasert estimat med rapportert spredning; står alene som eneste kilde til parameteren (se blockedCandidates) og derfor som prosa, ikke som parameterobservasjon."
+    },
+    {
+      "type": "wiki_fact",
+      "target": {
+        "pageType": "monograph",
+        "drug": { "drugName": "Morphine", "pubchemCid": 5288826 },
+        "sectionId": "forensic"
+      },
+      "operation": "add",
+      "statement": "Forholdet mellom morfinkonsentrasjon i hjerteblod og perifert blod varierer med forråtnelsesgrad, likets leie ved funn, administrasjonsvei og forsøk på gjenoppliving, der administrasjonsvei synes å ha størst betydning.",
+      "sourceKeys": ["S2"],
+      "editSummary": "Ny setning om hvilke variabler som påvirker C/P-forholdet for morfin; utfyller den numeriske parameteren uten å gjenta tallverdien."
+    }
+  ],
+  "blockedCandidates": [
+    {
+      "summary": "Absolutt oral biotilgjengelighet av morfin fra vandig løsning er 23,9 % hos seks friske frivillige.",
+      "blocker": "Kilden oppgir bare et punktestimat for denne armen (Results, s. 501-502; Tabell 2) — ingen spredning, standardavvik eller intervall er rapportert. bioavailability krever både low og high (se reference/vocabularies.md), og low = high = median ville diktet opp et intervall kilden aldri har rapportert. Verdien er i stedet publisert som prosa (se items[0]).",
+      "candidateIdentifier": "pmid:2719903"
+    },
+    {
+      "summary": "Oral biotilgjengelighet av morfin fra depottablett er 34 % (± 9 % SD) hos fem friske mannlige frivillige.",
+      "blocker": "Kilden rapporterer selv et intervall (34 ± 9 %, n = 5) som ville dekket bioavailability sitt krav om low og high. Den eneste andre kilden som dekker samme parameter (PMID 2719903, vandig løsning) oppgir imidlertid bare et punktestimat og kan ikke stå som observasjon (se forrige kandidat) — dermed ville denne verdien stå som eneste observasjon for parameteren, og en parameter med bare én kilde hører hjemme her, ikke som observasjon. Verdien er i stedet publisert som prosa (se items[1]).",
+      "candidateIdentifier": "pmid:10201674"
+    },
+    {
+      "summary": "Tid til maksimal plasmakonsentrasjon av morfin er omtrent 45 minutter etter oral vandig løsning hos friske frivillige.",
+      "blocker": "Bare én kilde er verifisert for parameteren: PMID 2719903 oppgir 45 minutter hos seks frivillige. En uavhengig studie som rapporterer tmax etter oral morfin i sammenlignbar kontekst er ikke funnet og lest i fulltekst, og en parameter med bare én kilde hører hjemme her, ikke som observasjon.",
+      "candidateIdentifier": "pmid:2719903"
+    },
+    {
+      "summary": "En klar overvekt av morfin og morfinglukuronider sammenlignet med kodeinrelaterte forbindelser taler for en morfinkilde utover omdannelse av kodein.",
+      "blocker": "Ingen primærkilde funnet som kvantifiserer en diskriminerende grenseverdi for morfin/kodein-forholdet. Slutningen hviler på resonnement i samtalen, og samtalen er ikke en vitenskapelig kilde.",
+      "candidateIdentifier": "pmid:9061094"
+    },
+    {
+      "summary": "Illegalt fremstilt heroin kan inneholde acetylkodein og dermed gi både et morfindominert funnmønster og mindre mengder kodeinrelaterte forbindelser.",
+      "blocker": "Fulltekst ikke tilgjengelig for den identifiserte kilden; kan ikke bekreftes til det nivået kontrakten krever før PDF er skaffet."
+    }
+  ]
+}

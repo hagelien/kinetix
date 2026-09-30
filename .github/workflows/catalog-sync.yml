@@ -1,0 +1,62 @@
+name: catalog-sync
+
+# PR-time half of the catalog-sync contract. `catalog-drift.yml` is the other
+# half: it runs on a schedule against the live database, because drift comes
+# from database writes that leave no trace in the repo and so have no diff to
+# trigger on. This job covers what a diff *can* trigger on — changes to the
+# exporter itself, and to the fixture it round-trips.
+#
+# `data/components.ts` is in the path filter on purpose: the unit suite splits
+# and re-renders the real committed fixture and asserts it evaluates back to an
+# identical catalog, and it pins the known duplicate-CID defect. A fixture edit
+# must re-run both.
+#
+# The repo's PR workflows are narrowly path-filtered (see kinetics-core.yml), so
+# without this job nothing would execute these tests on a pull request.
+# Merges to `main` no longer re-run this workflow: a pull request is tested
+# against its merge commit, so the post-merge run re-executed a verdict the pull
+# request had already produced (~500 billed minutes a month across this
+# repository's workflows). The trade-off is that two pull requests which pass
+# alone but break each other are caught by the next pull request to touch the
+# area rather than at the merge; a merge queue is how to get that signal back.
+on:
+  pull_request:
+    paths:
+      - 'src/lib/catalogExport.ts'
+      - 'src/lib/catalogExport.test.ts'
+      - 'api/_lib/catalogExportStore.ts'
+      - 'scripts/export-components.ts'
+      - 'tests/integration/catalog-export.test.ts'
+      - 'data/components.ts'
+      - '.github/workflows/catalog-sync.yml'
+
+# Supersede an in-flight run when a newer commit lands on the same PR. Every
+# trigger here is now a pull request, so there is no default-branch run left to
+# protect from cancellation.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  catalog-sync:
+    runs-on: ubuntu-latest
+    # Hang guard only; real runs finish in ~1 min.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install deps
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Projection, render, and diff unit tests
+        run: npx vitest run src/lib/catalogExport.test.ts
+      # PGlite runs in-process (WASM) — no Docker, no network, no service
+      # container needed.
+      - name: Projection integration tests (real SQL on PGlite)
+        run: npx vitest run --config vitest.integration.config.ts tests/integration/catalog-export.test.ts
+      - name: Exporter CLI is runnable
+        run: npx tsx scripts/export-components.ts --help

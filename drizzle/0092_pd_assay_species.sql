@@ -1,0 +1,13 @@
+-- Species of the preparation a pharmacodynamic measurement was made in (#1017).
+--
+-- `bio_entities` is a symbol-matched catalog shared across every drug, so a
+-- non-human Ki that binds to the human entity is not contained to the drug
+-- being imported — every other drug pointing at that entity inherits the
+-- mislabelled evidence. The fix keeps the catalog human-canonical (the entity
+-- is the thing being modelled) and records the assay species on the
+-- observation, where it belongs: a rat-tissue Ki is still evidence about the
+-- human target, just evidence with lower transferability.
+--
+-- NULL means unstated, not human: rows written before this column existed
+-- carry no species claim, and the UI must not invent one for them.
+ALTER TABLE "drug_receptor_targets" ADD COLUMN IF NOT EXISTS "assay_species" varchar(80);

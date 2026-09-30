@@ -1,0 +1,26 @@
+-- Verbatim source quote on a parameter entry.
+--
+-- An entry has always recorded WHICH document a value came from (`citation_id`)
+-- but never THE WORDS it was read off. That gap is what let a median Tmax of
+-- 1 h for oral oxymorphone collect two independent peer approvals: the cited
+-- label really does contain "1 hour" — in the food-effect narrative, describing
+-- a concentration profile — while the only figure the label itself calls a
+-- median for the identical condition is 2 hours. Right document, wrong
+-- sentence, and nothing in the pipeline could see the difference because the
+-- pipeline never saw the sentence.
+--
+-- Note the asymmetry this closes: a verdict and a dispute have carried an
+-- evidence quote since their tables were created (`evidence_refs` holds
+-- `{ citationId, quote, url }` on both). Only the SUBMISSION side lacked one,
+-- so a reviewer could quote the text that refutes a claim but a submitter could
+-- not quote the text that supports it.
+--
+-- Nullable and additive: every existing row keeps NULL and is untouched. A
+-- backfill is not possible — nobody recorded the sentences — so the column
+-- fills going forward. What consumes it is the consensus auto-apply gate: a
+-- calculation-driving (entry-backed) parameter proposed by an agent does not
+-- publish on peer consensus without one. Human review is deliberately
+-- unaffected, so no in-flight work is stranded and no existing row becomes
+-- unapprovable.
+ALTER TABLE "parameter_entries"
+  ADD COLUMN IF NOT EXISTS "source_quote" TEXT;

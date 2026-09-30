@@ -1,0 +1,60 @@
+name: prompt-registry-sync
+
+# Guards the deep-research seeding prompt against the parameter registry.
+#
+# `agents/deep-research-drug-seeding.md` is the only place a research agent
+# learns which drug parameters exist. The importer validates the returned JSON
+# against `DRUG_PARAMETERS`, so an ID missing from the prompt is never rejected
+# — it is simply never researched, and the seeded drug page ships without it.
+# The failure is silent at every layer, which is why it needs a build gate
+# rather than review attention.
+#
+# The repo's PR workflows are narrowly path-filtered (see kinetics-core.yml and
+# catalog-sync.yml), so without this job nothing would execute this test on a
+# pull request.
+#
+# `src/lib/deepResearchImport.ts` is in the filter because the test also pins
+# the prompt's "at least two independent sources" ask to the importer's
+# `MIN_SOURCES_PER_PARAMETER`, the threshold the coverage warning uses.
+#
+# There is no typecheck step on purpose: `npm run typecheck` covers
+# src/data/db/api only (tsconfig `include`), so it would not look at the test
+# file. The vitest run is the real gate — it also fails loudly if the registry
+# renames an export the test imports.
+# Merges to `main` no longer re-run this workflow: a pull request is tested
+# against its merge commit, so the post-merge run re-executed a verdict the pull
+# request had already produced (~500 billed minutes a month across this
+# repository's workflows). The trade-off is that two pull requests which pass
+# alone but break each other are caught by the next pull request to touch the
+# area rather than at the merge; a merge queue is how to get that signal back.
+on:
+  pull_request:
+    paths:
+      - 'src/lib/drugParameters.ts'
+      - 'src/lib/deepResearchImport.ts'
+      - 'agents/deep-research-drug-seeding.md'
+      - 'tests/deep-research-prompt-registry.test.ts'
+      - '.github/workflows/prompt-registry-sync.yml'
+
+# Supersede an in-flight run when a newer commit lands on the same PR. Every
+# trigger here is now a pull request, so there is no default-branch run left to
+# protect from cancellation.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  prompt-registry-sync:
+    runs-on: ubuntu-latest
+    # Hang guard only; real runs finish in well under a minute.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install deps
+        run: npm ci
+      - name: Prompt registry tables match the live registry
+        run: npx vitest run tests/deep-research-prompt-registry.test.ts

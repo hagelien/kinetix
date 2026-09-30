@@ -1,0 +1,322 @@
+{
+  "description": "Cross-application PK parity fixtures. Kinetix (source of truth) and Redose (vendored kinetics-core) both run these scenarios and must produce the golden results in parity-expected.json within declared tolerance. This is the harmonization contract in executable form.",
+  "nowIso": "2026-07-21T00:00:00.000Z",
+  "tolerance": { "absolute": 1e-9, "relative": 1e-9 },
+  "scenarios": [
+    {
+      "name": "amphetamine-oral-single-30mg",
+      "scenario": {
+        "schemaVersion": "1",
+        "analyte": "amphetamine",
+        "subject": { "weightKg": 70, "age": 30, "sex": "male", "liverImpairment": "none", "kidneyImpairment": "none" },
+        "doses": [{ "tHours": 0, "amountMg": 30, "route": "oral", "basis": "active-moiety" }],
+        "timeGrid": { "startHours": 0, "endHours": 12, "stepHours": 0.5 }
+      }
+    },
+    {
+      "name": "amphetamine-intranasal-single-20mg",
+      "scenario": {
+        "schemaVersion": "1",
+        "analyte": "amphetamine",
+        "subject": { "weightKg": 70, "age": 30, "sex": "male", "liverImpairment": "none", "kidneyImpairment": "none" },
+        "doses": [{ "tHours": 0, "amountMg": 20, "route": "intranasal", "basis": "active-moiety" }],
+        "timeGrid": { "startHours": 0, "endHours": 12, "stepHours": 0.5 }
+      }
+    },
+    {
+      "name": "amphetamine-mixed-route-oral-then-intranasal",
+      "scenario": {
+        "schemaVersion": "1",
+        "analyte": "amphetamine",
+        "subject": { "weightKg": 82, "age": 41, "sex": "female", "liverImpairment": "none", "kidneyImpairment": "none" },
+        "doses": [
+          { "tHours": 0, "amountMg": 30, "route": "oral", "basis": "active-moiety" },
+          { "tHours": 2, "amountMg": 20, "route": "intranasal", "basis": "active-moiety" }
+        ],
+        "timeGrid": { "startHours": 0, "endHours": 14, "stepHours": 0.5 }
+      }
+    },
+    {
+      "name": "cocaine-intranasal-single-40mg",
+      "scenario": {
+        "schemaVersion": "1",
+        "analyte": "cocaine",
+        "subject": { "weightKg": 75, "age": 28, "sex": "male", "liverImpairment": "none", "kidneyImpairment": "none" },
+        "doses": [{ "tHours": 0, "amountMg": 40, "route": "intranasal", "basis": "active-moiety" }],
+        "timeGrid": { "startHours": 0, "endHours": 6, "stepHours": 0.5 }
+      }
+    },
+    {
+      "name": "thc-inhalation-single-10mg",
+      "tolerance": { "absolute": 1e-9, "relative": 1e-6 },
+      "scenario": {
+        "schemaVersion": "1",
+        "analyte": "thc",
+        "subject": { "weightKg": 70, "age": 30, "sex": "male", "liverImpairment": "none", "kidneyImpairment": "none" },
+        "doses": [{ "tHours": 0, "amountMg": 10, "route": "inhalation", "basis": "active-moiety" }],
+        "timeGrid": { "startHours": 0, "endHours": 12, "stepHours": 0.5 }
+      }
+    },
+    {
+      "name": "thc-mixed-inhalation-then-oral",
+      "tolerance": { "absolute": 1e-9, "relative": 1e-6 },
+      "scenario": {
+        "schemaVersion": "1",
+        "analyte": "thc",
+        "subject": { "weightKg": 82, "age": 41, "sex": "female", "liverImpairment": "none", "kidneyImpairment": "none" },
+        "doses": [
+          { "tHours": 0, "amountMg": 10, "route": "inhalation", "basis": "active-moiety" },
+          { "tHours": 1.5, "amountMg": 20, "route": "oral", "basis": "active-moiety" }
+        ],
+        "timeGrid": { "startHours": 0, "endHours": 14, "stepHours": 0.5 }
+      }
+    },
+    {
+      "name": "cocaine-iv-bolus-40mg",
+      "scenario": {
+        "schemaVersion": "1",
+        "analyte": "cocaine",
+        "subject": { "weightKg": 75, "age": 28, "sex": "male", "liverImpairment": "none", "kidneyImpairment": "none" },
+        "doses": [{ "tHours": 0, "amountMg": 40, "route": "iv", "basis": "active-moiety" }],
+        "timeGrid": { "startHours": 0, "endHours": 6, "stepHours": 0.5 }
+      }
+    },
+    {
+      "name": "cocaine-inhalation-single-40mg",
+      "scenario": {
+        "schemaVersion": "1",
+        "analyte": "cocaine",
+        "subject": { "weightKg": 75, "age": 28, "sex": "male", "liverImpairment": "none", "kidneyImpairment": "none" },
+        "doses": [{ "tHours": 0, "amountMg": 40, "route": "inhalation", "basis": "active-moiety" }],
+        "timeGrid": { "startHours": 0, "endHours": 6, "stepHours": 0.5 }
+      }
+    },
+    {
+      "name": "cocaine-inhalation-single-40mg-finegrid",
+      "scenario": {
+        "schemaVersion": "1",
+        "analyte": "cocaine",
+        "subject": { "weightKg": 75, "age": 28, "sex": "male", "liverImpairment": "none", "kidneyImpairment": "none" },
+        "doses": [{ "tHours": 0, "amountMg": 40, "route": "inhalation", "basis": "active-moiety" }],
+        "timeGrid": { "startHours": 0, "endHours": 1, "stepHours": 0.01 }
+      }
+    },
+    {
+      "name": "cocaine-oral-single-100mg",
+      "scenario": {
+        "schemaVersion": "1",
+        "analyte": "cocaine",
+        "subject": { "weightKg": 75, "age": 28, "sex": "male", "liverImpairment": "none", "kidneyImpairment": "none" },
+        "doses": [{ "tHours": 0, "amountMg": 100, "route": "oral", "basis": "active-moiety" }],
+        "timeGrid": { "startHours": 0, "endHours": 6, "stepHours": 0.5 }
+      }
+    },
+    {
+      "name": "methylphenidate-oral-single-20mg",
+      "scenario": {
+        "schemaVersion": "1",
+        "analyte": "methylphenidate",
+        "subject": { "weightKg": 70, "heightCm": 178, "age": 30, "sex": "male", "liverImpairment": "none", "kidneyImpairment": "none" },
+        "doses": [{ "tHours": 0, "amountMg": 20, "route": "oral", "basis": "active-moiety" }],
+        "timeGrid": { "startHours": 0, "endHours": 12, "stepHours": 0.5 }
+      }
+    },
+    {
+      "name": "methylphenidate-intranasal-female-nonreference-body",
+      "scenario": {
+        "schemaVersion": "1",
+        "analyte": "methylphenidate",
+        "subject": { "weightKg": 60, "heightCm": 165, "age": 34, "sex": "female", "liverImpairment": "none", "kidneyImpairment": "none" },
+        "doses": [{ "tHours": 0, "amountMg": 15, "route": "intranasal", "basis": "active-moiety" }],
+        "timeGrid": { "startHours": 0, "endHours": 12, "stepHours": 0.5 }
+      }
+    },
+    {
+      "name": "lsd-sublingual-single-100ug",
+      "scenario": {
+        "schemaVersion": "1",
+        "analyte": "lsd",
+        "subject": { "weightKg": 68, "heightCm": 172, "age": 27, "sex": "female", "liverImpairment": "none", "kidneyImpairment": "none" },
+        "doses": [{ "tHours": 0, "amountMg": 0.1, "route": "sublingual", "basis": "active-moiety" }],
+        "timeGrid": { "startHours": 0, "endHours": 16, "stepHours": 0.5 }
+      }
+    },
+    {
+      "name": "2cb-oral-single-20mg",
+      "scenario": {
+        "schemaVersion": "1",
+        "analyte": "2cb",
+        "subject": { "weightKg": 80, "heightCm": 183, "age": 31, "sex": "male", "liverImpairment": "none", "kidneyImpairment": "none" },
+        "doses": [{ "tHours": 0, "amountMg": 20, "route": "oral", "basis": "active-moiety" }],
+        "timeGrid": { "startHours": 0, "endHours": 12, "stepHours": 0.5 }
+      }
+    },
+    {
+      "name": "ghb-oral-single-1500mg",
+      "tolerance": { "absolute": 1e-9, "relative": 1e-6 },
+      "scenario": {
+        "schemaVersion": "1",
+        "analyte": "ghb",
+        "subject": { "weightKg": 70, "heightCm": 178, "age": 30, "sex": "male", "liverImpairment": "none", "kidneyImpairment": "none" },
+        "doses": [{ "tHours": 0, "amountMg": 1500, "route": "oral", "basis": "active-moiety" }],
+        "timeGrid": { "startHours": 0, "endHours": 8, "stepHours": 0.25 }
+      }
+    },
+    {
+      "name": "ghb-oral-redose-1000mg-x2",
+      "tolerance": { "absolute": 1e-9, "relative": 1e-6 },
+      "scenario": {
+        "schemaVersion": "1",
+        "analyte": "ghb",
+        "subject": { "weightKg": 70, "heightCm": 178, "age": 30, "sex": "male", "liverImpairment": "none", "kidneyImpairment": "none" },
+        "doses": [
+          { "tHours": 0, "amountMg": 1000, "route": "oral", "basis": "active-moiety" },
+          { "tHours": 2, "amountMg": 1000, "route": "oral", "basis": "active-moiety" }
+        ],
+        "timeGrid": { "startHours": 0, "endHours": 8, "stepHours": 0.25 }
+      }
+    },
+    {
+      "name": "ghb-oral-mc-seed7",
+      "tolerance": { "absolute": 1e-9, "relative": 1e-6 },
+      "scenario": {
+        "schemaVersion": "1",
+        "analyte": "ghb",
+        "subject": { "weightKg": 70, "heightCm": 178, "age": 30, "sex": "male", "liverImpairment": "none", "kidneyImpairment": "none" },
+        "doses": [{ "tHours": 0, "amountMg": 1500, "route": "oral", "basis": "active-moiety" }],
+        "timeGrid": { "startHours": 0, "endHours": 8, "stepHours": 0.5 },
+        "uncertainty": { "seed": 7, "draws": 200 }
+      }
+    },
+    {
+      "name": "ethanol-oral-single-30g",
+      "tolerance": { "absolute": 1e-9, "relative": 1e-6 },
+      "scenario": {
+        "schemaVersion": "1",
+        "analyte": "ethanol",
+        "subject": { "weightKg": 80, "heightCm": 180, "age": 35, "sex": "male", "liverImpairment": "none", "kidneyImpairment": "none" },
+        "doses": [{ "tHours": 0, "amountMg": 30000, "route": "oral", "basis": "active-moiety" }],
+        "timeGrid": { "startHours": 0, "endHours": 12, "stepHours": 0.5 }
+      }
+    },
+    {
+      "name": "mdma-oral-single-120mg",
+      "tolerance": { "absolute": 1e-9, "relative": 1e-6 },
+      "scenario": {
+        "schemaVersion": "1",
+        "analyte": "mdma",
+        "subject": { "weightKg": 70, "age": 28, "sex": "male", "liverImpairment": "none", "kidneyImpairment": "none" },
+        "doses": [{ "tHours": 0, "amountMg": 120, "route": "oral", "basis": "active-moiety" }],
+        "timeGrid": { "startHours": 0, "endHours": 12, "stepHours": 0.5 }
+      }
+    },
+    {
+      "name": "mdma-oral-redose-120mg-then-60mg",
+      "tolerance": { "absolute": 1e-9, "relative": 1e-6 },
+      "scenario": {
+        "schemaVersion": "1",
+        "analyte": "mdma",
+        "subject": { "weightKg": 70, "age": 28, "sex": "male", "liverImpairment": "none", "kidneyImpairment": "none" },
+        "doses": [
+          { "tHours": 0, "amountMg": 120, "route": "oral", "basis": "active-moiety" },
+          { "tHours": 2, "amountMg": 60, "route": "oral", "basis": "active-moiety" }
+        ],
+        "timeGrid": { "startHours": 0, "endHours": 12, "stepHours": 0.5 }
+      }
+    },
+    {
+      "name": "lisdexamfetamine-oral-70mg",
+      "scenario": {
+        "schemaVersion": "1",
+        "analyte": "lisdexamfetamine",
+        "subject": { "weightKg": 70, "age": 30, "sex": "male", "liverImpairment": "none", "kidneyImpairment": "none" },
+        "doses": [{ "tHours": 0, "amountMg": 70, "route": "oral", "basis": "parent" }],
+        "timeGrid": { "startHours": 0, "endHours": 24, "stepHours": 0.5 }
+      }
+    },
+    {
+      "name": "ketamine-intranasal-single-50mg",
+      "scenario": {
+        "schemaVersion": "1",
+        "analyte": "ketamine",
+        "subject": { "weightKg": 70, "age": 30, "sex": "male", "liverImpairment": "none", "kidneyImpairment": "none" },
+        "doses": [{ "tHours": 0, "amountMg": 50, "route": "intranasal", "basis": "active-moiety" }],
+        "timeGrid": { "startHours": 0, "endHours": 8, "stepHours": 0.25 }
+      }
+    },
+    {
+      "name": "ketamine-im-then-oral-mixed",
+      "scenario": {
+        "schemaVersion": "1",
+        "analyte": "ketamine",
+        "subject": { "weightKg": 70, "age": 30, "sex": "male", "liverImpairment": "none", "kidneyImpairment": "none" },
+        "doses": [
+          { "tHours": 0, "amountMg": 40, "route": "im", "basis": "active-moiety" },
+          { "tHours": 1, "amountMg": 100, "route": "oral", "basis": "active-moiety" }
+        ],
+        "timeGrid": { "startHours": 0, "endHours": 8, "stepHours": 0.5 }
+      }
+    },
+    {
+      "name": "psilocybin-oral-single-25mg",
+      "scenario": {
+        "schemaVersion": "1",
+        "analyte": "psilocybin",
+        "subject": { "weightKg": 68, "heightCm": 172, "age": 27, "sex": "female", "liverImpairment": "none", "kidneyImpairment": "none" },
+        "doses": [{ "tHours": 0, "amountMg": 25, "route": "oral", "basis": "parent" }],
+        "timeGrid": { "startHours": 0, "endHours": 10, "stepHours": 0.5 }
+      }
+    },
+    {
+      "name": "ethanol-missing-age-failure",
+      "scenario": {
+        "schemaVersion": "1",
+        "analyte": "ethanol",
+        "subject": { "weightKg": 80, "heightCm": 180, "sex": "male" },
+        "doses": [{ "tHours": 0, "amountMg": 30000, "route": "oral", "basis": "active-moiety" }],
+        "timeGrid": { "startHours": 0, "endHours": 12, "stepHours": 1 }
+      }
+    },
+    {
+      "name": "lean-body-mass-missing-height-failure",
+      "scenario": {
+        "schemaVersion": "1",
+        "analyte": "methylphenidate",
+        "subject": { "weightKg": 70, "sex": "male" },
+        "doses": [{ "tHours": 0, "amountMg": 20, "route": "oral", "basis": "active-moiety" }],
+        "timeGrid": { "startHours": 0, "endHours": 12, "stepHours": 1 }
+      }
+    },
+    {
+      "name": "amphetamine-oral-mc-seed42",
+      "scenario": {
+        "schemaVersion": "1",
+        "analyte": "amphetamine",
+        "subject": { "weightKg": 70, "age": 30, "sex": "male" },
+        "doses": [{ "tHours": 0, "amountMg": 30, "route": "oral", "basis": "active-moiety" }],
+        "timeGrid": { "startHours": 0, "endHours": 12, "stepHours": 1 },
+        "uncertainty": { "seed": 42, "draws": 500 }
+      }
+    },
+    {
+      "name": "unsupported-route-failure",
+      "scenario": {
+        "schemaVersion": "1",
+        "analyte": "amphetamine",
+        "subject": { "weightKg": 70 },
+        "doses": [{ "tHours": 0, "amountMg": 30, "route": "iv", "basis": "active-moiety" }],
+        "timeGrid": { "startHours": 0, "endHours": 12, "stepHours": 1 }
+      }
+    },
+    {
+      "name": "unknown-analyte-failure",
+      "scenario": {
+        "schemaVersion": "1",
+        "analyte": "not-a-real-drug",
+        "subject": { "weightKg": 70 },
+        "doses": [{ "tHours": 0, "amountMg": 30, "route": "oral", "basis": "active-moiety" }],
+        "timeGrid": { "startHours": 0, "endHours": 12, "stepHours": 1 }
+      }
+    }
+  ]
+}

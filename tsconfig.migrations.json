@@ -1,0 +1,26 @@
+/*
+ * `npm run typecheck` covers src/data/db/api only — scripts/ and tests/ are
+ * outside its `include`, so nothing typechecked the code that applies
+ * migrations to production. This config closes that hole for the migration
+ * path specifically: the build-time runner, the statement guard, and the
+ * integration harness that replays the chain.
+ *
+ * Kept narrow on purpose. Widening it to all of scripts/ and tests/ is a
+ * separate job — this one has to stay green so migrations.yml can gate on it.
+ */
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": ["node", "vitest"],
+    "noEmit": true
+  },
+  "include": [
+    "scripts/apply-migrations-build.ts",
+    "scripts/lib/migration-gaps.ts",
+    "tests/drizzle-migration-statements.test.ts",
+    "tests/integration/setup/**/*.ts",
+    "tests/support/**/*.ts",
+    "src/types/import-meta-env.d.ts"
+  ]
+}

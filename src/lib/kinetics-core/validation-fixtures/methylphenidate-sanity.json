@@ -1,0 +1,62 @@
+{
+  "fixtureVersion": 1,
+  "suiteVersion": "1.0.0",
+  "id": "methylphenidate-sanity",
+  "description": "methylphenidate: numerical sanity check (dimensional consistency of the reported curve). No literature landmark is asserted here — see README in this directory.",
+  "modelId": "methylphenidate-one-comp-v1",
+  "selectors": {
+    "coreVersions": [
+      "1.10.0"
+    ],
+    "registryVersions": [
+      "0.9.0"
+    ],
+    "solvers": [
+      "closed-form"
+    ],
+    "parameterSets": [
+      "methylphenidate"
+    ]
+  },
+  "scenario": {
+    "schemaVersion": "1",
+    "analyte": "methylphenidate",
+    "subject": {
+      "weightKg": 80,
+      "heightCm": 178,
+      "age": 35,
+      "sex": "male"
+    },
+    "doses": [
+      {
+        "tHours": 0,
+        "amountMg": 50,
+        "route": "oral",
+        "basis": "active-moiety"
+      }
+    ],
+    "timeGrid": {
+      "startHours": 0,
+      "endHours": 12,
+      "stepHours": 0.25
+    }
+  },
+  "sources": [
+    {
+      "id": "kinetix-internal-invariant",
+      "citation": "Kinetix internal numerical invariant check (no external literature asserted)",
+      "locator": "dimensional consistency of the reported curve: correct unit, monotonic time grid, ordered percentile bands",
+      "reviewedBy": "Kinetix scientific registry review",
+      "reviewedAt": "2026-08-27",
+      "evidenceKind": "internal-invariant",
+      "endpoints": [
+        "dimensional-consistency"
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "endpoint": "dimensional-consistency"
+    }
+  ]
+}

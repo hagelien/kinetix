@@ -1,0 +1,23 @@
+-- Generalize `parameter_entries` beyond concentration parameters.
+--
+-- Multi-value source entries are no longer limited to the interpretive
+-- concentrations: any drug parameter whose reported value varies between papers
+-- (half-life, logP/logD, pKa, blood:plasma ratio, plasma protein binding,
+-- Vd, Tmax, clearance, bioavailability, the dose ranges, detection windows)
+-- is now backed by per-source rows and displayed as a pooled aggregate.
+--
+-- Two of the columns were concentration-specific and NOT NULL:
+--   * `matrix`   — only a concentration changes with the sampled matrix. A
+--                  half-life has no "serum vs whole blood" reading, and forcing
+--                  one would invent a dimension the source never reported.
+--   * `scenario` — the interpretive buckets (living therapeutic, postmortem
+--                  poly intoxication, …) describe a concentration's context.
+--                  A logP has none; its study context goes in `comments`.
+--
+-- Dropping NOT NULL is the whole change. Existing rows are unaffected: every
+-- one of them is a concentration entry that already carries both values, and
+-- the registry (matrixRelevant / scenarioRelevant) keeps requiring them for
+-- those parameters at the API and approval boundaries.
+ALTER TABLE "parameter_entries" ALTER COLUMN "matrix" DROP NOT NULL;
+--> statement-breakpoint
+ALTER TABLE "parameter_entries" ALTER COLUMN "scenario" DROP NOT NULL;

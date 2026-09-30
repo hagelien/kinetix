@@ -1,0 +1,50 @@
+name: parity
+
+# Merges to `main` no longer re-run this workflow: a pull request is tested
+# against its merge commit, so the post-merge run re-executed a verdict the pull
+# request had already produced (~500 billed minutes a month across this
+# repository's workflows). The trade-off is that two pull requests which pass
+# alone but break each other are caught by the next pull request to touch the
+# area rather than at the merge; a merge queue is how to get that signal back.
+on:
+  pull_request:
+    paths:
+      - 'src/lib/etoh**'
+      - 'src/lib/ethanol**'
+      - 'src/stores/ethanolSimulatorStore.ts'
+      - 'tests/parity/**'
+      - '.github/workflows/parity.yml'
+
+# Supersede an in-flight run when a newer commit lands on the same PR. Every
+# trigger here is now a pull request, so there is no default-branch run left to
+# protect from cancellation.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    # Hang guard only (npm + the parity suite finish in a few minutes).
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install JS deps
+        run: npm ci
+      # The reference outputs in tests/parity/oracle-snapshots.v3*.json are
+      # frozen: they were produced by the legacy spreadsheet tool, which is not
+      # part of this repository, so they are compared against, never regenerated.
+      - name: Run parity + invariants
+        run: npm run test:parity
+      - name: Upload PARITY.md on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-report
+          path: |
+            PARITY.md
+            tests/parity/reports/parity-report.json

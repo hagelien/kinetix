@@ -1,0 +1,59 @@
+name: simulator-mechanics
+
+# `/modeling/how-it-works` publishes the simulator's own account of itself — its
+# premises, assumptions, constraints and known weaknesses — for pharmacologists
+# deciding whether a curve may be relied on. A page like that is worth less than
+# nothing if it quietly describes last quarter's engine, so the claims in
+# `docs/simulator-mechanics.md` are asserted against the running code by
+# `src/lib/__tests__/simulatorMechanics.test.ts`.
+#
+# This job runs that guard whenever anything it describes changes: the engine and
+# its registry, the modelling wiring that feeds them, the page, or the document
+# itself. A failure means the simulator moved and the document did not — fix the
+# document, don't weaken the test.
+# Merges to `main` no longer re-run this workflow: a pull request is tested
+# against its merge commit, so the post-merge run re-executed a verdict the pull
+# request had already produced (~500 billed minutes a month across this
+# repository's workflows). The trade-off is that two pull requests which pass
+# alone but break each other are caught by the next pull request to touch the
+# area rather than at the merge; a merge queue is how to get that signal back.
+on:
+  pull_request:
+    paths:
+      - 'src/lib/kinetics-core/**'
+      - 'src/lib/simulatorMechanics.ts'
+      - 'src/lib/forwardCoreAdapter.ts'
+      - 'src/lib/modelingRun.ts'
+      - 'src/lib/ethanolEngine/**'
+      - 'src/lib/compute/**'
+      - 'src/stores/simulatorStore.ts'
+      - 'src/pages/SimulatorMechanicsPage.tsx'
+      - 'src/pages/SimulatorMechanicsPage.test.tsx'
+      - 'src/lib/__tests__/simulatorMechanics.test.ts'
+      - 'docs/simulator-mechanics.md'
+      - '.github/workflows/simulator-mechanics.yml'
+
+# Supersede an in-flight run when a newer commit lands on the same PR. Every
+# trigger here is now a pull request, so there is no default-branch run left to
+# protect from cancellation.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  simulator-mechanics:
+    runs-on: ubuntu-latest
+    # Hang guard only; the guard finishes in seconds.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install deps
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Mechanics document matches the running simulator
+        run: npx vitest run src/lib/__tests__/simulatorMechanics.test.ts src/pages/SimulatorMechanicsPage.test.tsx

