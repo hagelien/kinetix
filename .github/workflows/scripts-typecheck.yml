@@ -1,0 +1,65 @@
+name: scripts-typecheck
+
+# `npm run typecheck` covers src/data/db/api and tsconfig.migrations.json covers
+# the migration path. `scripts/` was in neither (#1077) — and `scripts/` is
+# where the CLIs that write to production live. Their correctness argument is
+# "the dry run is read first and the refusals abort before anything is
+# written", so a type error in a refusal was discovered by running the refusal
+# against a real database.
+#
+# What only a real run could see, until this job existed:
+# seed-reference-concentrations.ts selected `drugs.name`, a column removed by
+# migration 0013 in favour of the `names` jsonb, and inserted a
+# drug_parameter_revisions row without the `createdBy` that migration made NOT
+# NULL. Both were load-bearing; neither was reachable by any check.
+#
+# The filter is wider than this repo's usual convention on purpose. The paths
+# below are not a guess — they are the roots `scripts/**/*.ts` actually imports
+# from, and the failure this job exists to catch arrives as a *schema* change,
+# not a script change: the PR that renames a column is the one that breaks the
+# seeder, and gating only on `scripts/**` would let it land green and surface
+# on somebody else's unrelated PR weeks later.
+# Merges to `main` no longer re-run this workflow: a pull request is tested
+# against its merge commit, so the post-merge run re-executed a verdict the pull
+# request had already produced (~500 billed minutes a month across this
+# repository's workflows). The trade-off is that two pull requests which pass
+# alone but break each other are caught by the next pull request to touch the
+# area rather than at the merge; a merge queue is how to get that signal back.
+on:
+  pull_request:
+    paths:
+      - 'scripts/**'
+      - 'api/**'
+      - 'data/**'
+      - 'db/**'
+      - 'src/lib/**'
+      - 'src/types/**'
+      - 'tsconfig.json'
+      - 'tsconfig.migrations.json'
+      - 'tsconfig.scripts.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/scripts-typecheck.yml'
+
+# Supersede an in-flight run when a newer commit lands on the same PR. Every
+# trigger here is now a pull request, so there is no default-branch run left to
+# protect from cancellation.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  scripts-typecheck:
+    runs-on: ubuntu-latest
+    # Hang guard only; real runs finish in well under a minute.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install deps
+        run: npm ci
+      - name: Typecheck scripts/
+        run: npm run typecheck:scripts

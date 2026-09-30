@@ -1,0 +1,95 @@
+name: unit-tests
+
+# The default vitest project — every `src/**` and `tests/**` suite outside the
+# Postgres-backed integration and governance targets — had no PR gate at all.
+# Every other workflow here is filtered to one subsystem (`kinetics-core` to the
+# PK engine, `parity` to the ethanol path, `migrations` to the governance and
+# schema surface), so a change to anything else merged with its own tests
+# unexecuted, and a test broken on `main` stayed broken silently. That is how
+# `ParameterEntryList`'s tooltip assertion survived #1188.
+#
+# Deliberately unfiltered. A path list is what produced the gap: it has to be
+# widened by hand every time a tree grows, and the failure mode when someone
+# forgets is a green check that ran nothing. The suite is a few minutes, which
+# is cheaper than the class of bug it catches. The Postgres-backed targets stay
+# out — `migrations` owns those and they need a service container.
+#
+# This workflow runs on merges to `main` as well as on pull requests, and the
+# eight other workflows here do not. That asymmetry is deliberate.
+#
+# A pull request is tested against its merge commit, so the post-merge run is
+# usually re-reporting a verdict the pull request already produced — which is
+# why #1224 removed it everywhere, for ~500 billed minutes a month. What it
+# gives up is the one case the merge commit cannot cover: two pull requests
+# that each pass alone and break each other once both are merged. Several
+# agents open pull requests here in parallel, so that is not hypothetical.
+#
+# `merge_group` is the right answer to that and was tried first. It does not
+# work on this repository: merge queues require an organisation-owned
+# repository, and a private one needs GitHub Enterprise Cloud. These are
+# private repositories on a personal account, so the "Require merge queue"
+# setting does not exist to switch on and the trigger would never have fired.
+# Do not re-add it without checking that has changed.
+#
+# So the post-merge run comes back, for this workflow only. It is the one that
+# covers the whole tree (deliberately unfiltered, see above), and at the
+# suite's post-#1224 ~5 minutes it costs roughly 155 billed minutes a
+# fortnight against the 284 it cost before that work — the same order as the
+# queue would have, for the same protection one step later: a clash is caught
+# shortly after it lands rather than just before. The other eight stay
+# pull-request-only; they are narrow subsystem checks whose own pull request
+# already ran them, and `migrations` keeps its own `push: main` trigger for
+# the governance contract in connection-identity.test.ts.
+#
+# Draft pull requests do not run this suite. It is one of the two most
+# expensive workflows here, and a draft is by definition a branch still being
+# iterated on — every "Address Codex Nth pass" commit paid for a full run of a
+# tree that was about to change again. Marking the pull request **Ready for
+# review** is the switch: `ready_for_review` is listed below precisely so that
+# click starts the run, and a draft reopened for more work goes quiet again.
+#
+# The cheap path-filtered workflows (`kinetics-core`, `parity`,
+# `scripts-typecheck`, `server-shared-esm`, `catalog-sync`,
+# `prompt-registry-sync`) deliberately keep running on drafts: they are narrow
+# and short, and they are what gives a reviewer reading a draft any signal at
+# all. Silencing those too would have reviewers — human and agent — reading
+# code no check has ever touched.
+#
+# `codex-gate` already skips drafts in its own job `if`, so nothing downstream
+# needs to know about this.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+  push:
+    branches: [main]
+
+# Supersede an in-flight run when a newer commit lands on the same pull
+# request. Never cancels a `main` run: that is the whole point of the
+# post-merge trigger above, and each commit's result on the default branch has
+# to survive. Both halves below protect it — `pull_request.number` is null on a
+# push, which falls through to `run_id` and gives every `main` run a group of
+# its own, and `cancel-in-progress` is false for any event that is not a pull
+# request.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  unit-tests:
+    # A draft pull request is skipped; a `push` to `main` has no
+    # pull_request payload, so the first half keeps that path running.
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    # Hang guard only; the suite runs in a few minutes.
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install deps
+        run: npm ci
+      - name: Unit and component suite
+        run: npx vitest run

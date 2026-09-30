@@ -1,0 +1,31 @@
+/*
+ * Typechecks the maintenance CLIs under `scripts/` (#1077).
+ *
+ * `npm run typecheck` covers src/data/db/api; `tsconfig.migrations.json`
+ * covers the migration path. `scripts/` was in neither, which mattered because
+ * that is where the CLIs that write to production live — merge-drugs,
+ * retarget-pubchem-cid, seed-drugs, seed-reference-concentrations. Their
+ * correctness argument is "the dry run is read first and the refusals abort
+ * before anything is written", and until now every one of those refusals was
+ * code nothing typechecked. A type error in a guard was discovered by running
+ * the guard against a real database.
+ *
+ * Extends the migrations config so the two share one set of compiler options
+ * rather than drifting apart, with one deliberate divergence:
+ *
+ *   `lib` re-adds DOM. Several CLIs import from `src/lib/*` — browser modules
+ *   typechecked against DOM by the root config — and scripts/farmakologiportalen
+ *   parses HTML through jsdom. Under the migrations config's node-only `lib`
+ *   those files failed on `RequestInit.cache` and `Response.json()` returning
+ *   `unknown`: a mismatch between two configs, not a defect in the code.
+ *
+ * Scope is `.ts` only. The `.mjs` build helpers are not covered — `allowJs`
+ * stays off, and widening to them is a separate job, as is widening to tests.
+ */
+{
+  "extends": "./tsconfig.migrations.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+  },
+  "include": ["scripts/**/*.ts", "src/types/import-meta-env.d.ts"]
+}

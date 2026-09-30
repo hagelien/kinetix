@@ -1,0 +1,218 @@
+{
+  "schemaVersion": "kinetix-deep-research-output-v1",
+  "drugIdentity": {
+    "preferredName": "Cocaine",
+    "names": {
+      "en": "Cocaine",
+      "nb": "Kokain"
+    },
+    "nameShort": null,
+    "aliases": ["coke", "benzoylmethylecgonine", "kokain"],
+    "pubchemCid": 446220,
+    "molecularWeight": 303.35
+  },
+  "kinetixParameterValues": [
+    {
+      "parameter": "halfLife",
+      "status": "finalized",
+      "value": {
+        "min": 0.7,
+        "max": 1.7,
+        "median": 1.2,
+        "unit": "h",
+        "note": "Akutt enkeltdose hos voksne; plasma/fullblod; intravenøst, intranasalt og peroralt. Ved kronisk bruk, i spytt og i postmortal terminalfase er verdiene lengre (3,5–8 t) og må ikke brukes til å tolke akutte blodkonsentrasjoner."
+      },
+      "sourceIds": ["S1", "S2"],
+      "sourceValues": [
+        {
+          "sourceId": "S1",
+          "low": 0.7,
+          "high": 1.3,
+          "median": 1.0,
+          "unit": "h",
+          "n": 12,
+          "comments": "Friske voksne, én intravenøs enkeltdose, plasma."
+        },
+        {
+          "sourceId": "S2",
+          "median": 1.6,
+          "unit": "h",
+          "comments": "Kroniske brukere, intranasal tilførsel, fullblod."
+        }
+      ]
+    },
+    {
+      "parameter": "bloodPlasmaRatio",
+      "status": "finalized",
+      "value": {
+        "median": 0.87,
+        "unit": "ratio",
+        "note": "Kokain fordeler seg omtrent likt mellom fullblod og plasma (halveringstid 1,3 t i fullblod mot 1,5 t i plasma)."
+      },
+      "sourceIds": ["S2", "S4"],
+      "sourceValues": [
+        {
+          "sourceId": "S2",
+          "median": 0.87,
+          "unit": "ratio",
+          "comments": "Sammenligning av halveringstid i fullblod og plasma, voksne."
+        },
+        {
+          "sourceId": "S4",
+          "median": 1.0,
+          "unit": "ratio",
+          "comments": "Oppsummert fordeling fra oppslagsverk; kokain fordeler seg omtrent likt mellom fullblod og plasma."
+        }
+      ]
+    },
+    {
+      "parameter": "pKa",
+      "status": "finalized",
+      "value": {
+        "median": 8.6,
+        "note": "Svak base; dimensjonsløs — enhet utelatt."
+      },
+      "sourceIds": ["S3", "S4"],
+      "sourceValues": [
+        {
+          "sourceId": "S3",
+          "median": 8.7,
+          "unit": "",
+          "comments": "Oppføring for fri base i stoffdatabase; dimensjonsløs, enhet utelatt."
+        },
+        {
+          "sourceId": "S4",
+          "median": 8.6,
+          "unit": "",
+          "comments": "Verdi for fri base fra oppslagsverk."
+        }
+      ]
+    },
+    {
+      "parameter": "logD",
+      "status": "not_finalized",
+      "value": null,
+      "note": "Fant ingen målt logD 7,4; beregnede verdier spriker mer enn én logenhet.",
+      "sourceIds": []
+    }
+  ],
+  "ionizationConstants": [
+    {
+      "pKa": 8.6,
+      "protonatedCharge": 1,
+      "deprotonatedCharge": 0,
+      "evidenceType": "experimental",
+      "sourceIds": ["S3", "S4"]
+    }
+  ],
+  "pharmacodynamicTargets": [
+    {
+      "targetSymbol": "SLC6A3",
+      "targetName": "Dopamintransportør",
+      "interactionType": "inhibitor",
+      "tier": "primary",
+      "ki": {
+        "median": 0.64,
+        "unit": "µM"
+      },
+      "assaySpecies": "Homo sapiens (rekombinant, HEK293)",
+      "sourceIds": ["S1"],
+      "evidenceNote": "Radioligandbinding til rekombinant DAT. Blokkering av dopaminreopptak er hovedmekanismen bak den forsterkende effekten."
+    },
+    {
+      "targetSymbol": "SLC6A4",
+      "targetName": "Serotonintransportør",
+      "interactionType": "inhibitor",
+      "tier": "secondary",
+      "ki": {
+        "median": 0.14,
+        "unit": "µM"
+      },
+      "sourceIds": []
+    }
+  ],
+  "metabolism": {
+    "profileEvidenceNote": "Kokain hydrolyseres raskt av karboksylesteraser i plasma og lever; hovedmetabolittene er benzoylecgonin og ecgoninmetylester.",
+    "profileSourceIds": ["S1"],
+    "eliminationRoutes": [
+      {
+        "kind": "enzyme",
+        "enzymeOrEntitySymbol": "CES1",
+        "label": "Carboxylesterase 1",
+        "fraction": 0.4,
+        "sourceIds": ["S1"]
+      },
+      {
+        "kind": "enzyme",
+        "enzymeOrEntitySymbol": "BChE",
+        "label": "Butyrylcholinesterase",
+        "sourceIds": ["S1"]
+      },
+      {
+        "kind": "renal_unchanged",
+        "label": "Glomerulær filtrasjon av uendret morstoff",
+        "fraction": 0.05,
+        "sourceIds": []
+      }
+    ],
+    "metabolites": [
+      {
+        "metaboliteName": "Benzoylecgonine",
+        "activity": "inactive",
+        "conversionFraction": 0.35,
+        "sourceIds": ["S1"]
+      },
+      {
+        "metaboliteName": "Ecgonine methyl ester",
+        "activity": "inactive",
+        "conversionFraction": 0.32,
+        "sourceIds": ["S1"]
+      }
+    ],
+    "enzymeInteractions": [
+      {
+        "enzymeOrEntitySymbol": "CYP3A4",
+        "role": "substrate",
+        "strength": "moderate",
+        "note": "N-demetylering til norkokain.",
+        "sourceIds": ["S1"]
+      }
+    ]
+  },
+  "sources": [
+    {
+      "sourceId": "S1",
+      "citationType": "pmid",
+      "pmid": "29462364",
+      "title": "Bioavailability and Pharmacokinetics of Oral Cocaine in Humans",
+      "authors": ["Coe MA", "Jufer Phipps RA", "Cone EJ", "Walsh SL"],
+      "journalOrSource": "J Anal Toxicol",
+      "year": 2018,
+      "doi": "10.1093/jat/bky007"
+    },
+    {
+      "sourceId": "S2",
+      "citationType": "pmid",
+      "pmid": "31150569",
+      "title": "Detection of cocaine and its metabolites in whole blood and plasma following a single dose, controlled administration of intranasal cocaine",
+      "authors": ["Menzies EL", "Archer JRH", "Dargan PI"],
+      "journalOrSource": "Drug Test Anal",
+      "year": 2019,
+      "doi": "10.1002/dta.2657"
+    },
+    {
+      "sourceId": "S3",
+      "citationType": "url",
+      "url": "https://pubchem.ncbi.nlm.nih.gov/compound/446220",
+      "title": "PubChem Compound Summary — Cocaine (CID 446220)"
+    },
+    {
+      "sourceId": "S4",
+      "citationType": "freetext",
+      "identifier": "Baselt RC. Disposition of Toxic Drugs and Chemicals in Man. 12th ed. Seal Beach, CA: Biomedical Publications; 2020.",
+      "title": "Disposition of Toxic Drugs and Chemicals in Man, 12th ed.",
+      "authors": ["Baselt RC"],
+      "year": 2020
+    }
+  ]
+}

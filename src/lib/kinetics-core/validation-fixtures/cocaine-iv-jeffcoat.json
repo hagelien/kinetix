@@ -1,0 +1,48 @@
+{
+  "fixtureVersion": 1,
+  "suiteVersion": "1.0.0",
+  "id": "cocaine-iv-jeffcoat-1989",
+  "description": "Cocaine IV bolus dimensional, mass-balance, and terminal landmark review",
+  "modelId": "cocaine-one-comp-v2",
+  "selectors": {
+    "coreVersions": ["1.10.0"],
+    "registryVersions": ["0.9.0"],
+    "solvers": ["closed-form"],
+    "parameterSets": ["cocaine"]
+  },
+  "scenario": {
+    "schemaVersion": "1",
+    "analyte": "cocaine",
+    "subject": { "weightKg": 80 },
+    "doses": [
+      { "tHours": 0, "amountMg": 100, "route": "iv", "basis": "active-moiety" }
+    ],
+    "timeGrid": { "startHours": 0, "endHours": 12, "stepHours": 0.25 }
+  },
+  "sources": [
+    {
+      "id": "jeffcoat-1989",
+      "citation": "Jeffcoat AR et al. Cocaine disposition in humans after intravenous injection, nasal insufflation, or smoking. Drug Metab Dispos. 1989;17(2):153-159.",
+      "locator": "PMID: 2565204; terminal elimination half-life reported approximately 69-78 minutes",
+      "reviewedBy": "Kinetix scientific registry review",
+      "reviewedAt": "2026-08-26",
+      "evidenceKind": "external-literature",
+      "endpoints": ["literature-landmark"]
+    }
+  ],
+  "checks": [
+    { "endpoint": "dimensional-consistency" },
+    {
+      "endpoint": "mass-balance",
+      "doseMg": 100,
+      "volumeLiters": 216,
+      "atHours": 0,
+      "relTol": 0.000001
+    },
+    {
+      "endpoint": "literature-landmark",
+      "landmark": "terminalHalfLifeHours",
+      "expected": { "value": 1.225, "absTol": 0.3 }
+    }
+  ]
+}

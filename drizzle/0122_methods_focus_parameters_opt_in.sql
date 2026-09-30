@@ -1,0 +1,41 @@
+-- An explicit opt-in for the composed `methods` + `parameters` focus.
+--
+-- 0121 cleared the dormant `parameters` array off a `methods` focus row, and
+-- `scopeArraysToMode` stopped new ones being written. Both are necessary and
+-- neither closes the deploy window, which is this file's job.
+--
+-- `vercel.json` runs `scripts/apply-migrations-build.ts` as the FIRST step of
+-- the build command, and `.github/workflows/deploy-production.yml` only runs
+-- `vercel deploy --prebuilt` once that build finishes. So every migration
+-- applies while the PREVIOUS build is still live and still serving writes. An
+-- admin who saves a `methods` focus during that window goes through the OLD
+-- `PUT /api/agent-focus`, which persists whatever `parameters` the old form
+-- submitted — landing AFTER 0121's UPDATE has already run. The new resolver
+-- then goes live over a row that looks exactly like the one 0121 was written
+-- to disarm, and the silent narrowing is back. AGENTS.md records this same
+-- window twice (the substance-class backfill and the loq/lod retirement, both
+-- deliberately post-deploy scripts rather than migrations) — a one-shot
+-- migration cannot fix state that a still-running writer can recreate.
+--
+-- A post-deploy script is the wrong shape here for a reason those two are not:
+-- their risk is stale DATA, repaired whenever the script runs, while this risk
+-- is a READER activating an array it should not trust. The new code is live the
+-- instant the deploy finishes, so between deploy and script the narrowing would
+-- already be in force — and a manual step that must be remembered is exactly
+-- what it must not depend on.
+--
+-- So the guard moves into the row itself. `methods_parameters_opt_in` records
+-- that a COMPOSITION-AWARE writer put those parameters there. It defaults to
+-- false, and the old handler never mentions the column, so any write landing in
+-- the build window leaves it false and the resolver ignores the array — the
+-- window is closed by construction rather than by timing. `scopeArraysToMode`
+-- derives the flag from what it is about to store, so the two can never
+-- disagree, and an admin re-picks the combination in the form once the new
+-- build is live.
+--
+-- Deliberately NOT backfilled to true for any existing row: there is no row
+-- that could legitimately want it yet, since the composed focus ships with this
+-- change. False for everything is the honest starting state.
+
+ALTER TABLE "agent_focus_config"
+  ADD COLUMN IF NOT EXISTS "methods_parameters_opt_in" boolean NOT NULL DEFAULT false;

@@ -1,0 +1,309 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* IBM Plex Mono — vendored locally, served from /fonts/.
+ * Only Regular (400) and Bold (700) are shipped; the app doesn't reference
+ * other weights or italic mono. Add more faces here if a new weight/style
+ * is introduced. */
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 400;
+  src: url("/fonts/IBMPlexMono-Regular.ttf") format("truetype");
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 700;
+  src: url("/fonts/IBMPlexMono-Bold.ttf") format("truetype");
+  font-display: swap;
+}
+
+@layer base {
+  :root {
+    /* Kinetix — scientific precision palette */
+    --background: 210 20% 98%;
+    --foreground: 210 25% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 210 25% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 210 25% 12%;
+
+    /* Deep teal primary — life sciences */
+    --primary: 188 65% 32%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Cool gray secondary */
+    --secondary: 210 15% 95%;
+    --secondary-foreground: 210 25% 12%;
+
+    /* Muted tones */
+    --muted: 210 12% 93%;
+    --muted-foreground: 210 10% 45%;
+    /* The design's "faint" tier and row hairline. The only two tokens this
+       view adds: the hatched band, tick labels and row rules are all drawn
+       from them, so the dark theme inverts with everything else rather than
+       carrying a second palette. */
+    --muted-foreground-faint: 210 10% 58%;
+    --border-subtle: 200 10% 94%;
+
+    /* Cool cyan accent — data highlights, sits in primary's hue family */
+    --accent: 188 70% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    /* Design handoff mode accents */
+    --sim: 220 70% 50%;
+    --kine: 280 55% 50%;
+    --etoh: 24 90% 55%;
+    --mode-accent: var(--sim);
+
+    --success: 155 55% 38%;
+    --success-foreground: 0 0% 100%;
+
+    /* Clear red for warnings */
+    --destructive: 4 70% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Subtle borders with cool undertone */
+    --border: 210 15% 88%;
+    --input: 210 15% 88%;
+    --ring: 188 60% 38%;
+
+    /* Categorical colors for the parameter-entry forest plot, keyed by
+       biological matrix. Full hex (not HSL triplets) so SVG can use var()
+       directly. Light steps validated for CVD/contrast via the dataviz skill. */
+    --matrix-whole_blood: #2a78d6;
+    --matrix-serum: #eb6834;
+    --matrix-plasma: #1baf7a;
+    --matrix-urine: #eda100;
+    --matrix-vitreous: #e87ba4;
+    --matrix-hair: #4a3aa7;
+    --matrix-other: #6b7280;
+    /* Sources with no matrix: either the parameter has no matrix dimension
+       (half-life, logP, pKa) or the source never stated one. Distinct from
+       'other', which is a matrix a source is coded as on purpose. */
+    --matrix-none: #3f5a73;
+
+    --radius: 0.625rem;
+
+    --text-scale: 0.95;
+
+    /* Signature dark chrome — same in light and dark mode. */
+    --header-gradient: linear-gradient(
+      to right,
+      hsl(195 35% 14%),
+      hsl(210 30% 18%),
+      hsl(220 45% 25%)
+    );
+  }
+
+  .dark {
+    /* Kinetix dark mode */
+    --background: 210 20% 8%;
+    --foreground: 210 10% 92%;
+
+    --card: 210 18% 11%;
+    --card-foreground: 210 10% 92%;
+
+    --popover: 210 18% 11%;
+    --popover-foreground: 210 10% 92%;
+
+    --primary: 188 55% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 15% 15%;
+    --secondary-foreground: 210 10% 92%;
+
+    --muted: 210 12% 18%;
+    --muted-foreground: 210 8% 55%;
+    --muted-foreground-faint: 210 8% 45%;
+    --border-subtle: 215 15% 22%;
+
+    --accent: 188 65% 55%;
+    --accent-foreground: 0 0% 100%;
+
+    --success: 155 50% 48%;
+    --success-foreground: 0 0% 100%;
+
+    --destructive: 4 65% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 210 12% 20%;
+    --input: 210 12% 20%;
+    --ring: 188 50% 50%;
+
+    /* Matrix categorical colors re-stepped for the dark surface. */
+    --matrix-whole_blood: #3987e5;
+    --matrix-serum: #d95926;
+    --matrix-plasma: #199e70;
+    --matrix-urine: #c98500;
+    --matrix-vitreous: #d55181;
+    --matrix-hair: #9085e9;
+    --matrix-other: #9aa0a6;
+    --matrix-none: #93a7bb;
+  }
+
+  [data-modeling-mode="simulator"] {
+    --mode-accent: var(--sim);
+  }
+
+  [data-modeling-mode="kinelab"] {
+    --mode-accent: var(--kine);
+  }
+
+  [data-modeling-mode="ethanol"] {
+    --mode-accent: var(--etoh);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family:
+      "IBM Plex Sans",
+      system-ui,
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      sans-serif;
+    font-size: calc(15px * var(--text-scale));
+  }
+}
+
+@layer utilities {
+  /* Row of actions that stays out of the way until the row is hovered or
+     focused. A coarse pointer never fires :hover, so on touch the row would
+     be permanently invisible and its actions unreachable — for the drug
+     parameter rows that includes the only entry point to a parameter's source
+     values. Where the device cannot hover, show the actions outright.
+     Doubling the class outweighs Tailwind's `.opacity-0` without !important;
+     Tailwind 3.4 has no pointer/hover media variants of its own. */
+  @media (hover: none) {
+    .hover-actions.hover-actions {
+      opacity: 1;
+    }
+  }
+
+  .num {
+    font-family:
+      "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+}
+
+@layer components {
+  .formula-block {
+    @apply border border-dashed border-border rounded-lg p-3 bg-card mb-2.5;
+  }
+
+  .formula-block h4 {
+    @apply m-0 mb-1.5 font-semibold;
+  }
+
+  .formula-text {
+    @apply m-0 text-muted-foreground leading-relaxed;
+  }
+
+  .calculator-grid {
+    @apply grid gap-3 mb-3;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  }
+
+  .calculator-input {
+    @apply flex flex-col gap-1.5 p-2.5 border border-border rounded-lg bg-secondary;
+  }
+
+  .calculator-input label {
+    @apply font-semibold text-sm;
+  }
+
+  .calculator-input input {
+    @apply px-2.5 py-2 rounded-lg border border-border bg-card focus:ring-2 focus:ring-ring focus:border-transparent outline-none transition-all;
+  }
+
+  .scenario-list {
+    @apply flex flex-wrap gap-2 my-2.5 p-0 list-none;
+  }
+
+  .scenario-pill {
+    @apply inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full border border-border bg-secondary text-sm;
+  }
+
+  .status-chip {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-primary/10 text-primary font-semibold text-sm;
+  }
+
+  .badge {
+    @apply inline-flex px-2 py-1 rounded-full bg-primary/15 text-primary font-bold text-sm;
+  }
+
+  .badge--muted {
+    @apply bg-muted text-muted-foreground;
+  }
+
+  .drug-name {
+    @apply font-bold;
+  }
+
+  .drug-name-en {
+    @apply text-sm text-muted-foreground;
+  }
+
+  .drug-category {
+    @apply block text-xs text-muted-foreground mt-0.5;
+  }
+}
+
+/* Custom scrollbar - warm tones */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-muted rounded;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply rounded;
+  background: hsl(var(--accent));
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary));
+}
+
+/* Print stylesheet for /simulator/ethanol — single-page report. */
+@media print {
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  nav,
+  header,
+  .print\:hidden,
+  button {
+    display: none !important;
+  }
+  .lg\:col-span-2,
+  [data-testid="workbook-backcalc-panel"],
+  [data-testid="workbook-outputs"] {
+    break-inside: avoid;
+  }
+  a[href]:after {
+    content: "";
+  }
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+}

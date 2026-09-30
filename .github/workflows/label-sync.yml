@@ -1,0 +1,35 @@
+name: label-sync
+
+# The issue-triage routine labels issues P0-P3. Applying a label through the
+# issues API does create a missing one, but it lands grey and description-less,
+# and nothing in the repository says which four bands exist or what they mean.
+# This job makes .github/labels.json the source of truth: it runs whenever that
+# file changes on main, and on demand, so the label set is reviewed in a pull
+# request like everything else.
+#
+# It only creates and updates (`gh label create --force`). It never deletes,
+# because removing a label strips it off every issue that carries it.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/labels.json
+      - .github/workflows/label-sync.yml
+      - scripts/sync-labels.sh
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create or update labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: ./scripts/sync-labels.sh

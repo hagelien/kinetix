@@ -1,0 +1,69 @@
+name: kinetics-core
+
+# The portable PK engine + its registry-provenance gate are safety-critical and
+# vendored into Redose, but no other workflow runs them on a PR (parity.yml is
+# ethanol-path-filtered). This job runs the kinetics-core unit/parity/provenance
+# tests, typechecks, and asserts the committed provenance report is in sync and
+# the registry has no undeclared catalog drift.
+# Merges to `main` no longer re-run this workflow: a pull request is tested
+# against its merge commit, so the post-merge run re-executed a verdict the pull
+# request had already produced (~500 billed minutes a month across this
+# repository's workflows). The trade-off is that two pull requests which pass
+# alone but break each other are caught by the next pull request to touch the
+# area rather than at the merge; a merge queue is how to get that signal back.
+on:
+  pull_request:
+    paths:
+      - 'src/lib/kinetics-core/**'
+      - 'src/lib/kinetics-provenance/**'
+      - 'scripts/generate-registry-provenance.ts'
+      - 'scripts/generate-derived-registry.ts'
+      - 'scripts/run-kinetics-validation.ts'
+      - 'api/_lib/model-derivation-store.ts'
+      - 'docs/kinetics-core/registry-provenance.md'
+      - 'data/components.ts'
+      - '.github/workflows/kinetics-core.yml'
+
+# Supersede an in-flight run when a newer commit lands on the same PR. Every
+# trigger here is now a pull request, so there is no default-branch run left to
+# protect from cancellation.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  kinetics-core:
+    runs-on: ubuntu-latest
+    # Hang guard only; real runs finish in ~1 min.
+    timeout-minutes: 10
+    steps:
+      # Full history: the validation step narrows fixtures by diffing against the PR base with
+      # `<base>...HEAD`, a symmetric difference that needs a merge base. Checkout's default
+      # depth-1 clone has no common ancestor to find one, so the diff aborts.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - name: Install deps
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit + parity + provenance tests
+        run: npx vitest run src/lib/kinetics-core
+      - name: Registry provenance gate (no undeclared drift, report in sync)
+        run: npm run kinetics:provenance:check
+      - name: Derived registry snapshot gate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npm run kinetics:registry:check
+      - name: Select and run reviewed scientific validation fixtures
+        run: npm run kinetics:validate -- --base=${{ github.event.pull_request.base.sha || github.event.before }}
+      - name: Upload before/after-capable validation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kinetics-validation
+          path: artifacts/kinetics-validation.*

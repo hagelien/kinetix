@@ -1,0 +1,23 @@
+-- Split observation context out of curator commentary (parameter_entries.comments).
+--
+-- `comments` has carried two different kinds of text under one column: facts
+-- about the reading itself ("Fasted, single dose, healthy volunteers.",
+-- "Measured by LC-MS/MS.") and curator commentary about the record ("Double-
+-- checked against table 3.", "Superseded by the 2024 label, keep until #1180
+-- lands."). `SOURCE_QUOTE_EVIDENCE_FIELDS` (src/lib/parameterEntries.ts)
+-- deliberately excludes `comments` from what a stored source quote is
+-- evidence for, so a curator rewording a note never costs the entry its
+-- quote — the right call for commentary, and the wrong one for context: a
+-- curator who changes "fasted" to "fed" has changed what the reading IS, so
+-- a quote attached to the old text is no longer evidence for it, but nothing
+-- moved to say so.
+--
+-- This adds a column for the context half and puts IT in the evidence list,
+-- leaving `comments` exactly as it was.
+--
+-- Nullable and NOT backfilled, on purpose: every existing row's `comments` is
+-- an unclassifiable mix of both kinds, so there is no sound way to split it
+-- after the fact. Every existing row keeps this NULL, and only a new or
+-- edited entry populates it going forward.
+ALTER TABLE "parameter_entries"
+  ADD COLUMN IF NOT EXISTS "observation_context" TEXT;

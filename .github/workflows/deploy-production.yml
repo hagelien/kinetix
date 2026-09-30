@@ -1,0 +1,60 @@
+name: deploy-production
+
+# Manual-only production deploy. Auto-deploy stays off to control cost.
+on:
+  workflow_dispatch:
+
+# Never let two prod deploys overlap.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Gate behind the "production" environment (configure Required reviewers
+    # on it in repo Settings → Environments so only approved collaborators
+    # can release).
+    environment: production
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      # Always deploy the tip of main, regardless of which branch launched
+      # this run.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install deps
+        run: npm ci
+      # The build command applies pending migrations to the live database
+      # before it compiles anything (vercel.json → apply-migrations-build.ts),
+      # so this is the last point at which a malformed migration can be stopped
+      # without leaving production half-migrated. migrations.yml runs the same
+      # guard on the PR; this repeats it because a manual deploy can release a
+      # commit whose path filter never triggered that job. See
+      # tests/drizzle-migration-statements.test.ts.
+      - name: Migration statement guard (runs before Neon sees anything)
+        run: npx vitest run tests/drizzle-migration-statements.test.ts
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+      - name: Pull Vercel production env
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+      # Fail fast if the pulled link does not point at the kinetix project. This
+      # catches a misconfigured VERCEL_PROJECT_ID secret before a build/deploy
+      # could publish Kinetix into another project (e.g. ketai) and hijack its
+      # production domain. See docs/ops/vercel-project-link.md.
+      - name: Verify Vercel project link
+        run: node scripts/assert-vercel-project.mjs
+      - name: Build (production)
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Deploy prebuilt to production
+        # --archive=tgz uploads the prebuilt output as a single tarball.
+        # Without it the deploy fails once the output exceeds Vercel's
+        # 15,000-file upload limit (the .vercel/output tree currently
+        # ships ~15k+ files).
+        run: vercel deploy --prebuilt --prod --archive=tgz --token=${{ secrets.VERCEL_TOKEN }}

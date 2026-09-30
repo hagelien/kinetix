@@ -1,0 +1,127 @@
+{
+  "$schema": "kinetix-pm-concentration-dataset-v1",
+  "_comment": "SYNTHETIC TEST FIXTURE. Every analyte name, PubChem CID, number, citation and caveat in this file is invented for tests of scripts/pm-concentrations/dataset.ts. It is not a transcription of any real source and must never be seeded into a database.",
+  "source": {
+    "key": "synthetic-test-cohort",
+    "type": "report",
+    "citation": "Syntetisk testkohort, oppdiktede tall (kun for tester)",
+    "shortLabel": "Syntetisk",
+    "title": "Synthetic postmortem concentration fixture (invented values)",
+    "authors": [
+      "Kinetix test fixture"
+    ],
+    "venue": "None (synthetic)",
+    "year": 2000,
+    "published": false
+  },
+  "study": {
+    "heading": "Syntetiske postmortale testdata",
+    "matrix": "postmortem_femoral_blood",
+    "unit": "mg/L",
+    "design": "Oppdiktet kohort med fem analytter, laget for å teste validatoren. Tallene beskriver ingenting.",
+    "tcColumn": "TC-kolonnen er også oppdiktet og brukes bare for å teste null-håndtering."
+  },
+  "caveats": [
+    "Syntetiske testdata: ingen tall i denne filen er målt."
+  ],
+  "entries": [
+    {
+      "analyte": "Fictazepam",
+      "pubchemCid": 990001,
+      "pubchemName": "Fictazepam",
+      "molecularWeight": 250,
+      "n": 1200,
+      "loq": 0.05,
+      "mean": 0.3,
+      "median": 0.125,
+      "p90": 0.5,
+      "p95": 0.75,
+      "p975": 1,
+      "tcPlasma": 1.5,
+      "medianOverTc": 0.08,
+      "printed": {
+        "p975": "1.0"
+      }
+    },
+    {
+      "analyte": "Placebolol",
+      "pubchemCid": 990002,
+      "pubchemName": "Placebolol",
+      "molecularWeight": 300,
+      "n": 400,
+      "loq": 0.1,
+      "mean": 1.2,
+      "median": 0.4,
+      "p90": 12,
+      "p95": 2.5,
+      "p975": 3.5,
+      "tcPlasma": 0.5,
+      "medianOverTc": 0.8,
+      "anomaly": "Syntetisk: 90-persentilen er satt til 12 mg/L, over både 95- og 97,5-persentilen, for å etterligne en trykkfeil. 90-persentilen tegnes ikke som referanselinje.",
+      "undrawable": [
+        "p90"
+      ],
+      "printed": {
+        "median": "0.40"
+      }
+    },
+    {
+      "analyte": "Examplezine",
+      "pubchemCid": 990003,
+      "pubchemName": "Examplezine systematic-name placeholder",
+      "displayName": "Examplezine",
+      "molecularWeight": 200,
+      "n": 25,
+      "loq": 0.001,
+      "mean": 0,
+      "median": 0.002,
+      "p90": 0.004,
+      "p95": 0.006,
+      "p975": 0.01,
+      "tcPlasma": 0.004,
+      "medianOverTc": 0.5,
+      "anomaly": "Syntetisk: gjennomsnittet er trykt som 0,00 mg/L, altså avrundet til null ved to desimaler. Gjennomsnittet tegnes ikke som referanselinje.",
+      "undrawable": [
+        "mean"
+      ],
+      "printed": {
+        "mean": "0.00"
+      }
+    },
+    {
+      "analyte": "Nullacid (synthetic metabolite)",
+      "pubchemCid": 990004,
+      "pubchemName": "Nullacid",
+      "molecularWeight": 350,
+      "n": 600,
+      "loq": 0.003,
+      "mean": 0.04,
+      "median": 0.02,
+      "p90": 0.08,
+      "p95": 0.11,
+      "p975": 0.16,
+      "tcPlasma": null,
+      "medianOverTc": null
+    },
+    {
+      "analyte": "Mockamine, 4-hydroxy-",
+      "pubchemCid": 990005,
+      "pubchemName": "4-Hydroxymockamine",
+      "displayName": "Hydroxymockamine",
+      "molecularWeight": 180,
+      "n": 90,
+      "loq": null,
+      "mean": 0.05,
+      "median": 0.03,
+      "p90": 0.09,
+      "p95": 0.12,
+      "p975": 0.2,
+      "tcPlasma": 0.1,
+      "medianOverTc": 0.3,
+      "reviewNote": "Syntetisk: koblingen mellom analytt og CID er ubekreftet (testdata).",
+      "printed": {
+        "p975": "0.20"
+      }
+    }
+  ]
+}

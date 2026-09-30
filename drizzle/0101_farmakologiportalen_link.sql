@@ -1,0 +1,34 @@
+-- Link each drug monograph to its counterpart on Farmakologiportalen.
+--
+-- Farmakologiportalen (https://farmakologiportalen.no) is the Norwegian
+-- clinical-pharmacology reference our readers cross-check against, and
+-- scripts/import-farmakologiportalen.ts already walks its substance index. It
+-- kept only what it imported (parameters, metabolites, a `source` flag) and
+-- discarded the one thing a reader wants: the address of the page the values
+-- came from.
+--
+-- The portal addresses a substance as `/content/<associationId>/<Slug>` and
+-- BOTH segments are load-bearing — `/content/757` alone answers 200 with a
+-- shell page that names no substance, so the numeric id on its own is not a
+-- usable handle. Hence the whole path is stored verbatim rather than an id we
+-- would have to re-slugify into a URL and get wrong.
+--
+-- Path, not absolute URL: the origin is a constant of the source
+-- (FARMAKOLOGIPORTALEN_BASE_URL in src/lib/farmakologiportalen.ts), and
+-- storing it per row would let a stray absolute URL from some future importer
+-- point an on-page link at an arbitrary host. The renderer only accepts a
+-- `/content/…` path, so the destination host cannot be data-controlled.
+--
+-- NULL means "no known counterpart" — either the portal does not list the
+-- substance or the link has not been backfilled yet — and the monograph simply
+-- shows no link. It is deliberately not a claim that the portal lacks it.
+--
+-- ROLLOUT: this adds the column NULL for every existing row, so the deploy
+-- that carries it ships the feature switched off — the monograph renders a
+-- link only where a path is stored, and nothing in `vercel build` stores one.
+-- Filling them is a post-deploy step (Actions → farmakologiportalen-links, or
+-- `npm run backfill:farmakologiportalen-links`), deliberately not part of the
+-- build: the backfill reads a third-party site, and a release that fails
+-- because farmakologiportalen.no is briefly down is worse than a link filled a
+-- few minutes later. See docs/ops/farmakologiportalen-links.md.
+ALTER TABLE "drugs" ADD COLUMN IF NOT EXISTS "farmakologiportalen_path" varchar(300);

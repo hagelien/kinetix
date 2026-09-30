@@ -1,0 +1,55 @@
+{
+  "$comment": "Label definitions for hagelien/kinetix. Applied by .github/workflows/label-sync.yml (and `npm run labels:sync`) with `gh label create --force`, which creates a missing label and updates the colour/description of one that already exists. Nothing here ever deletes a label, so labels that are not listed are left alone. P0-P3 are urgency bands for any issue, review-born or not: the same four bands docs/REVIEW_POLICY.md routes review findings into, so the two never drift into separate vocabularies, but the descriptions stay source-neutral because most labelled issues have no raising pull request. What a review finding of each severity obliges is in docs/REVIEW_POLICY.md; `review-debt` is what marks an issue as review-born. .github/ISSUE_TEMPLATE/review-debt.md names `P2` and `review-debt`, which a template silently drops if they do not exist, so both have to be declared here. `immediate_implementation` is the one label a human applies to make something happen rather than to describe it: labelling an issue with it wakes the issue-worker routine, which implements that issue straight away instead of waiting for the next scheduled backlog pass.",
+  "labels": [
+    {
+      "name": "P0",
+      "color": "b60205",
+      "description": "Highest urgency: blocks a release. Takes priority over all other work."
+    },
+    {
+      "name": "P1",
+      "color": "d93f0b",
+      "description": "High urgency: worked immediately, ahead of planned backlog work."
+    },
+    {
+      "name": "P2",
+      "color": "fbca04",
+      "description": "Real but not blocking. Tracked as scheduled work, never dropped."
+    },
+    {
+      "name": "P3",
+      "color": "c2e0c6",
+      "description": "Lowest urgency. Tracked like a P2, picked up when it fits."
+    },
+    {
+      "name": "review-debt",
+      "color": "d4c5f9",
+      "description": "Deferred review finding awaiting the milestone backlog review."
+    },
+    {
+      "name": "blocked",
+      "color": "5319e7",
+      "description": "Waiting on another issue, a decision, or an external dependency."
+    },
+    {
+      "name": "epic",
+      "color": "0e8a16",
+      "description": "Umbrella issue tracking a set of subtasks."
+    },
+    {
+      "name": "subtask",
+      "color": "bfd4f2",
+      "description": "Part of an epic; see the parent issue for the whole picture."
+    },
+    {
+      "name": "auto-fix",
+      "color": "1d76db",
+      "description": "Filed automatically from a failed build or a runtime error."
+    },
+    {
+      "name": "immediate_implementation",
+      "color": "0052cc",
+      "description": "Work this issue now: wakes the issue worker to implement it straight away."
+    }
+  ]
+}

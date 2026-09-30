@@ -1,0 +1,121 @@
+-- Drop volume-of-distribution values stored in a unit the parameter does not have.
+--
+-- `volumeOfDistribution` is declared per-kilogram in the registry
+-- (src/lib/drugParameters.ts): `allowedUnits: ['L/kg']`, bounds 0.01–1000. A
+-- bulk auto-extraction nonetheless wrote absolute volumes under `unit: 'L'` —
+-- "total volume" figures scraped from PubChem/OpenFDA — which is a different
+-- quantity, not a different spelling of the same one.
+--
+-- Unlike the percent→fraction repair in 0116 there is NO conversion to apply.
+-- Litres become litres per kilogram only by dividing by a body weight the
+-- source never states. But the more useful fact is that these figures have
+-- already been superseded: 15 of the 16 drugs now carry a curated `L/kg`
+-- value in the live database, aggregated from cited `parameter_entries`. So
+-- the extractions can be graded against a reviewed number, and read as a 70 kg
+-- adult's total volume only a third of them land inside it —
+--
+--   drug              extracted   curated L/kg → L (70 kg)   ratio
+--   gabapentin              6 L   0.6–0.8    →     42–56      0.13×
+--   clobazam              100 L   0.8–1.5    →     56–105     1.32×  in range
+--   cannabidiol         20963 L   20–40      →   1400–2800    9.98×
+--   cocaine               266 L   1.3–1.96   →     91–137     2.92×
+--   naloxone              200 L   1.8–4.5    →    126–315     0.95×  in range
+--   tapentadol             98 L   6.5–9.5    →    455–665     0.18×
+--   amitriptyline        1221 L   10–20      →    700–1400    1.25×  in range
+--   duloxetine          -1800 L   14–35      →    980–2450   −1.17×
+--   clozapine             508 L   2–7        →    140–490     1.73×
+--   chlorprothixene      1035 L   11–23      →    770–1610    1.02×  in range
+--   mianserin             250 L   10–20      →    700–1400    0.26×
+--   mirtazapine            42 L   4–6        →    280–420     0.13×
+--   nortriptyline         268 L   15–27      →   1050–1890    0.18×
+--   olanzapine           1000 L   10–20      →    700–1400    1.06×  in range
+--   paliperidone          487 L   4.5–5.5    →    315–385     1.43×
+--
+-- — five of fifteen, the others missing by 1.4× to 10×, and one negative for a
+-- quantity that cannot be. That is the argument against rescaling rather than
+-- deleting: the unit is not the whole defect, the extractor often did not pick
+-- a steady-state volume at all, and nothing distinguishes the five it got
+-- right from the ten it did not except the curated value you would have used
+-- instead. Dividing by 70 would replace an obviously foreign unit with a
+-- plausible-looking wrong number — worse, because the wrongness would stop
+-- being visible.
+--
+-- Adding `L` to the parameter's `allowedUnits` (the seam `modelDerivation.ts`
+-- reserves in NON_DEFAULT_VD_UNIT_SCALINGS) is the other way to make these
+-- rows legal. Not attempted here: it is a registry, unit-family,
+-- engine-scaling and aggregation-pooling change, and it would be undertaken to
+-- enshrine 16 values that the table above shows are mostly wrong and that a
+-- better-sourced value already replaces in 15 cases.
+--
+-- What the deletion changes, per consumer:
+--
+--   * The API rejects any edit to these rows already — the value is outside
+--     the parameter's bounds once read as `L/kg` — so the rows are frozen
+--     where they are. Nothing changes; they stop existing.
+--   * Model derivation (src/lib/modelDerivation.ts) already skips them: `L` is
+--     in no unit family in src/lib/unitFamilies.ts, so `convertParameterValue`
+--     returns null and `toAssemblyValues` leaves the `vd` role in
+--     `missingParameters`. No derived model changes.
+--   * The KineLab prior builder DOES consume them: `resolveFirstOrderVd` in
+--     src/lib/compute/drugPriors.ts reads a litre-typed row as an absolute
+--     volume and uses it as-is. That is the one real behaviour change. Those
+--     drugs fall out of the first-order coverage tier and get the synthesized
+--     `FALLBACKS.vdLitres`, tagged `fallback` in the prior summary — a weaker
+--     claim, honestly labelled, in place of a number that is wrong by 4–10×
+--     and presented as the catalog's. The pinned counts in
+--     src/lib/compute/__tests__/engineCoverage.test.ts move with it.
+--   * The monograph sidebar and the drug table stop rendering "14 L" in a
+--     column where every other drug reads L/kg.
+--
+-- So this is not a loss of information but a correction of the record: the
+-- pair becomes an open gap on a core-coverage parameter
+-- (CORE_COVERAGE_PARAMETERS in src/lib/parameterApplicability.ts), which is
+-- what puts it in front of a curator who can source a cited value. Absent and
+-- queued beats present and wrong.
+--
+-- Which rows this reaches, in the live database at the time of writing: one —
+-- sufentanil, `{"median": 14, "unit": "L", "note": "auto-extracted from
+-- PubChem (total volume)"}`, stamped with the same 2026-05-07 bulk timestamp
+-- as the rows 0116 repaired. It is the one drug of the sixteen with no
+-- `parameter_entries`, so nothing ever recomputed its drug-level cache; the
+-- other fifteen were overwritten in `L/kg` by the aggregation pipeline, which
+-- is where the curated column in the table above comes from. A sweep of the
+-- whole table confirms it: 211 `volumeOfDistribution` rows in `L/kg`, one in
+-- `L`.
+--
+-- All 16 values nonetheless still sit in data/components.ts, which
+-- `scripts/seed-drugs.ts` would seed straight back in (softValidateParam
+-- stores a value that fails `spec.zod` as-is, with only a warning) — so a
+-- from-scratch database would reintroduce every one of them, and for fifteen
+-- would do it by shipping a stale extraction in place of the curated value.
+-- They are removed from the fixture in the same change, and
+-- tests/fixture-parameter-units.test.ts fails if one returns.
+--
+-- Removed rather than replaced with the curated values, even though the
+-- database now holds one for fifteen of them. Writing them in by hand would be
+-- a fragment of a catalog re-export, which is `npm run catalog:export`'s job
+-- and is gated separately — `catalog:check` reports the fixture drifted on 133
+-- drugs, so the export is a decision of its own and this change must not
+-- smuggle a piece of it in. Removal leaves the offline fixture saying "no Vd"
+-- where it has no reviewed value, which is what it should say.
+--
+-- Scope, deliberately:
+--   * `parameter_entries` is NOT touched. It holds no absolute-litre row (308
+--     `volumeOfDistribution` entries, all `L/kg`) and cannot acquire one: every
+--     entry write validates the unit against the parameter's `allowedUnits`
+--     (validateEntryForParameter in src/lib/parameterEntries.ts).
+--   * `drug_parameter_revisions` is NOT touched, and the deleted value is not
+--     written into a new one. The revision log records what was stored when, so
+--     the row's history stays readable there; minting a deletion revision would
+--     need a `created_by` user who did not make this edit.
+--   * A row with NO unit at all is left alone. That is ambiguity rather than a
+--     wrong claim, it needs a different judgement, and none exists today.
+--
+-- Re-running changes nothing: the WHERE clause selects rows whose unit is not
+-- `L/kg`, and every surviving row's is.
+
+DELETE FROM "drug_parameters" AS dp
+WHERE dp."parameter" = 'volumeOfDistribution'
+  AND jsonb_typeof(dp."value") = 'object'
+  AND dp."value" ? 'unit'
+  AND dp."value" ->> 'unit' IS DISTINCT FROM 'L/kg';

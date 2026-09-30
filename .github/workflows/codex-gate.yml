@@ -1,0 +1,558 @@
+name: Codex gate
+
+# v7 changes — the second half of the billed-minutes work, aimed at what v6
+# left behind. v6's filtering worked: measured like-for-like across the active
+# PR hours of 11 Aug, the cost of a PR-driven event fell from 3.9 to 2.5 billed
+# minutes, and 27 events skipped for free instead of paying for a runner. What
+# it did not touch was the in-job wait, which was then 74% of everything the
+# gate still billed.
+#
+#   * WAIT_FOR_CODEX_MIN is 2, down from 6. The wait exists only to catch a 👍
+#     reaction, which raises no webhook; every other verdict shape arrives as
+#     an event. AGENTS.md now asks the Codex reviewer to leave a one-line
+#     comment on a clean review, which turns the common case into a webhook
+#     CLEAN_RE matches on arrival — no runner sitting in a poll loop at all.
+#   * the cron deliberately stayed at every 2 hours. It is the backstop for a
+#     bare reaction that lands after the (now much shorter) wait gives up, so
+#     shortening the wait makes it *more* load-bearing, not less. Stretching it
+#     to 4 hours would have saved ~$1.44/month and doubled the worst-case stall.
+#
+# v6 changes — all about billed minutes. v5 was correct but cost ~125 billed
+# minutes per hour of active PR work on a private repo. The four causes, in
+# order of how much they cost:
+#
+#   * every event started its own run and they all ran to completion.
+#     `cancel-in-progress` was false because the concurrency group used to be
+#     global — but v5 made the group per PR, so a newer run for a PR strictly
+#     supersedes an older one for the same PR. It is now true, which collapses
+#     the pile of overlapping waiters on one PR down to the newest.
+#   * two thirds of the `pull_request_review` runs were human reviews. The
+#     gate only ever honours a review by $BOT_RE or the override label, so a
+#     human review could never change the outcome — it just paid for a runner.
+#     Author filtering now happens in the job-level `if`, before a runner is
+#     allocated, so those events cost nothing instead of a minimum-billed
+#     minute each.
+#   * adding the `codex-approved` label re-triggered the workflow through
+#     `pull_request: labeled`. Only the override label is actionable now.
+#   * the cron ran 4x/hour purely as a backstop. It is now every 2 hours; the
+#     in-job wait plus the event triggers are what actually merge PRs.
+#
+# The two dials if this still costs too much (or merges too slowly):
+# WAIT_FOR_CODEX_MIN, and the cron below. Everything else is filtering, which
+# only ever removes runs that could not have merged anything.
+#
+# v5 changes (sign-off detection is working — the blocker moved to *when the
+# gate gets to run*):
+#   * Codex reports a clean review by adding a 👍 reaction, and GitHub fires
+#     no workflow event for a reaction. Every trigger below except the cron
+#     therefore only fires when Codex has something to say — i.e. exactly the
+#     case that must not merge. A run whose PR has no verdict yet now waits
+#     in-job for up to WAIT_FOR_CODEX_MIN, re-reading the reactions, instead
+#     of handing the PR to a scheduled sweep that may not arrive.
+#   * `pull_request: opened / synchronize / reopened / ready_for_review` all
+#     start that wait, so every commit Codex is about to review has a run
+#     listening for its verdict. `opened` is not redundant with `synchronize`:
+#     a PR opened non-draft has its head pushed before the PR exists, so no
+#     synchronize event ever follows it.
+#   * the merge is bound to the evaluated commit with --match-head-commit.
+#     `gh pr merge` otherwise merges whatever the head is at that instant,
+#     while the sign-off and checks were read for the head the run started
+#     on — a window the wait above makes minutes wide.
+#   * a check run with no timestamp is pending, not stale. GitHub can report
+#     a queued run with started_at and completed_at both null; the v4 fallback
+#     dated it to the epoch, which aged it past STALE_PENDING_MIN and dropped
+#     a check that had never run.
+#   * the concurrency group is per PR. It used to be one global group, and
+#     GitHub keeps only one *pending* run per group: a run queued for PR A was
+#     cancelled by a newer run for PR B, and A was never evaluated.
+#   * the cron moved off :00/:15/:30/:45 — scheduled runs are best-effort and
+#     are dropped most often on the round minutes every repository asks for.
+#
+# v4 changes:
+#   * the evidence group now lists every check run on the head commit with
+#     its status, conclusion and age, so "checks still running" names names
+#   * a check that has been queued/in-progress longer than STALE_PENDING_MIN
+#     is treated as never going to finish and ignored, with a note
+#   * IGNORE_CHECKS_RE skips checks by name (this workflow's own job, and
+#     anything else that should never gate a merge)
+#   * the verdict line lists exactly which checks are pending or failing
+
+on:
+  pull_request_review:
+    types: [submitted]
+  issue_comment:
+    types: [created]
+  pull_request:
+    # `opened` matters as much as `synchronize`: a PR opened non-draft has its
+    # head pushed before the PR exists, so no synchronize event ever follows.
+    types: [labeled, opened, synchronize, reopened, ready_for_review]
+  check_suite:
+    # Kept for third-party apps that report through the Checks API. It stays
+    # cheap because a suite that did not succeed cannot lead to a merge, and
+    # the job-level `if` drops those before a runner is allocated.
+    types: [completed]
+  workflow_run:
+    # GitHub deliberately does not raise `check_suite` for suites that Actions
+    # itself created, so the repo's own PR checks going green never woke the
+    # gate — for those, the workflow was listening for an event that cannot
+    # arrive. This is the signal that does fire, and only for PRs that ran one
+    # of these workflows (all are path-filtered, so most PRs raise nothing).
+    # This must list *every* workflow with a `pull_request` trigger, or a PR
+    # whose only check is an omitted one goes unwoken. `migrations` matters
+    # most of the five: it is the slowest (it replays the migration chain and
+    # runs the integration suite), so it is the likeliest to still be pending
+    # when the waiter below gives up.
+    workflows: [catalog-sync, kinetics-core, migrations, parity, prompt-registry-sync, unit-tests]
+    types: [completed]
+  schedule:
+    # Backstop only, for the one case no event covers: Codex signs off with a
+    # 👍 reaction (which raises no webhook) after the in-job wait below has
+    # already given up. Every 2 hours rather than every 15 minutes — each
+    # sweep is a minimum-billed minute whether or not it has anything to do.
+    # Deliberately off the round minutes: GitHub drops scheduled runs under
+    # load, and :00/:15/:30/:45 are the busiest minutes on the platform.
+    - cron: "23 */2 * * *"
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: PR number to evaluate (blank = sweep all open PRs)
+        required: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  checks: read
+  statuses: read
+
+concurrency:
+  # Two groups per PR, not one, and the split is what makes cancelling safe.
+  #
+  # Concurrency is resolved when the run is created — *before* the job-level
+  # `if` below is evaluated. A run that is about to skip every job therefore
+  # still evicts whatever is in its group. Without the split that is a live
+  # hazard: a human review or comment posted while the gate is polling for a
+  # bare 👍 would cancel the poller, and the run that replaced it would skip
+  # on author and never poll. A reaction raises no webhook, so the PR would
+  # then sit idle until the cron sweep hours later — the filtering below would
+  # have turned a cost saving into a stall.
+  #
+  # So events that provably cannot run the job get a `-noop` suffix, where
+  # cancelling is free because there is nothing to cancel. Each condition
+  # below must be a strict *subset* of what the job `if` skips. Erring one way
+  # is harmless — a skipped event left in the live group is one wasted cancel
+  # — while erring the other way is not: marking an event noop when it does
+  # run the job puts two live runs on one PR, which is the cost this exists to
+  # prevent. Anything unlisted stays live, so the default is the safe one.
+  #
+  # The `workflow_run` and `check_suite` conditions test more than the
+  # conclusion, because an event with no PR attached falls back to the `sweep`
+  # key and would then share a group with the cron. All five watched workflows
+  # also run on push to main, so a green push build was landing in
+  # `sweep-live` and could cancel a running sweep — leaving its PRs for the
+  # next cron two hours out. Matching the job `if` exactly is what keeps them
+  # out of that group.
+  #
+  # `-checks` is a third group, for the CI-finished events that *do* run the
+  # job. They must not share `-live` with a poller: cancelling a poller and
+  # replacing it with one of these loses the wait, because the replacement
+  # does not inherit STARTS_REVIEW and `should_wait` then refuses to poll on a
+  # commit older than the cap. A PR opened from a branch pushed hours ago is
+  # exactly that case — Codex is reviewing it, its sign-off is a 👍 that
+  # raises no webhook, and the poller that would have caught it is gone. The
+  # separate group costs at most one extra short run per PR, since these never
+  # wait, and it means a green CI result can never silence a live poller.
+  #
+  # Nothing in Actions checks that this suffix and the job `if` still agree,
+  # and a drift between them is silent — it shows up as a PR merging hours
+  # late, not as a red run. After editing either one, run:
+  #     python tools/codex-gate/check_concurrency_routing.py
+  # It evaluates both expressions out of this file and asserts the three
+  # properties described above. It is deliberately not wired into CI: it
+  # guards a file that changes a few times a year, and a job per push is the
+  # sort of standing cost this workflow exists to avoid.
+  group: >-
+    codex-gate-${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number || github.event.check_suite.pull_requests[0].number || inputs.pr || 'sweep' }}-${{
+    ((github.event_name == 'pull_request_review'
+    && !contains(github.event.review.user.login, 'codex'))
+    || (github.event_name == 'issue_comment'
+    && !contains(github.event.comment.user.login, 'codex'))
+    || (github.event_name == 'pull_request'
+    && github.event.action == 'labeled'
+    && github.event.label.name != 'merge-when-green')
+    || github.event.pull_request.draft == true
+    || (github.event_name == 'workflow_run'
+    && (github.event.workflow_run.conclusion != 'success'
+    || github.event.workflow_run.event != 'pull_request'))
+    || (github.event_name == 'check_suite'
+    && (github.event.check_suite.conclusion != 'success'
+    || github.event.check_suite.pull_requests[0].number == null)))
+    && 'noop'
+    || ((github.event_name == 'workflow_run'
+    || github.event_name == 'check_suite')
+    && 'checks' || 'live') }}
+  # Safe *because* the group is per PR and per liveness: the only run this can
+  # cancel is an older live run for the same PR, whose conclusion is strictly
+  # staler than the one cancelling it. This is what stops a burst of events on
+  # one PR from paying for a stack of runners that all wait, all re-read the
+  # same reactions, and all reach the same verdict. The worst case is a cancel
+  # during `gh pr merge`; that call is a single API request, and the run that
+  # cancelled it re-evaluates from scratch either way.
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    # Must match IGNORE_CHECKS_RE so the job never waits on itself.
+    name: gate
+    runs-on: ubuntu-latest
+    # Every condition here is one a runner would otherwise be allocated to
+    # discover — a skipped job bills nothing, a job that starts and exits on
+    # line one still bills a minute. None of these can change an outcome:
+    #   * a review or comment by anyone but $BOT_RE is never a sign-off (the
+    #     jq filters drop non-$BOT_RE authors), and humans wrote two thirds of
+    #     the review events this workflow was paying to evaluate
+    #   * `labeled` for anything but the override label is noise, and the gate
+    #     labelling its own PR `codex-approved` was re-triggering itself
+    #   * a draft PR is skipped in-job anyway
+    #   * an `issue_comment` on a plain issue has no PR to gate
+    # The literal below must stay in step with OVERRIDE_LABEL; `env` is not
+    # in scope in a job-level `if`. `contains()` is case-insensitive, so it
+    # matches both `codex` and `chatgpt-codex-connector[bot]`.
+    if: >-
+      github.event_name == 'schedule'
+      || github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'workflow_run'
+      && github.event.workflow_run.event == 'pull_request'
+      && github.event.workflow_run.conclusion == 'success')
+      || (github.event_name == 'check_suite'
+      && github.event.check_suite.conclusion == 'success'
+      && github.event.check_suite.pull_requests[0].number != null)
+      || (github.event_name == 'pull_request'
+      && github.event.pull_request.draft == false
+      && (github.event.action != 'labeled'
+      || github.event.label.name == 'merge-when-green'))
+      || (github.event_name == 'pull_request_review'
+      && github.event.pull_request.draft == false
+      && contains(github.event.review.user.login, 'codex'))
+      || (github.event_name == 'issue_comment'
+      && github.event.issue.pull_request != null
+      && github.event.issue.state == 'open'
+      && contains(github.event.comment.user.login, 'codex'))
+    # Bounded by WAIT_FOR_CODEX_MIN plus a sweep. A job that hangs is billed
+    # for every minute it hangs, so this is a cost ceiling, not just a guard.
+    timeout-minutes: 12
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      BOT_RE: codex
+      CLEAN_RE: "no (major |minor |critical |blocking |obvious |significant )?(issues|problems|concerns|findings|bugs)|did ?n.t find|found no|nothing to flag|nothing blocking|no blockers|lgtm|looks good|all good|approved"
+      OVERRIDE_LABEL: merge-when-green
+      IGNORE_CHECKS_RE: "^(gate|Codex gate)$"
+      # Checks that must have actually *succeeded* on the head before a merge —
+      # not merely "not failing". Everything else here is snapshot logic: `bad`
+      # and `pending` are derived from the check runs that exist at the instant
+      # load_checks runs, so a check GitHub has not created yet is neither. It is
+      # invisible, and a commit with no checks registered at all reads as green.
+      #
+      # That is a live hole now that every pull request is opened as a draft
+      # (AGENTS.md, "Opening a pull request"). `unit-tests` and `migrations` are
+      # gated on `draft == false`, so the `ready_for_review` click is the first
+      # time either runs — and it queues them and wakes this gate in the same
+      # event. The Codex wait below used to cover that window by accident, but
+      # only ever runs when there is *no* verdict yet; under draft-by-default the
+      # review is obtained while the PR is still a draft, so the sign-off is
+      # already in hand at the ready transition, the wait is skipped, and the
+      # snapshot races the two suites it exists to enforce.
+      #
+      # `unit-tests` is the right sentinel because it is the one expensive
+      # workflow with no `paths:` filter: it runs on every non-draft pull
+      # request, so a run of it is always owed and never "does not apply".
+      # `migrations` cannot be named here — it is path-filtered, so its absence
+      # is usually legitimate — but it does not need to be: both are triggered
+      # by the same event, so GitHub creates their check runs together, and
+      # `unit-tests` having completed means `migrations` is registered too
+      # wherever its paths matched, at which point `pending` holds the merge.
+      #
+      # **Success, not presence.** Skipping the job still writes a check run —
+      # `unit-tests` sits on a draft's head as `completed/skipped`, and the head
+      # SHA does not change when the draft is marked ready. So a presence test
+      # would be satisfied by the draft's own skipped run and would close
+      # nothing. `skipped` is also absent from the `bad` pattern below, so it
+      # reads as passing today. This requires a `success` conclusion, which the
+      # skipped run cannot supply and only a real post-readiness run can.
+      #
+      # This fails closed: if the readiness event somehow queues no run, the
+      # gate holds the pull request and says so in its verdict rather than
+      # merging on an empty snapshot.
+      REQUIRE_SUCCESS_RE: "^unit-tests$"
+      STALE_PENDING_MIN: 45
+      # How long a single-PR run waits for Codex to reach a verdict on the
+      # head commit. 0 = off.
+      #
+      # This is billed wall-clock and it is the gate's largest line item by a
+      # wide margin: measured over the active PR hours of 11 Aug, after the v6
+      # filtering landed, runs that sat in this poll were 74% of the gate's
+      # billed minutes (47% in the 3-6m band, 27% pinned at the cap). It buys
+      # exactly one thing — catching a 👍 sign-off, which raises no webhook.
+      # Every other verdict shape (a review, a comment) arrives as an event
+      # that starts a newer run and cancels this one, so the wait is only ever
+      # load-bearing for the bare-reaction case.
+      #
+      # Cut from 6 to 2 because that case is now the exception rather than the
+      # rule: AGENTS.md asks the Codex reviewer to leave a one-line comment on
+      # a clean review, and a comment is a webhook — CLEAN_RE catches it on
+      # arrival with no waiting at all. 2 minutes still covers a reaction that
+      # lands promptly after the review starts; a slower one falls through to
+      # the cron, which is why that stayed at every 2 hours when this dropped.
+      # If PRs start sitting unmerged until a sweep, this is the dial to raise
+      # first — check whether Codex is commenting before assuming it is too low.
+      WAIT_FOR_CODEX_MIN: 2
+      WAIT_POLL_SEC: 60
+      MERGE_METHOD: squash # squash | merge | rebase
+      # True for the events that make Codex start a review, whatever the age
+      # of the commit it is reviewing.
+      STARTS_REVIEW: ${{ github.event_name == 'pull_request' && contains(fromJSON('["opened","reopened","ready_for_review","synchronize"]'), github.event.action) }}
+      EVENT_PR: ${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number || github.event.check_suite.pull_requests[0].number || inputs.pr }}
+      IS_PR_COMMENT: ${{ github.event_name != 'issue_comment' || github.event.issue.pull_request != null }}
+    steps:
+      - name: Evaluate and merge
+        run: |
+          set -euo pipefail
+
+          verdict() {
+            echo "#$1: $2"
+            echo "- **#$1** — $2" >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          # Everything Codex could have signed off with. Re-read on every poll.
+          load_signoff_inputs() {
+            REVIEWS="$(gh api "repos/$REPO/pulls/$PR/reviews?per_page=100")"
+            COMMENTS="$(gh api "repos/$REPO/issues/$PR/comments?per_page=100")"
+            REACTIONS="$(gh api "repos/$REPO/issues/$PR/reactions?per_page=100")"
+          }
+
+          # name | status | conclusion | age in seconds, or -1 for a check with
+          # no timestamp at all. A queued run can have started_at and
+          # completed_at both null; dating it to the epoch would age it past
+          # STALE_PENDING_MIN and quietly drop a check that has never run.
+          load_checks() {
+            CHECKS="$(gh api "repos/$REPO/commits/$HEAD/check-runs?per_page=100" --jq \
+              '.check_runs[] | [.name, .status, (.conclusion // ""),
+                 (if (.started_at // .completed_at) then
+                    ((now - ((.started_at // .completed_at)|fromdateiso8601))|floor)
+                  else -1 end)] | join("|")')"
+            ST="$(gh api "repos/$REPO/commits/$HEAD/status")"
+          }
+
+          show_evidence() {
+            echo "::group::PR #$PR — evidence $1 (head ${HEAD:0:7}, $HEAD_DATE)"
+            jq -r --arg re "$BOT_RE" '.[] | select(.user.login|test($re;"i"))
+              | "review   \(.state)  \(.commit_id[0:7])  \(.submitted_at)"' <<<"$REVIEWS" || true
+            jq -r --arg re "$BOT_RE" '.[] | select(.user.login|test($re;"i"))
+              | "comment  \(.created_at)"' <<<"$COMMENTS" || true
+            jq -r '.[] | "react    \(.user.login)  \(.content)  \(.created_at)"' <<<"$REACTIONS" || true
+            awk -F'|' '{age = ($4 < 0) ? "not started" : sprintf("%dm old", $4/60)
+                        printf "check    %-40s %-12s %-10s %s\n", $1, $2, $3, age}' <<<"${CHECKS:-}"
+            jq -r '.statuses[] | "status   \(.context)  \(.state)"' <<<"$ST" || true
+            echo "::endgroup::"
+          }
+
+          # Reads the globals set by load_signoff_inputs. Emits one of:
+          #   BLOCKED|<reason>  Codex asked for changes on the current commit
+          #   OK|<reason>       a sign-off was found
+          #   (nothing)         Codex has not reached a verdict on this commit
+          codex_verdict() {
+            if [ "$OVERRIDE" -gt 0 ]; then
+              echo "OK|$OVERRIDE_LABEL label"; return
+            fi
+
+            local blocked approved bodies thumbs
+
+            blocked="$(jq -r --arg re "$BOT_RE" --arg head "$HEAD" \
+              '[.[] | select(.user.login|test($re;"i")) | select(.commit_id==$head)] | last
+               | select(.state=="CHANGES_REQUESTED") | .id' <<<"$REVIEWS")"
+            if [ -n "$blocked" ]; then
+              echo "BLOCKED|Codex requested changes on the current commit"; return
+            fi
+
+            approved="$(jq -r --arg re "$BOT_RE" --arg head "$HEAD" \
+              '[.[] | select(.user.login|test($re;"i"))] | last
+               | select(.state=="APPROVED" and .commit_id==$head) | .id' <<<"$REVIEWS")"
+            if [ -n "$approved" ]; then
+              echo "OK|formal approval"; return
+            fi
+
+            bodies="$( { jq -r --arg re "$BOT_RE" --arg d "$HEAD_DATE" \
+                          '.[] | select(.user.login|test($re;"i"))
+                           | select((.submitted_at // "1970") > $d) | (.body // "")' <<<"$REVIEWS"
+                        jq -r --arg re "$BOT_RE" --arg d "$HEAD_DATE" \
+                          '.[] | select(.user.login|test($re;"i"))
+                           | select(.created_at > $d) | (.body // "")' <<<"$COMMENTS"; } | tr '\n' ' ')"
+            if grep -qiE "$CLEAN_RE" <<<"${bodies:-}"; then
+              echo "OK|clean comment"; return
+            fi
+
+            thumbs="$(jq -r --arg re "$BOT_RE" --arg d "$HEAD_DATE" \
+              '[.[] | select(.content=="+1") | select(.user.login|test($re;"i"))
+                | select(.created_at > $d)] | length' <<<"$REACTIONS")"
+            if [ "${thumbs:-0}" -gt 0 ]; then
+              echo "OK|thumbs-up reaction"; return
+            fi
+
+            echo ""
+          }
+
+          # Is it worth holding this job open for a verdict on the head commit?
+          should_wait() {
+            [ -n "${EVENT_PR:-}" ] || return 1      # never during a sweep
+            [ "$WAIT_FOR_CODEX_MIN" -gt 0 ] || return 1
+
+            # A checks-completion run exists to re-read the checks now that CI
+            # has finished; it is not a poller and must not become one. It also
+            # sits in its own concurrency group, so it never displaces the run
+            # that *is* polling — and that run re-reads the checks itself once
+            # its wait ends, so nothing is lost by exiting early here.
+            case "${GITHUB_EVENT_NAME:-}" in
+              workflow_run|check_suite) return 1 ;;
+            esac
+
+            # Codex has picked this commit up and not yet reported — it is
+            # working right now, however old the commit is.
+            local eyes
+            eyes="$(jq -r --arg re "$BOT_RE" --arg d "$HEAD_DATE" \
+              '[.[] | select(.content=="eyes") | select(.user.login|test($re;"i"))
+                | select(.created_at > $d)] | length' <<<"$REACTIONS")"
+            [ "${eyes:-0}" -gt 0 ] && return 0
+
+            # The event itself starts a review. A PR opened from a branch
+            # pushed hours ago gets one too, so age says nothing here.
+            [ "${STARTS_REVIEW:-false}" = "true" ] && return 0
+
+            # Otherwise only wait while the commit is young enough that Codex
+            # could plausibly still be on it.
+            [ "$(( $(date -u +%s) - $(date -u -d "$HEAD_DATE" +%s) ))" -lt "$(( (WAIT_FOR_CODEX_MIN + 10) * 60 ))" ]
+          }
+
+          if [ "$IS_PR_COMMENT" != "true" ]; then
+            echo "Comment was on an issue, not a PR."; exit 0
+          fi
+
+          if [ -n "${EVENT_PR:-}" ]; then
+            PRS="$EVENT_PR"
+          else
+            PRS="$(gh api "repos/$REPO/pulls?state=open&per_page=100" --jq '.[] | select(.draft==false) | .number')"
+          fi
+          [ -n "${PRS:-}" ] || { echo "No open PRs."; exit 0; }
+
+          echo "## Codex gate" >> "$GITHUB_STEP_SUMMARY"
+          FAILED=0
+
+          for PR in $PRS; do
+            pr_json="$(gh api "repos/$REPO/pulls/$PR")"
+            HEAD="$(jq -r .head.sha <<<"$pr_json")"
+            if [ "$(jq -r .state <<<"$pr_json")" != "open" ] || [ "$(jq -r .draft <<<"$pr_json")" != "false" ]; then
+              verdict "$PR" "skipped (closed or draft)"; continue
+            fi
+            HEAD_DATE="$(gh api "repos/$REPO/commits/$HEAD" --jq '.commit.committer.date')"
+            OVERRIDE="$(jq -r --arg l "$OVERRIDE_LABEL" '[.labels[].name | select(. == $l)] | length' <<<"$pr_json")"
+
+            load_signoff_inputs
+            load_checks
+            show_evidence "on arrival"
+
+            V="$(codex_verdict)"
+
+            # A clean Codex review is a 👍 reaction, and no workflow event
+            # exists for a reaction — so a run that arrives before Codex
+            # finishes must wait for it here or the verdict is never seen.
+            # Only single-PR runs wait, and only while the commit is young
+            # enough that Codex could still be working on it.
+            if [ -z "$V" ] && should_wait; then
+              deadline="$(( $(date -u +%s) + WAIT_FOR_CODEX_MIN * 60 ))"
+              echo "No Codex verdict yet for ${HEAD:0:7} — polling for up to ${WAIT_FOR_CODEX_MIN}m"
+              while [ -z "$V" ] && [ "$(date -u +%s)" -lt "$deadline" ]; do
+                sleep "$WAIT_POLL_SEC"
+                now_head="$(gh api "repos/$REPO/pulls/$PR" --jq .head.sha)"
+                if [ "$now_head" != "$HEAD" ]; then
+                  echo "Head moved to ${now_head:0:7} while waiting — that commit gets its own run"
+                  break
+                fi
+                load_signoff_inputs
+                V="$(codex_verdict)"
+              done
+              # CI almost certainly progressed while we waited.
+              load_checks
+              show_evidence "after waiting"
+            fi
+
+            case "${V:-}" in
+              BLOCKED\|*) verdict "$PR" "${V#BLOCKED|}"; continue ;;
+              OK\|*)      SIGNOFF="${V#OK|}" ;;
+              *)          verdict "$PR" "no Codex sign-off yet for ${HEAD:0:7}"; continue ;;
+            esac
+
+            bad="$(awk -F'|' -v ig="$IGNORE_CHECKS_RE" \
+              '$1 !~ ig && $3 ~ /^(failure|timed_out|cancelled|action_required|stale)$/ {printf "%s ", $1}' <<<"${CHECKS:-}")"
+            # An age of -1 means the check has no timestamp yet, so it is
+            # pending — never stale, however long the queue has been backed up.
+            pending="$(awk -F'|' -v ig="$IGNORE_CHECKS_RE" -v max="$((STALE_PENDING_MIN * 60))" \
+              '$1 !~ ig && $2 != "completed" && ($4 < 0 || $4 < max) {printf "%s ", $1}' <<<"${CHECKS:-}")"
+            stale="$(awk -F'|' -v ig="$IGNORE_CHECKS_RE" -v max="$((STALE_PENDING_MIN * 60))" \
+              '$1 !~ ig && $2 != "completed" && $4 >= 0 && $4 >= max {printf "%s ", $1}' <<<"${CHECKS:-}")"
+            [ -n "${stale// /}" ] && echo "Ignoring checks stuck for over ${STALE_PENDING_MIN}m: $stale"
+
+            if [ -n "${bad// /}" ]; then
+              verdict "$PR" "sign-off ($SIGNOFF) but checks failed: $bad"; continue
+            fi
+            if [ -n "${pending// /}" ]; then
+              verdict "$PR" "sign-off ($SIGNOFF), waiting on: $pending"; continue
+            fi
+            # Nothing is failing and nothing is pending — but on the snapshot
+            # this gate reads, that is also exactly what "the suites have not
+            # been created yet" looks like, and what a draft's leftover
+            # `skipped` run looks like. Demand a real success before merging.
+            if [ -n "${REQUIRE_SUCCESS_RE:-}" ] && \
+               ! awk -F'|' -v re="$REQUIRE_SUCCESS_RE" \
+                 '$1 ~ re && $3 == "success" {ok = 1} END {exit !ok}' <<<"${CHECKS:-}"; then
+              seen="$(awk -F'|' -v re="$REQUIRE_SUCCESS_RE" \
+                '$1 ~ re {printf "%s(%s) ", $1, ($3 == "" ? $2 : $3)}' <<<"${CHECKS:-}")"
+              verdict "$PR" "sign-off ($SIGNOFF), but no successful run of $REQUIRE_SUCCESS_RE on ${HEAD:0:7} yet${seen:+ — saw: $seen}"
+              continue
+            fi
+            if [ "$(jq -r '.statuses | length' <<<"$ST")" -gt 0 ] && [ "$(jq -r .state <<<"$ST")" != "success" ]; then
+              failing_st="$(jq -r '[.statuses[] | select(.state != "success") | .context] | join(" ")' <<<"$ST")"
+              verdict "$PR" "sign-off ($SIGNOFF) but commit statuses not green: $failing_st"; continue
+            fi
+
+            gh label create codex-approved --repo "$REPO" \
+              --color 0E8A16 --description "Codex review came back clean" 2>/dev/null || true
+            gh pr edit "$PR" --repo "$REPO" --add-label codex-approved || true
+
+            # --match-head-commit or the merge is of whatever the head is
+            # *now*, while the sign-off and the checks above were read for
+            # $HEAD. A push landing in that window — wider now that the job
+            # may have waited minutes for a verdict — would otherwise merge a
+            # commit nothing in this run ever looked at.
+            if err="$(gh pr merge "$PR" --repo "$REPO" --"$MERGE_METHOD" \
+                        --match-head-commit "$HEAD" --delete-branch 2>&1)"; then
+              verdict "$PR" "merged via $SIGNOFF"
+            else
+              after="$(gh api "repos/$REPO/pulls/$PR")"
+              now_head="$(jq -r .head.sha <<<"$after")"
+              # Runs for one PR are no longer strictly serialised — a
+              # checks-completion run and a poller sit in different groups and
+              # can reach this point together. The loser of that race sees its
+              # own merge fail on a PR that is already merged, which is the
+              # intended outcome and must not be reported as a failure.
+              if [ "$(jq -r '.merged // false' <<<"$after")" = "true" ]; then
+                verdict "$PR" "already merged by a concurrent run"
+              elif [ "$now_head" != "$HEAD" ]; then
+                verdict "$PR" "head moved to ${now_head:0:7} before the merge — that commit gets its own run"
+              else
+                verdict "$PR" "sign-off ($SIGNOFF) but merge failed: ${err//$'\n'/ }"
+                FAILED=1
+              fi
+            fi
+          done
+
+          exit $FAILED
