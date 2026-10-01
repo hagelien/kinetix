@@ -55,10 +55,10 @@ jobs:
         run: npx vitest run src/lib/kinetics-core
       - name: Registry provenance gate (no undeclared drift, report in sync)
         run: npm run kinetics:provenance:check
-      - name: Derived registry snapshot gate
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: npm run kinetics:registry:check
+      # The derived-registry snapshot gate reads the production database, so it
+      # does not run on pull requests: PR code must never execute with the
+      # production DATABASE_URL, and a fork PR has no secrets to run it with.
+      # It runs weekly against `main` in catalog-drift.yml instead.
       - name: Select and run reviewed scientific validation fixtures
         run: npm run kinetics:validate -- --base=${{ github.event.pull_request.base.sha || github.event.before }}
       - name: Upload before/after-capable validation artifacts
