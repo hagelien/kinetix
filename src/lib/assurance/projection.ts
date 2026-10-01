@@ -181,14 +181,32 @@ export function consensusHoldReasonFromDecision(
 export type GenericConsensusHoldReason =
   | 'quorum_unmet'
   | 'open_dispute'
+  | 'upheld_dispute'
+  | 'returned_unrevised'
+  | 'target_unpublished'
   | 'human_submitted'
   | 'high_risk_missing_flagship'
   | 'high_risk_degraded_quorum'
   | 'source_quote_missing'
   | 'clinical_case';
 
+/**
+ * Why the generic policy's `noOpenDisputes` requirement is unmet. That
+ * requirement is one boolean fact (`ConsensusFacts.hasOpenHumanDispute`) that
+ * folds four legacy conditions together, so the decision alone cannot say which
+ * one held the edit. The facts collector names the first that applies, in the
+ * legacy gate's own order, and {@link genericConsensusHoldReason} reports it
+ * instead of calling every one of them an `open_dispute` (issue 1404).
+ */
+export type ConsensusDisputeHoldCause =
+  | 'open_dispute'
+  | 'upheld_dispute'
+  | 'returned_unrevised'
+  | 'target_unpublished';
+
 export function genericConsensusHoldReason(
   decision: PolicyDecision,
+  disputeHoldCause?: ConsensusDisputeHoldCause | null,
 ): GenericConsensusHoldReason {
   const unmet = decision.unmet;
   const has = (ruleId: string) => unmet.some((u) => u.ruleId === ruleId);
@@ -220,6 +238,10 @@ export function genericConsensusHoldReason(
   if (has(KINETIX_RULE_IDS.unquoted)) return 'source_quote_missing';
   if (has(KINETIX_RULE_IDS.clinicalCase)) return 'clinical_case';
   if (has(KINETIX_RULE_IDS.humanAuthored)) return 'human_submitted';
+  // `legacyConsensusHold` checks `pendingEditTargetOpenToAgents` right after the
+  // human-author refusal and before it computes any tally, so an unpublished
+  // page outranks a short quorum or a missing flagship approval.
+  if (disputeHoldCause === 'target_unpublished') return 'target_unpublished';
   if (
     unmet.some(
       (u) =>
@@ -237,7 +259,7 @@ export function genericConsensusHoldReason(
       : 'high_risk_degraded_quorum';
   }
   if (unmet.some((u) => u.requirementId === REQUIREMENT_IDS.noOpenDisputes)) {
-    return 'open_dispute';
+    return disputeHoldCause ?? 'open_dispute';
   }
   return 'quorum_unmet';
 }

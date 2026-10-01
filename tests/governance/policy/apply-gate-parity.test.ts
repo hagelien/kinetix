@@ -257,6 +257,49 @@ describe('required parity matrix', () => {
     expect(divergence.severity).toBe('none');
   });
 
+  it('5c. non-dispute holds keep their own reason (issue 1404)', () => {
+    // An upheld ruling, an unrevised return and an unpublished page all fold
+    // into `hasOpenHumanDispute` for the decision, but an operator needs the
+    // remedy each one names, not "resolve the dispute".
+    for (const cause of [
+      'open_dispute',
+      'upheld_dispute',
+      'returned_unrevised',
+      'target_unpublished',
+    ] as const) {
+      const { evaluation } = compare(
+        facts({
+          summary: summary({ approveCount: 2 }),
+          hasOpenHumanDispute: true,
+          disputeHoldCause: cause,
+        }),
+      );
+      expect(evaluation.outcome).toBe('hold');
+      expect(
+        genericConsensusHoldReason(evaluation.decision, cause),
+      ).toBe(cause);
+    }
+  });
+
+  it('5d. unpublished target outranks a short tally (issue 1404)', () => {
+    // The legacy gate checks the page before it computes the tally.
+    const { evaluation } = compare(
+      facts({
+        summary: summary({ approveCount: 0 }),
+        hasOpenHumanDispute: true,
+        disputeHoldCause: 'target_unpublished',
+      }),
+    );
+    expect(evaluation.outcome).toBe('hold');
+    expect(
+      genericConsensusHoldReason(evaluation.decision, 'target_unpublished'),
+    ).toBe('target_unpublished');
+    // The other causes still wait behind the tally.
+    expect(
+      genericConsensusHoldReason(evaluation.decision, 'upheld_dispute'),
+    ).toBe('quorum_unmet');
+  });
+
   it('5b. open dispute alongside a high-risk hold — held on the high-risk reason', () => {
     // Issue #1408 (filed from #1403's own review): the base rule's
     // `noOpenDisputes` and the high-risk rule can both be unmet at once (base
