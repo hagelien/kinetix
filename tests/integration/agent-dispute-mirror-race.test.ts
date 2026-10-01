@@ -187,4 +187,45 @@ describe('mirrorAgentDisputeVerdict (#1324)', () => {
     const rows = await db.select().from(disputes).where(eq(disputes.targetId, editId));
     expect(rows).toHaveLength(0);
   });
+
+  it('skips the mirror when a concurrent approve flipped the surviving verdict row (issue 1401)', async () => {
+    const disputer = await seedAgent('disputer');
+    const author = await seedUser(db, {
+      email: 'author3@example.com',
+      username: 'author3',
+      role: 'contributor',
+    });
+    const editId = await seedPendingEdit(author);
+    const versionAtRead = (await verificationTargetVersion({
+      targetType: 'pending_edit',
+      targetId: editId,
+    }))!;
+    const verificationId = await recordDisputeVerdict(disputer.agentId, editId);
+
+    // The same agent's newer approve upserts the row in place (same id) and
+    // has already withdrawn the dispute; a bare status flip then moves the
+    // target so the older dispute request enters its retry.
+    await db
+      .update(agentVerifications)
+      .set({ verdict: 'approve' })
+      .where(eq(agentVerifications.id, verificationId));
+    await db
+      .update(pendingEdits)
+      .set({ status: 'returned' })
+      .where(eq(pendingEdits.id, editId));
+
+    const mirrored = await mirrorAgentDisputeVerdict({
+      targetType: 'pending_edit',
+      targetId: editId,
+      createdBy: disputer.userId,
+      reasonMd: 'Disputing the claimed distribution-phase quote.',
+      evidenceRefs: [],
+      targetVersion: versionAtRead,
+      verificationId,
+    });
+
+    expect(mirrored).toBeNull();
+    const rows = await db.select().from(disputes).where(eq(disputes.targetId, editId));
+    expect(rows).toHaveLength(0);
+  });
 });

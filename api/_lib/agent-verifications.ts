@@ -32,6 +32,7 @@ import {
   type DisputeTargetType,
 } from '../../db/schema.js';
 import {
+  DisputeVerdictGoneError,
   StaleDisputeTargetError,
   upsertOpenDispute,
   withdrawAgentDisputesForTarget,
@@ -1380,17 +1381,6 @@ export async function clearVerificationsForTarget(args: {
   return deleted.length;
 }
 
-/** Whether a specific verdict row is still on record — see {@link mirrorAgentDisputeVerdict}. */
-async function verificationRowStillExists(id: number): Promise<boolean> {
-  const db = getDb();
-  const [row] = await db
-    .select({ id: agentVerifications.id })
-    .from(agentVerifications)
-    .where(eq(agentVerifications.id, id))
-    .limit(1);
-  return Boolean(row);
-}
-
 /**
  * Mirror an agent's `dispute` verdict into the unified `disputes` table
  * (`upsertOpenDispute`), retrying once when the target moved between the
@@ -1433,19 +1423,34 @@ export async function mirrorAgentDisputeVerdict(args: {
     reasonMd: args.reasonMd,
     evidenceRefs: args.evidenceRefs,
   };
+  // Each attempt re-checks, under lock and in the same transaction as the
+  // mirror write, that this exact verdict row is still an explicit dispute
+  // (issue 1401): a bare existence check in a separate query would pass for a
+  // concurrent approve/abstain that upserted the row in place and already
+  // withdrew the dispute.
   try {
     return await upsertOpenDispute({
       ...mirrorArgs,
       targetVersion: args.targetVersion,
+      requireLiveDisputeVerdictId: args.verificationId,
     });
   } catch (err) {
+    if (err instanceof DisputeVerdictGoneError) return null;
     if (!(err instanceof StaleDisputeTargetError)) throw err;
     if (err.actual === null) return null;
-    if (!(await verificationRowStillExists(args.verificationId))) return null;
     try {
-      return await upsertOpenDispute({ ...mirrorArgs, targetVersion: err.actual });
+      return await upsertOpenDispute({
+        ...mirrorArgs,
+        targetVersion: err.actual,
+        requireLiveDisputeVerdictId: args.verificationId,
+      });
     } catch (retryErr) {
-      if (retryErr instanceof StaleDisputeTargetError) return null;
+      if (
+        retryErr instanceof StaleDisputeTargetError ||
+        retryErr instanceof DisputeVerdictGoneError
+      ) {
+        return null;
+      }
       throw retryErr;
     }
   }
