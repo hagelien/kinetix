@@ -436,6 +436,26 @@ describe('agent consensus hold, re-stamp and retry', () => {
     expect(stuckAfter!.status).toBe('pending');
   });
 
+  it("counts only approvals the gate counts when filtering the sweep window (issue 1398)", async () => {
+    // A pool of three, so the floor is the full two approvals.
+    const author = await seedAgent('author');
+    const b = await seedAgent('b');
+    const c = await seedAgent('c');
+    // Older: the author's own approval (cast under a self-review grant that no
+    // longer exists) plus one peer approval. The raw count is two, but the
+    // gate counts one.
+    const revoked = await seedHighRiskEdit(author.userId);
+    await approve(author.agentId, revoked);
+    await approve(b.agentId, revoked);
+    await new Promise((r) => setTimeout(r, 5));
+    const ready = await seedHighRiskEdit(author.userId);
+    await approve(b.agentId, ready);
+    await approve(c.agentId, ready);
+
+    const results = await sweepAgentConsensus(1);
+    expect(results.map((r) => r.pendingEditId)).toEqual([ready]);
+  });
+
   it('downgrades a tier and its pending verdict snapshots together', async () => {
     const author = await seedAgent('author');
     const opus = await seedAgent('opus');
@@ -572,14 +592,13 @@ describe('agent consensus hold, re-stamp and retry', () => {
     // off (the seeded agent has self_review_enabled = false).
     await approve(author.agentId, edit!.id);
 
-    const results = await sweepAgentConsensus();
-    expect(results).toEqual([
-      expect.objectContaining({
-        pendingEditId: edit!.id,
-        outcome: 'held',
-        reason: 'quorum_unmet',
-      }),
-    ]);
+    // The sweep no longer offers a row whose only approval is ineligible
+    // (issue 1398); the gate itself still holds it when asked directly.
+    expect(await sweepAgentConsensus()).toEqual([]);
+    expect(await retryAgentConsensus(edit!.id)).toEqual({
+      outcome: 'held',
+      reason: 'quorum_unmet',
+    });
     const [after] = await db
       .select({ status: pendingEdits.status })
       .from(pendingEdits)
@@ -652,10 +671,11 @@ describe('agent consensus hold, re-stamp and retry', () => {
       .where(eq(agents.id, suspended.agentId));
     void peer;
 
-    const results = await sweepAgentConsensus();
-    expect(results).toEqual([
-      expect.objectContaining({ pendingEditId: edit!.id, outcome: 'held' }),
-    ]);
+    // Filtered out of the sweep (issue 1398); the gate still holds it directly.
+    expect(await sweepAgentConsensus()).toEqual([]);
+    expect(await retryAgentConsensus(edit!.id)).toMatchObject({
+      outcome: 'held',
+    });
     const [after] = await db
       .select({ status: pendingEdits.status })
       .from(pendingEdits)
