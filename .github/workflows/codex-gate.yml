@@ -216,8 +216,9 @@ jobs:
     #   * a draft PR is skipped in-job anyway
     #   * an `issue_comment` on a plain issue has no PR to gate
     # The literal below must stay in step with OVERRIDE_LABEL; `env` is not
-    # in scope in a job-level `if`. `contains()` is case-insensitive, so it
-    # matches both `codex` and `chatgpt-codex-connector[bot]`.
+    # in scope in a job-level `if`. The Codex reviewer is matched by its exact
+    # bot login: the repository is public, and any account whose name merely
+    # contains "codex" must never count as a sign-off.
     if: >-
       github.event_name == 'schedule'
       || github.event_name == 'workflow_dispatch'
@@ -233,18 +234,20 @@ jobs:
       || github.event.label.name == 'merge-when-green'))
       || (github.event_name == 'pull_request_review'
       && github.event.pull_request.draft == false
-      && contains(github.event.review.user.login, 'codex'))
+      && github.event.review.user.login == 'chatgpt-codex-connector[bot]')
       || (github.event_name == 'issue_comment'
       && github.event.issue.pull_request != null
       && github.event.issue.state == 'open'
-      && contains(github.event.comment.user.login, 'codex'))
+      && github.event.comment.user.login == 'chatgpt-codex-connector[bot]')
     # Bounded by WAIT_FOR_CODEX_MIN plus a sweep. A job that hangs is billed
     # for every minute it hangs, so this is a cost ceiling, not just a guard.
     timeout-minutes: 12
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       REPO: ${{ github.repository }}
-      BOT_RE: codex
+      # Exact login, anchored: a substring match would trust any account
+      # named like the bot.
+      BOT_RE: '^chatgpt-codex-connector\[bot\]$'
       CLEAN_RE: "no (major |minor |critical |blocking |obvious |significant )?(issues|problems|concerns|findings|bugs)|did ?n.t find|found no|nothing to flag|nothing blocking|no blockers|lgtm|looks good|all good|approved"
       OVERRIDE_LABEL: merge-when-green
       IGNORE_CHECKS_RE: "^(gate|Codex gate)$"
@@ -450,6 +453,11 @@ jobs:
           for PR in $PRS; do
             pr_json="$(gh api "repos/$REPO/pulls/$PR")"
             HEAD="$(jq -r .head.sha <<<"$pr_json")"
+            # Never auto-merge a pull request from a fork: its author has no
+            # write access here, and the gate must not grant it by proxy.
+            if [ "$(jq -r '.head.repo.full_name // ""' <<<"$pr_json")" != "$REPO" ]; then
+              verdict "$PR" "skipped (fork pull request — merge by hand after review)"; continue
+            fi
             if [ "$(jq -r .state <<<"$pr_json")" != "open" ] || [ "$(jq -r .draft <<<"$pr_json")" != "false" ]; then
               verdict "$PR" "skipped (closed or draft)"; continue
             fi

@@ -41,7 +41,7 @@ jobs:
       - name: Migration statement guard (runs before Neon sees anything)
         run: npx vitest run tests/drizzle-migration-statements.test.ts
       - name: Install Vercel CLI
-        run: npm install --global vercel@latest
+        run: npm install --global vercel@62.1.0
       - name: Pull Vercel production env
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
       # Fail fast if the pulled link does not point at the kinetix project. This
