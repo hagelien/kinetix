@@ -1028,6 +1028,7 @@ describe('agent consensus hold, re-stamp and retry', () => {
         reason: 'upheld_dispute',
       }),
     ]);
+    expect((await collectConsensusFacts(edit!.id))?.disputeHoldCause).toBe('upheld_dispute');
     expect((await collectConsensusFacts(edit!.id))?.hasOpenHumanDispute).toBe(true);
     const [held] = await db
       .select({ status: pendingEdits.status })
@@ -1099,6 +1100,7 @@ describe('agent consensus hold, re-stamp and retry', () => {
         approverUserId: peerA.userId,
       }),
     ).toEqual({ outcome: 'held', reason: 'target_unpublished' });
+    expect((await collectConsensusFacts(edit!.id))?.disputeHoldCause).toBe('target_unpublished');
     expect((await collectConsensusFacts(edit!.id))?.hasOpenHumanDispute).toBe(true);
     const [held] = await db
       .select({ status: pendingEdits.status })

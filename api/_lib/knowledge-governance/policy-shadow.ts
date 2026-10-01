@@ -48,6 +48,7 @@ import { isActiveAgentSubmitter } from './actor-context.js';
 import {
   assuranceFromLegacySummary,
   KINETIX_SPACE,
+  type ConsensusDisputeHoldCause,
 } from '../../../src/lib/assurance/projection.js';
 import {
   KINETIX_APPLY_POLICY,
@@ -97,6 +98,13 @@ export interface ConsensusFacts {
    */
   readonly lacksSourceQuote: boolean;
   readonly hasOpenHumanDispute: boolean;
+  /**
+   * Which of the four conditions behind `hasOpenHumanDispute` applies, first
+   * match in the legacy gate's order. Diagnostic only — the hold decision reads
+   * the boolean. Unset on facts built without it, which then report a generic
+   * `open_dispute`.
+   */
+  readonly disputeHoldCause?: ConsensusDisputeHoldCause | null;
 }
 
 /**
@@ -152,6 +160,15 @@ export async function collectConsensusFacts(
 
   const activeAgents = await countActiveVerifierAgents();
 
+  // An upheld ruling that still stands against this payload holds the edit
+  // exactly as an open dispute does — the legacy gate refuses it too
+  // (`legacyConsensusHold`), and a bare resubmit keeps the old approvals, so
+  // without this the generic engine would publish what the ruling rejected.
+  // So does a wiki edit whose page is no longer published (out of the agents'
+  // reach) and a reviewer's comment-only return the author has not yet answered
+  // with a revision. Each keeps its own name, checked in the legacy order.
+  const disputeHoldCause = await collectDisputeHoldCause(pending, pendingEditId);
+
   return {
     pendingEditId,
     editType: pending.editType,
@@ -180,22 +197,8 @@ export async function collectConsensusFacts(
     // value neither engine actually produces, and false parity is the one thing
     // the dossier must never report.
     lacksSourceQuote: await highRiskProposalWouldPublishUnquoted(pending),
-    // An upheld ruling that still stands against this payload holds the edit
-    // exactly as an open dispute does — the legacy gate refuses it too
-    // (`legacyConsensusHold`), and a bare resubmit keeps the old approvals, so
-    // without this the generic engine would publish what the ruling rejected.
-    hasOpenHumanDispute:
-      (await hasOpenDispute({
-        targetType: 'pending_edit',
-        targetId: pendingEditId,
-      })) ||
-      (await pendingEditUpheldRulingStands(pendingEditId, pending.proposedMeta)) ||
-      // …and so does a reviewer's comment-only return the author has not yet
-      // answered with a revision (`legacyConsensusHold`: returned_unrevised).
-      returnStandsUnrevised(pending.proposedMeta) ||
-      // …and a wiki edit whose page is no longer published is out of the
-      // agents' reach (`legacyConsensusHold`: target_unpublished).
-      !(await pendingEditTargetOpenToAgents(pending)),
+    hasOpenHumanDispute: disputeHoldCause !== null,
+    disputeHoldCause,
   };
 }
 
@@ -375,4 +378,21 @@ export async function recordShadowDecision(
     outcome: evaluation.outcome,
   });
   return { evaluation, recorded: true };
+}
+
+async function collectDisputeHoldCause(
+  pending: Parameters<typeof pendingEditTargetOpenToAgents>[0] & {
+    proposedMeta: unknown;
+  },
+  pendingEditId: number,
+): Promise<ConsensusDisputeHoldCause | null> {
+  if (!(await pendingEditTargetOpenToAgents(pending))) return 'target_unpublished';
+  if (await hasOpenDispute({ targetType: 'pending_edit', targetId: pendingEditId })) {
+    return 'open_dispute';
+  }
+  if (await pendingEditUpheldRulingStands(pendingEditId, pending.proposedMeta)) {
+    return 'upheld_dispute';
+  }
+  if (returnStandsUnrevised(pending.proposedMeta)) return 'returned_unrevised';
+  return null;
 }
