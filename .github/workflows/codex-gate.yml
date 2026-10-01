@@ -174,9 +174,9 @@ concurrency:
   group: >-
     codex-gate-${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number || github.event.check_suite.pull_requests[0].number || inputs.pr || 'sweep' }}-${{
     ((github.event_name == 'pull_request_review'
-    && !contains(github.event.review.user.login, 'codex'))
+    && github.event.review.user.login != 'chatgpt-codex-connector[bot]')
     || (github.event_name == 'issue_comment'
-    && !contains(github.event.comment.user.login, 'codex'))
+    && github.event.comment.user.login != 'chatgpt-codex-connector[bot]')
     || (github.event_name == 'pull_request'
     && github.event.action == 'labeled'
     && github.event.label.name != 'merge-when-green')
