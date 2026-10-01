@@ -90,26 +90,33 @@ export default withErrorHandling(async function handler(req, res): Promise<void>
       1,
       Number.isInteger(limitRaw) ? limitRaw : RECONSIDERATION_LIST_LIMIT,
     );
-    const candidates = await listReconsiderationCandidates({
+    const items: Array<{
+      targetType: AgentVerificationTargetType;
+      targetId: number;
+      targetVersion: string;
+      payload: unknown;
+    }> = [];
+    await listReconsiderationCandidates({
       agentId: agent.id,
       agentUserId: auth.userId,
       limit,
-    });
-    const items = [];
-    for (const c of candidates) {
       // Same payload, under the same visibility rules, the agent judged the
-      // first time; a target it can no longer read is not served.
-      const target = await fetchSingleCandidate({
-        type: c.targetType,
-        targetId: c.targetId,
-        agentId: agent.id,
-        agentUserId: auth.userId,
-        selfReviewEnabled: agent.selfReviewEnabled,
-        includeJudged: true,
-      });
-      if (!target || target.targetVersion !== c.targetVersion) continue;
-      items.push({ ...c, payload: target.payload });
-    }
+      // first time; a target it can no longer read is not served, and does
+      // not use up a slot of `limit`.
+      accept: async (c) => {
+        const target = await fetchSingleCandidate({
+          type: c.targetType,
+          targetId: c.targetId,
+          agentId: agent.id,
+          agentUserId: auth.userId,
+          selfReviewEnabled: agent.selfReviewEnabled,
+          includeJudged: true,
+        });
+        if (!target || target.targetVersion !== c.targetVersion) return false;
+        items.push({ ...c, payload: target.payload });
+        return true;
+      },
+    });
     json(
       res,
       200,
