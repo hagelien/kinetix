@@ -24,6 +24,10 @@ under GitHub's expression semantics, and asserts:
      workflow_run and check_suite — must not sit in a `-live` group, or a green
      CI result would cancel a poller and replace it with a run that cannot wait
      for the 👍 that raises no webhook.
+  D. a review or comment by a look-alike account (a login that merely contains
+     "codex") neither runs the job nor lands in a `-live` group. The repository
+     is public, so anyone can register such a name; in a live group its
+     skipped run would cancel the real poller for that PR.
 
 Positive controls run alongside, so the invariants cannot pass by the `if`
 evaluating false for everything.
@@ -47,6 +51,8 @@ WORKFLOW = Path(".github/workflows/codex-gate.yml")
 # one is changed there without being changed here, the controls below fail.
 OVERRIDE_LABEL = "merge-when-green"
 CODEX = "chatgpt-codex-connector[bot]"
+# Any account can be named like this on a public repository.
+LOOKALIKE = "evil-codex"
 CANNOT_POLL = {"workflow_run", "check_suite"}
 
 
@@ -123,8 +129,7 @@ def gh_eq(a: object, b: object) -> bool:
 
 
 def contains(haystack: object, needle: object) -> bool:
-    """GitHub's contains() is documented as case-insensitive, which is what
-    lets the workflow match both `codex` and `chatgpt-codex-connector[bot]`."""
+    """GitHub's contains() is documented as case-insensitive."""
     if haystack is None or haystack is MISSING or isinstance(haystack, Ctx):
         return False
     return str(needle).lower() in str(haystack).lower()
@@ -185,7 +190,7 @@ def group_of(event_name: str, payload: dict) -> str:
 # --- the event matrix --------------------------------------------------------
 
 def build_cases() -> list[tuple[str, dict]]:
-    authors = ["hagelien", CODEX, "Codex", "dependabot[bot]"]
+    authors = ["hagelien", CODEX, "Codex", LOOKALIKE, "dependabot[bot]"]
     bools = [True, False]
     conclusions = ["success", "failure", "cancelled", None]
     # a push build carries no PR; a PR build carries one
@@ -232,6 +237,12 @@ CONTROLS: list[tuple[str, str, dict, bool]] = [
     ("codex review, draft", "pull_request_review",
      {"review": {"user": {"login": CODEX}},
       "pull_request": {"number": 42, "draft": True}}, False),
+    ("look-alike review, non-draft", "pull_request_review",
+     {"review": {"user": {"login": LOOKALIKE}},
+      "pull_request": {"number": 42, "draft": False}}, False),
+    ("look-alike comment on open PR", "issue_comment",
+     {"comment": {"user": {"login": LOOKALIKE}},
+      "issue": {"number": 42, "state": "open", "pull_request": {"url": "x"}}}, False),
     ("human review, non-draft", "pull_request_review",
      {"review": {"user": {"login": "hagelien"}},
       "pull_request": {"number": 42, "draft": False}}, False),
@@ -282,6 +293,9 @@ def main() -> int:
             violations.append(f"B: skips but sits in sweep-live: {event_name} {payload}")
         if runs and event_name in CANNOT_POLL and suffix == "live":
             violations.append(f"C: runs, cannot poll, but sits in -live: {event_name} {payload}")
+        actor = (payload.get("review") or payload.get("comment") or {}).get("user", {}).get("login")
+        if actor and actor != CODEX and "codex" in actor.lower() and (runs or suffix != "noop"):
+            violations.append(f"D: look-alike {actor} runs or is not noop: {event_name} {payload}")
 
     routed = ", ".join(f"{n} -> {s}" for s, n in sorted(tally.items()))
     print(f"{len(cases)} synthetic events routed: {routed}")
