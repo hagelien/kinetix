@@ -240,6 +240,28 @@ async function handleCreate(
   }
 
   const db = getDb();
+  // `parent_id` is not a foreign key, so a reply must be checked against the
+  // thread it is posted into: a parent from another parameter, fact or host
+  // would attach the reply (and its notification) to an unrelated thread.
+  if (parsed.data.parentId !== undefined) {
+    const [parent] = await db
+      .select({ id: drugParameterDiscussions.id })
+      .from(drugParameterDiscussions)
+      .where(
+        and(
+          eq(drugParameterDiscussions.id, parsed.data.parentId),
+          hostCondition(host),
+          parameter
+            ? eq(drugParameterDiscussions.parameter, parameter)
+            : isNull(drugParameterDiscussions.parameter),
+        ),
+      )
+      .limit(1);
+    if (!parent) {
+      error(res, 400, 'parentId does not belong to this discussion thread');
+      return;
+    }
+  }
   const [row] = await db
     .insert(drugParameterDiscussions)
     .values({
