@@ -219,7 +219,10 @@ export async function publishOnAgentConsensus(args: {
       outcome: 'held',
       reason: 'the generic policy holds this version',
       unmet: evaluation.reasons,
-      holdReason: genericConsensusHoldReason(evaluation.decision),
+      holdReason: genericConsensusHoldReason(
+        evaluation.decision,
+        evaluation.facts.disputeHoldCause,
+      ),
       authority,
     };
   }
