@@ -113,7 +113,11 @@ function mockSelectDb(rows: unknown[], pageStatus?: string) {
   return select;
 }
 
-function mockInsertDb(row: unknown, pageStatus?: string) {
+function mockInsertDb(
+  row: unknown,
+  pageStatus?: string,
+  parentRows?: unknown[],
+) {
   const chain = {
     values: vi.fn(() => chain),
     returning: vi.fn(() => Promise.resolve([row])),
@@ -121,6 +125,8 @@ function mockInsertDb(row: unknown, pageStatus?: string) {
   const db: Record<string, unknown> = { insert: vi.fn(() => chain) };
   if (pageStatus) {
     db.select = vi.fn(() => selectChain([{ status: pageStatus }]));
+  } else if (parentRows) {
+    db.select = vi.fn(() => selectChain(parentRows));
   }
   getDbMock.mockReturnValue(db);
   return chain;
@@ -240,6 +246,53 @@ describe('/api/drug-discussions host validation', () => {
     expect(fireAgentHookMock).toHaveBeenCalledWith(
       7,
       expect.objectContaining({ kind: 'comment_posted', drugId: 9 }),
+    );
+  });
+
+  it('rejects a reply whose parent is not in the same thread', async () => {
+    getUserFromRequestMock.mockResolvedValue({
+      userId: 7,
+      role: 'contributor',
+    });
+    const chain = mockInsertDb(
+      { id: 3, drugId: 9, wikiPageId: null },
+      undefined,
+      [],
+    );
+    const { res, state } = createResponse();
+    await handler(
+      createRequest('drugId=9&parameter=fact:abc', 'POST', {
+        body: 'hi',
+        parentId: 41,
+      }),
+      res,
+    );
+    expect(state.statusCode).toBe(400);
+    expect(chain.values).not.toHaveBeenCalled();
+    expect(recordImplicitAgentApprovalMock).not.toHaveBeenCalled();
+  });
+
+  it('accepts a reply whose parent is in the same thread', async () => {
+    getUserFromRequestMock.mockResolvedValue({
+      userId: 7,
+      role: 'contributor',
+    });
+    const chain = mockInsertDb(
+      { id: 3, drugId: 9, wikiPageId: null },
+      undefined,
+      [{ id: 41 }],
+    );
+    const { res, state } = createResponse();
+    await handler(
+      createRequest('drugId=9&parameter=fact:abc', 'POST', {
+        body: 'hi',
+        parentId: 41,
+      }),
+      res,
+    );
+    expect(state.statusCode).toBe(201);
+    expect(chain.values).toHaveBeenCalledWith(
+      expect.objectContaining({ parentId: 41 }),
     );
   });
 });
