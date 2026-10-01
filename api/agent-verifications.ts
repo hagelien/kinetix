@@ -1387,15 +1387,29 @@ export async function sweepAgentConsensus(
   // permanently sub-quorum tally (issue #1367): without it, 25+ edits stuck at
   // one approval in a two-approval pool would occupy the oldest-first window on
   // every cycle and starve out newer edits whose tally already clears the bar.
+  //
+  // Only approvals the real gate would count are tallied (issue 1398): an
+  // agent that still has standing, and never the author unless it currently
+  // holds the self-review grant. Otherwise a revoked self-approval plus one
+  // peer approval reaches the raw floor of two while `legacyConsensusHold`
+  // sees one, and 25 such rows refill the window with `quorum_unmet`.
   const approvalsAtLeastQuorumFloor = db
     .select({ one: sql`1` })
     .from(agentVerifications)
+    .innerJoin(agents, eq(agents.id, agentVerifications.agentId))
+    .innerJoin(users, eq(users.id, agents.userId))
     .where(
       and(
         eq(agentVerifications.targetType, 'pending_edit'),
         eq(agentVerifications.targetId, pendingEdits.id),
         eq(agentVerifications.verdict, 'approve'),
         eq(agentVerifications.isImplicit, false),
+        eq(agents.status, 'active'),
+        inArray(users.role, ACTIVE_AGENT_ROLES),
+        or(
+          ne(agents.userId, pendingEdits.submittedBy),
+          eq(agents.selfReviewEnabled, true),
+        ),
       ),
     )
     .groupBy(sql`1`)
