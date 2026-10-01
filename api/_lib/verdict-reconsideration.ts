@@ -265,11 +265,23 @@ async function reconsiderationCandidateRows(
  * was then starved out of the list permanently. This keeps fetching
  * subsequent pages, oldest-first, until `limit` valid candidates are
  * collected or {@link RECONSIDERATION_SCAN_LIMIT} rows have been scanned.
+ *
+ * `accept` is a caller-side visibility check (the payload must still be
+ * servable). A candidate it rejects does not count toward `limit` either: the
+ * scan pages past it exactly as it does a stale version, so one invisible row
+ * whose version is still current — say a disputed wiki revision whose page
+ * went back to draft — cannot starve the live candidates behind it (issue
+ * 1395).
  */
 export async function listReconsiderationCandidates(args: {
   agentId: number;
   agentUserId: number;
   limit?: number;
+  accept?: (candidate: {
+    targetType: AgentVerificationTargetType;
+    targetId: number;
+    targetVersion: string;
+  }) => Promise<boolean>;
 }): Promise<
   Array<{
     targetType: AgentVerificationTargetType;
@@ -322,7 +334,13 @@ export async function listReconsiderationCandidates(args: {
       // A dispute bound to an older payload is not reconsidered — the target
       // moved, so the verdict is due a fresh blind round, not a second look.
       if (!current || current !== row.disputeVersion) continue;
-      out.push({ targetType, targetId: row.targetId, targetVersion: current });
+      const candidate = {
+        targetType,
+        targetId: row.targetId,
+        targetVersion: current,
+      };
+      if (args.accept && !(await args.accept(candidate))) continue;
+      out.push(candidate);
     }
   }
   return out;
