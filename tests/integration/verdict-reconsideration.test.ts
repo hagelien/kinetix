@@ -474,6 +474,41 @@ describe('dispute reconsideration', () => {
     ]);
   });
 
+  it('pages past a candidate that is no longer servable instead of starving the ones behind it (issue 1395)', async () => {
+    const author = await seedAgent('author');
+    const peer = await seedAgent('peer');
+    const sol = await seedAgent('sol');
+
+    const hiddenEdit = await seedWikiFactEdit(author.userId, 'oksymorfon-hidden');
+    await approve(peer.agentId, hiddenEdit);
+    await dispute(sol, hiddenEdit);
+    // The page goes back to draft after the dispute was filed. The dispute's
+    // version is still current, so the listing keeps it, but the GET handler's
+    // visibility check refuses to serve a draft page's payload.
+    const [hidden] = await db
+      .select({ pageId: pendingEdits.targetId })
+      .from(pendingEdits)
+      .where(eq(pendingEdits.id, hiddenEdit));
+    await db
+      .update(wikiPages)
+      .set({ status: 'draft' })
+      .where(eq(wikiPages.id, hidden!.pageId!));
+
+    const liveEdit = await seedWikiFactEdit(author.userId, 'oksymorfon-live');
+    await approve(peer.agentId, liveEdit);
+    const liveVersion = await dispute(sol, liveEdit);
+
+    // Without the visibility check inside the scan, `?limit=1` selected the
+    // hidden row, the handler dropped it, and every call came back empty.
+    const listed = await call(reconsiderHandler, sol.userId, 'GET', `${RECONSIDER}?limit=1`);
+    expect(listed.statusCode).toBe(200);
+    expect(listed.body.items).toHaveLength(1);
+    expect(listed.body.items[0]).toMatchObject({
+      targetId: liveEdit,
+      targetVersion: liveVersion,
+    });
+  });
+
   it('refuses a verdict write that was admitted before the second look but lands after it', async () => {
     // The route's pre-check can pass while /reconsider holds the source-row
     // lock; the write that follows must re-check under that lock.
