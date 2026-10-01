@@ -46,6 +46,19 @@ export class StaleDisputeTargetError extends Error {
   }
 }
 
+/**
+ * The agent verdict a mirror write was meant to represent is no longer a live
+ * explicit `dispute` (deleted by a revision, or flipped to approve/abstain by
+ * a concurrent request). Thrown from {@link upsertOpenDispute} so the mirror
+ * is skipped rather than recreating a dispute the agent already withdrew.
+ */
+export class DisputeVerdictGoneError extends Error {
+  constructor(readonly verificationId: number) {
+    super(`agent verdict ${verificationId} is no longer a live dispute`);
+    this.name = 'DisputeVerdictGoneError';
+  }
+}
+
 export interface DisputeFeedItem {
   id: number;
   targetType: DisputeTargetType;
@@ -95,12 +108,34 @@ export async function upsertOpenDispute(args: {
   reasonMd: string;
   evidenceRefs?: AgentVerificationEvidenceRef[];
   targetVersion: string;
+  /**
+   * An agent verdict row this write mirrors. When set, that row is locked
+   * (`FOR UPDATE`, after the source row) and must still be an explicit
+   * `dispute`, else {@link DisputeVerdictGoneError} is thrown — so a concurrent
+   * approve/abstain that already withdrew the dispute cannot be undone by a
+   * stale mirror (issue 1401).
+   */
+  requireLiveDisputeVerdictId?: number;
 }): Promise<{ id: number; inserted: boolean }> {
   return inTransaction(async () => {
     const tx = getDb();
     // Source row first, matching every other writer that re-checks a target
     // version under lock (recordVerification, the upheld-return path).
     await lockVerificationSourceRow(tx, args.targetType, args.targetId);
+    if (args.requireLiveDisputeVerdictId !== undefined) {
+      const [live] = await tx
+        .select({ id: agentVerifications.id })
+        .from(agentVerifications)
+        .where(
+          and(
+            eq(agentVerifications.id, args.requireLiveDisputeVerdictId),
+            eq(agentVerifications.verdict, 'dispute'),
+            eq(agentVerifications.isImplicit, false),
+          ),
+        )
+        .for('update');
+      if (!live) throw new DisputeVerdictGoneError(args.requireLiveDisputeVerdictId);
+    }
     const actual = await verificationTargetVersion(
       { targetType: args.targetType, targetId: args.targetId },
       tx,
