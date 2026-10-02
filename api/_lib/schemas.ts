@@ -9,11 +9,24 @@ import {
   normalizeClaimText,
 } from '../../src/lib/disputedClaim.js';
 import { DRUG_PARAMETERS } from '../../src/lib/drugParameters.js';
+import { isReservedEditSummary } from './cache-revision-codes.js';
 import { isAgentWorkTarget } from './agent-work-targets.js';
 import {
   normalizeHandleIdentifier,
   resolverHandleFromUrl,
 } from '../../src/lib/citationHandles.js';
+
+/**
+ * A human- or agent-authored edit summary. The `auto:param_entries_*` prefix is
+ * reserved for the aggregate cache's own revisions, so a caller cannot forge a
+ * summary that later tooling would mistake for one.
+ */
+function humanEditSummary(max: number, trim: boolean) {
+  const base = trim ? z.string().trim().max(max) : z.string().max(max);
+  return base.refine((v) => !isReservedEditSummary(v), {
+    message: 'editSummary may not start with the reserved prefix "auto:param_entries_"',
+  });
+}
 
 // Per-language drug names. At least one language entry is required. Keys are
 // BCP-47 language codes (lowercase); values are the localized name. Empty
@@ -53,7 +66,7 @@ export const createPageSchema = z.object({
   drugCid: z.number().int().positive().optional(),
   parentId: z.number().int().positive().optional(),
   categoryIds: z.array(z.number().int().positive()).optional(),
-  editSummary: z.string().max(500).optional(),
+  editSummary: humanEditSummary(500, false).optional(),
   status: z.enum(['draft', 'published']).default('published'),
   submitForReview: z.boolean().optional(),
   // Monograph creation may optionally include a new drug row + initial PK
@@ -72,7 +85,7 @@ export const updatePageSchema = z.object({
   drugCid: z.number().int().positive().nullable().optional(),
   parentId: z.number().int().positive().nullable().optional(),
   categoryIds: z.array(z.number().int().positive()).optional(),
-  editSummary: z.string().max(500).optional(),
+  editSummary: humanEditSummary(500, false).optional(),
   status: z.enum(['draft', 'published']).optional(),
   submitForReview: z.boolean().optional(),
   /**
@@ -94,7 +107,7 @@ export const updatePageSchema = z.object({
 
 export const updateDrugParameterSchema = z.object({
   value: z.any(), // Validated against the registry spec at the route layer
-  editSummary: z.string().max(500).optional(),
+  editSummary: humanEditSummary(500, false).optional(),
   // The verbatim sentence, table cell or figure caption the proposed value was
   // read off, quoted from the cited source. Stored on the pending edit's
   // `proposed_meta` rather than on the value, because a drug-parameter value is
@@ -579,7 +592,7 @@ export const createPaperReviewSchema = z
     // Why this (re-)review was made, in the author's language (Norwegian
     // bokmål). Recorded verbatim on the revision-history row so humans and
     // agents can see the reason for each change. Omit / empty on a first review.
-    editSummary: z.string().trim().max(500).optional(),
+    editSummary: humanEditSummary(500, true).optional(),
   })
   .strict();
 
@@ -873,7 +886,7 @@ export const metabolismWriteSchema = z.object({
   metabolites: z.array(metabolismMetaboliteSchema).max(100).default([]),
   precursors: z.array(metabolismPrecursorSchema).max(100).default([]),
   /** Short rationale stored on the pending edit's proposedMeta. */
-  editSummary: z.string().trim().max(2000).optional(),
+  editSummary: humanEditSummary(2000, true).optional(),
   /** Admins may opt their edit into the review queue instead of writing. */
   submitForReview: z.boolean().optional(),
 });
@@ -953,7 +966,7 @@ const BIO_ENTITY_FIELD_KEYS = [
 // before the payload is queued so the apply-time re-validation sees only the
 // entity fields (bioEntityEditSchema below).
 const bioEntityWriteExtras = {
-  editSummary: z.string().max(2000).optional(),
+  editSummary: humanEditSummary(2000, false).optional(),
   submitForReview: z.boolean().optional(),
 };
 
@@ -1002,7 +1015,7 @@ const enzymeInteractionSchema = z.object({
 
 export const enzymeInteractionsWriteSchema = z.object({
   interactions: z.array(enzymeInteractionSchema).max(100).default([]),
-  editSummary: z.string().max(2000).optional(),
+  editSummary: humanEditSummary(2000, false).optional(),
   submitForReview: z.boolean().optional(),
 });
 
@@ -1084,7 +1097,7 @@ export const receptorMechanismSchema = z
 export const receptorTargetsWriteSchema = z.object({
   mechanisms: z.array(receptorMechanismSchema).max(100).default([]),
   /** Short rationale stored on the pending edit's proposedMeta. */
-  editSummary: z.string().trim().max(2000).optional(),
+  editSummary: humanEditSummary(2000, true).optional(),
   /** Admins may opt their edit into the review queue instead of writing. */
   submitForReview: z.boolean().optional(),
 });
@@ -1204,7 +1217,7 @@ export const learningUnitMetaSchema = z.object({
     .regex(/^[a-z0-9-]+$/, 'slug must be lowercase letters, digits, and hyphens'),
   difficulty: z.enum(LEARNING_DIFFICULTIES),
   domains: z.array(z.string().trim().min(1).max(60)).max(20).default([]),
-  editSummary: z.string().trim().max(2000).optional(),
+  editSummary: humanEditSummary(2000, true).optional(),
 });
 
 // ─── Clinical-case content schema (Phase D, spec §5.4) ───────────────────────
@@ -1262,7 +1275,7 @@ export const clinicalCaseMetaSchema = z.object({
     .regex(/^[a-z0-9-]+$/, 'slug must be lowercase letters, digits, and hyphens'),
   difficulty: z.enum(LEARNING_DIFFICULTIES),
   domains: z.array(z.string().trim().min(1).max(60)).max(20).default([]),
-  editSummary: z.string().trim().max(2000).optional(),
+  editSummary: humanEditSummary(2000, true).optional(),
   // Clinical cases ALWAYS require a human expert moderator (never auto-apply on
   // agent consensus — enforced in code at applyOnAgentConsensus). The flag is
   // carried for the queue/UI; the code guard is the real safety mechanism.
