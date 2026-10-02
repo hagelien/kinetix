@@ -154,6 +154,14 @@ describe('/api/drug-discussions host validation', () => {
     expect(state.statusCode).toBe(400);
   });
 
+  it('rejects an empty parameter on a drug thread', async () => {
+    for (const method of ['GET', 'POST'] as const) {
+      const { res, state } = createResponse();
+      await handler(createRequest('drugId=9&parameter=', method), res);
+      expect(state.statusCode).toBe(400);
+    }
+  });
+
   it('rejects a wikiPageId thread without a fact parameter', async () => {
     const { res, state } = createResponse();
     await handler(createRequest('wikiPageId=5'), res);
