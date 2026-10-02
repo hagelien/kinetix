@@ -456,6 +456,52 @@ describe('agent consensus hold, re-stamp and retry', () => {
     expect(results.map((r) => r.pendingEditId)).toEqual([ready]);
   });
 
+  it("does not let one-approval high-risk rows fill the sweep window in a two-agent pool", async () => {
+    // Two active agents: the pool floor is one approval, but a high-risk edit
+    // never rides the degraded path and needs two.
+    const author = await seedAgent('author');
+    const b = await seedAgent('b');
+    const stuck = await seedHighRiskEdit(author.userId);
+    await approve(b.agentId, stuck);
+    await new Promise((r) => setTimeout(r, 5));
+    const [page] = await db
+      .insert(wikiPages)
+      .values({
+        slug: 'diazepam',
+        title: 'Diazepam',
+        pageType: 'drug_monograph',
+        content: {
+          version: 2,
+          sections: { pk: { body: { type: 'doc', content: [] } } },
+        },
+        status: 'published',
+        createdBy: author.userId,
+        updatedBy: author.userId,
+      })
+      .returning({ id: wikiPages.id });
+    const [ready] = await db
+      .insert(pendingEdits)
+      .values({
+        editType: 'wiki_fact',
+        targetId: page!.id,
+        sectionId: 'pk',
+        factOperation: 'add',
+        factStatement: 'Distribusjonsvolumet er ca. 1 L/kg.',
+        proposedValue: {
+          type: 'fact',
+          attrs: { factId: 'f-hr', referenceIds: [] },
+          content: [{ type: 'text', text: 'Distribusjonsvolumet er ca. 1 L/kg.' }],
+        },
+        submittedBy: author.userId,
+        status: 'pending',
+      })
+      .returning({ id: pendingEdits.id });
+    await approve(b.agentId, ready!.id);
+
+    const results = await sweepAgentConsensus(1);
+    expect(results.map((r) => r.pendingEditId)).toEqual([ready!.id]);
+  });
+
   it('downgrades a tier and its pending verdict snapshots together', async () => {
     const author = await seedAgent('author');
     const opus = await seedAgent('opus');
