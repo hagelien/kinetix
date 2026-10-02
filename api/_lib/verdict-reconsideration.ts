@@ -267,7 +267,11 @@ async function reconsiderationCandidateRows(
  * collected or {@link RECONSIDERATION_SCAN_LIMIT} rows have been scanned.
  *
  * `accept` is a caller-side visibility check (the payload must still be
- * servable). A candidate it rejects does not count toward `limit` either: the
+ * servable); it returns the payload to serve, or null to reject. Each scan
+ * page is checked concurrently (version read + `accept` per row) and the
+ * results are then consumed in order, so a long run of unservable rows costs
+ * one page of parallel reads rather than one serial round trip per row. A
+ * candidate it rejects does not count toward `limit` either: the
  * scan pages past it exactly as it does a stale version, so one invisible row
  * whose version is still current — say a disputed wiki revision whose page
  * went back to draft — cannot starve the live candidates behind it (issue
@@ -281,12 +285,13 @@ export async function listReconsiderationCandidates(args: {
     targetType: AgentVerificationTargetType;
     targetId: number;
     targetVersion: string;
-  }) => Promise<boolean>;
+  }) => Promise<{ payload: unknown } | null>;
 }): Promise<
   Array<{
     targetType: AgentVerificationTargetType;
     targetId: number;
     targetVersion: string;
+    payload?: unknown;
   }>
 > {
   const db = getDb();
@@ -299,6 +304,7 @@ export async function listReconsiderationCandidates(args: {
     targetType: AgentVerificationTargetType;
     targetId: number;
     targetVersion: string;
+    payload?: unknown;
   }> = [];
   // Keyset cursor on the same (updatedAt, id) order the query returns,
   // advanced past every row read so far — valid or not — so a starved row is
@@ -324,23 +330,30 @@ export async function listReconsiderationCandidates(args: {
     const last = rows[rows.length - 1]!;
     cursor = { updatedAt: last.updatedAt, id: last.id };
 
-    for (const row of rows) {
+    const checked = await Promise.all(
+      rows.map(async (row) => {
+        const targetType = row.targetType as AgentVerificationTargetType;
+        const current = await verificationTargetVersion({
+          targetType,
+          targetId: row.targetId,
+        });
+        // A dispute bound to an older payload is not reconsidered — the
+        // target moved, so the verdict is due a fresh blind round, not a
+        // second look.
+        if (!current || current !== row.disputeVersion) return null;
+        const candidate = {
+          targetType,
+          targetId: row.targetId,
+          targetVersion: current,
+        };
+        if (!args.accept) return candidate;
+        const accepted = await args.accept(candidate);
+        return accepted ? { ...candidate, payload: accepted.payload } : null;
+      }),
+    );
+    for (const item of checked) {
       if (out.length >= limit) break;
-      const targetType = row.targetType as AgentVerificationTargetType;
-      const current = await verificationTargetVersion({
-        targetType,
-        targetId: row.targetId,
-      });
-      // A dispute bound to an older payload is not reconsidered — the target
-      // moved, so the verdict is due a fresh blind round, not a second look.
-      if (!current || current !== row.disputeVersion) continue;
-      const candidate = {
-        targetType,
-        targetId: row.targetId,
-        targetVersion: current,
-      };
-      if (args.accept && !(await args.accept(candidate))) continue;
-      out.push(candidate);
+      if (item) out.push(item);
     }
   }
   return out;
