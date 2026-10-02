@@ -90,13 +90,7 @@ export default withErrorHandling(async function handler(req, res): Promise<void>
       1,
       Number.isInteger(limitRaw) ? limitRaw : RECONSIDERATION_LIST_LIMIT,
     );
-    const items: Array<{
-      targetType: AgentVerificationTargetType;
-      targetId: number;
-      targetVersion: string;
-      payload: unknown;
-    }> = [];
-    await listReconsiderationCandidates({
+    const found = await listReconsiderationCandidates({
       agentId: agent.id,
       agentUserId: auth.userId,
       limit,
@@ -112,11 +106,11 @@ export default withErrorHandling(async function handler(req, res): Promise<void>
           selfReviewEnabled: agent.selfReviewEnabled,
           includeJudged: true,
         });
-        if (!target || target.targetVersion !== c.targetVersion) return false;
-        items.push({ ...c, payload: target.payload });
-        return true;
+        if (!target || target.targetVersion !== c.targetVersion) return null;
+        return { payload: target.payload };
       },
     });
+    const items = found.map((c) => ({ ...c, payload: c.payload }));
     json(
       res,
       200,
