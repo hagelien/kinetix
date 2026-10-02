@@ -52,6 +52,7 @@ import {
   type ConsensusHoldReason,
   type VerificationSummary,
 } from './_lib/agent-verifications.js';
+import { DRUG_PARAMETER_IDS } from '../src/lib/drugParameters.js';
 import { FLAGSHIP_TIER, isFlagshipTier } from '../src/lib/modelTiers.js';
 import {
   applyApprovedEdit,
@@ -1380,6 +1381,18 @@ export async function sweepAgentConsensus(
   const quorumFloor = effectiveConsensusQuorum(await countActiveVerifierAgents(), {
     authorSelfReviews: false,
   });
+  // A calculation-driving edit never rides the degraded single-approval path
+  // (`consensusApprovalHoldReason`), so its bar is the full design target even
+  // when the pool's floor is 1. Without it, 25 older high-risk rows sitting at
+  // one approval would pass the floor, hold as `high_risk_degraded_quorum` on
+  // every retry, and starve a newer low-risk row that is ready to apply.
+  const highRiskQuorumFloor = Math.max(
+    quorumFloor,
+    AGENT_CONSENSUS_APPROVE_QUORUM,
+  );
+  const highRiskParameterIds = DRUG_PARAMETER_IDS.filter((id) =>
+    isHighRiskPendingEdit({ editType: 'parameter', parameter: id }),
+  );
   // Edits that consensus can never publish are filtered out here, before the
   // LIMIT, not left to `legacyConsensusHold`: otherwise 25 old human-submitted
   // or clinical rows would fill every sweep and starve the agent-authored edits
@@ -1413,7 +1426,12 @@ export async function sweepAgentConsensus(
       ),
     )
     .groupBy(sql`1`)
-    .having(sql`count(*) >= ${quorumFloor}`);
+    .having(
+      sql`count(*) >= case when ${pendingEdits.editType} in ('parameter', 'param_entry') and ${pendingEdits.parameter} in (${sql.join(
+        highRiskParameterIds.map((id) => sql`${id}`),
+        sql`, `,
+      )}) then ${highRiskQuorumFloor} else ${quorumFloor} end`,
+    );
   const authorIsActiveAgent = db
     .select({ one: sql`1` })
     .from(agents)
