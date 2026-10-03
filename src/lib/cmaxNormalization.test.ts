@@ -144,6 +144,11 @@ describe('normalizeCmaxEntry — eligibility', () => {
     ['an interaction arm', {}, { coadministrationState: 'with_interacting_drug' }, 'interaction_arm_not_pooled'],
     ["coadministration 'unknown'", {}, { coadministrationState: 'unknown' }, 'unknown_coadministration_state'],
     ['an altered population', {}, { pkPopulation: 'renal_impairment' }, 'altered_population_not_pooled'],
+    ['a concentration with no dose at all', {}, { doseValue: null }, 'missing_dose'],
+    ['a dose value with no recognised dose unit', {}, { doseUnit: null }, 'missing_dose'],
+    ['no administered drug', {}, { administeredDrugId: null }, 'missing_dose'],
+    ['a declared ratio whose unit has no per-dose denominator', { unit: 'µmol/L' }, { valueBasis: 'dose_normalized', centralValue: 0.5 }, 'incompatible_dose_family'],
+    ['a per-mg ratio against a per-kg dose', { unit: 'µmol/L/mg' }, { valueBasis: 'dose_normalized', centralValue: 0.5, doseValue: 0.03, doseUnit: 'mg/kg' }, 'incompatible_dose_family'],
     ["population 'other'", {}, { pkPopulation: 'other' }, 'unknown_population'],
   ] as const)('%s → %s', (_label, over, dc, reason) => {
     const c = reason === 'missing_molecular_weight' ? { ...ctx, molecularWeight: null } : ctx;
