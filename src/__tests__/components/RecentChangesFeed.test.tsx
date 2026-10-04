@@ -126,6 +126,49 @@ describe('RecentChangesFeed', () => {
     expect(drugLink).toHaveAttribute('href', '/wiki/diazepam');
   });
 
+  it('lists a source value and a revision that share an id as separate rows', async () => {
+    fetchMock.mockResolvedValue({
+      changes: [
+        {
+          type: 'drug_parameter',
+          origin: 'source_value',
+          id: 7,
+          parameter: 'dispositionModel',
+          editSummary: null,
+          createdAt: '2026-10-04T08:44:00Z',
+          drug: { id: 2, names: { en: 'Clonazepam' }, nameShort: null },
+          author,
+        },
+        {
+          type: 'drug_parameter',
+          origin: 'revision',
+          id: 7,
+          parameter: 'halfLife',
+          editSummary: null,
+          createdAt: '2026-10-01T06:00:00Z',
+          drug: { id: 1, names: { en: 'Diazepam' }, nameShort: null },
+          author,
+        },
+      ],
+    });
+
+    renderFeed();
+
+    await waitFor(() =>
+      expect(screen.queryByText('recentChanges.loading')).toBeNull(),
+    );
+
+    expect(screen.getByRole('link', { name: 'clonazepam' })).toHaveAttribute(
+      'href',
+      '/wiki/drug/2',
+    );
+    expect(screen.getByRole('link', { name: 'diazepam' })).toHaveAttribute(
+      'href',
+      '/wiki/drug/1',
+    );
+    expect(screen.getAllByRole('listitem')).toHaveLength(2);
+  });
+
   it('shows an empty state when there are no changes yet', async () => {
     fetchMock.mockResolvedValue({ changes: [] });
 
