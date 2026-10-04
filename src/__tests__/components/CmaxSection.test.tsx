@@ -220,6 +220,21 @@ describe('CmaxSection', () => {
       expect(screen.getByTestId('cmax-headline').textContent).toContain('cmax.headlineNone');
     });
 
+    // Issue #21: toggling must not refetch or lose the view.
+    it('reuses the held summary when toggling back to the per-dose view', async () => {
+      store.push(cmaxRow({ id: 1 }));
+      render(<CmaxSection drugId={42} drugName="Kokain" />);
+      await screen.findByText('84 ng/mL (70–98)');
+      fireEvent.click(screen.getByRole('button', { name: 'cmax.modeNormalized' }));
+      await screen.findByTestId('cmax-headline');
+      expect(fetchCmaxSummary).toHaveBeenCalledTimes(1);
+
+      fireEvent.click(screen.getByRole('button', { name: 'cmax.modeObserved' }));
+      fireEvent.click(screen.getByRole('button', { name: 'cmax.modeNormalized' }));
+      expect(await screen.findByTestId('cmax-headline')).toBeTruthy();
+      expect(fetchCmaxSummary).toHaveBeenCalledTimes(1);
+    });
+
     it('shows one pooled headline, each normalized value, and why a reading is left out', async () => {
       store.push(cmaxRow({ id: 1 }), cmaxRow({ id: 2, sourceQuote: null }), cmaxRow({ id: 3, sourceQuote: null }));
       const a = poolable(1, 0.1387);
@@ -305,15 +320,17 @@ describe('CmaxSection', () => {
       store.push(cmaxRow({ id: 1 }));
       const a = poolable(1, 0.14);
       summary = { outcomes: [{ kind: 'poolable', entry: a }], strata: [stratum([a], 0.14)], headline: { kind: 'single', stratum: stratum([a], 0.14) } };
-      render(<CmaxSection drugId={42} drugName="Kokain" />);
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+      render(<CmaxSection drugId={42} drugName="Kokain" canEdit />);
       await screen.findAllByTestId('cmax-entry');
       fireEvent.click(screen.getByRole('button', { name: 'cmax.modeNormalized' }));
       expect((await screen.findByTestId('cmax-headline')).textContent).toContain('cmax.headlineSingleOne');
 
+      // A change to the rows is what refreshes the summary; the refresh fails.
       fetchCmaxSummary.mockRejectedValueOnce(new Error('boom'));
-      fireEvent.click(screen.getByRole('button', { name: 'cmax.modeObserved' }));
-      fireEvent.click(screen.getByRole('button', { name: 'cmax.modeNormalized' }));
+      fireEvent.click(screen.getByRole('button', { name: 'common.delete' }));
       expect(await screen.findByText('cmax.summaryError')).toBeTruthy();
+      confirm.mockRestore();
       expect(screen.queryByTestId('cmax-headline')).toBeNull();
       expect(screen.queryByText(/cmax\.headlineSingleOne/)).toBeNull();
     });
