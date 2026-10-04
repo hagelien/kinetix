@@ -692,6 +692,19 @@ export async function fetchDiscussions(
   return apiFetch(`/api/drug-discussions?${sp}`);
 }
 
+/**
+ * One discussion comment by id, with its parent, direct replies and a link to
+ * the page that hosts it — what a "discussion #N" reference resolves to.
+ */
+export async function fetchDiscussionById(id: number): Promise<{
+  discussion: DrugDiscussionDTO;
+  parent: DrugDiscussionDTO | null;
+  replies: DrugDiscussionDTO[];
+  url: string;
+}> {
+  return apiFetch(`/api/drug-discussions?id=${id}`);
+}
+
 export async function postDiscussion(
   host: DiscussionHost,
   body: string,
