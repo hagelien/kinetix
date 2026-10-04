@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import {
   cancelPriorityFlag,
   fetchPriorityFlags,
-  updatePriorityFlag,
   type PriorityFlagRow,
 } from '@/lib/parameterPriorityFlagsApi';
 import { UserBadge } from '@/components/ui/UserBadge';
@@ -29,15 +28,6 @@ export function PriorityFlagsAdminSection() {
   useEffect(() => {
     load();
   }, [load]);
-
-  async function handleResolve(id: number) {
-    try {
-      await updatePriorityFlag(id, { status: 'resolved' });
-      load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  }
 
   async function handleCancel(id: number) {
     try {
@@ -98,9 +88,6 @@ export function PriorityFlagsAdminSection() {
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <div className="flex gap-2 justify-end">
-                      <Button size="sm" variant="outline" onClick={() => handleResolve(row.id)}>
-                        {t('review.flagResolve')}
-                      </Button>
                       <Button size="sm" variant="outline" onClick={() => handleCancel(row.id)}>
                         {t('review.flagCancel')}
                       </Button>

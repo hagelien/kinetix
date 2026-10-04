@@ -2436,7 +2436,6 @@
     "flagNote": "Notat",
     "flagFlaggedBy": "Flagget av",
     "flagCreatedAt": "Flagget",
-    "flagResolve": "Marker fullført",
     "flagCancel": "Fjern",
     "wikiDiff": {
       "greenAdded": "Grønt = lagt til",
