@@ -2436,7 +2436,6 @@
     "flagNote": "Note",
     "flagFlaggedBy": "Flagged by",
     "flagCreatedAt": "Flagged",
-    "flagResolve": "Resolve",
     "flagCancel": "Clear",
     "wikiDiff": {
       "greenAdded": "Green = added",
