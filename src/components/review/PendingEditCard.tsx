@@ -48,6 +48,7 @@ import { PaperReviewDiff } from './PaperReviewDiff';
 import { LearningContentDiff } from './LearningContentDiff';
 import { UserBadge } from '@/components/ui/UserBadge';
 import type { RejectionReason } from '@/lib/rejectionReasons';
+import { ReferenceText } from './ReferenceText';
 
 // Map stable server error codes to localized strings, falling back to the
 // server's English prose for codes the UI hasn't been taught yet (AGENTS.md
@@ -369,7 +370,11 @@ function DisputePanel({
               <span>· {new Date(d.createdAt).toLocaleString()}</span>
             </div>
             <p className="whitespace-pre-wrap leading-snug">
-              {d.reasonMd.trim() || t('review.dispute.noReason')}
+              {d.reasonMd.trim() ? (
+                <ReferenceText text={d.reasonMd.trim()} />
+              ) : (
+                t('review.dispute.noReason')
+              )}
             </p>
             {d.evidenceRefs.length > 0 ? (
               <div className="text-[11px] text-muted-foreground">
@@ -898,7 +903,7 @@ export function PendingEditCard({ edit, onReviewed }: PendingEditCardProps) {
 
       {typeof meta.editSummary === 'string' && meta.editSummary ? (
         <p className="text-xs italic text-muted-foreground">
-          “{meta.editSummary}”
+          “<ReferenceText text={meta.editSummary} />”
         </p>
       ) : null}
 
@@ -907,7 +912,7 @@ export function PendingEditCard({ edit, onReviewed }: PendingEditCardProps) {
           <span className="font-semibold">
             {t('review.returnCommentLabel')}:{' '}
           </span>
-          {edit.rejectionComment}
+          <ReferenceText text={edit.rejectionComment} />
         </div>
       ) : edit.rejectionReason || edit.rejectionComment ? (
         <div className="rounded-md border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-300 space-y-1">
@@ -930,7 +935,7 @@ export function PendingEditCard({ edit, onReviewed }: PendingEditCardProps) {
                   {t('review.rejectionReason')}:{' '}
                 </span>
               )}
-              {edit.rejectionComment}
+              <ReferenceText text={edit.rejectionComment} />
             </div>
           ) : null}
         </div>

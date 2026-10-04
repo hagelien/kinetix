@@ -459,6 +459,70 @@ export async function listOpenDisputes(args: {
 }
 
 /**
+ * One dispute by id, whatever its status — what a reader needs to follow a
+ * "dispute #N" reference written into an edit summary or return note back to
+ * the objection itself. Unlike the feed, a resolved row is returned with its
+ * ruling, since the reference usually outlives the dispute being open.
+ */
+export async function getDisputeById(id: number): Promise<
+  | (DisputeFeedItem & {
+      resolution: string | null;
+      resolvedAt: string | null;
+    })
+  | null
+> {
+  const db = getDb();
+  const [r] = await db
+    .select({
+      id: disputes.id,
+      targetType: disputes.targetType,
+      targetId: disputes.targetId,
+      source: disputes.source,
+      reasonMd: disputes.reasonMd,
+      evidenceRefs: disputes.evidenceRefs,
+      status: disputes.status,
+      resolution: disputes.resolution,
+      resolvedAt: disputes.resolvedAt,
+      createdAt: disputes.createdAt,
+      updatedAt: disputes.updatedAt,
+      escalatedAt: disputes.escalatedAt,
+      createdBy: disputes.createdBy,
+      authorName: users.displayName,
+      authorRole: users.role,
+      agentSlug: agents.slug,
+    })
+    .from(disputes)
+    .leftJoin(users, eq(users.id, disputes.createdBy))
+    .leftJoin(agents, eq(agents.userId, disputes.createdBy))
+    .where(eq(disputes.id, id))
+    .limit(1);
+  if (!r) return null;
+  return {
+    id: r.id,
+    targetType: r.targetType as DisputeTargetType,
+    targetId: r.targetId,
+    source: r.source as DisputeSource,
+    reasonMd: r.reasonMd,
+    evidenceRefs: (r.evidenceRefs ?? []) as AgentVerificationEvidenceRef[],
+    status: r.status,
+    resolution: r.resolution ?? null,
+    resolvedAt: r.resolvedAt ? r.resolvedAt.toISOString() : null,
+    createdAt: r.createdAt.toISOString(),
+    updatedAt: r.updatedAt.toISOString(),
+    escalatedAt: r.escalatedAt ? r.escalatedAt.toISOString() : null,
+    createdBy: r.createdBy,
+    author: r.createdBy
+      ? {
+          id: r.createdBy,
+          name: r.authorName ?? null,
+          role: r.authorRole ?? null,
+          agentSlug: r.agentSlug ?? null,
+        }
+      : null,
+  };
+}
+
+/**
  * Claim every open dispute created at or before `overdueBefore` that has not
  * been escalated yet, stamping `escalated_at = now`, and return the claimed
  * disputes oldest first (#1233).

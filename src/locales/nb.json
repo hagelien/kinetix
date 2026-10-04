@@ -2180,6 +2180,28 @@
     }
   },
   "review": {
+    "reference": {
+      "disputeTitle": "Bestridelse #{{id}}",
+      "discussionTitle": "Diskusjon #{{id}}",
+      "close": "Lukk",
+      "loading": "Laster …",
+      "notFound": "Fant den ikke, eller du har ikke tilgang til den.",
+      "failed": "Kunne ikke hente referansen.",
+      "disputeOpen": "Åpen",
+      "disputeResolved": "Avgjort",
+      "disputeResolution": {
+        "upheld": "Tatt til følge",
+        "rejected": "Avvist",
+        "withdrawn": "Trukket tilbake"
+      },
+      "disputeTarget": "Bestrider {{type}} {{id}}",
+      "openTarget": "Åpne det som bestrides",
+      "discussionThread": "Tråd: {{parameter}}",
+      "inReplyTo": "Svar på",
+      "replies_one": "{{count}} svar",
+      "replies_other": "{{count}} svar",
+      "openDiscussion": "Åpne diskusjonssiden"
+    },
     "myEdits": "Mine ventende endringer",
     "reviewQueue": "Gjennomgangskø",
     "resultCount_one": "{{count}} treff",
