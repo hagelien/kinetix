@@ -1,5 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
 
 const { getDbMock } = vi.hoisted(() => ({ getDbMock: vi.fn() }));
 
@@ -47,8 +49,8 @@ function createResponse(): {
   return { res, state };
 }
 
-// Both queries the handler runs (drug-parameter revisions, wiki revisions)
-// share the same join/order/limit shape, so one self-referential chain
+// All three queries the handler runs (drug-parameter revisions, wiki
+// revisions, approved source values) share the same join/order/limit shape, so one self-referential chain
 // stub — resolving on `.limit()` — covers either.
 function createChain(rows: unknown[]) {
   const chain: Record<string, unknown> = {};
@@ -61,11 +63,16 @@ function createChain(rows: unknown[]) {
   return chain;
 }
 
-function mockDb(parameterRows: unknown[], wikiRows: unknown[]) {
+function mockDb(
+  parameterRows: unknown[],
+  wikiRows: unknown[],
+  sourceValueRows: unknown[] = [],
+) {
   const select = vi
     .fn()
     .mockReturnValueOnce(createChain(parameterRows))
-    .mockReturnValueOnce(createChain(wikiRows));
+    .mockReturnValueOnce(createChain(wikiRows))
+    .mockReturnValueOnce(createChain(sourceValueRows));
 
   getDbMock.mockReturnValue({ select } as unknown as ReturnType<
     typeof getDbMock
@@ -136,6 +143,72 @@ describe('GET /api/recent-changes', () => {
       'drug_parameter:2',
     ]);
     expect(state.headers['Cache-Control']).toContain('public');
+  });
+
+  it('includes approved source values on revisionless parameters, tagged by origin', async () => {
+    const parameterRows = [
+      {
+        id: 5,
+        parameter: 'volumeOfDistribution',
+        editSummary: null,
+        createdAt: new Date('2026-10-01T06:00:00Z'),
+        drug: { id: 1, slug: 'amphetamine', names: { en: 'Amphetamine' }, nameShort: null },
+        author,
+      },
+    ];
+    const sourceValueRows = [
+      {
+        id: 5,
+        parameter: 'dispositionModel',
+        editSummary: null,
+        createdAt: new Date('2026-10-04T08:44:00Z'),
+        drug: { id: 2, slug: 'clonazepam', names: { en: 'Clonazepam' }, nameShort: null },
+        author,
+      },
+    ];
+    const { select } = mockDb(parameterRows, [], sourceValueRows);
+
+    const req = createRequest('/api/recent-changes');
+    const { res, state } = createResponse();
+    await handler(req, res);
+
+    expect(state.statusCode).toBe(200);
+    const body = JSON.parse(state.body) as {
+      changes: Array<{ type: string; origin: string; id: number; parameter: string }>;
+    };
+    expect(
+      body.changes.map((c) => `${c.type}:${c.origin}:${c.id}:${c.parameter}`),
+    ).toEqual([
+      'drug_parameter:source_value:5:dispositionModel',
+      'drug_parameter:revision:5:volumeOfDistribution',
+    ]);
+    const sourceValueChain = select.mock.results[2]!.value as {
+      where: ReturnType<typeof vi.fn>;
+      limit: ReturnType<typeof vi.fn>;
+    };
+    expect(sourceValueChain.where).toHaveBeenCalledTimes(1);
+    expect(sourceValueChain.limit).toHaveBeenCalledWith(20);
+  });
+
+  it('reads only created source values, whose drug link survives a later delete', async () => {
+    const { select } = mockDb([], []);
+    const req = createRequest('/api/recent-changes');
+    const { res } = createResponse();
+    await handler(req, res);
+
+    const sourceValueChain = select.mock.results[2]!.value as {
+      where: ReturnType<typeof vi.fn>;
+      innerJoin: ReturnType<typeof vi.fn>;
+      leftJoin: ReturnType<typeof vi.fn>;
+    };
+    const where = new PgDialect().sqlToQuery(
+      sourceValueChain.where.mock.calls[0]![0] as SQL,
+    );
+    expect(where.sql).toContain(`->> 'op' = 'create'`);
+    // The drug comes straight from the pending edit, never via the entry row
+    // (which an approved delete removes).
+    expect(sourceValueChain.innerJoin).toHaveBeenCalledTimes(1);
+    expect(sourceValueChain.leftJoin).toHaveBeenCalledTimes(2);
   });
 
   it('caps the limit query param at the maximum', async () => {
