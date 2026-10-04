@@ -1,5 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
 
 const { getDbMock } = vi.hoisted(() => ({ getDbMock: vi.fn() }));
 
@@ -186,6 +188,27 @@ describe('GET /api/recent-changes', () => {
     };
     expect(sourceValueChain.where).toHaveBeenCalledTimes(1);
     expect(sourceValueChain.limit).toHaveBeenCalledWith(20);
+  });
+
+  it('reads only created source values, whose drug link survives a later delete', async () => {
+    const { select } = mockDb([], []);
+    const req = createRequest('/api/recent-changes');
+    const { res } = createResponse();
+    await handler(req, res);
+
+    const sourceValueChain = select.mock.results[2]!.value as {
+      where: ReturnType<typeof vi.fn>;
+      innerJoin: ReturnType<typeof vi.fn>;
+      leftJoin: ReturnType<typeof vi.fn>;
+    };
+    const where = new PgDialect().sqlToQuery(
+      sourceValueChain.where.mock.calls[0]![0] as SQL,
+    );
+    expect(where.sql).toContain(`->> 'op' = 'create'`);
+    // The drug comes straight from the pending edit, never via the entry row
+    // (which an approved delete removes).
+    expect(sourceValueChain.innerJoin).toHaveBeenCalledTimes(1);
+    expect(sourceValueChain.leftJoin).toHaveBeenCalledTimes(2);
   });
 
   it('caps the limit query param at the maximum', async () => {

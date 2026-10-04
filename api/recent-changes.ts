@@ -6,9 +6,9 @@
  * exactly this kind of global recency query, not just the per-drug/per-page
  * history views that use them today.
  *
- * Approved source values on parameters with no drug-level value (Cmax, ka,
- * the model-structure axes) never write a `drug_parameter_revisions` row, so
- * they are read from their approved pending edits instead — otherwise a
+ * Approved new source values on parameters with no drug-level value (Cmax,
+ * ka, the model-structure axes) never write a `drug_parameter_revisions` row,
+ * so they are read from their approved pending edits instead — otherwise a
  * stretch of agent work confined to those parameters leaves the feed frozen
  * even though changes are landing. `pending_edits_rejection_scan_idx`
  * (status, reviewed_at desc) serves that recency query.
@@ -26,7 +26,6 @@ import {
   users,
   agents,
   pendingEdits,
-  parameterEntries,
 } from '../db/schema.js';
 import {
   DRUG_PARAMETER_IDS,
@@ -134,29 +133,19 @@ export default withErrorHandling(async function handler(req, res): Promise<void>
           author: authorColumns,
         })
         .from(pendingEdits)
-        // A `create` names its drug in `target_id`; an `update`/`delete`
-        // names the entry, so its drug is read off that entry. An applied
-        // delete has no entry left to read and drops out of the feed.
-        .leftJoin(
-          parameterEntries,
-          and(
-            sql`${pendingEdits.proposedValue} ->> 'op' <> 'create'`,
-            eq(parameterEntries.id, pendingEdits.targetId),
-          ),
-        )
-        .innerJoin(
-          drugs,
-          eq(
-            drugs.id,
-            sql`case when ${pendingEdits.proposedValue} ->> 'op' = 'create' then ${pendingEdits.targetId} else ${parameterEntries.drugId} end`,
-          ),
-        )
+        // Only creates: a create names its drug in `target_id`, which
+        // outlives the entry. An update/delete names the entry instead, and
+        // the pending edit keeps no snapshot of its drug — once the entry is
+        // deleted, every edit that touched it would drop out of the feed and
+        // older items would backfill in its place.
+        .innerJoin(drugs, eq(pendingEdits.targetId, drugs.id))
         .leftJoin(users, eq(pendingEdits.submittedBy, users.id))
         .leftJoin(agents, eq(agents.userId, users.id))
         .where(
           and(
             eq(pendingEdits.status, 'approved'),
             eq(pendingEdits.editType, 'param_entry'),
+            sql`${pendingEdits.proposedValue} ->> 'op' = 'create'`,
             inArray(pendingEdits.parameter, REVISIONLESS_ENTRY_PARAMETERS),
             isNotNull(pendingEdits.reviewedAt),
           ),
