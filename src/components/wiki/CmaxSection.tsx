@@ -207,8 +207,13 @@ export function CmaxSection({ drugId, drugName, canEdit = false, isAdmin = false
     setSummaryItems(null);
     setSummaryFailed(false);
   }, [drugId]);
+  // A summary already held is current by construction: every change to the
+  // entries drops it (invalidateSummary, a failed reload), so switching back to
+  // the per-dose view reuses it instead of refetching.
+  const summaryHeldRef = useRef(false);
+  summaryHeldRef.current = summary !== null;
   useEffect(() => {
-    if (mode === 'normalized') void loadSummary();
+    if (mode === 'normalized' && !summaryHeldRef.current) void loadSummary();
   }, [mode, loadSummary, entries]);
 
   useEffect(() => {
