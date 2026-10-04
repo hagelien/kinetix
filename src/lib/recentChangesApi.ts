@@ -2,6 +2,11 @@ import type { UserBadgeData } from '@/components/ui/UserBadge';
 
 export interface RecentDrugParameterChange {
   type: 'drug_parameter';
+  // 'revision': `id` is a drug_parameter_revisions id. 'source_value': an
+  // approved source value on a parameter with no drug-level value (Cmax, ka,
+  // model structure), and `id` is its pending-edit id. Optional because a
+  // response cached across a deploy may predate the field.
+  origin?: 'revision' | 'source_value';
   id: number;
   parameter: string;
   editSummary: string | null;
