@@ -12,6 +12,14 @@ import {
 
 const FEED_LIMIT = 15;
 
+// Revision ids and pending-edit ids share a number space, so a parameter
+// change's origin is part of its key.
+function changeKey(change: RecentChange): string {
+  return change.type === 'drug_parameter'
+    ? `${change.type}-${change.origin ?? 'revision'}-${change.id}`
+    : `${change.type}-${change.id}`;
+}
+
 function ChangeRow({ change }: { change: RecentChange }) {
   const { t, i18n } = useTranslation();
   const timestamp = new Date(change.createdAt).toLocaleString(i18n.language);
@@ -114,7 +122,7 @@ export function RecentChangesFeed() {
       {!failed && changes !== null && changes.length > 0 && (
         <ul>
           {changes.map((change) => (
-            <ChangeRow key={`${change.type}-${change.id}`} change={change} />
+            <ChangeRow key={changeKey(change)} change={change} />
           ))}
         </ul>
       )}
