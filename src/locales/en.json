@@ -2427,7 +2427,7 @@
     "flagSubmit": "Flag",
     "flagUpdateFailed": "Could not update the agent flag.",
     "flagsTitle": "Agent priority queue",
-    "flagsDescription": "Drugs and parameters flagged here are processed by kinetix-agent before the default popularity-based queue. A flag is a \"dig deep\" instruction: the agent keeps working the parameter across cycles and the flag stays active until you resolve it here.",
+    "flagsDescription": "Drugs and parameters flagged here are processed by kinetix-agent before the default popularity-based queue. A flag is a \"dig deep\" instruction: the agent keeps working the parameter across cycles and the flag stays active until you clear it here.",
     "flagsEmpty": "No active flags.",
     "flagsLoading": "Loading flags…",
     "flagDrug": "Drug",
