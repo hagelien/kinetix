@@ -44,6 +44,8 @@ async function scenario(opts: {
   approvals: number;
   agentDispute?: boolean;
   humanDispute?: boolean;
+  upheldRuling?: boolean;
+  proposedMeta?: Record<string, unknown>;
 }) {
   const author = opts.authorIsAgent
     ? (await seedAgent('author-agent', 'mid')).userId
@@ -58,7 +60,8 @@ async function scenario(opts: {
       targetId: drugId,
       parameter: 'halfLife',
       proposedValue: { value: 33 },
-      proposedMeta: opts.quote === null ? null : { sourceQuote: opts.quote },
+      proposedMeta:
+        opts.proposedMeta ?? (opts.quote === null ? null : { sourceQuote: opts.quote }),
       submittedBy: author,
       status: 'pending',
     })
@@ -99,6 +102,20 @@ async function scenario(opts: {
       createdBy: human,
     });
   }
+  if (opts.upheldRuling) {
+    const human = await seedUser(db, { email: 'judge@example.com', username: 'judge', role: 'editor' });
+    await db.insert(disputes).values({
+      targetType: 'pending_edit',
+      targetId: edit!.id,
+      status: 'resolved',
+      resolution: 'upheld',
+      resolvedBy: human,
+      resolvedAt: new Date(),
+      source: 'human',
+      reasonMd: 'Verdien stemmer ikke med referansen som er oppgitt.',
+      createdBy: human,
+    });
+  }
   const outcome = await runAgentConsensus({ pendingEditId: edit!.id, approverUserId: flagship.userId });
   const [row] = await db.select().from(pendingEdits).where(eq(pendingEdits.id, edit!.id));
   return { outcome, row: row! };
@@ -124,6 +141,25 @@ describe('an unquoted calculation-driving proposal', () => {
 
   it('is not returned while a person disputes it', async () => {
     const { row } = await scenario({ authorIsAgent: true, quote: null, approvals: 2, humanDispute: true });
+    expect(row.status).toBe('pending');
+  });
+
+  it('does not overwrite a reviewer’s standing return the author bare-resubmitted', async () => {
+    // Returned with a substantive note, then resubmitted without a revision:
+    // replacing that note with the quote-only one would let the author clear
+    // the reviewer's objection by adding a quote.
+    const { row } = await scenario({
+      authorIsAgent: true,
+      quote: null,
+      approvals: 2,
+      proposedMeta: { returnedAt: '2026-10-01T00:00:00.000Z' },
+    });
+    expect(row.status).toBe('pending');
+    expect(row.rejectionComment ?? '').not.toContain('source quote missing');
+  });
+
+  it('is not returned while an upheld ruling still binds the unrevised payload', async () => {
+    const { row } = await scenario({ authorIsAgent: true, quote: null, approvals: 2, upheldRuling: true });
     expect(row.status).toBe('pending');
   });
 
