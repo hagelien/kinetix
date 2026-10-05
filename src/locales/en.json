@@ -2180,6 +2180,28 @@
     }
   },
   "review": {
+    "reference": {
+      "disputeTitle": "Dispute #{{id}}",
+      "discussionTitle": "Discussion #{{id}}",
+      "close": "Close",
+      "loading": "Loading…",
+      "notFound": "Not found, or you don't have access to it.",
+      "failed": "Could not load the reference.",
+      "disputeOpen": "Open",
+      "disputeResolved": "Resolved",
+      "disputeResolution": {
+        "upheld": "Upheld",
+        "rejected": "Overruled",
+        "withdrawn": "Withdrawn"
+      },
+      "disputeTarget": "Contests {{type}} {{id}}",
+      "openTarget": "Open what it contests",
+      "discussionThread": "Thread: {{parameter}}",
+      "inReplyTo": "In reply to",
+      "replies_one": "{{count}} reply",
+      "replies_other": "{{count}} replies",
+      "openDiscussion": "Open the discussion page"
+    },
     "myEdits": "My Pending Edits",
     "reviewQueue": "Review Queue",
     "resultCount_one": "{{count}} result",

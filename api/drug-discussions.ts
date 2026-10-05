@@ -9,6 +9,9 @@
  *     drug-parameter threads, so a fact target key is required here.
  *
  *   GET   list a thread
+ *   GET   ?id=N — one comment, with its parent, direct replies and a `url` to
+ *         the page that hosts it. Lets a "discussion #N" reference written in
+ *         an edit summary or return note be opened and checked.
  *   POST  append a comment (any authenticated user)
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -59,6 +62,11 @@ export default withErrorHandling(
     const drugIdRaw = url.searchParams.get('drugId');
     const wikiPageIdRaw = url.searchParams.get('wikiPageId');
     const parameterRaw = url.searchParams.get('parameter');
+    const idRaw = url.searchParams.get('id');
+
+    if (idRaw !== null && req.method === 'GET') {
+      return handleGetById(req, res, idRaw);
+    }
 
     // Exactly one host. Both-set or neither-set is a client error, not a
     // silently-picked default — the table CHECK would reject the row anyway.
@@ -213,6 +221,98 @@ async function handleList(
     200,
     { discussions: enriched },
     access.isDraft ? { headers: noStoreHeaders() } : undefined,
+  );
+}
+
+/** Columns a single comment is shown with — the list's own shape. */
+const discussionRowColumns = {
+  id: drugParameterDiscussions.id,
+  drugId: drugParameterDiscussions.drugId,
+  wikiPageId: drugParameterDiscussions.wikiPageId,
+  parameter: drugParameterDiscussions.parameter,
+  parentId: drugParameterDiscussions.parentId,
+  body: drugParameterDiscussions.body,
+  createdAt: drugParameterDiscussions.createdAt,
+  author: {
+    id: users.id,
+    username: users.username,
+    displayName: users.displayName,
+    role: users.role,
+    isAgent: sql<boolean>`${agents.id} is not null`,
+  },
+};
+
+/**
+ * `GET ?id=N`: one comment by id. Same audience as the thread it sits in — a
+ * drug thread is public, a topic-page thread follows the page's read gate, and
+ * an unreadable page answers 404 like a missing comment.
+ */
+async function handleGetById(
+  req: IncomingMessage,
+  res: ServerResponse,
+  idRaw: string,
+): Promise<void> {
+  const id = Number(idRaw);
+  if (!Number.isInteger(id) || id <= 0) {
+    error(res, 400, '?id must be a positive integer');
+    return;
+  }
+  const db = getDb();
+  const auth = await getUserFromRequest(req);
+  const [row] = await db
+    .select(discussionRowColumns)
+    .from(drugParameterDiscussions)
+    .leftJoin(users, eq(drugParameterDiscussions.createdBy, users.id))
+    .leftJoin(agents, eq(agents.userId, users.id))
+    .where(eq(drugParameterDiscussions.id, id))
+    .limit(1);
+  if (!row) {
+    error(res, 404, 'Discussion comment not found', 'discussion_not_found');
+    return;
+  }
+
+  let url = '/wiki';
+  let isDraft = false;
+  if (row.drugId != null) {
+    url = `/wiki/drug/${row.drugId}`;
+  } else if (row.wikiPageId != null) {
+    const [page] = await db
+      .select({ slug: wikiPages.slug, status: wikiPages.status })
+      .from(wikiPages)
+      .where(eq(wikiPages.id, row.wikiPageId))
+      .limit(1);
+    if (!page || !(await callerCanReadWikiPage(page.status, auth))) {
+      error(res, 404, 'Discussion comment not found', 'discussion_not_found');
+      return;
+    }
+    isDraft = page.status === 'draft';
+    url = `/wiki/${encodeURIComponent(page.slug)}`;
+  }
+
+  const [parent] =
+    row.parentId != null
+      ? await db
+          .select(discussionRowColumns)
+          .from(drugParameterDiscussions)
+          .leftJoin(users, eq(drugParameterDiscussions.createdBy, users.id))
+          .leftJoin(agents, eq(agents.userId, users.id))
+          .where(eq(drugParameterDiscussions.id, row.parentId))
+          .limit(1)
+      : [];
+  const replies = await db
+    .select(discussionRowColumns)
+    .from(drugParameterDiscussions)
+    .leftJoin(users, eq(drugParameterDiscussions.createdBy, users.id))
+    .leftJoin(agents, eq(agents.userId, users.id))
+    .where(eq(drugParameterDiscussions.parentId, row.id))
+    .orderBy(drugParameterDiscussions.createdAt)
+    .limit(50);
+
+  json(
+    res,
+    200,
+    { discussion: row, parent: parent ?? null, replies, url },
+    isDraft ? { headers: noStoreHeaders() } : undefined,
   );
 }
 
