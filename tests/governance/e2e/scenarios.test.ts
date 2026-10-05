@@ -688,7 +688,7 @@ describe('5. high-risk parameter → flagship + peer → applies at full quorum'
 // with the number read out of the wrong sentence. Everything the earlier
 // scenarios gate on is satisfied here — agent author, full quorum, a flagship
 // approver, no dispute — and the only thing missing is the sentence itself.
-describe('5b. high-risk parameter → no source quote → held whatever the tally', () => {
+describe('5b. high-risk parameter → no source quote → back to its author whatever the tally', () => {
   it('refuses to publish a calculation-driving value nobody quoted', async () => {
     const world = await seedWorld({
       tiers: ['flagship', 'flagship'],
@@ -700,10 +700,12 @@ describe('5b. high-risk parameter → no source quote → held whatever the tall
       await verdict({ editId, reviewer, verdict: 'approve' });
     }
 
-    expect(await statusOf(editId)).toBe('pending');
-    // Held, not published: nothing reached the drug. This is the same
-    // domain-side statement of "held" scenario 4 makes, for a different reason
-    // — there the reviewers were too weak, here the evidence is incomplete.
+    // Returned to the submitting agent to add the quote, rather than parked
+    // for a person: the quote is the author's to supply.
+    expect(await statusOf(editId)).toBe('returned');
+    // Not published: nothing reached the drug. This is the same domain-side
+    // statement of "held" scenario 4 makes, for a different reason — there
+    // the reviewers were too weak, here the evidence is incomplete.
     expect(await parameterRevisionCount(world.drugId)).toBe(0);
   });
 

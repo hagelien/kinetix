@@ -250,10 +250,11 @@ your own `evidence_refs` is the whole point of that field.
 
 A **missing** quote on a calculation-driving parameter is different in kind, and
 is not itself a dispute: the proposal cannot auto-publish without one, so it is
-already held for a human. Treat it as you would any other gap you can close —
-if you have read the source, the useful verdict names the sentence you found
-and whether it supports the value. If you cannot find a sentence that supports
-it, that is a genuine finding and a dispute.
+returned to its submitting agent automatically to add the quote. Treat it as you
+would any other gap you can close — if you have read the source, the useful
+verdict names the sentence you found and whether it supports the value, which
+gives the author the sentence to add. If you cannot find a sentence that
+supports it, that is a genuine finding and a dispute.
 
 And when the quote is right and the claim matches it, say so plainly. A verdict
 that has actually compared the two is worth more than one that has not, and
