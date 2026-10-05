@@ -85,6 +85,7 @@ import { publishOnAgentConsensus } from './_lib/knowledge-governance/publication
 import { pendingEditWikiVisibility } from './agent-verifications-queue.js';
 import { frozenLiveVerdictId } from './_lib/verdict-reconsideration.js';
 import { highRiskProposalWouldPublishUnquoted } from './_lib/source-quote-gate.js';
+import { returnUnquotedAgentEdit } from './_lib/unquoted-edit-return.js';
 import {
   agents,
   agentVerifications,
@@ -1128,9 +1129,11 @@ export async function runAgentConsensus(args: {
   // carries — for an entry update the write decides — so the question is put
   // once, to whichever source can answer it. See
   // `highRiskProposalWouldPublishUnquoted`.
+  let quoteUnresolved = false;
   if (
     pending &&
     (await highRiskProposalWouldPublishUnquoted(pending, (err) => {
+      quoteUnresolved = true;
       console.error(
         `[agent-consensus] could not resolve the effective source quote for ` +
           `pending edit ${args.pendingEditId}: ` +
@@ -1138,6 +1141,31 @@ export async function runAgentConsensus(args: {
       );
     }))
   ) {
+    // The quote is something the submitting agent can supply, so an agent's
+    // proposal goes back to it rather than waiting for a person. Not when the
+    // gate could not tell (it fails closed on a fault): an author cannot fix
+    // a quote that may well be there.
+    if (!quoteUnresolved) {
+      try {
+        const sent = await returnUnquotedAgentEdit({
+          pendingEditId: args.pendingEditId,
+          submittedAt: pending.submittedAt,
+        });
+        if (sent.returned) {
+          return {
+            outcome: 'held',
+            reason: 'source_quote_missing',
+            detail: 'returned to its submitting agent to add the quote',
+          };
+        }
+      } catch (err) {
+        console.error(
+          `[agent-consensus] could not return unquoted pending edit ` +
+            `${args.pendingEditId} to its author: ` +
+            `${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
     warnMissingSourceQuoteHold(args.pendingEditId, pending.parameter);
     return { outcome: 'held', reason: 'source_quote_missing' };
   }
