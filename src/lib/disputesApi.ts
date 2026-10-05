@@ -73,6 +73,20 @@ export async function fetchDisputesForTarget(args: {
   return apiFetch(`/api/disputes?${sp}`);
 }
 
+/**
+ * One dispute by id, open or resolved, with `url` to what it contests — what a
+ * "dispute #N" reference in an edit summary or return note resolves to.
+ */
+export async function fetchDisputeById(id: number): Promise<{
+  dispute: DisputeRow & {
+    resolution: DisputeResolution | null;
+    resolvedAt: string | null;
+    url: string;
+  };
+}> {
+  return apiFetch(`/api/disputes?id=${id}`);
+}
+
 export interface ResolveDisputeResult {
   id: number;
   resolution: DisputeResolution;

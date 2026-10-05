@@ -1,6 +1,13 @@
 /**
  * Unified disputes endpoint.
  *
+ *   GET  /api/disputes?id=N
+ *        One dispute by id, open or resolved, plus `url` — the deep link to
+ *        what it contests. Lets a "dispute #N" reference in an edit summary or
+ *        return note be opened and checked. Readable by whoever may read the
+ *        target-scoped feed below (agent, reviewer, the target's author) and
+ *        by the dispute's own author.
+ *
  *   GET  /api/disputes[?status=&targetType=&targetId=&limit=&offset=]
  *        Deterministic dispute feed (oldest-first, stable order) for the given
  *        `status` (`open`, the default, or `resolved`). The `open` feed is the
@@ -56,6 +63,7 @@ import {
   visibleVerificationTargetIds,
 } from './_lib/agent-verifications.js';
 import {
+  getDisputeById,
   listOpenDisputes,
   resolveDisputeById,
   upsertOpenDispute,
@@ -107,6 +115,9 @@ async function handleGet(
     req.url ?? '/',
     `http://${req.headers.host ?? 'localhost'}`,
   );
+  const idRaw = url.searchParams.get('id');
+  if (idRaw !== null) return handleGetById(res, auth, idRaw);
+
   const statusRaw = url.searchParams.get('status') ?? 'open';
   if (statusRaw !== 'open' && statusRaw !== 'resolved') {
     error(res, 400, `Unknown status "${statusRaw}"`);
@@ -189,6 +200,50 @@ async function handleGet(
     offset,
   });
   json(res, 200, { disputes: feed }, { headers: noStoreHeaders() });
+}
+
+/**
+ * `GET ?id=N`: one dispute, for following a "dispute #N" reference. Gated like
+ * the single-target feed (agent, reviewer or the target's author) plus the
+ * dispute's own author. Not-found and forbidden answer alike, so the id space
+ * can't be probed for objections against items the caller cannot see.
+ */
+async function handleGetById(
+  res: ServerResponse,
+  auth: NonNullable<Awaited<ReturnType<typeof getUserFromRequest>>>,
+  idRaw: string,
+): Promise<void> {
+  const id = Number(idRaw);
+  if (!Number.isInteger(id) || id <= 0) {
+    error(res, 400, '?id must be a positive integer');
+    return;
+  }
+  const row = await getDisputeById(id);
+  let allowed = false;
+  if (row) {
+    allowed =
+      row.createdBy === auth.userId ||
+      Boolean(await resolveActiveAgent(auth.userId)) ||
+      (await callerCan(auth.role, CAP['dispute.queue.read'])) ||
+      (await targetAuthorUserId({
+        targetType: row.targetType,
+        targetId: row.targetId,
+      })) === auth.userId;
+  }
+  if (!row || !allowed) {
+    error(res, 404, 'Dispute not found', 'disputes_not_found');
+    return;
+  }
+  const targetUrl = await disputeTargetUrl({
+    targetType: row.targetType,
+    targetId: row.targetId,
+  });
+  json(
+    res,
+    200,
+    { dispute: { ...row, url: targetUrl } },
+    { headers: noStoreHeaders() },
+  );
 }
 
 async function handlePost(

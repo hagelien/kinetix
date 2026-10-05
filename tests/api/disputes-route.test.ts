@@ -9,6 +9,7 @@ const {
   callerCanMock,
   disputeTargetUrlMock,
   fanOutDisputeNotificationMock,
+  getDisputeByIdMock,
   getUserFromRequestMock,
   listOpenDisputesMock,
   parseAndValidateMock,
@@ -24,6 +25,7 @@ const {
   callerCanMock: vi.fn(),
   disputeTargetUrlMock: vi.fn(),
   fanOutDisputeNotificationMock: vi.fn(),
+  getDisputeByIdMock: vi.fn(),
   getUserFromRequestMock: vi.fn(),
   listOpenDisputesMock: vi.fn(),
   parseAndValidateMock: vi.fn(),
@@ -64,6 +66,7 @@ vi.mock('../../api/_lib/disputes.js', async (importOriginal) => {
     await importOriginal<typeof import('../../api/_lib/disputes.js')>();
   return {
     ...actual,
+    getDisputeById: getDisputeByIdMock,
     listOpenDisputes: listOpenDisputesMock,
     resolveDisputeById: resolveDisputeByIdMock,
     upsertOpenDispute: upsertOpenDisputeMock,
@@ -754,5 +757,90 @@ describe('/api/disputes upheld ruling commits with its return', () => {
         disputeRaisedAt: new Date('2026-09-21T11:00:00.000Z'),
       }),
     );
+  });
+});
+
+describe('GET /api/disputes?id= (following a "dispute #N" reference)', () => {
+  const row = {
+    id: 871,
+    targetType: 'pending_edit',
+    targetId: 1412,
+    source: 'agent',
+    reasonMd: 'Cha 2024 is a digitised subset of the same cohort.',
+    evidenceRefs: [],
+    status: 'resolved',
+    resolution: 'upheld',
+    resolvedAt: '2026-10-02T00:00:00.000Z',
+    createdAt: '2026-10-01T00:00:00.000Z',
+    updatedAt: '2026-10-01T00:00:00.000Z',
+    escalatedAt: null,
+    createdBy: 9,
+    author: { id: 9, name: null, role: 'contributor', agentSlug: 'gpt-terra' },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resolveActiveAgentMock.mockResolvedValue(null);
+    targetAuthorUserIdMock.mockResolvedValue(42);
+    callerCanMock.mockImplementation(shippedDefaults);
+    disputeTargetUrlMock.mockResolvedValue('/review?id=1412');
+  });
+
+  it('returns a resolved dispute with its target url to a reviewer', async () => {
+    getUserFromRequestMock.mockResolvedValue({ userId: 1, role: 'editor' });
+    getDisputeByIdMock.mockResolvedValue(row);
+
+    const { res, state } = createResponse();
+    await handler(createRequest('GET', '/api/disputes?id=871'), res);
+
+    expect(state.statusCode).toBe(200);
+    expect(state.headers['Cache-Control']).toBe('no-store');
+    expect(JSON.parse(state.body).dispute).toMatchObject({
+      id: 871,
+      resolution: 'upheld',
+      url: '/review?id=1412',
+    });
+    expect(getDisputeByIdMock).toHaveBeenCalledWith(871);
+    expect(listOpenDisputesMock).not.toHaveBeenCalled();
+  });
+
+  it("lets the contested item's author read it", async () => {
+    getUserFromRequestMock.mockResolvedValue({
+      userId: 42,
+      role: 'contributor',
+    });
+    getDisputeByIdMock.mockResolvedValue(row);
+
+    const { res, state } = createResponse();
+    await handler(createRequest('GET', '/api/disputes?id=871'), res);
+
+    expect(state.statusCode).toBe(200);
+  });
+
+  it('answers an unrelated contributor as not found', async () => {
+    getUserFromRequestMock.mockResolvedValue({
+      userId: 77,
+      role: 'contributor',
+    });
+    getDisputeByIdMock.mockResolvedValue(row);
+
+    const { res, state } = createResponse();
+    await handler(createRequest('GET', '/api/disputes?id=871'), res);
+
+    expect(state.statusCode).toBe(404);
+    expect(JSON.parse(state.body).code).toBe('disputes_not_found');
+  });
+
+  it('404s a missing dispute and 400s a malformed id', async () => {
+    getUserFromRequestMock.mockResolvedValue({ userId: 1, role: 'editor' });
+    getDisputeByIdMock.mockResolvedValue(null);
+
+    const missing = createResponse();
+    await handler(createRequest('GET', '/api/disputes?id=5'), missing.res);
+    expect(missing.state.statusCode).toBe(404);
+
+    const bad = createResponse();
+    await handler(createRequest('GET', '/api/disputes?id=abc'), bad.res);
+    expect(bad.state.statusCode).toBe(400);
   });
 });

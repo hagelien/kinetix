@@ -304,3 +304,91 @@ describe('/api/drug-discussions host validation', () => {
     );
   });
 });
+
+describe('GET /api/drug-discussions?id= (following a "discussion #N" reference)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getUserFromRequestMock.mockResolvedValue(null);
+  });
+
+  function mockSequence(...results: unknown[][]) {
+    const select = vi.fn();
+    for (const rows of results) select.mockReturnValueOnce(selectChain(rows));
+    getDbMock.mockReturnValue({ select });
+    return select;
+  }
+
+  it('returns a drug-thread comment with its parent, replies and drug page url', async () => {
+    const comment = {
+      id: 1379,
+      drugId: 12,
+      wikiPageId: null,
+      parentId: 1370,
+      body: 'b',
+    };
+    const parent = {
+      id: 1370,
+      drugId: 12,
+      wikiPageId: null,
+      parentId: null,
+      body: 'a',
+    };
+    const reply = {
+      id: 1381,
+      drugId: 12,
+      wikiPageId: null,
+      parentId: 1379,
+      body: 'c',
+    };
+    mockSequence([comment], [parent], [reply]);
+    const { res, state } = createResponse();
+    await handler(createRequest('id=1379'), res);
+    expect(state.statusCode).toBe(200);
+    expect(JSON.parse(state.body)).toEqual({
+      discussion: comment,
+      parent,
+      replies: [reply],
+      url: '/wiki/drug/12',
+    });
+  });
+
+  it('links a topic-page comment to its page by slug', async () => {
+    const comment = {
+      id: 5,
+      drugId: null,
+      wikiPageId: 3,
+      parentId: null,
+      body: 'x',
+    };
+    mockSequence([comment], [{ slug: 'zolpidem-pk', status: 'published' }], []);
+    const { res, state } = createResponse();
+    await handler(createRequest('id=5'), res);
+    expect(state.statusCode).toBe(200);
+    expect(JSON.parse(state.body).url).toBe('/wiki/zolpidem-pk');
+  });
+
+  it('hides a comment on a draft topic page from anonymous callers', async () => {
+    const comment = {
+      id: 5,
+      drugId: null,
+      wikiPageId: 3,
+      parentId: null,
+      body: 'x',
+    };
+    mockSequence([comment], [{ slug: 'secret', status: 'draft' }]);
+    const { res, state } = createResponse();
+    await handler(createRequest('id=5'), res);
+    expect(state.statusCode).toBe(404);
+  });
+
+  it('404s an unknown id and 400s a malformed one', async () => {
+    mockSequence([]);
+    const missing = createResponse();
+    await handler(createRequest('id=99'), missing.res);
+    expect(missing.state.statusCode).toBe(404);
+
+    const bad = createResponse();
+    await handler(createRequest('id=0'), bad.res);
+    expect(bad.state.statusCode).toBe(400);
+  });
+});
