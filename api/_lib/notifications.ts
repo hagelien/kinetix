@@ -323,6 +323,17 @@ export async function unreadableNotificationIds(
   return unreadable;
 }
 
+/** `pending_edits.proposed_meta.source` of an edit staged by conversation ingestion. */
+export const CONVERSATION_INGESTION_SOURCE = 'conversation-ingestion';
+
+/**
+ * A pending edit (aliased `alias`) that a person submitted, rather than one
+ * conversation ingestion staged on an admin's tick.
+ */
+export function notIngested(alias: SQL): SQL {
+  return sql`${alias}.proposed_meta->>'source' IS DISTINCT FROM ${CONVERSATION_INGESTION_SOURCE}`;
+}
+
 /**
  * The person a target counts as the contribution OF, for notices: whoever
  * submitted it, not whoever's id happens to be on the row. Narrower than
@@ -330,29 +341,30 @@ export async function unreadableNotificationIds(
  * user verify it?" and must stay as wide as `created_by`.
  *
  * A drug-parameter revision is someone's contribution only when it came from
- * an edit they submitted for review. Everything else stamped with a user id
- * was not written by that person: an aggregate recompute (`auto:` summary) is
- * credited to whoever triggered it, a research import or seed to whoever ran
- * it, and a direct write skips the review flow. A submission its own submitter
- * approved (the conversation-ingestion path) was never reviewed by anyone
- * else, so it is not feedback-worthy "submitted work" either; the same rule
- * applies to a wiki revision made through a pending edit. A wiki revision
- * written directly in the editor is its writer's own work.
+ * an edit they submitted. Everything else stamped with a user id was not
+ * written by that person: an aggregate recompute (`auto:` summary) is credited
+ * to whoever triggered it, a research import or seed to whoever ran it, and a
+ * direct write skips the submission flow. An edit staged by conversation
+ * ingestion (`proposed_meta.source`) carries an assistant's proposal across on
+ * the admin's tick; it is not that admin's own submission either, unlike a
+ * proposal an admin wrote and then approved under `review.edit.decideOwn`.
+ * The same rule applies to a wiki revision made through a pending edit; a
+ * wiki revision written directly in the editor is its writer's own work.
  */
 function contributionAuthorSql(targetType: SQL, targetId: SQL): SQL {
-  const submittedForReview = (pendingEditId: SQL) => sql`(
+  const submittedBy = (pendingEditId: SQL) => sql`(
     SELECT pe.submitted_by FROM pending_edits pe
     WHERE pe.id = ${pendingEditId}
-      AND pe.reviewed_by IS DISTINCT FROM pe.submitted_by
+      AND ${notIngested(sql`pe`)}
   )`;
   return sql`CASE ${targetType}
     WHEN 'wiki_revision' THEN (
       SELECT CASE WHEN wr.pending_edit_id IS NULL THEN wr.created_by
-                  ELSE ${submittedForReview(sql`wr.pending_edit_id`)} END
+                  ELSE ${submittedBy(sql`wr.pending_edit_id`)} END
       FROM wiki_revisions wr WHERE wr.id = ${targetId}
     )
     WHEN 'drug_parameter_revision' THEN (
-      SELECT ${submittedForReview(sql`dr.pending_edit_id`)}
+      SELECT ${submittedBy(sql`dr.pending_edit_id`)}
       FROM drug_parameter_revisions dr
       WHERE dr.id = ${targetId}
         AND dr.pending_edit_id IS NOT NULL
@@ -361,7 +373,7 @@ function contributionAuthorSql(targetType: SQL, targetId: SQL): SQL {
     WHEN 'drug_discussion' THEN (SELECT created_by FROM drug_parameter_discussions WHERE id = ${targetId})
     WHEN 'paper_review' THEN (SELECT created_by FROM paper_reviews WHERE id = ${targetId})
     WHEN 'learning_unit_revision' THEN (SELECT created_by FROM learning_unit_revisions WHERE id = ${targetId})
-    WHEN 'pending_edit' THEN (SELECT submitted_by FROM pending_edits WHERE id = ${targetId})
+    WHEN 'pending_edit' THEN ${submittedBy(targetId)}
   END`;
 }
 

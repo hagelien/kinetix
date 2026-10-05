@@ -6,11 +6,11 @@
  *   - the author of the comment it replies to (`comment_reply`);
  *   - the contributors of the parameter or fact it is posted on
  *     (`comment_on_contribution`): for a drug parameter, the submitter of the
- *     latest revision someone submitted for review, and everyone who entered a
- *     source value by hand; for a wiki fact (`fact:<factId>`), the submitter of
- *     the most recent approved edit of that fact. Nobody is a contributor by
- *     having triggered a recompute, run an import, or approved their own
- *     ingested item — those rows carry a user id, not a submission;
+ *     latest hand-written revision, and everyone who entered a source value by
+ *     hand; for a wiki fact (`fact:<factId>`), the submitter of the most recent
+ *     approved edit of that fact. Nobody is a contributor by having triggered a
+ *     recompute, run an import, or accepted an ingested item — those rows
+ *     carry a user id, not a submission;
  *   - everyone else who already commented in the same thread
  *     (`comment_in_thread`), so joining a discussion on someone else's
  *     submission means hearing how it continues.
@@ -24,7 +24,7 @@
  */
 import { sql } from 'drizzle-orm';
 import { getDb } from './db.js';
-import { notifyContributionFeedback } from './notifications.js';
+import { notIngested, notifyContributionFeedback } from './notifications.js';
 import { callerCanReadWikiPage } from './permissions-store.js';
 
 /** Upper bound on contributors told about one comment on a busy parameter. */
@@ -63,23 +63,26 @@ async function parameterContributors(
   drugId: number,
   parameter: string,
 ): Promise<number[]> {
-  // The same notion of "submitted" as contributionAuthorUserId: a revision
-  // counts only when it came from an edit someone ELSE reviewed (not an
-  // aggregate recompute, an import or a self-approved ingestion), and a source
-  // value only when it was entered by hand (`origin = 'contributor'`), not
-  // migrated or ingested.
+  // The same notion of "submitted" as contributionAuthorUserId. The value's
+  // author is whoever submitted the latest hand-written revision (aggregate
+  // recomputes are skipped: they re-pool source values, whose contributors are
+  // the second half below) — and nobody when that revision was an import, a
+  // direct write or an ingested item, rather than an older revision's author
+  // whose value has since been replaced. A source value counts only when it
+  // was entered by hand (`origin = 'contributor'`), not migrated or ingested.
   const result = await getDb().execute<{ user_id: number }>(sql`
     SELECT user_id FROM (
-      (
-        SELECT pe.submitted_by AS user_id
-        FROM drug_parameter_revisions dr
-        JOIN pending_edits pe ON pe.id = dr.pending_edit_id
-        WHERE dr.drug_id = ${drugId} AND dr.parameter = ${parameter}
-          AND (dr.edit_summary IS NULL OR dr.edit_summary NOT LIKE 'auto:%')
-          AND pe.reviewed_by IS DISTINCT FROM pe.submitted_by
-        ORDER BY dr.created_at DESC, dr.id DESC
+      SELECT pe.submitted_by AS user_id
+      FROM (
+        SELECT pending_edit_id
+        FROM drug_parameter_revisions
+        WHERE drug_id = ${drugId} AND parameter = ${parameter}
+          AND (edit_summary IS NULL OR edit_summary NOT LIKE 'auto:%')
+        ORDER BY created_at DESC, id DESC
         LIMIT 1
-      )
+      ) latest
+      JOIN pending_edits pe ON pe.id = latest.pending_edit_id
+      WHERE ${notIngested(sql`pe`)}
       UNION
       SELECT DISTINCT created_by AS user_id
       FROM parameter_entries
@@ -109,9 +112,8 @@ async function factAuthor(
     FROM pending_edits
     WHERE edit_type = 'wiki_fact'
       AND status = 'approved'
-      -- Reviewed by someone else: a fact its submitter approved themselves
-      -- (conversation ingestion) was never submitted for review.
-      AND reviewed_by IS DISTINCT FROM submitted_by
+      -- A person's submission, not a fact conversation ingestion staged.
+      AND ${notIngested(sql`pending_edits`)}
       AND ${onHostPage}
       -- Only edits that wrote the fact's content: a reorder or remove names
       -- the fact too, but its submitter did not author it.

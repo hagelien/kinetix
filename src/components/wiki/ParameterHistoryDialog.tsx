@@ -251,10 +251,10 @@ export function ParameterHistoryDialog({
   const heading = t('paramHistory.dialogHeading', { parameter: longLabel });
 
   const load = useCallback(() => {
-    fetchDrugParameterHistory(drugId, parameter)
+    fetchDrugParameterHistory(drugId, parameter, focusRevisionId)
       .then((data) => setRevisions(data.revisions))
       .catch((err) => setError(err instanceof Error ? err.message : String(err)));
-  }, [drugId, parameter]);
+  }, [drugId, parameter, focusRevisionId]);
 
   useEffect(() => {
     load();

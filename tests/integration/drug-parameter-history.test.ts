@@ -17,7 +17,14 @@ vi.mock('../../api/_lib/auth.js', () => ({
   getUserFromRequest: getUserFromRequestMock,
 }));
 
-import { agents, agentVerifications, citations, disputes, parameterEntries } from '../../db/schema.js';
+import {
+  agents,
+  agentVerifications,
+  citations,
+  disputes,
+  drugParameterRevisions,
+  parameterEntries,
+} from '../../db/schema.js';
 import handler from '../../api/drug-parameter-history.js';
 import { recomputeAndCacheParameterSummary } from '../../api/_lib/parameter-entries-store.js';
 import {
@@ -59,10 +66,10 @@ function createResponse() {
   return { res, state };
 }
 
-async function callHistory(drugId: number, parameter: string) {
+async function callHistory(drugId: number, parameter: string, query = '') {
   const req = {
     method: 'GET',
-    url: `/api/drug-parameter-history?drugId=${drugId}&parameter=${parameter}`,
+    url: `/api/drug-parameter-history?drugId=${drugId}&parameter=${parameter}${query}`,
     headers: { host: 'localhost' },
   } as IncomingMessage;
   const { res, state } = createResponse();
@@ -214,5 +221,43 @@ describe('GET /api/drug-parameter-history', () => {
     const { body } = await callHistory(drugId, 'therapeuticConcentration');
     const latest = body.revisions.find((r: { id: number }) => r.id === revisionId);
     expect(latest.disputes).toHaveLength(1);
+  });
+});
+
+describe('a revision a notification links to', () => {
+  it('is included even when it is older than the newest 100', async () => {
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db, { email: 'h@example.com', username: 'h' });
+    const base = Date.UTC(2026, 0, 1);
+    const inserted = await db
+      .insert(drugParameterRevisions)
+      .values(
+        Array.from({ length: 101 }, (_, i) => ({
+          drugId,
+          parameter: 'halfLife',
+          createdBy: userId,
+          createdAt: new Date(base + i * 60_000),
+        })),
+      )
+      .returning({ id: drugParameterRevisions.id, createdAt: drugParameterRevisions.createdAt });
+    const oldest = inserted.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0]!.id;
+    // Another parameter's revision: an id from elsewhere must not leak in.
+    const [other] = await db
+      .insert(drugParameterRevisions)
+      .values({ drugId, parameter: 'tmax', createdBy: userId, createdAt: new Date(base) })
+      .returning({ id: drugParameterRevisions.id });
+
+    const plain = await callHistory(drugId, 'halfLife');
+    const plainIds = plain.body.revisions.map((r: { id: number }) => r.id);
+    expect(plainIds).toHaveLength(100);
+    expect(plainIds).not.toContain(oldest);
+
+    const linked = await callHistory(drugId, 'halfLife', `&revision=${oldest}`);
+    expect(linked.body.revisions.map((r: { id: number }) => r.id)).toContain(oldest);
+
+    const foreign = await callHistory(drugId, 'halfLife', `&revision=${other!.id}`);
+    expect(foreign.body.revisions.map((r: { id: number }) => r.id)).not.toContain(other!.id);
+
+    expect((await callHistory(drugId, 'halfLife', '&revision=abc')).status).toBe(400);
   });
 });

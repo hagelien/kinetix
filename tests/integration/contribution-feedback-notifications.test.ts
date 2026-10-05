@@ -12,7 +12,9 @@ import {
   parameterEntries,
   pendingEdits,
 } from '../../db/schema.js';
+import { CONVERSATION_INGESTION_SOURCE as STORE_INGESTION_SOURCE } from '../../api/_lib/conversationIngestionStore.js';
 import {
+  CONVERSATION_INGESTION_SOURCE,
   contributionAuthorUserId,
   fanOutDisputeNotification,
   listNotifications,
@@ -202,6 +204,45 @@ describe('notifyCommentFeedback', () => {
     expect(await inbox(bob)).toEqual([]);
   });
 
+  it('does not fall back to an older author once an import replaced their value', async () => {
+    const drugId = await seedDrug(db);
+    const [edit] = await db
+      .insert(pendingEdits)
+      .values({ editType: 'parameter', status: 'approved', submittedBy: alice, reviewedBy: carol, proposedValue: {} } as never)
+      .returning({ id: pendingEdits.id });
+    await db.insert(drugParameterRevisions).values([
+      {
+        drugId,
+        parameter: 'halfLife',
+        pendingEditId: edit!.id,
+        createdBy: alice,
+        createdAt: new Date('2026-09-01T00:00:00Z'),
+      },
+      {
+        drugId,
+        parameter: 'halfLife',
+        createdBy: carol,
+        editSummary: 'Seeded from deep-research output',
+        createdAt: new Date('2026-09-02T00:00:00Z'),
+      },
+    ]);
+
+    await notifyCommentFeedback({
+      comment: {
+        id: 98,
+        body: 'Which source?',
+        parentId: null,
+        parameter: 'halfLife',
+        drugId,
+        wikiPageId: null,
+        createdBy: bob,
+      },
+      url: '/wiki/drug',
+    });
+
+    expect(await inbox(alice)).toEqual([]);
+  });
+
   it('tells earlier commenters in the thread how the discussion continues', async () => {
     const drugId = await seedDrug(db);
     await db.insert(drugParameterDiscussions).values([
@@ -235,7 +276,7 @@ describe('notifyCommentFeedback', () => {
     expect(await inbox(carol)).toEqual([]);
   });
 
-  it('does not take a fact its submitter approved themselves for a contribution', async () => {
+  it('does not take a fact conversation ingestion staged for a contribution', async () => {
     const [page] = await db
       .insert(wikiPages)
       .values({ slug: 'ingested', title: 'I', status: 'published', createdBy: bob, updatedBy: bob } as never)
@@ -246,6 +287,7 @@ describe('notifyCommentFeedback', () => {
       submittedBy: alice,
       reviewedBy: alice,
       targetId: page!.id,
+      proposedMeta: { source: CONVERSATION_INGESTION_SOURCE },
       proposedValue: { type: 'fact', attrs: { factId: 'f-ingested' } },
     } as never);
 
@@ -693,7 +735,11 @@ describe('contributionAuthorUserId', () => {
   async function revision(values: {
     createdBy: number;
     editSummary?: string;
-    pendingEdit?: { submittedBy: number; reviewedBy: number | null };
+    pendingEdit?: {
+      submittedBy: number;
+      reviewedBy: number | null;
+      proposedMeta?: Record<string, unknown>;
+    };
   }) {
     const drugId = await seedDrug(db, { slug: `drug-${++seq}` });
     let pendingEditId: number | undefined;
@@ -721,7 +767,15 @@ describe('contributionAuthorUserId', () => {
     expect(await revision({ createdBy: alice, pendingEdit: { submittedBy: alice, reviewedBy: bob } })).toBe(alice);
   });
 
-  it('credits nobody for a recompute, a direct write or import, or a self-approved item', async () => {
+  it('credits an admin’s own proposal they approved under review.edit.decideOwn', async () => {
+    expect(await revision({ createdBy: alice, pendingEdit: { submittedBy: alice, reviewedBy: alice } })).toBe(alice);
+  });
+
+  it('matches the marker conversation ingestion writes', () => {
+    expect(CONVERSATION_INGESTION_SOURCE).toBe(STORE_INGESTION_SOURCE);
+  });
+
+  it('credits nobody for a recompute, a direct write or import, or an ingested item', async () => {
     expect(
       await revision({
         createdBy: alice,
@@ -730,7 +784,16 @@ describe('contributionAuthorUserId', () => {
       }),
     ).toBeNull();
     expect(await revision({ createdBy: alice, editSummary: 'Seeded from deep-research output' })).toBeNull();
-    expect(await revision({ createdBy: alice, pendingEdit: { submittedBy: alice, reviewedBy: alice } })).toBeNull();
+    expect(
+      await revision({
+        createdBy: alice,
+        pendingEdit: {
+          submittedBy: alice,
+          reviewedBy: alice,
+          proposedMeta: { source: CONVERSATION_INGESTION_SOURCE },
+        },
+      }),
+    ).toBeNull();
   });
 });
 
