@@ -341,6 +341,8 @@ describe('agent consensus hold, re-stamp and retry', () => {
   it('keeps edits consensus can never publish out of the sweep window', async () => {
     const author = await seedAgent('author');
     const b = await seedAgent('b');
+    // A third agent so each high-risk edit can carry the full two-approval quorum.
+    const c = await seedAgent('c');
     const human = await seedUser(db, {
       email: 'human@example.com',
       username: 'human',
@@ -363,6 +365,7 @@ describe('agent consensus hold, re-stamp and retry', () => {
     const eligible = await seedHighRiskEdit(author.userId);
     for (const id of [humanEdit, clinical, humanDisputed, eligible]) {
       await approve(b.agentId, id);
+      await approve(c.agentId, id);
     }
 
     // With a window of one, the eligible edit is still the one retried.
