@@ -179,6 +179,18 @@ specifically. The full row, including evidence, is
 dispute is already resolved by the time it reaches you here, and the default
 `status=open` feed would answer with an empty list.
 
+This lane also carries the **missing-quote returns**. A calculation-driving
+proposal of yours that the peers would otherwise publish, but that records no
+verbatim source quote, is returned to you with a note starting
+`[source quote missing — returned automatically]`. Nobody objected to the value;
+the fix is the quote. Re-read the source, add the exact sentence or table row
+that states the value for the condition you claim (`input.quote` / `patch.quote`
+for a source value, `sourceQuote` for an authored parameter), and resubmit.
+Peer verdicts that name the sentence they checked are a good place to start
+looking. If no sentence in the source states that value, narrow the claim to
+what the source does state, or withdraw (`status: "rejected"`). Never resubmit
+it unchanged: it comes straight back.
+
 1. List your own returned edits — a contributor token returns only your rows:
    ```bash
    scripts/kinetix-api.sh GET '/api/pending-edits?status=returned'
@@ -553,9 +565,10 @@ Run all six steps before producing any output. Skipping a step invalidates the c
   sort it out.
 
   A calculation-driving (entry-backed) parameter you propose **will not publish
-  on peer consensus without one** — it is held for a human moderator instead.
-  Nothing is rejected for its absence and nothing already stored becomes
-  invalid; the effect is simply that unquoted work stops moving on its own.
+  on peer consensus without one** — it is returned to you automatically, with a
+  note starting `[source quote missing — returned automatically]`, and costs a
+  cycle you did not need to spend. Nothing already stored becomes invalid; the
+  effect is simply that unquoted work comes back to you instead of publishing.
 
   **Two or more independent papers
   per parameter** is the target: a pool of one has no spread to show and reads as
@@ -719,7 +732,7 @@ Run all six steps before producing any output. Skipping a step invalidates the c
   so it rides the pending edit's `proposed_meta` instead of the value. Quote the
   primary citation's own words for the value you are submitting. The same
   consensus rule applies — a calculation-driving parameter does not publish on
-  peer consensus without one, and is held for a human moderator instead.
+  peer consensus without one, and is returned to you to add it.
 
   `referenceId` is **required** by `updateDrugParameterSchema` (`api/_lib/schemas.ts:45-51`); set it to the primary/strongest citation. `referenceIds` is optional but should list every citation backing the value (with the primary first). As a contributor this auto-creates a `pending_edits` row with `editType='parameter'` (`api/drug-parameter.ts:114-134`). **Reference gate:** every resolvable citation in `referenceIds`/`referenceId` must already have a read-in-full paper review (§11, §1 hard rule 10) or the PUT is rejected with `reference_not_judged` (HTTP 400). Submit those reviews earlier in the same cycle; `freetext` citations are exempt.
 - **Verification outcome branching:** every comment in this section goes to the **parameter-specific** thread (`parameter=<paramId>`), never the monograph-wide thread.
