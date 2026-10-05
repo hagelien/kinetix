@@ -1,24 +1,30 @@
 /**
  * Feedback notices for a new discussion comment (#1233 follow-up).
  *
- * A comment is feedback for two kinds of human contributor:
+ * A comment is feedback for three kinds of human participant:
  *
  *   - the author of the comment it replies to (`comment_reply`);
  *   - the contributors of the parameter or fact it is posted on
- *     (`comment_on_contribution`): for a drug parameter, whoever wrote the
- *     latest authored revision and every contributor of a source value; for a
- *     wiki fact (`fact:<factId>`), the submitter of the most recent approved
- *     edit of that fact.
+ *     (`comment_on_contribution`): for a drug parameter, the submitter of the
+ *     latest hand-written revision, and everyone who entered a source value by
+ *     hand; for a wiki fact (`fact:<factId>`), the submitter of the most recent
+ *     approved edit of that fact. Nobody is a contributor by having triggered a
+ *     recompute, run an import, or accepted an ingested item — those rows
+ *     carry a user id, not a submission;
+ *   - everyone else who already commented in the same thread
+ *     (`comment_in_thread`), so joining a discussion on someone else's
+ *     submission means hearing how it continues.
  *
- * Each person is told once — a reply outranks "comment on your contribution"
- * — and never about their own comment. Agents are skipped by
- * {@link notifyContributionFeedback}. A comment on the monograph as a whole
- * (`parameter = null`) has no single contributor and notifies only the
- * replied-to author.
+ * Each person is told once — a reply outranks "comment on your contribution",
+ * which outranks "comment in a discussion you joined" — and never about their
+ * own comment. Agents are skipped by {@link notifyContributionFeedback}. A
+ * comment on the monograph as a whole (`parameter = null`) has no single
+ * contributor; it notifies the replied-to author and the thread's other
+ * participants.
  */
 import { sql } from 'drizzle-orm';
 import { getDb } from './db.js';
-import { notifyContributionFeedback } from './notifications.js';
+import { notIngested, notifyContributionFeedback } from './notifications.js';
 import { callerCanReadWikiPage } from './permissions-store.js';
 
 /** Upper bound on contributors told about one comment on a busy parameter. */
@@ -57,21 +63,32 @@ async function parameterContributors(
   drugId: number,
   parameter: string,
 ): Promise<number[]> {
+  // The same notion of "submitted" as contributionAuthorUserId. The value's
+  // author is whoever submitted the latest hand-written revision (aggregate
+  // recomputes are skipped: they re-pool source values, whose contributors are
+  // the second half below) — and nobody when that revision was an import, a
+  // direct write or an ingested item, rather than an older revision's author
+  // whose value has since been replaced. A source value counts only when it
+  // was entered by hand (`origin = 'contributor'`), not migrated or ingested.
   const result = await getDb().execute<{ user_id: number }>(sql`
     SELECT user_id FROM (
-      (
-        SELECT created_by AS user_id
+      SELECT pe.submitted_by AS user_id
+      FROM (
+        SELECT pending_edit_id
         FROM drug_parameter_revisions
         WHERE drug_id = ${drugId} AND parameter = ${parameter}
-          AND created_by IS NOT NULL
+          AND (edit_summary IS NULL OR edit_summary NOT LIKE 'auto:%')
         ORDER BY created_at DESC, id DESC
         LIMIT 1
-      )
+      ) latest
+      JOIN pending_edits pe ON pe.id = latest.pending_edit_id
+      WHERE ${notIngested(sql`pe`)}
       UNION
       SELECT DISTINCT created_by AS user_id
       FROM parameter_entries
       WHERE drug_id = ${drugId} AND parameter = ${parameter}
         AND created_by IS NOT NULL
+        AND origin = 'contributor'
     ) t
     LIMIT ${MAX_CONTRIBUTOR_RECIPIENTS}
   `);
@@ -95,6 +112,8 @@ async function factAuthor(
     FROM pending_edits
     WHERE edit_type = 'wiki_fact'
       AND status = 'approved'
+      -- A person's submission, not a fact conversation ingestion staged.
+      AND ${notIngested(sql`pending_edits`)}
       AND ${onHostPage}
       -- Only edits that wrote the fact's content: a reorder or remove names
       -- the fact too, but its submitter did not author it.
@@ -107,6 +126,27 @@ async function factAuthor(
     LIMIT 1
   `);
   return result.rows[0]?.submitted_by ?? null;
+}
+
+/** Everyone who has already commented in the thread, earliest first. */
+async function threadParticipants(args: {
+  commentId: number;
+  drugId: number | null;
+  wikiPageId: number | null;
+  parameter: string | null;
+}): Promise<number[]> {
+  const result = await getDb().execute<{ user_id: number }>(sql`
+    SELECT created_by AS user_id
+    FROM drug_parameter_discussions
+    WHERE id <> ${args.commentId}
+      AND drug_id IS NOT DISTINCT FROM ${args.drugId}::int
+      AND wiki_page_id IS NOT DISTINCT FROM ${args.wikiPageId}::int
+      AND parameter IS NOT DISTINCT FROM ${args.parameter}::text
+    GROUP BY created_by
+    ORDER BY min(created_at), created_by
+    LIMIT ${MAX_CONTRIBUTOR_RECIPIENTS}
+  `);
+  return result.rows.map((r) => r.user_id);
 }
 
 /**
@@ -173,9 +213,10 @@ export async function notifyCommentFeedback(args: {
     }
   }
 
-  if (comment.parameter === null) return;
   let contributors: number[] = [];
-  if (comment.parameter.startsWith('fact:')) {
+  if (comment.parameter === null) {
+    // A monograph-wide comment: no single contributor.
+  } else if (comment.parameter.startsWith('fact:')) {
     const author = await factAuthor(comment.parameter.slice('fact:'.length), {
       drugId: comment.drugId,
       wikiPageId: comment.wikiPageId,
@@ -195,6 +236,28 @@ export async function notifyCommentFeedback(args: {
       targetType: 'drug_discussion',
       targetId: comment.id,
       title: 'New comment on your contribution',
+      bodyMd: body,
+      url: args.url,
+    });
+  }
+
+  const participants = await threadParticipants({
+    commentId: comment.id,
+    drugId: comment.drugId,
+    wikiPageId: comment.wikiPageId,
+    parameter: comment.parameter,
+  });
+  for (const userId of participants) {
+    if (told.has(userId)) continue;
+    told.add(userId);
+    if (!(await mayRead(userId))) continue;
+    await notifyContributionFeedback({
+      recipientUserId: userId,
+      actorUserId: comment.createdBy,
+      type: 'comment_in_thread',
+      targetType: 'drug_discussion',
+      targetId: comment.id,
+      title: 'New comment in a discussion you joined',
       bodyMd: body,
       url: args.url,
     });

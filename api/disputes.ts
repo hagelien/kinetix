@@ -64,7 +64,10 @@ import {
 import { verificationTargetVersion } from './_lib/verification-targets.js';
 import { returnPendingEditForUpheldDispute } from './_lib/upheld-dispute-return.js';
 import { runInPoolTransaction } from './_lib/db.js';
-import { fanOutDisputeNotification } from './_lib/notifications.js';
+import {
+  contributionAuthorUserId,
+  fanOutDisputeNotification,
+} from './_lib/notifications.js';
 import { CAP } from '../src/lib/permissions.js';
 import { callerCan } from './_lib/permissions-store.js';
 import { disputeTargetTypeSchema } from './_lib/schemas.js';
@@ -282,7 +285,7 @@ async function handlePost(
   // every reason edit, so an author isn't pinged repeatedly for one contest.
   let recipients = 0;
   if (inserted) {
-    const authorUserId = await targetAuthorUserId({ targetType, targetId });
+    const authorUserId = await contributionAuthorUserId({ targetType, targetId });
     ({ recipients } = await fanOutDisputeNotification({
       type: 'dispute_opened',
       disputeId: id,
@@ -400,8 +403,8 @@ async function handlePatch(
     return;
   }
 
-  const authorUserId = await targetAuthorUserId({
-    targetType: row.targetType as DisputeTargetType,
+  const authorUserId = await contributionAuthorUserId({
+    targetType: row.targetType,
     targetId: row.targetId,
   });
   await fanOutDisputeNotification({
@@ -411,6 +414,7 @@ async function handlePatch(
     targetId: row.targetId,
     actorUserId: auth.userId,
     targetAuthorUserId: authorUserId,
+    raisedByUserId: row.createdBy,
     title: `Dispute ${resolution}`,
     url: await disputeTargetUrl({
       targetType: row.targetType as DisputeTargetType,

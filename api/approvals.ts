@@ -34,7 +34,10 @@ import {
   paperReviews,
 } from '../db/schema.js';
 import { callerCan } from './_lib/permissions-store.js';
-import { notifyContributionFeedback } from './_lib/notifications.js';
+import {
+  contributionAuthorUserId,
+  notifyContributionFeedback,
+} from './_lib/notifications.js';
 import { disputeTargetUrl } from './_lib/agent-verifications.js';
 import { CAP } from '../src/lib/permissions.js';
 import type { ApprovalTargetType } from '../db/schema.js';
@@ -332,11 +335,15 @@ async function handlePost(
     approvedBy: auth.userId,
   });
   if (inserted) {
-    // A stamp on someone's revision, comment or review is feedback on it.
+    // A stamp on someone's revision, comment or review is feedback on it —
+    // for whoever submitted it, not whoever's id is on a recompute or import.
     // The stamp is already recorded, so a notice failure is only logged.
     try {
       await notifyContributionFeedback({
-        recipientUserId: ownerUserId,
+        recipientUserId: await contributionAuthorUserId({
+          targetType: parsed.data.targetType,
+          targetId: parsed.data.targetId,
+        }),
         actorUserId: auth.userId,
         type: 'contribution_endorsed',
         targetType: parsed.data.targetType,

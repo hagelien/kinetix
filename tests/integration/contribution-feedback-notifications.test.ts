@@ -12,10 +12,14 @@ import {
   parameterEntries,
   pendingEdits,
 } from '../../db/schema.js';
+import { CONVERSATION_INGESTION_SOURCE as STORE_INGESTION_SOURCE } from '../../api/_lib/conversationIngestionStore.js';
 import {
+  CONVERSATION_INGESTION_SOURCE,
+  contributionAuthorUserId,
   fanOutDisputeNotification,
   listNotifications,
   notifyContributionFeedback,
+  reclassifyTargetAuthorNotices,
 } from '../../api/_lib/notifications.js';
 import { resetPermissionOverridesForTests } from '../../api/_lib/permissions-store.js';
 import { notifyEditDecision } from '../../api/_lib/editDecisionNotifications.js';
@@ -123,9 +127,14 @@ describe('notifyEditDecision', () => {
 describe('notifyCommentFeedback', () => {
   it('tells the replied-to author and the parameter contributors, each once', async () => {
     const drugId = await seedDrug(db);
+    const [edit] = await db
+      .insert(pendingEdits)
+      .values({ editType: 'parameter', status: 'approved', submittedBy: alice, reviewedBy: carol, proposedValue: {} } as never)
+      .returning({ id: pendingEdits.id });
     await db.insert(drugParameterRevisions).values({
       drugId,
       parameter: 'halfLife',
+      pendingEditId: edit!.id,
       createdBy: alice,
     });
     await db.insert(parameterEntries).values({
@@ -158,6 +167,144 @@ describe('notifyCommentFeedback', () => {
     expect((await inbox(bob)).map((r) => r.type)).toEqual(['comment_reply']);
     expect((await inbox(alice)).map((r) => r.type)).toEqual(['comment_on_contribution']);
     expect(await inbox(carol)).toEqual([]);
+  });
+
+  it('does not take a recompute, an import or an ingested value for a contribution', async () => {
+    const drugId = await seedDrug(db);
+    // Alice triggered an aggregate recompute and ran a research import; Bob
+    // ingested a source value through a conversation bundle.
+    await db.insert(drugParameterRevisions).values([
+      { drugId, parameter: 'halfLife', createdBy: alice, editSummary: 'Seeded from deep-research output' },
+      { drugId, parameter: 'halfLife', createdBy: alice, editSummary: 'auto:param_entries_recomputed:2' },
+    ]);
+    await db.insert(parameterEntries).values({
+      drugId,
+      parameter: 'halfLife',
+      low: '2',
+      high: '4',
+      unit: 'h',
+      origin: 'conversation',
+      createdBy: bob,
+    } as never);
+
+    await notifyCommentFeedback({
+      comment: {
+        id: 99,
+        body: 'Reference 1610 points at the wrong compound.',
+        parentId: null,
+        parameter: 'halfLife',
+        drugId,
+        wikiPageId: null,
+        createdBy: carol,
+      },
+      url: '/wiki/drug',
+    });
+
+    expect(await inbox(alice)).toEqual([]);
+    expect(await inbox(bob)).toEqual([]);
+  });
+
+  it('does not fall back to an older author once an import replaced their value', async () => {
+    const drugId = await seedDrug(db);
+    const [edit] = await db
+      .insert(pendingEdits)
+      .values({ editType: 'parameter', status: 'approved', submittedBy: alice, reviewedBy: carol, proposedValue: {} } as never)
+      .returning({ id: pendingEdits.id });
+    await db.insert(drugParameterRevisions).values([
+      {
+        drugId,
+        parameter: 'halfLife',
+        pendingEditId: edit!.id,
+        createdBy: alice,
+        createdAt: new Date('2026-09-01T00:00:00Z'),
+      },
+      {
+        drugId,
+        parameter: 'halfLife',
+        createdBy: carol,
+        editSummary: 'Seeded from deep-research output',
+        createdAt: new Date('2026-09-02T00:00:00Z'),
+      },
+    ]);
+
+    await notifyCommentFeedback({
+      comment: {
+        id: 98,
+        body: 'Which source?',
+        parentId: null,
+        parameter: 'halfLife',
+        drugId,
+        wikiPageId: null,
+        createdBy: bob,
+      },
+      url: '/wiki/drug',
+    });
+
+    expect(await inbox(alice)).toEqual([]);
+  });
+
+  it('tells earlier commenters in the thread how the discussion continues', async () => {
+    const drugId = await seedDrug(db);
+    await db.insert(drugParameterDiscussions).values([
+      { drugId, parameter: 'halfLife', body: 'Is this the right CID?', createdBy: alice },
+      { drugId, parameter: 'tmax', body: 'Other thread', createdBy: bob },
+    ]);
+
+    await notifyCommentFeedback({
+      comment: {
+        id: 99,
+        body: 'No — CID 9332 is a different compound.',
+        parentId: null,
+        parameter: 'halfLife',
+        drugId,
+        wikiPageId: null,
+        createdBy: carol,
+      },
+      url: '/wiki/drug',
+    });
+
+    expect(await inbox(alice)).toEqual([
+      {
+        type: 'comment_in_thread',
+        audience: 'author',
+        bodyMd: 'No — CID 9332 is a different compound.',
+        url: '/wiki/drug',
+      },
+    ]);
+    // A comment in another parameter's thread is not this discussion.
+    expect(await inbox(bob)).toEqual([]);
+    expect(await inbox(carol)).toEqual([]);
+  });
+
+  it('does not take a fact conversation ingestion staged for a contribution', async () => {
+    const [page] = await db
+      .insert(wikiPages)
+      .values({ slug: 'ingested', title: 'I', status: 'published', createdBy: bob, updatedBy: bob } as never)
+      .returning({ id: wikiPages.id });
+    await db.insert(pendingEdits).values({
+      editType: 'wiki_fact',
+      status: 'approved',
+      submittedBy: alice,
+      reviewedBy: alice,
+      targetId: page!.id,
+      proposedMeta: { source: CONVERSATION_INGESTION_SOURCE },
+      proposedValue: { type: 'fact', attrs: { factId: 'f-ingested' } },
+    } as never);
+
+    await notifyCommentFeedback({
+      comment: {
+        id: 13,
+        body: 'Source?',
+        parentId: null,
+        parameter: 'fact:f-ingested',
+        drugId: null,
+        wikiPageId: page!.id,
+        createdBy: bob,
+      },
+      url: '/wiki/ingested',
+    });
+
+    expect(await inbox(alice)).toEqual([]);
   });
 
   it('finds a fact’s author through its approved wiki_fact edit', async () => {
@@ -580,5 +727,132 @@ describe('listNotifications review-queue excerpts', () => {
 
     const [row] = await listNotifications({ userId: alice, role: 'contributor', limit: 10 });
     expect(row!.bodyMd).toBe('The dispute reason');
+  });
+});
+
+describe('contributionAuthorUserId', () => {
+  let seq = 0;
+  async function revision(values: {
+    createdBy: number;
+    editSummary?: string;
+    pendingEdit?: {
+      submittedBy: number;
+      reviewedBy: number | null;
+      proposedMeta?: Record<string, unknown>;
+    };
+  }) {
+    const drugId = await seedDrug(db, { slug: `drug-${++seq}` });
+    let pendingEditId: number | undefined;
+    if (values.pendingEdit) {
+      const [edit] = await db
+        .insert(pendingEdits)
+        .values({ editType: 'parameter', status: 'approved', proposedValue: {}, ...values.pendingEdit } as never)
+        .returning({ id: pendingEdits.id });
+      pendingEditId = edit!.id;
+    }
+    const [rev] = await db
+      .insert(drugParameterRevisions)
+      .values({
+        drugId,
+        parameter: 'halfLife',
+        createdBy: values.createdBy,
+        editSummary: values.editSummary ?? null,
+        pendingEditId,
+      })
+      .returning({ id: drugParameterRevisions.id });
+    return contributionAuthorUserId({ targetType: 'drug_parameter_revision', targetId: rev!.id });
+  }
+
+  it('credits a parameter revision to whoever submitted it for review', async () => {
+    expect(await revision({ createdBy: alice, pendingEdit: { submittedBy: alice, reviewedBy: bob } })).toBe(alice);
+  });
+
+  it('credits an admin’s own proposal they approved under review.edit.decideOwn', async () => {
+    expect(await revision({ createdBy: alice, pendingEdit: { submittedBy: alice, reviewedBy: alice } })).toBe(alice);
+  });
+
+  it('matches the marker conversation ingestion writes', () => {
+    expect(CONVERSATION_INGESTION_SOURCE).toBe(STORE_INGESTION_SOURCE);
+  });
+
+  it('credits nobody for a recompute, a direct write or import, or an ingested item', async () => {
+    expect(
+      await revision({
+        createdBy: alice,
+        editSummary: 'auto:param_entries_recomputed:2',
+        pendingEdit: { submittedBy: bob, reviewedBy: alice },
+      }),
+    ).toBeNull();
+    expect(await revision({ createdBy: alice, editSummary: 'Seeded from deep-research output' })).toBeNull();
+    expect(
+      await revision({
+        createdBy: alice,
+        pendingEdit: {
+          submittedBy: alice,
+          reviewedBy: alice,
+          proposedMeta: { source: CONVERSATION_INGESTION_SOURCE },
+        },
+      }),
+    ).toBeNull();
+  });
+});
+
+describe('dispute notices that are feedback on the recipient’s own work', () => {
+  async function disputeOnImportedRevision() {
+    const drugId = await seedDrug(db);
+    const [rev] = await db
+      .insert(drugParameterRevisions)
+      .values({ drugId, parameter: 'halfLife', createdBy: alice, editSummary: 'auto:param_entries_recomputed:2' })
+      .returning({ id: drugParameterRevisions.id });
+    const [dispute] = await db
+      .insert(disputes)
+      .values({
+        targetType: 'drug_parameter_revision',
+        targetId: rev!.id,
+        createdBy: bob,
+        source: 'human',
+        reasonMd: 'Reference 1610 points at the wrong compound.',
+      })
+      .returning({ id: disputes.id });
+    return { revisionId: rev!.id, disputeId: dispute!.id };
+  }
+
+  it('moves a queued notice off "your contribution" for someone who only triggered a recompute', async () => {
+    const { revisionId, disputeId } = await disputeOnImportedRevision();
+    await db.insert(notifications).values({
+      userId: alice,
+      type: 'dispute_opened',
+      title: 'Dispute opened',
+      audience: 'author',
+      targetType: 'drug_parameter_revision',
+      targetId: revisionId,
+      disputeId,
+    });
+    await reclassifyTargetAuthorNotices();
+    expect((await inbox(alice)).map((r) => r.audience)).toEqual(['reviewer']);
+  });
+
+  it('tells the person who raised a dispute how it was ruled, as their own feedback', async () => {
+    const { revisionId, disputeId } = await disputeOnImportedRevision();
+    const editor = await seedUser(db, { email: 'ed@example.com', username: 'ed', role: 'editor' });
+    resetPermissionOverridesForTests();
+    await fanOutDisputeNotification({
+      type: 'dispute_resolved',
+      disputeId,
+      targetType: 'drug_parameter_revision',
+      targetId: revisionId,
+      actorUserId: editor,
+      targetAuthorUserId: null,
+      raisedByUserId: bob,
+      title: 'Dispute upheld',
+    });
+    expect((await inbox(bob)).map((r) => [r.type, r.audience])).toEqual([
+      ['dispute_resolved', 'author'],
+    ]);
+    // Alice only triggered the recompute: not told at all as a contributor.
+    expect(await inbox(alice)).toEqual([]);
+    // And the reclassifier agrees the raiser's copy is theirs.
+    await reclassifyTargetAuthorNotices();
+    expect((await inbox(bob)).map((r) => r.audience)).toEqual(['author']);
   });
 });

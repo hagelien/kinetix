@@ -2941,6 +2941,7 @@ export type NotificationType =
   | 'edit_returned'
   | 'comment_reply'
   | 'comment_on_contribution'
+  | 'comment_in_thread'
   | 'contribution_endorsed';
 
 export type NotificationAudience = 'author' | 'reviewer';

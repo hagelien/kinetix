@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   BarChartHorizontal,
   ChevronDown,
@@ -29,6 +29,7 @@ import {
   PARAMETER_GROUPS,
   getParameterLongLabelKey,
   getParametersInGroup,
+  isDrugParameterId,
   isModelStructureParameter,
   parameterAcceptsAuthoredValue,
   parameterIsSummarizable,
@@ -165,7 +166,42 @@ export function DrugMonographSidebar({
   const [dialog, setDialog] = useState<{
     kind: DialogKind;
     parameter: DrugParameterId;
+    /** Revision (history) or comment (discussion) a deep link points at. */
+    focusId?: number;
   } | null>(null);
+  // A notification links to `?param=<id>&view=history|discussion` plus the
+  // `revision` or `comment` it is about: open that dialog once the drug has
+  // loaded, and drop the query again when the reader closes it.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const loadedDrugId = drug?.id;
+  const linkParam = searchParams.get('param');
+  const linkView = searchParams.get('view');
+  const linkFocus = searchParams.get(
+    linkView === 'history' ? 'revision' : 'comment',
+  );
+  useEffect(() => {
+    if (loadedDrugId == null) return;
+    if (!linkParam || !isDrugParameterId(linkParam)) return;
+    if (linkView !== 'history' && linkView !== 'discussion') return;
+    const focus = Number(linkFocus);
+    setDialog({
+      kind: linkView,
+      parameter: linkParam,
+      focusId: Number.isInteger(focus) && focus > 0 ? focus : undefined,
+    });
+  }, [loadedDrugId, linkParam, linkView, linkFocus]);
+  const closeLinkedDialog = useCallback(() => {
+    setDialog(null);
+    if (!searchParams.has('view')) return;
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        for (const key of ['param', 'view', 'revision', 'comment']) next.delete(key);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [searchParams, setSearchParams]);
   // Coverage-area flagging keeps its own state rather than joining the union
   // above: metabolism and pharmacodynamics are flaggable work targets but have
   // no parameter id, and every other dialog kind here takes a real one.
@@ -1584,7 +1620,8 @@ export function DrugMonographSidebar({
           drugId={drug.id}
           parameter={dialog.parameter}
           verification={verificationLevels[dialog.parameter]}
-          onClose={() => setDialog(null)}
+          focusRevisionId={dialog.focusId}
+          onClose={closeLinkedDialog}
         />
       )}
 
@@ -1593,7 +1630,8 @@ export function DrugMonographSidebar({
           drugId={drug.id}
           parameter={dialog.parameter}
           verification={verificationLevels[dialog.parameter]}
-          onClose={() => setDialog(null)}
+          focusCommentId={dialog.focusId}
+          onClose={closeLinkedDialog}
         />
       )}
 

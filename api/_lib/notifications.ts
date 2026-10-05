@@ -17,7 +17,7 @@
  * who opted in to its audience, per event or as a summary.
  */
 
-import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import { getDb } from './db.js';
 import {
   notifications,
@@ -140,6 +140,11 @@ export async function fanOutDisputeNotification(args: {
   targetId: number;
   actorUserId: number;
   targetAuthorUserId: number | null;
+  /**
+   * For a ruling: whoever raised the dispute. Told as `author` (it settles an
+   * objection they made), and only when a human: agents read the feed.
+   */
+  raisedByUserId?: number | null;
   title: string;
   bodyMd?: string | null;
   url?: string | null;
@@ -169,6 +174,11 @@ export async function fanOutDisputeNotification(args: {
         SELECT ${args.targetAuthorUserId}::int AS author_user_id
       ) author
       WHERE author_user_id IS NOT NULL
+      UNION
+      SELECT u.id AS user_id
+      FROM users u
+      WHERE u.id = ${args.raisedByUserId ?? null}::int
+        AND NOT EXISTS (SELECT 1 FROM agents a WHERE a.user_id = u.id)
     ),
     inserted AS (
       INSERT INTO notifications (
@@ -192,10 +202,11 @@ export async function fanOutDisputeNotification(args: {
         ${args.title},
         ${args.bodyMd ?? null},
         ${args.url ?? null},
-        -- The target's author is told as its author even when they are also
-        -- a reviewer: it is feedback on their own work.
+        -- The target's author (and a ruling's raiser) is told as such even
+        -- when also a reviewer: it is feedback on their own work.
         CASE
           WHEN user_id = ${args.targetAuthorUserId}::int THEN 'author'
+          WHEN user_id = ${args.raisedByUserId ?? null}::int THEN 'author'
           ELSE 'reviewer'
         END,
         ${now}
@@ -312,24 +323,88 @@ export async function unreadableNotificationIds(
   return unreadable;
 }
 
+/** `pending_edits.proposed_meta.source` of an edit staged by conversation ingestion. */
+export const CONVERSATION_INGESTION_SOURCE = 'conversation-ingestion';
+
 /**
- * The author of a dispute notice's target, per target type — the same
- * resolution as `targetAuthorUserId` (agent-verifications.ts); migration 0133
- * backfills stored rows with it too. Only the two dispute event types the
- * previous build wrote are matched: their target author's copy is feedback on
- * their own work.
+ * A pending edit (aliased `alias`) that a person submitted, rather than one
+ * conversation ingestion staged on an admin's tick.
+ */
+export function notIngested(alias: SQL): SQL {
+  return sql`${alias}.proposed_meta->>'source' IS DISTINCT FROM ${CONVERSATION_INGESTION_SOURCE}`;
+}
+
+/**
+ * The person a target counts as the contribution OF, for notices: whoever
+ * submitted it, not whoever's id happens to be on the row. Narrower than
+ * `targetAuthorUserId` (agent-verifications.ts), which answers "may this
+ * user verify it?" and must stay as wide as `created_by`.
+ *
+ * A drug-parameter revision is someone's contribution only when it came from
+ * an edit they submitted. Everything else stamped with a user id was not
+ * written by that person: an aggregate recompute (`auto:` summary) is credited
+ * to whoever triggered it, a research import or seed to whoever ran it, and a
+ * direct write skips the submission flow. An edit staged by conversation
+ * ingestion (`proposed_meta.source`) carries an assistant's proposal across on
+ * the admin's tick; it is not that admin's own submission either, unlike a
+ * proposal an admin wrote and then approved under `review.edit.decideOwn`.
+ * The same rule applies to a wiki revision made through a pending edit; a
+ * wiki revision written directly in the editor is its writer's own work.
+ */
+function contributionAuthorSql(targetType: SQL, targetId: SQL): SQL {
+  const submittedBy = (pendingEditId: SQL) => sql`(
+    SELECT pe.submitted_by FROM pending_edits pe
+    WHERE pe.id = ${pendingEditId}
+      AND ${notIngested(sql`pe`)}
+  )`;
+  return sql`CASE ${targetType}
+    WHEN 'wiki_revision' THEN (
+      SELECT CASE WHEN wr.pending_edit_id IS NULL THEN wr.created_by
+                  ELSE ${submittedBy(sql`wr.pending_edit_id`)} END
+      FROM wiki_revisions wr WHERE wr.id = ${targetId}
+    )
+    WHEN 'drug_parameter_revision' THEN (
+      SELECT ${submittedBy(sql`dr.pending_edit_id`)}
+      FROM drug_parameter_revisions dr
+      WHERE dr.id = ${targetId}
+        AND dr.pending_edit_id IS NOT NULL
+        AND (dr.edit_summary IS NULL OR dr.edit_summary NOT LIKE 'auto:%')
+    )
+    WHEN 'drug_discussion' THEN (SELECT created_by FROM drug_parameter_discussions WHERE id = ${targetId})
+    WHEN 'paper_review' THEN (SELECT created_by FROM paper_reviews WHERE id = ${targetId})
+    WHEN 'learning_unit_revision' THEN (SELECT created_by FROM learning_unit_revisions WHERE id = ${targetId})
+    WHEN 'pending_edit' THEN ${submittedBy(targetId)}
+  END`;
+}
+
+/**
+ * Who should hear about feedback on a target as its author
+ * ({@link contributionAuthorSql}); null when nobody submitted it.
+ */
+export async function contributionAuthorUserId(args: {
+  targetType: string;
+  targetId: number;
+}): Promise<number | null> {
+  const result = await getDb().execute<{ user_id: number | null }>(sql`
+    SELECT ${contributionAuthorSql(sql`${args.targetType}::text`, sql`${args.targetId}::int`)} AS user_id
+  `);
+  return result.rows[0]?.user_id ?? null;
+}
+
+/**
+ * A dispute notice that is feedback on the recipient's own work: they
+ * submitted the disputed target ({@link contributionAuthorSql}), or, for a
+ * ruling, they raised the dispute. Migration 0133 backfilled stored rows with
+ * the target-author half.
  */
 const DISPUTE_NOTICE_OF_TARGET_AUTHOR = sql`
   n.type IN ('dispute_opened', 'dispute_resolved')
   AND n.dispute_id IS NOT NULL
-  AND n.user_id = CASE n.target_type
-    WHEN 'wiki_revision' THEN (SELECT created_by FROM wiki_revisions WHERE id = n.target_id)
-    WHEN 'drug_parameter_revision' THEN (SELECT created_by FROM drug_parameter_revisions WHERE id = n.target_id)
-    WHEN 'drug_discussion' THEN (SELECT created_by FROM drug_parameter_discussions WHERE id = n.target_id)
-    WHEN 'paper_review' THEN (SELECT created_by FROM paper_reviews WHERE id = n.target_id)
-    WHEN 'learning_unit_revision' THEN (SELECT created_by FROM learning_unit_revisions WHERE id = n.target_id)
-    WHEN 'pending_edit' THEN (SELECT submitted_by FROM pending_edits WHERE id = n.target_id)
-  END
+  AND (
+    n.user_id = ${contributionAuthorSql(sql`n.target_type`, sql`n.target_id`)}
+    OR (n.type = 'dispute_resolved'
+      AND n.user_id = (SELECT created_by FROM disputes WHERE id = n.dispute_id))
+  )
 `;
 
 /** The notifications among `ids` that tell `userId` about a dispute on their own work. */
@@ -349,19 +424,29 @@ async function targetAuthoredNotificationIds(
 }
 
 /**
- * Re-tag as `author` every not-yet-emailed dispute notice that went to the
- * disputed target's author with the `reviewer` default — rows the previous
- * build wrote during the 0133 deploy window, after the migration's backfill.
- * The current build tags these rows itself, so after the window this matches
- * nothing. Run before each email delivery, so a user already opted in to
- * feedback (the legacy toggle carries over) gets them as feedback.
+ * Bring every not-yet-emailed dispute notice's audience in line with
+ * {@link DISPUTE_NOTICE_OF_TARGET_AUTHOR}, both ways:
+ *
+ *   - `reviewer` → `author` for a notice that is feedback on the recipient's
+ *     own work but was stored with the `reviewer` default (rows the previous
+ *     build wrote during the 0133 deploy window);
+ *   - `author` → `reviewer` for a notice an earlier build sent as "feedback on
+ *     your contribution" to someone who only triggered a recompute, ran an
+ *     import or self-approved an ingested item. As a reviewer row it reaches
+ *     them only if they opted in to review-queue email and may read the queue.
+ *
+ * The current build tags rows itself, so once the backlog is drained this
+ * matches nothing. Run before each email delivery.
  */
 export async function reclassifyTargetAuthorNotices(): Promise<number> {
   const result = await getDb().execute(sql`
-    UPDATE notifications n SET audience = 'author'
-    WHERE n.audience = 'reviewer'
-      AND n.email_handled_at IS NULL
-      AND ${DISPUTE_NOTICE_OF_TARGET_AUTHOR}
+    UPDATE notifications n
+    SET audience = CASE WHEN ${DISPUTE_NOTICE_OF_TARGET_AUTHOR} THEN 'author' ELSE 'reviewer' END
+    WHERE n.email_handled_at IS NULL
+      AND n.type IN ('dispute_opened', 'dispute_resolved')
+      AND n.dispute_id IS NOT NULL
+      AND n.audience IS DISTINCT FROM
+        CASE WHEN ${DISPUTE_NOTICE_OF_TARGET_AUTHOR} THEN 'author' ELSE 'reviewer' END
   `);
   return result.rowCount ?? 0;
 }

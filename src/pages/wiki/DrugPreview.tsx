@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { DrugAnalyticalMethods } from '@/components/wiki/DrugAnalyticalMethods';
 import { DrugPmConcentrations } from '@/components/wiki/DrugPmConcentrations';
@@ -17,6 +17,7 @@ export function DrugPreview() {
   const lang = activeLangCode(i18n.language);
   const { drugId } = useParams<{ drugId: string }>();
   const navigate = useNavigate();
+  const { search } = useLocation();
   const { isAuthenticated } = useAuthStore();
   // Without this gate, users saw the Create button but POST
   // /api/wiki/pages would 403 silently (handleCreate only handles
@@ -66,7 +67,9 @@ export function DrugPreview() {
       .then(({ page }) => {
         if (cancelled) return;
         if (page?.slug) {
-          navigate(`/wiki/${page.slug}`, { replace: true });
+          // Keep the query: a notification links here with `param`/`view`
+          // for the sidebar to open a parameter's log or discussion.
+          navigate(`/wiki/${page.slug}${search}`, { replace: true });
           return;
         }
         return fetchDrugById(cid).then(({ drug }) => {
@@ -81,6 +84,8 @@ export function DrugPreview() {
     return () => {
       cancelled = true;
     };
+    // `search` is read once for the redirect; changing it must not re-run it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cid, navigate]);
 
   async function handleCreate() {

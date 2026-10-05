@@ -674,9 +674,12 @@ export async function searchReceptorTargets(
 export async function fetchDrugParameterHistory(
   drugId: number,
   parameter: DrugParameterId,
+  /** Include this revision even if it is older than the newest page. */
+  revisionId?: number,
 ): Promise<{ revisions: DrugParameterRevisionDTO[] }> {
+  const revision = revisionId != null ? `&revision=${revisionId}` : '';
   return apiFetch(
-    `/api/drug-parameter-history?drugId=${drugId}&parameter=${encodeURIComponent(parameter)}`,
+    `/api/drug-parameter-history?drugId=${drugId}&parameter=${encodeURIComponent(parameter)}${revision}`,
   );
 }
 
