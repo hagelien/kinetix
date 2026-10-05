@@ -79,6 +79,7 @@ vi.mock('../../api/_lib/verification-targets.js', async (importOriginal) => {
 });
 
 vi.mock('../../api/_lib/notifications.js', () => ({
+  contributionAuthorUserId: async () => 42,
   fanOutDisputeNotification: fanOutDisputeNotificationMock,
 }));
 

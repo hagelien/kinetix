@@ -29,6 +29,7 @@ const FEEDBACK_TITLE_KEYS: Record<string, string> = {
   edit_returned: 'notifications.types.editReturned',
   comment_reply: 'notifications.types.commentReply',
   comment_on_contribution: 'notifications.types.commentOnContribution',
+  comment_in_thread: 'notifications.types.commentInThread',
   contribution_endorsed: 'notifications.types.contributionEndorsed',
 };
 export function NotificationBell() {

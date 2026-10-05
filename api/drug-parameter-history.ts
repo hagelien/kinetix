@@ -1,6 +1,10 @@
 /**
  * Drug parameter revision history.
- *   GET ?drugId=&parameter=
+ *   GET ?drugId=&parameter=[&revision=]
+ *
+ * The newest 100 revisions. `revision` names one more to include even when it
+ * is older than that — a notification links to the exact revision it is
+ * about, and the dialog must be able to show it.
  */
 import { desc, eq, and, sql } from 'drizzle-orm';
 import { json, error, withErrorHandling } from './_lib/response.js';
@@ -39,47 +43,72 @@ export default withErrorHandling(async function handler(req, res): Promise<void>
     return;
   }
 
+  const revisionRaw = url.searchParams.get('revision');
+  const requestedRevisionId = revisionRaw === null ? null : Number(revisionRaw);
+  if (
+    requestedRevisionId !== null &&
+    (!Number.isInteger(requestedRevisionId) || requestedRevisionId <= 0)
+  ) {
+    error(res, 400, 'Invalid revision');
+    return;
+  }
+
   const db = getDb();
+  const ofThisParameter = and(
+    eq(drugParameterRevisions.drugId, drugId),
+    eq(drugParameterRevisions.parameter, parameter),
+  );
+  const selectRevisions = () =>
+    db
+      .select({
+        id: drugParameterRevisions.id,
+        oldValue: drugParameterRevisions.oldValue,
+        newValue: drugParameterRevisions.newValue,
+        editSummary: drugParameterRevisions.editSummary,
+        referenceIds: drugParameterRevisions.referenceIds,
+        sourceDiff: drugParameterRevisions.sourceDiff,
+        pendingEditId: drugParameterRevisions.pendingEditId,
+        createdAt: drugParameterRevisions.createdAt,
+        author: {
+          id: users.id,
+          username: users.username,
+          displayName: users.displayName,
+          // Email intentionally NOT exposed — this endpoint has no auth
+          // gate, so revision authors' addresses would otherwise be
+          // scrapeable from public drug pages. Role + isAgent are fine
+          // (already public via /api/agents); UserBadge degrades to a
+          // plain span when email is absent.
+          role: users.role,
+          isAgent: sql<boolean>`${agents.id} is not null`,
+        },
+      })
+      .from(drugParameterRevisions)
+      .leftJoin(users, eq(drugParameterRevisions.createdBy, users.id))
+      .leftJoin(agents, eq(agents.userId, users.id));
   try {
     // Revisions data and auth are independent — run in parallel to save one
     // Neon HTTP round-trip on authenticated requests.
-    const [rows, auth] = await Promise.all([
-      db
-        .select({
-          id: drugParameterRevisions.id,
-          oldValue: drugParameterRevisions.oldValue,
-          newValue: drugParameterRevisions.newValue,
-          editSummary: drugParameterRevisions.editSummary,
-          referenceIds: drugParameterRevisions.referenceIds,
-          sourceDiff: drugParameterRevisions.sourceDiff,
-          pendingEditId: drugParameterRevisions.pendingEditId,
-          createdAt: drugParameterRevisions.createdAt,
-          author: {
-            id: users.id,
-            username: users.username,
-            displayName: users.displayName,
-            // Email intentionally NOT exposed — this endpoint has no auth
-            // gate, so revision authors' addresses would otherwise be
-            // scrapeable from public drug pages. Role + isAgent are fine
-            // (already public via /api/agents); UserBadge degrades to a
-            // plain span when email is absent.
-            role: users.role,
-            isAgent: sql<boolean>`${agents.id} is not null`,
-          },
-        })
-        .from(drugParameterRevisions)
-        .leftJoin(users, eq(drugParameterRevisions.createdBy, users.id))
-        .leftJoin(agents, eq(agents.userId, users.id))
-        .where(
-          and(
-            eq(drugParameterRevisions.drugId, drugId),
-            eq(drugParameterRevisions.parameter, parameter),
-          ),
-        )
+    const [newest, auth] = await Promise.all([
+      selectRevisions()
+        .where(ofThisParameter)
         .orderBy(desc(drugParameterRevisions.createdAt))
         .limit(100),
       getUserFromRequest(req),
     ]);
+    // The linked revision, when it fell outside the newest 100. Scoped to this
+    // drug and parameter, so the id cannot pull in another parameter's row.
+    const rows =
+      requestedRevisionId !== null &&
+      !newest.some((r) => r.id === requestedRevisionId)
+        ? [
+            ...newest,
+            ...(await selectRevisions()
+              .where(
+                and(ofThisParameter, eq(drugParameterRevisions.id, requestedRevisionId)),
+              )
+              .limit(1)),
+          ]
+        : newest;
 
     const revisionIds = rows.map((r) => r.id);
     // Batch-load approval summaries so each revision row carries its

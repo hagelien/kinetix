@@ -23,6 +23,8 @@ interface DiscussionThreadProps {
   parameter: DrugParameterId | FactDiscussionTargetKey | null;
   /** Optional heading rendered above the thread. */
   heading?: string;
+  /** Comment to scroll to and highlight (a notification's deep link). */
+  focusCommentId?: number;
 }
 
 interface ThreadNode {
@@ -64,6 +66,7 @@ function ThreadComment({
   onCancelReply,
   posting,
   canPost,
+  focusCommentId,
 }: {
   node: ThreadNode;
   depth: number;
@@ -75,12 +78,19 @@ function ThreadComment({
   onCancelReply: () => void;
   posting: boolean;
   canPost: boolean;
+  focusCommentId?: number;
 }) {
   const { t } = useTranslation();
   const isReplying = postingReplyTo === node.comment.id;
+  const focused = focusCommentId === node.comment.id;
   return (
     <li className={depth === 0 ? '' : 'ml-4 border-l border-border pl-3'}>
-      <div className="group rounded-md border border-border p-3 bg-muted/30 relative">
+      <div
+        id={`discussion-comment-${node.comment.id}`}
+        className={`group rounded-md border p-3 relative ${
+          focused ? 'border-primary bg-primary/5 ring-2 ring-primary/40' : 'border-border bg-muted/30'
+        }`}
+      >
         <div className="text-xs text-muted-foreground mb-1 flex items-center justify-between gap-2">
           <span>
             <UserBadge user={node.comment.author} /> ·{' '}
@@ -156,6 +166,7 @@ function ThreadComment({
               onCancelReply={onCancelReply}
               posting={posting}
               canPost={canPost}
+              focusCommentId={focusCommentId}
             />
           ))}
         </ul>
@@ -168,6 +179,7 @@ export function DiscussionThread({
   host,
   parameter,
   heading,
+  focusCommentId,
 }: DiscussionThreadProps) {
   const { t } = useTranslation();
   const [discussions, setDiscussions] = useState<DrugDiscussionDTO[] | null>(
@@ -230,6 +242,15 @@ export function DiscussionThread({
 
   const tree = discussions ? buildTree(discussions) : null;
 
+  // Bring a deep-linked comment into view once the thread has loaded.
+  const loaded = discussions !== null;
+  useEffect(() => {
+    if (!loaded || focusCommentId == null) return;
+    document
+      .getElementById(`discussion-comment-${focusCommentId}`)
+      ?.scrollIntoView?.({ block: 'center' });
+  }, [loaded, focusCommentId]);
+
   return (
     <section className="space-y-3">
       {heading && <h3 className="text-base font-semibold">{heading}</h3>}
@@ -266,6 +287,7 @@ export function DiscussionThread({
               }}
               posting={posting}
               canPost={canComment}
+              focusCommentId={focusCommentId}
             />
           ))}
         </ul>

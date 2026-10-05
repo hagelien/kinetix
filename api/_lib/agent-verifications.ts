@@ -499,25 +499,47 @@ export async function disputeTargetUrl(args: {
         : fallback;
     }
     case 'drug_parameter_revision': {
+      // Straight to the parameter's change log with this revision in view
+      // (DrugMonographSidebar reads `param`/`view`/`revision`), not just the
+      // drug's page: the revision, and any dispute on it, live in that log.
       const [row] = await db
-        .select({ drugId: drugParameterRevisions.drugId })
+        .select({
+          drugId: drugParameterRevisions.drugId,
+          parameter: drugParameterRevisions.parameter,
+        })
         .from(drugParameterRevisions)
         .where(eq(drugParameterRevisions.id, args.targetId))
         .limit(1);
-      return row?.drugId != null ? `/wiki/drug/${row.drugId}` : fallback;
+      if (row?.drugId == null) return fallback;
+      return `/wiki/drug/${row.drugId}?${new URLSearchParams({
+        param: row.parameter,
+        view: 'history',
+        revision: String(args.targetId),
+      })}`;
     }
     case 'drug_discussion': {
       // A discussion is either drug-scoped or topic-page-scoped (drugId XOR
-      // wikiPageId); route to whichever the row carries.
+      // wikiPageId); route to whichever the row carries. A comment on one
+      // drug parameter opens that parameter's discussion at the comment.
       const [row] = await db
         .select({
           drugId: drugParameterDiscussions.drugId,
           wikiPageId: drugParameterDiscussions.wikiPageId,
+          parameter: drugParameterDiscussions.parameter,
         })
         .from(drugParameterDiscussions)
         .where(eq(drugParameterDiscussions.id, args.targetId))
         .limit(1);
-      if (row?.drugId != null) return `/wiki/drug/${row.drugId}`;
+      if (row?.drugId != null) {
+        if (row.parameter && !row.parameter.startsWith('fact:')) {
+          return `/wiki/drug/${row.drugId}?${new URLSearchParams({
+            param: row.parameter,
+            view: 'discussion',
+            comment: String(args.targetId),
+          })}`;
+        }
+        return `/wiki/drug/${row.drugId}`;
+      }
       if (row?.wikiPageId != null) {
         const [page] = await db
           .select({ slug: wikiPages.slug })
