@@ -84,8 +84,10 @@ export default withErrorHandling(
       host = { wikiPageId };
     }
 
+    // An empty `?parameter=` is malformed, not "no parameter": it would
+    // otherwise be stored as '' and read back as the whole-monograph thread.
     if (
-      parameterRaw &&
+      parameterRaw !== null &&
       !isDrugParameterId(parameterRaw) &&
       !isFactDiscussionTargetKey(parameterRaw)
     ) {
