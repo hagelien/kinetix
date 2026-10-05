@@ -68,7 +68,10 @@ import {
   pendingEditUpheldRulingStands,
   withdrawOpenDispute,
 } from './_lib/disputes.js';
-import { fanOutDisputeNotification } from './_lib/notifications.js';
+import {
+  contributionAuthorUserId,
+  fanOutDisputeNotification,
+} from './_lib/notifications.js';
 import {
   disputedClaimAppearsInTarget,
   rationaleWithDisputedClaim,
@@ -567,7 +570,7 @@ async function handlePost(
       verificationId: id,
     });
     if (mirrored?.inserted) {
-      const authorUserId = await targetAuthorUserId({
+      const authorUserId = await contributionAuthorUserId({
         targetType,
         targetId: parsed.data.targetId,
       });

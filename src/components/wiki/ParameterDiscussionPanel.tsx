@@ -15,6 +15,8 @@ interface Props {
   parameter: DrugParameterId;
   /** Verification level of this parameter's live value, if known. */
   verification?: VerificationLevelInfo;
+  /** Comment to scroll to and highlight (a notification's deep link). */
+  focusCommentId?: number;
   onClose: () => void;
 }
 
@@ -22,6 +24,7 @@ export function ParameterDiscussionPanel({
   drugId,
   parameter,
   verification,
+  focusCommentId,
   onClose,
 }: Props) {
   const { t } = useTranslation();
@@ -48,7 +51,11 @@ export function ParameterDiscussionPanel({
 
       <div className="flex-1 overflow-y-auto">
         {verification ? <VerificationSummary info={verification} /> : null}
-        <DiscussionThread host={{ drugId }} parameter={parameter} />
+        <DiscussionThread
+          host={{ drugId }}
+          parameter={parameter}
+          focusCommentId={focusCommentId}
+        />
       </div>
     </ModalOverlay>
   );
