@@ -25,6 +25,8 @@ interface Props {
   parameter: DrugParameterId;
   /** Verification level of this parameter's live value, if known. */
   verification?: VerificationLevelInfo;
+  /** Revision to scroll to and highlight (a notification's deep link). */
+  focusRevisionId?: number;
   onClose: () => void;
 }
 
@@ -229,6 +231,7 @@ export function ParameterHistoryDialog({
   drugId,
   parameter,
   verification,
+  focusRevisionId,
   onClose,
 }: Props) {
   const { t } = useTranslation();
@@ -256,6 +259,15 @@ export function ParameterHistoryDialog({
   useEffect(() => {
     load();
   }, [load]);
+
+  // Bring a deep-linked revision into view once the log has loaded.
+  const loaded = revisions !== null;
+  useEffect(() => {
+    if (!loaded || focusRevisionId == null) return;
+    document
+      .getElementById(`param-revision-${focusRevisionId}`)
+      ?.scrollIntoView?.({ block: 'center' });
+  }, [loaded, focusRevisionId]);
 
   return (
     <ModalOverlay
@@ -286,7 +298,12 @@ export function ParameterHistoryDialog({
             {revisions.map((rev) => (
               <li
                 key={rev.id}
-                className="rounded-md border border-border p-3 bg-muted/30"
+                id={`param-revision-${rev.id}`}
+                className={`rounded-md border p-3 ${
+                  rev.id === focusRevisionId
+                    ? 'border-primary bg-primary/5 ring-2 ring-primary/40'
+                    : 'border-border bg-muted/30'
+                }`}
               >
                 <div className="flex items-center justify-between text-xs text-muted-foreground mb-2 gap-2">
                   <span>

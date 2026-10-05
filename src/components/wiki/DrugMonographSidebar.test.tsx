@@ -197,6 +197,28 @@ describe('DrugMonographSidebar favorites (#321)', () => {
   const VD_LABEL = /volume of distribution/i;
   const BIO_LABEL = /oral bioavailability/i;
 
+  it('opens the parameter dialog a notification link points at', async () => {
+    setUser([]);
+    render(
+      <MemoryRouter initialEntries={['/wiki/x?param=halfLife&view=discussion&comment=5']}>
+        <DrugMonographSidebar drugCid={mockDrugState.pubchemCid} />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByRole('dialog', { name: /half-life — discussion/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('ignores a link to a parameter it does not know', () => {
+    setUser([]);
+    render(
+      <MemoryRouter initialEntries={['/wiki/x?param=notAParameter&view=history']}>
+        <DrugMonographSidebar drugCid={mockDrugState.pubchemCid} />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
   it('prefixes the favorite value with the parameter symbol', () => {
     setUser(['halfLife', 'bloodPlasmaRatio']);
     renderSidebar();

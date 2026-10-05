@@ -51,7 +51,7 @@ describe('disputeTargetUrl over real SQL', () => {
     ).toBe('/wiki/my%20topic/history');
   });
 
-  it('links a drug_parameter_revision dispute to the drug monograph', async () => {
+  it('links a drug_parameter_revision dispute to that revision in the parameter’s log', async () => {
     const drugId = await seedDrug(db);
     const [rev] = await db
       .insert(drugParameterRevisions)
@@ -62,10 +62,21 @@ describe('disputeTargetUrl over real SQL', () => {
         targetType: 'drug_parameter_revision',
         targetId: rev!.id,
       }),
-    ).toBe(`/wiki/drug/${drugId}`);
+    ).toBe(`/wiki/drug/${drugId}?param=halfLife&view=history&revision=${rev!.id}`);
   });
 
-  it('routes a drug-scoped discussion to the drug monograph', async () => {
+  it('links a parameter comment to that comment in the parameter’s discussion', async () => {
+    const drugId = await seedDrug(db);
+    const [row] = await db
+      .insert(drugParameterDiscussions)
+      .values({ drugId, parameter: 'halfLife', body: 'Source?', createdBy: authorId })
+      .returning({ id: drugParameterDiscussions.id });
+    expect(
+      await disputeTargetUrl({ targetType: 'drug_discussion', targetId: row!.id }),
+    ).toBe(`/wiki/drug/${drugId}?param=halfLife&view=discussion&comment=${row!.id}`);
+  });
+
+  it('routes a monograph-wide drug discussion to the drug monograph', async () => {
     const drugId = await seedDrug(db);
     const [row] = await db
       .insert(drugParameterDiscussions)

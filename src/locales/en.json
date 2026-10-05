@@ -47,6 +47,7 @@
       "editReturned": "Your edit was returned for changes",
       "commentReply": "New reply to your comment",
       "commentOnContribution": "New comment on your contribution",
+      "commentInThread": "New comment in a discussion you joined",
       "contributionEndorsed": "Your contribution received an approval stamp"
     }
   },

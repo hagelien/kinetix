@@ -85,6 +85,7 @@ const COPY = {
   nb: {
     titles: {
       dispute_opened: 'Innsigelse mot noe du kan vurdere eller har bidratt med',
+      dispute_opened_author: 'Noen har bestridt noe du har sendt inn',
       dispute_upheld: 'En innsigelse ble tatt til følge',
       dispute_rejected: 'En innsigelse ble avvist',
       dispute_withdrawn: 'En innsigelse ble trukket',
@@ -94,6 +95,7 @@ const COPY = {
       edit_returned: 'Endringen din ble sendt tilbake for endringer',
       comment_reply: 'Nytt svar på kommentaren din',
       comment_on_contribution: 'Ny kommentar på bidraget ditt',
+      comment_in_thread: 'Ny kommentar i en diskusjon du deltar i',
       contribution_endorsed: 'Bidraget ditt fikk et godkjenningsstempel',
     } as Record<string, string>,
     open: 'Åpne i Kinetix',
@@ -112,6 +114,7 @@ const COPY = {
   en: {
     titles: {
       dispute_opened: 'A dispute was raised on something you review or contributed',
+      dispute_opened_author: 'Someone disputed something you submitted',
       dispute_upheld: 'A dispute was upheld',
       dispute_rejected: 'A dispute was rejected',
       dispute_withdrawn: 'A dispute was withdrawn',
@@ -121,6 +124,7 @@ const COPY = {
       edit_returned: 'Your edit was returned for changes',
       comment_reply: 'New reply to your comment',
       comment_on_contribution: 'New comment on your contribution',
+      comment_in_thread: 'New comment in a discussion you joined',
       contribution_endorsed: 'Your contribution received an approval stamp',
     } as Record<string, string>,
     open: 'Open in Kinetix',
@@ -140,11 +144,15 @@ const COPY = {
 
 /** Localized title; the stored English title for any type not listed. */
 export function notificationTitle(
-  row: Pick<NotificationRowForEmail, 'type' | 'title'>,
+  row: Pick<NotificationRowForEmail, 'type' | 'title'> &
+    Partial<Pick<NotificationRowForEmail, 'audience'>>,
   locale: EmailLocale,
 ): string {
   let key = row.type;
-  if (row.type === 'dispute_resolved') {
+  if (row.type === 'dispute_opened' && row.audience === 'author') {
+    // Only the submitter gets an `author` copy, so say so plainly.
+    key = 'dispute_opened_author';
+  } else if (row.type === 'dispute_resolved') {
     // Stored as `Dispute ${resolution}`, the same token the bell reads.
     const outcome = row.title.trim().split(/\s+/).pop()?.toLowerCase();
     key = `dispute_${outcome}`;
