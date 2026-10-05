@@ -22,11 +22,18 @@
  * (`returnStandsUnrevised`).
  */
 
-import { and, eq, sql } from 'drizzle-orm';
-import { getDb } from './db.js';
+import { eq } from 'drizzle-orm';
+import { getDb, inTransaction } from './db.js';
 import { pendingEdits } from '../../db/schema.js';
 import { fireAgentHookForSubmitterAsync } from './agentHooks.js';
-import { isActiveAgentUser } from './agent-verifications.js';
+import { isActiveAgentUser, pendingEditSourceQuote } from './agent-verifications.js';
+import {
+  hasOpenDispute,
+  pendingEditUpheldRulingStands,
+  unresolvedDisputeVerdictCount,
+} from './disputes.js';
+import { returnStandsUnrevised } from './pending-edit-review-token.js';
+import { lockVerificationSourceRow } from './verification-targets.js';
 
 /** The note's fixed prefix, so the author and the queue can recognise it. */
 export const UNQUOTED_RETURN_PREFIX = '[source quote missing — returned automatically]';
@@ -44,78 +51,138 @@ export function composeUnquotedReturnNote(parameter: string | null): string {
 
 export type UnquotedReturnOutcome =
   | { returned: true }
-  | { returned: false; reason: 'not_found' | 'not_open' | 'human_submitted' | 'raced' };
+  | {
+      returned: false;
+      reason:
+        | 'not_found'
+        | 'not_open'
+        | 'human_submitted'
+        | 'revised_since'
+        | 'quote_stated'
+        | 'disputed'
+        | 'return_stands'
+        | 'upheld_ruling_stands';
+    };
 
 /**
- * Return the pending edit to its submitting agent for a missing source quote.
+ * Return the pending edit to its submitting agent for a missing source quote,
+ * when the missing quote is the only thing standing between it and
+ * publication.
  *
- * Only an active agent's proposal is returned: a human contributor's proposal
- * never publishes on agent consensus in the first place, and agents do not
- * moderate human work. `submittedAt` is the version the caller found unquoted;
- * the write matches it, so a proposal the author revised in the meantime (for
- * instance by adding the quote) is left alone.
+ * Every condition is decided inside one transaction, after taking the pending
+ * edit's row lock — the same source-row lock a verdict write
+ * (`recordVerification`) and a dispute (`upsertOpenDispute`) take first. So a
+ * dispute raised concurrently either commits before this check (and is seen)
+ * or waits until the return has committed; it can never land in between and
+ * be overwritten by a note that says only the quote is missing.
+ *
+ * Not returned, and left for the ordinary hold:
+ * - a human contributor's proposal: it never publishes on agent consensus,
+ *   and agents do not moderate human work;
+ * - a payload that states a quote: the write treats it as an echo of the
+ *   stored sentence, and re-sending it cannot clear that;
+ * - a proposal anyone disputes, by agent verdict or human dispute: the note
+ *   would misstate the objection, and the author's revision would clear the
+ *   dispute verdicts with the value unchanged;
+ * - a proposal a reviewer already returned, or an upheld ruling still binds,
+ *   that has not been revised since: replacing that return note with this one
+ *   would let the author clear it by adding only a quote.
+ *
+ * `submittedAt` is the version the caller found unquoted; a proposal revised
+ * since then is left alone.
  */
 export async function returnUnquotedAgentEdit(args: {
   pendingEditId: number;
   submittedAt: Date | null;
 }): Promise<UnquotedReturnOutcome> {
-  const db = getDb();
-  const [edit] = await db
-    .select({
-      id: pendingEdits.id,
-      status: pendingEdits.status,
-      editType: pendingEdits.editType,
-      targetId: pendingEdits.targetId,
-      submittedBy: pendingEdits.submittedBy,
-      parameter: pendingEdits.parameter,
-      proposedMeta: pendingEdits.proposedMeta,
-    })
-    .from(pendingEdits)
-    .where(eq(pendingEdits.id, args.pendingEditId))
-    .limit(1);
-  if (!edit) return { returned: false, reason: 'not_found' };
-  if (edit.status !== 'pending') return { returned: false, reason: 'not_open' };
-  if (edit.submittedBy == null || !(await isActiveAgentUser(edit.submittedBy))) {
-    return { returned: false, reason: 'human_submitted' };
-  }
+  const outcome = await inTransaction(async (): Promise<
+    UnquotedReturnOutcome & { edit?: { id: number; submittedBy: number; editType: string; targetId: number | null } }
+  > => {
+    const db = getDb();
+    await lockVerificationSourceRow(db, 'pending_edit', args.pendingEditId);
+    const [edit] = await db
+      .select({
+        id: pendingEdits.id,
+        status: pendingEdits.status,
+        editType: pendingEdits.editType,
+        targetId: pendingEdits.targetId,
+        submittedBy: pendingEdits.submittedBy,
+        submittedAt: pendingEdits.submittedAt,
+        parameter: pendingEdits.parameter,
+        proposedValue: pendingEdits.proposedValue,
+        proposedMeta: pendingEdits.proposedMeta,
+      })
+      .from(pendingEdits)
+      .where(eq(pendingEdits.id, args.pendingEditId))
+      .limit(1);
+    if (!edit) return { returned: false, reason: 'not_found' };
+    if (edit.status !== 'pending') return { returned: false, reason: 'not_open' };
+    if (
+      args.submittedAt &&
+      edit.submittedAt &&
+      edit.submittedAt.getTime() !== args.submittedAt.getTime()
+    ) {
+      return { returned: false, reason: 'revised_since' };
+    }
+    if (edit.submittedBy == null || !(await isActiveAgentUser(edit.submittedBy))) {
+      return { returned: false, reason: 'human_submitted' };
+    }
+    if (pendingEditSourceQuote(edit) !== null) {
+      return { returned: false, reason: 'quote_stated' };
+    }
+    if (
+      (await unresolvedDisputeVerdictCount({ targetType: 'pending_edit', targetId: edit.id })) > 0 ||
+      (await hasOpenDispute({ targetType: 'pending_edit', targetId: edit.id }))
+    ) {
+      return { returned: false, reason: 'disputed' };
+    }
+    if (returnStandsUnrevised(edit.proposedMeta)) {
+      return { returned: false, reason: 'return_stands' };
+    }
+    if (await pendingEditUpheldRulingStands(edit.id, edit.proposedMeta)) {
+      return { returned: false, reason: 'upheld_ruling_stands' };
+    }
 
-  const meta =
-    edit.proposedMeta && typeof edit.proposedMeta === 'object' && !Array.isArray(edit.proposedMeta)
-      ? (edit.proposedMeta as Record<string, unknown>)
-      : {};
-  const updated = await db
-    .update(pendingEdits)
-    .set({
-      status: 'returned',
-      // A return, not a rejection: no reason category, as on the manual path.
-      rejectionReason: null,
-      rejectionComment: composeUnquotedReturnNote(edit.parameter),
-      // No person decided this; the system applied a standing rule.
-      reviewedBy: null,
-      reviewedAt: new Date(),
-      proposedMeta: { ...meta, returnedAt: new Date().toISOString() } as never,
-    })
-    // The version the caller examined, compared truncated for the same reason
-    // as the reviewer lock (`pendingEditReviewerLock`): the column stores
-    // microseconds, drizzle reads milliseconds back.
-    .where(
-      and(
-        eq(pendingEdits.id, edit.id),
-        eq(pendingEdits.status, 'pending'),
-        ...(args.submittedAt
-          ? [sql`date_trunc('milliseconds', ${pendingEdits.submittedAt}) = ${args.submittedAt}`]
-          : []),
-      ),
-    )
-    .returning({ id: pendingEdits.id });
-  if (updated.length === 0) return { returned: false, reason: 'raced' };
+    const meta =
+      edit.proposedMeta && typeof edit.proposedMeta === 'object' && !Array.isArray(edit.proposedMeta)
+        ? (edit.proposedMeta as Record<string, unknown>)
+        : {};
+    const now = new Date();
+    await db
+      .update(pendingEdits)
+      .set({
+        status: 'returned',
+        // A return, not a rejection: no reason category, as on the manual path.
+        rejectionReason: null,
+        rejectionComment: composeUnquotedReturnNote(edit.parameter),
+        // No person decided this; the system applied a standing rule.
+        reviewedBy: null,
+        reviewedAt: now,
+        // Holds consensus until the author actually revises
+        // (`returnStandsUnrevised`), as a reviewer's note-only return does.
+        proposedMeta: { ...meta, returnedAt: now.toISOString() } as never,
+      })
+      .where(eq(pendingEdits.id, edit.id));
+    return {
+      returned: true,
+      edit: {
+        id: edit.id,
+        submittedBy: edit.submittedBy,
+        editType: edit.editType,
+        targetId: edit.targetId ?? null,
+      },
+    };
+  });
+  if (!outcome.returned) return outcome;
 
-  // The same wake-up a manual return fires, so the author revises this cycle.
+  // After the commit, as on the manual path: the same wake-up a manual return
+  // fires, so the author revises this cycle.
+  const edit = outcome.edit!;
   fireAgentHookForSubmitterAsync(edit.submittedBy, {
     kind: 'edit_returned',
     pendingEditId: edit.id,
     editType: edit.editType,
-    targetId: edit.targetId ?? null,
+    targetId: edit.targetId,
   });
   return { returned: true };
 }
