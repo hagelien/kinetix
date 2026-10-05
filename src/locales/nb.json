@@ -2428,7 +2428,7 @@
     "flagSubmit": "Flagg",
     "flagUpdateFailed": "Kunne ikke oppdatere agentflagget.",
     "flagsTitle": "Agentens prioriteringskø",
-    "flagsDescription": "Legemidler og parametere som er flagget her behandles av kinetix-agent før den vanlige popularitetsbaserte køen. Et flagg er en «grav dypt»-instruksjon: agenten fortsetter å jobbe med parameteren over flere sykluser, og flagget forblir aktivt til du markerer det som fullført her.",
+    "flagsDescription": "Legemidler og parametere som er flagget her behandles av kinetix-agent før den vanlige popularitetsbaserte køen. Et flagg er en «grav dypt»-instruksjon: agenten fortsetter å jobbe med parameteren over flere sykluser, og flagget forblir aktivt til du fjerner det her.",
     "flagsEmpty": "Ingen aktive flagg.",
     "flagsLoading": "Laster flagg…",
     "flagDrug": "Legemiddel",
@@ -2437,7 +2437,6 @@
     "flagNote": "Notat",
     "flagFlaggedBy": "Flagget av",
     "flagCreatedAt": "Flagget",
-    "flagResolve": "Marker fullført",
     "flagCancel": "Fjern",
     "wikiDiff": {
       "greenAdded": "Grønt = lagt til",
