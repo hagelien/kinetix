@@ -402,8 +402,11 @@ export async function computeParameterSummary(
  * Norwegian reviewer doesn't see hardcoded English. Kept stable; the recompute
  * count is appended after the colon.
  */
-export const CACHE_REVISION_CLEARED_CODE = 'auto:param_entries_cleared';
-export const CACHE_REVISION_RECOMPUTED_CODE = 'auto:param_entries_recomputed';
+import {
+  CACHE_REVISION_CLEARED_CODE,
+  CACHE_REVISION_RECOMPUTED_CODE,
+} from './cache-revision-codes.js';
+export { CACHE_REVISION_CLEARED_CODE, CACHE_REVISION_RECOMPUTED_CODE };
 
 /**
  * Recognized `reason` codes a caller can attach to a recompute, appended
