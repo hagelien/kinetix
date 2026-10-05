@@ -5,7 +5,7 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { agentVerifications, agents, pendingEdits } from '../../db/schema.js';
+import { agentVerifications, agents, disputes, parameterEntries, pendingEdits } from '../../db/schema.js';
 import { runAgentConsensus } from '../../api/agent-verifications.js';
 import { returnStandsUnrevised } from '../../api/_lib/pending-edit-review-token.js';
 import { UNQUOTED_RETURN_PREFIX } from '../../api/_lib/unquoted-edit-return.js';
@@ -38,7 +38,13 @@ async function seedAgent(name: string, tier: string | null): Promise<{ userId: n
   return { userId, agentId: agent!.id };
 }
 
-async function scenario(opts: { authorIsAgent: boolean; quote: string | null; approvals: number }) {
+async function scenario(opts: {
+  authorIsAgent: boolean;
+  quote: string | null;
+  approvals: number;
+  agentDispute?: boolean;
+  humanDispute?: boolean;
+}) {
   const author = opts.authorIsAgent
     ? (await seedAgent('author-agent', 'mid')).userId
     : await seedUser(db, { email: 'human@example.com', username: 'human', role: 'contributor' });
@@ -71,6 +77,28 @@ async function scenario(opts: { authorIsAgent: boolean; quote: string | null; ap
       rationaleMd: '',
     });
   }
+  if (opts.agentDispute) {
+    const disputer = await seedAgent('verifier-disputer', 'mid');
+    await db.insert(agentVerifications).values({
+      agentId: disputer.agentId,
+      targetType: 'pending_edit',
+      targetId: edit!.id,
+      verdict: 'dispute',
+      verifierTier: 'mid',
+      rationaleMd: 'Tabell 2 oppgir en annen verdi enn forslaget.',
+    });
+  }
+  if (opts.humanDispute) {
+    const human = await seedUser(db, { email: 'mod@example.com', username: 'mod', role: 'editor' });
+    await db.insert(disputes).values({
+      targetType: 'pending_edit',
+      targetId: edit!.id,
+      status: 'open',
+      source: 'human',
+      reasonMd: 'Verdien stemmer ikke med referansen som er oppgitt.',
+      createdBy: human,
+    });
+  }
   const outcome = await runAgentConsensus({ pendingEditId: edit!.id, approverUserId: flagship.userId });
   const [row] = await db.select().from(pendingEdits).where(eq(pendingEdits.id, edit!.id));
   return { outcome, row: row! };
@@ -86,6 +114,17 @@ describe('an unquoted calculation-driving proposal', () => {
     expect(row.reviewedBy).toBeNull();
     // Consensus stays held until the author actually revises it.
     expect(returnStandsUnrevised(row.proposedMeta)).toBe(true);
+  });
+
+  it('is not returned while a peer disputes it', async () => {
+    const { outcome, row } = await scenario({ authorIsAgent: true, quote: null, approvals: 2, agentDispute: true });
+    expect(outcome).toMatchObject({ outcome: 'held', reason: 'source_quote_missing' });
+    expect(row.status).toBe('pending');
+  });
+
+  it('is not returned while a person disputes it', async () => {
+    const { row } = await scenario({ authorIsAgent: true, quote: null, approvals: 2, humanDispute: true });
+    expect(row.status).toBe('pending');
   });
 
   it('stays in the human queue when a person submitted it', async () => {
@@ -104,5 +143,47 @@ describe('a quoted proposal', () => {
     });
     expect(outcome).toMatchObject({ outcome: 'held', reason: 'quorum_unmet' });
     expect(row.status).toBe('pending');
+  });
+});
+
+describe('a source-value update that only echoes the stored quote', () => {
+  it('stays held rather than bouncing back to an author who cannot fix it', async () => {
+    const author = (await seedAgent('author-agent', 'mid')).userId;
+    const flagship = await seedAgent('verifier-flagship', 'flagship');
+    const mid = await seedAgent('verifier-mid', 'mid');
+    const drugId = await seedDrug(db, { slug: 'ghb' });
+    const sentence = 'Terminal half-life ranged from 2 to 4 h.';
+    const [entry] = await db
+      .insert(parameterEntries)
+      .values({ drugId, parameter: 'halfLife', low: '2', high: '4', unit: 'h', sourceQuote: sentence, createdBy: author } as never)
+      .returning({ id: parameterEntries.id });
+    // The reading moves but the sentence is the stored one: the write treats it
+    // as an echo and the value would publish unquoted.
+    const [edit] = await db
+      .insert(pendingEdits)
+      .values({
+        editType: 'param_entry',
+        targetId: entry!.id,
+        parameter: 'halfLife',
+        proposedValue: { op: 'update', patch: { low: 3, high: 5, quote: sentence } },
+        submittedBy: author,
+        status: 'pending',
+      })
+      .returning({ id: pendingEdits.id });
+    for (const [agentId, tier] of [[flagship.agentId, 'flagship'], [mid.agentId, 'mid']] as const) {
+      await db.insert(agentVerifications).values({
+        agentId,
+        targetType: 'pending_edit',
+        targetId: edit!.id,
+        verdict: 'approve',
+        verifierTier: tier,
+        rationaleMd: '',
+      });
+    }
+
+    const outcome = await runAgentConsensus({ pendingEditId: edit!.id, approverUserId: flagship.userId });
+    expect(outcome).toMatchObject({ outcome: 'held', reason: 'source_quote_missing' });
+    const [row] = await db.select().from(pendingEdits).where(eq(pendingEdits.id, edit!.id));
+    expect(row!.status).toBe('pending');
   });
 });

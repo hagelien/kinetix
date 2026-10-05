@@ -46,6 +46,7 @@ import {
   resolveActiveAgent,
   summariseVerificationsForTargets,
   mirrorAgentDisputeVerdict,
+  pendingEditSourceQuote,
   targetAuthorUserId,
   verificationTargetVersion,
   visibleVerificationTargetIds,
@@ -66,6 +67,7 @@ import { ParameterApplyError } from './_lib/drugs-helpers.js';
 import {
   hasOpenDispute,
   pendingEditUpheldRulingStands,
+  unresolvedDisputeVerdictCount,
   withdrawOpenDispute,
 } from './_lib/disputes.js';
 import {
@@ -1142,10 +1144,26 @@ export async function runAgentConsensus(args: {
     }))
   ) {
     // The quote is something the submitting agent can supply, so an agent's
-    // proposal goes back to it rather than waiting for a person. Not when the
-    // gate could not tell (it fails closed on a fault): an author cannot fix
-    // a quote that may well be there.
-    if (!quoteUnresolved) {
+    // proposal goes back to it rather than waiting for a person — but only
+    // when the quote is the one thing wrong with it:
+    //  - not when the gate could not tell (it fails closed on a fault): an
+    //    author cannot fix a quote that may well be there;
+    //  - not when the payload carries a quote the write treats as an echo of
+    //    the stored one (a `param_entry` update moving the reading under the
+    //    old sentence): re-sending the same sentence cannot clear that, so a
+    //    return would only bounce;
+    //  - not when anyone disputes the proposal: a note saying only the quote
+    //    is missing would misstate the objection, and the author's revision
+    //    would clear the dispute verdicts with the value unchanged.
+    if (
+      !quoteUnresolved &&
+      pendingEditSourceQuote(pending) === null &&
+      (await unresolvedDisputeVerdictCount({
+        targetType: 'pending_edit',
+        targetId: args.pendingEditId,
+      })) === 0 &&
+      !(await hasOpenDispute({ targetType: 'pending_edit', targetId: args.pendingEditId }))
+    ) {
       try {
         const sent = await returnUnquotedAgentEdit({
           pendingEditId: args.pendingEditId,
