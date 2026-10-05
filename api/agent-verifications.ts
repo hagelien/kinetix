@@ -1430,7 +1430,7 @@ export async function sweepAgentConsensus(
       sql`count(*) >= case when ${pendingEdits.editType} in ('parameter', 'param_entry') and ${pendingEdits.parameter} in (${sql.join(
         highRiskParameterIds.map((id) => sql`${id}`),
         sql`, `,
-      )}) then ${highRiskQuorumFloor} else ${quorumFloor} end`,
+      )}) then ${highRiskQuorumFloor}::int else ${quorumFloor}::int end`,
     );
   const authorIsActiveAgent = db
     .select({ one: sql`1` })
