@@ -16,6 +16,7 @@ const {
   isActiveAgentUserMock,
   isSelfReviewAgentUserMock,
   quoteAfterUpdateMock,
+  returnUnquotedAgentEditMock,
 } = vi.hoisted(() => ({
   getDbMock: vi.fn(),
   applyApprovedEditMock: vi.fn().mockResolvedValue(undefined),
@@ -25,6 +26,7 @@ const {
   isActiveAgentUserMock: vi.fn(),
   isSelfReviewAgentUserMock: vi.fn(),
   quoteAfterUpdateMock: vi.fn().mockResolvedValue(null),
+  returnUnquotedAgentEditMock: vi.fn().mockResolvedValue({ returned: true }),
 }));
 
 vi.mock('../../api/_lib/db.js', () => ({ getDb: getDbMock }));
@@ -32,8 +34,12 @@ vi.mock('../../api/_lib/auth.js', () => ({ getUserFromRequest: vi.fn() }));
 vi.mock('../../api/_lib/notifications.js', () => ({
   fanOutDisputeNotification: vi.fn(),
 }));
+vi.mock('../../api/_lib/unquoted-edit-return.js', () => ({
+  returnUnquotedAgentEdit: returnUnquotedAgentEditMock,
+}));
 vi.mock('../../api/_lib/disputes.js', () => ({
   hasOpenDispute: hasOpenDisputeMock,
+  unresolvedDisputeVerdictCount: vi.fn(async () => 0),
   pendingEditUpheldRulingStands: vi.fn(async () => false),
   upsertOpenDispute: vi.fn(),
   withdrawOpenDispute: vi.fn(),
@@ -463,6 +469,10 @@ describe('applyOnAgentConsensus — source-quote gate', () => {
     });
     expect(applied).toBe(false);
     expect(applyApprovedEditMock).not.toHaveBeenCalled();
+    // Back to the agent that wrote it, to add the quote.
+    expect(returnUnquotedAgentEditMock).toHaveBeenCalledWith(
+      expect.objectContaining({ pendingEditId: 1 }),
+    );
   });
 
   it('APPLIES the same edit once the quote is present', async () => {
