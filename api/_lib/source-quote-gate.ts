@@ -99,11 +99,13 @@ export const SOURCE_QUOTE_REQUIRED_MESSAGE =
   'verbatim sentence (or table row) from the primary source that states this ' +
   'value: `input.quote` for a new source value, `quote` in an update, ' +
   '`sourceQuote` for an authored parameter. Without it the value can never ' +
-  'publish on peer consensus, so it is refused here rather than queued.';
+  'publish on peer consensus, so it is refused here rather than queued or written.';
 
 /**
  * True when an active agent is about to queue a calculation-driving proposal
- * that consensus could never publish for want of a quote.
+ * that consensus could never publish for want of a quote — or, holding direct
+ * writes, to publish one with no quote at all. The routes ask before choosing
+ * queued versus direct, so neither path takes it.
  *
  * Refusing at submission lets the agent add the sentence in the same cycle,
  * before any peer spends a verification on it; queued, it would only come

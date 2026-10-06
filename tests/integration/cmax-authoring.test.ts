@@ -23,7 +23,7 @@ import parameterEntriesHandler from '../../api/parameter-entries.js';
 import pendingEditsHandler from '../../api/pending-edits.js';
 import { applyApprovedEdit } from '../../api/_lib/pending-edits-helpers.js';
 import { listEntriesForDrug } from '../../api/_lib/parameter-entries-store.js';
-import { parameterEntries, pendingEdits } from '../../db/schema.js';
+import { agents, parameterEntries, pendingEdits } from '../../db/schema.js';
 import {
   resetIntegrationDb,
   setupIntegrationDb,
@@ -128,6 +128,22 @@ async function queueCreate(input: Record<string, unknown>, submittedBy: number) 
 // Release C (#1341): Cmax is authorable through the generic entry API, on
 // both its branches, with the self-administered default.
 describe('authoring Cmax through POST /api/parameter-entries', () => {
+  it('refuses an agent holding direct writes that sends no quote, before writing anything', async () => {
+    // The direct-write branch would otherwise publish the unquoted value at
+    // once: no consensus gate stands behind it.
+    const drugId = await seedDrug(db, { slug: 'kokain' });
+    const citationId = await seedAdmissibleCitation(db);
+    const userId = await seedUser(db, { role: 'admin', email: 'agent@example.com', username: 'agent' });
+    await db.insert(agents).values({ userId, name: 'agent', slug: 'agent', status: 'active', modelTier: 'flagship' });
+
+    const state = await post(cmaxInput(drugId, citationId), userId, 'admin');
+
+    expect(state.statusCode).toBe(400);
+    expect(JSON.parse(state.body)).toMatchObject({ code: 'source_quote_required' });
+    expect(await db.select().from(parameterEntries)).toHaveLength(0);
+    expect(await db.select().from(pendingEdits)).toHaveLength(0);
+  });
+
   it('writes directly for an admin, defaulting the administered drug to the analyte', async () => {
     const drugId = await seedDrug(db, { slug: 'kokain' });
     const citationId = await seedAdmissibleCitation(db);
