@@ -1452,6 +1452,91 @@ describe('agent consensus hold, re-stamp and retry', () => {
     expect(published!.status).toBe('approved');
   });
 
+  it('stops holding an ingested fact on an unread paper a revision dropped', async () => {
+    // The check covers what the fact cites now: a marked paper the author has
+    // since removed no longer backs the claim, so it must not hold it.
+    const admin = await seedUser(db, {
+      email: 'admin@example.com',
+      username: 'admin',
+      role: 'admin',
+    });
+    const peerA = await seedAgent('peer-a');
+    const peerB = await seedAgent('peer-b');
+    const [page] = await db
+      .insert(wikiPages)
+      .values({
+        slug: 'diazepam',
+        title: 'Diazepam',
+        pageType: 'drug_monograph',
+        content: {
+          version: 2,
+          sections: { pk: { body: { type: 'doc', content: [] } } },
+        },
+        status: 'published',
+        createdBy: admin,
+        updatedBy: admin,
+      })
+      .returning({ id: wikiPages.id });
+    const [unread] = await db
+      .insert(citations)
+      .values({ type: 'pmid', identifier: '12345678' })
+      .returning({ id: citations.id });
+    const [read] = await db
+      .insert(citations)
+      .values({ type: 'pmid', identifier: '87654321' })
+      .returning({ id: citations.id });
+    await db.insert(paperReviews).values({
+      citationId: read!.id,
+      reviewMarkdown: 'Read in full.',
+      readInFull: true,
+      createdBy: admin,
+    });
+    const fact = (referenceIds: number[]) => ({
+      type: 'fact',
+      attrs: { factId: 'f-1', referenceIds },
+      content: [{ type: 'text', text: 'Halveringstiden er 20–100 timer.' }],
+    });
+    const [edit] = await db
+      .insert(pendingEdits)
+      .values({
+        editType: 'wiki_fact',
+        targetId: page!.id,
+        sectionId: 'pk',
+        factOperation: 'add',
+        factStatement: 'Halveringstiden er 20–100 timer.',
+        proposedValue: fact([unread!.id, read!.id]),
+        proposedMeta: {
+          source: 'conversation_ingestion',
+          unverifiedReferenceIds: [unread!.id],
+        },
+        referenceIds: [unread!.id, read!.id],
+        referenceId: unread!.id,
+        submittedBy: admin,
+        status: 'pending',
+      })
+      .returning({ id: pendingEdits.id });
+    await approve(peerA.agentId, edit!.id);
+    await approve(peerB.agentId, edit!.id);
+    expect(await agentConsensusStatus(edit!.id)).toMatchObject({
+      ready: false,
+      reason: 'unverified_sources',
+    });
+
+    // The author drops the unread paper; the marker stays, server-owned.
+    await db
+      .update(pendingEdits)
+      .set({
+        proposedValue: fact([read!.id]),
+        referenceIds: [read!.id],
+        referenceId: read!.id,
+      })
+      .where(eq(pendingEdits.id, edit!.id));
+    expect((await collectConsensusFacts(edit!.id))?.disputeHoldCause).toBeNull();
+    expect(await sweepAgentConsensus()).toEqual([
+      { pendingEditId: edit!.id, outcome: 'applied' },
+    ]);
+  });
+
   it('never attributes a publication to an implicit approval', async () => {
     const author = await seedAgent('author');
     const peerA = await seedAgent('peer-a');

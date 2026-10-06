@@ -121,6 +121,13 @@ function stripServerManagedMeta(meta: unknown): unknown {
   delete rest.revisedAt;
   delete rest.returnedAt;
   delete rest.conflict;
+  // The conversation-ingestion marker is the server's too, and a client
+  // cannot write it (`SERVER_OWNED_META_KEYS` in api/pending-edits.ts). A
+  // request that only forges or omits it must not read as a revision, which
+  // would stamp a fresh `revisedAt` and clear a ruling or return against
+  // unchanged content.
+  delete rest.unverifiedReferenceIds;
+  delete rest.unverifiedSourceKeys;
   return rest;
 }
 

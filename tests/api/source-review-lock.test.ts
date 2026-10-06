@@ -73,3 +73,33 @@ describe('lockPendingEditSourceReviews', () => {
     expect(getDbMock).not.toHaveBeenCalled();
   });
 });
+
+describe('the ingestion marker and the payload fingerprint', () => {
+  // The marker is server-owned: a client cannot write it, so a request that
+  // only forges or omits it must not read as a revision — that would stamp a
+  // fresh `revisedAt` and clear a ruling or return against unchanged content.
+  it('ignores the marker keys when fingerprinting a payload', async () => {
+    const { pendingEditPayloadFingerprint } = await import(
+      '../../api/_lib/pending-edit-review-token.ts'
+    );
+    const base = {
+      proposedValue: { type: 'fact', attrs: { factId: 'f-1', referenceIds: [3] } },
+      referenceIds: [3],
+      referenceId: 3,
+    };
+    const stored = pendingEditPayloadFingerprint({
+      ...base,
+      proposedMeta: {
+        editSummary: 'x',
+        unverifiedReferenceIds: [3],
+        unverifiedSourceKeys: ['S1'],
+      },
+    });
+    for (const proposedMeta of [
+      { editSummary: 'x' },
+      { editSummary: 'x', unverifiedReferenceIds: [], unverifiedSourceKeys: [] },
+    ]) {
+      expect(pendingEditPayloadFingerprint({ ...base, proposedMeta })).toBe(stored);
+    }
+  });
+});

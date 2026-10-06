@@ -1752,11 +1752,13 @@ export interface SourceCheckedPendingEdit {
  * What an ingested fact's unread-sources hold has to examine. Null for any
  * edit conversation ingestion did not stage for a full-text check — the
  * `proposedMeta.unverifiedReferenceIds` marker is what says it did. For one
- * that carries it, EVERY reference the edit cites now (its reference columns
- * and the fact node's own `referenceIds`), plus the marked ones: a source
- * reviewed at ingestion can lose its read-in-full attestation since, and a
- * revision can add one nobody has read, so the frozen marker alone is not the
- * set to check.
+ * that carries it, every reference the edit cites NOW: its reference columns
+ * and the fact node's own `referenceIds`. Not the frozen marker alone — a
+ * source reviewed at ingestion can lose its read-in-full attestation since,
+ * and a revision can add one nobody has read — and not a marked paper a
+ * revision has since dropped, which no longer backs the claim (the review
+ * card names the same set: `WikiFactDiff` intersects the marker with the
+ * references still on the proposal).
  */
 function sourceCheckSetOf(pending: SourceCheckedPendingEdit): number[] | null {
   const listed = (pending.proposedMeta as { unverifiedReferenceIds?: unknown } | null)
@@ -1765,7 +1767,6 @@ function sourceCheckSetOf(pending: SourceCheckedPendingEdit): number[] | null {
   const nodeIds = (pending.proposedValue as { attrs?: { referenceIds?: unknown } } | null)
     ?.attrs?.referenceIds;
   const candidates: unknown[] = [
-    ...listed,
     ...(pending.referenceIds ?? []),
     pending.referenceId,
     ...(Array.isArray(nodeIds) ? nodeIds : []),
@@ -1825,7 +1826,7 @@ export async function lockPendingEditSourceReviews(
  * `proposedMeta.unverifiedReferenceIds`. Agent verifiers judge the claim, not
  * whether the paper was read, so their approvals alone must not publish it.
  * The hold lifts once every paper the edit cites now (see
- * {@link sourceCheckSetOf}) carries a read-in-full review — a live one, or a
+ * `sourceCheckSetOf`) carries a read-in-full review — a live one, or a
  * pending submission that attests it, the same evidence the agent reference
  * gate accepts — or when a moderator approves the edit. A reference that
  * cannot be reviewed at all (a missing or `freetext` citation) keeps the

@@ -1474,8 +1474,8 @@ export async function sweepAgentConsensus(
   )`;
   // An ingested fact (one carrying `unverifiedReferenceIds`) citing a paper
   // with no read-in-full review, live or pending — the same set
-  // `pendingEditCitesUnreadSources` checks: the marked ids plus every
-  // reference the edit cites now. It holds as `unverified_sources` on every
+  // `pendingEditCitesUnreadSources` checks: every reference the edit cites
+  // now. It holds as `unverified_sources` on every
   // retry, so it stays out of the window until the review lands — the sweep
   // is what publishes it then, since no new verdict on the fact need arrive.
   const jsonbArray = (expr: ReturnType<typeof sql>) =>
@@ -1492,8 +1492,7 @@ export async function sweepAgentConsensus(
           then (e.v #>> '{}')::bigint
         end as id
         from jsonb_array_elements(
-          ${jsonbArray(sql`${pendingEdits.proposedMeta}->'unverifiedReferenceIds'`)}
-          || ${jsonbArray(sql`${pendingEdits.proposedValue}->'attrs'->'referenceIds'`)}
+          ${jsonbArray(sql`${pendingEdits.proposedValue}->'attrs'->'referenceIds'`)}
           || coalesce(to_jsonb(${pendingEdits.referenceIds}), '[]'::jsonb)
           || coalesce(jsonb_build_array(${pendingEdits.referenceId}), '[]'::jsonb)
         ) as e(v)
