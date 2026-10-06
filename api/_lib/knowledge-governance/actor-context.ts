@@ -75,15 +75,18 @@ export function userIdFromActorRef(actorRef: string | null | undefined): number 
  *
  * The one test that decides `authorKind`, and it has to be this test rather
  * than "is there an author reference at all". Every `pending_edits` row has a
- * `submitted_by`, so presence proves only that somebody submitted it — deriving
- * `agent` from that labels a person's proposal as an agent's, and the policy's
- * `human-authored` rule (`when: { authorKind: 'human' } → humanApproval()`)
- * then never fires. Agent consensus would stand in for the moderator on a
- * human's work, which §1.7 forbids in that direction specifically.
+ * `submitted_by`, so presence proves only that somebody submitted it.
  *
- * An agent whose status was revoked is `human` for the same reason the legacy
- * gate treats it that way: the exemption belongs to an active agent, not to
- * whoever once was one. The backing user's role is the second half of that
+ * Since `kinetix-consensus@v2` a person's proposal publishes on agent
+ * consensus under the same bar as an agent's, so `agent` versus `human` no
+ * longer decides *whether* consensus may publish. It still decides the pool
+ * arithmetic (a person holds no seat in the agent pool, so every active agent
+ * is an eligible verifier) and what the decision record says about who wrote
+ * the proposal, and the two engines must agree on it.
+ *
+ * An agent whose status was revoked is `human`, as the legacy gate treats it:
+ * the author's seat in the pool belongs to an active agent, not to whoever
+ * once was one. The backing user's role is the second half of that
  * test, not decoration: the kill switch demotes the user below contributor and
  * leaves `agents.status` alone, so a status-only predicate would answer `agent`
  * for an agent legacy has already stopped — the same disagreement in the same

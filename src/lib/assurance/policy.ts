@@ -14,10 +14,11 @@
  * is pinned exhaustively by
  * `tests/governance/policy/kinetix-consensus-parity.test.ts`.
  *
- * The `human-authored` and `clinical-case` rules are *declarations* of
- * invariants Kinetix enforces elsewhere in the request path — a human's
- * proposal never publishes on agent consensus, a clinical case needs a human
- * with clinical standing. Nothing routes through this policy for them yet;
+ * The `unattributed` and `clinical-case` rules are *declarations* of
+ * invariants Kinetix enforces elsewhere in the request path — a proposal with
+ * no recorded author never publishes on agent consensus, a clinical case needs
+ * a human with clinical standing. (A person's proposal does publish on agent
+ * consensus since v2; `human-authored`, which forbade it, is retired.) Nothing routes through this policy for them yet;
  * they are here so the generic layer models the whole gate rather than the
  * convenient third of it, and so later phases have something to cut over to
  * rather than something to invent.
