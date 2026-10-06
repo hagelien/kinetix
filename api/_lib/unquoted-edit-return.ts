@@ -38,14 +38,30 @@ import { lockVerificationSourceRow } from './verification-targets.js';
 /** The note's fixed prefix, so the author and the queue can recognise it. */
 export const UNQUOTED_RETURN_PREFIX = '[source quote missing — returned automatically]';
 
-export function composeUnquotedReturnNote(parameter: string | null): string {
-  return (
+/**
+ * The note on an automatic return. A proposal already marked stale
+ * (`proposed_meta.conflict`) has a second blocker the quote does not clear —
+ * the approval refuses it until the author rebases — so the note says so;
+ * naming only the quote would send the author back with an edit that still
+ * cannot apply.
+ */
+export function composeUnquotedReturnNote(
+  parameter: string | null,
+  opts: { conflicted?: boolean } = {},
+): string {
+  const note =
     `${UNQUOTED_RETURN_PREFIX} ${parameter ?? 'This parameter'} drives ` +
     `calculations, so it publishes on peer consensus only with the verbatim ` +
     `sentence (or table row) from the primary source that states this value. ` +
     `Re-read the source, add that sentence as the quote, and resubmit. If no ` +
     `sentence in the source states this value for the condition you claim, ` +
-    `narrow the claim to what the source does state, or withdraw the proposal.`
+    `narrow the claim to what the source does state, or withdraw the proposal.`;
+  if (!opts.conflicted) return note;
+  return (
+    `${note} The value this proposal changes has also been changed since you ` +
+    `proposed it, so the proposal is stale: re-read its current state and ` +
+    `revise the proposal against it as well, or withdraw it if the change ` +
+    `already covers yours.`
   );
 }
 
@@ -154,7 +170,9 @@ export async function returnUnquotedAgentEdit(args: {
         status: 'returned',
         // A return, not a rejection: no reason category, as on the manual path.
         rejectionReason: null,
-        rejectionComment: composeUnquotedReturnNote(edit.parameter),
+        rejectionComment: composeUnquotedReturnNote(edit.parameter, {
+          conflicted: Boolean(meta.conflict),
+        }),
         // No person decided this; the system applied a standing rule.
         reviewedBy: null,
         reviewedAt: now,

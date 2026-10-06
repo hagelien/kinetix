@@ -2371,6 +2371,7 @@
       "selfDecisionDisputed": "Det står en åpen innsigelse mot dette forslaget. Avgjør innsigelsen først — du kan ikke rydde den bort ved å godkjenne ditt eget forslag.",
       "selfDecisionNotAllowed": "Du kan ikke avgjøre ditt eget forslag. Du kan fortsatt trekke det tilbake.",
       "decideAfterRevising": "Endre innholdet og avgjør forslaget i hver sin operasjon: lagre endringen først, og godkjenn eller returner deretter det oppdaterte forslaget.",
+      "sourceQuoteRequired": "Denne verdien brukes i beregninger, så en agent må legge inn den ordrette setningen (eller tabellraden) fra kilden som oppgir den før forslaget kan sendes til vurdering igjen.",
       "parameterNotApplicable": "Denne parameteren er ikke en definert størrelse for stoffet — en merking eller stoffklassen utelukker den. Løs det før du godkjenner en verdi.",
       "parameterEntryBacked": "Verdien til denne parameteren kommer fra kildeverdiene sine, så en verdi som er skrevet inn direkte, kan ikke godkjennes. Avvis denne endringen og legg inn avlesningen som en kildeverdi i stedet."
     },
@@ -3843,6 +3844,7 @@
       "contextHint": "Denne parameteren har verken matriks eller scenario — skriv studiekonteksten (populasjon, administrasjonsvei, metode) som forklarer verdien under Observasjonskontekst.",
       "error_param_entry_invalid_for_parameter": "Verdien er ikke gyldig for denne parameteren — kontroller enhet og tillatt område.",
       "error_parameter_not_applicable": "Denne parameteren er ikke en definert størrelse for dette stoffet, og kan derfor ikke ha kildeoppføringer. Fjern «ikke aktuelt»-merkingen, eller korriger stoffklassen, først.",
+      "error_source_quote_required": "Denne verdien brukes i beregninger, så en agent må legge inn den ordrette setningen (eller tabellraden) fra kilden som oppgir den, i sitatfeltet.",
       "modelStructureValue": "Modellstruktur",
       "modelStructureHint": "En modellstruktur-angivelse er et kildebelagt valg, ikke en målt verdi — velg formen denne kilden støtter.",
       "errorModelStructureRequired": "Velg en modellstruktur-verdi.",

@@ -127,6 +127,10 @@ import {
   wikiTargetFocusRefusal,
 } from './agent-focus.js';
 import { consensusStatusForTargets } from './agent-verifications.js';
+import {
+  agentProposalLacksSourceQuote,
+  SOURCE_QUOTE_REQUIRED_MESSAGE,
+} from './_lib/source-quote-gate.js';
 import { notifyEditDecisionAfterCommit } from './_lib/editDecisionNotifications.js';
 
 type PendingEditRecord = typeof pendingEdits.$inferSelect;
@@ -3333,6 +3337,24 @@ async function handlePatch(
         : requestedStatus === 'draft'
           ? 'draft'
           : edit.status;
+    // An agent putting a calculation-driving proposal back in the queue with
+    // no quote is refused here, as the entry routes refuse it at submission:
+    // consensus could never publish it, so it would only come straight back.
+    // Asked of what the row will hold after this PATCH, so a bare resubmit
+    // of a returned proposal and a revision that drops the quote both count.
+    if (
+      nextStatus === 'pending' &&
+      (await agentProposalLacksSourceQuote(auth.userId, {
+        editType: edit.editType,
+        parameter: edit.parameter,
+        targetId: edit.targetId,
+        proposedValue: nextProposedValue,
+        proposedMeta: nextMeta,
+      }))
+    ) {
+      error(res, 400, SOURCE_QUOTE_REQUIRED_MESSAGE, 'source_quote_required');
+      return;
+    }
     const shouldClearReviewFields =
       nextStatus === 'draft' || requestedStatus === 'pending';
 
