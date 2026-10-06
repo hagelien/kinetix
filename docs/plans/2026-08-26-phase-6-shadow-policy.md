@@ -51,14 +51,13 @@ this publish?"*, and adds the one requirement the tally has no way to express:
 
 ### 2.2 Two legacy special cases become policy facts
 
-**Human author.** Legacy returns early when the submitter is not an active
-agent. Here `authorKind` is `agent` only under exactly that test, and the
-`human-authored` rule then requires a human approval the agent tally cannot
-supply. "Consensus never stands in for a moderator on a person's work" stops
-being an early return and becomes a stated reason. *(Superseded: `v3` of this
-policy retires `human-authored`; a person's proposal publishes on agent
-consensus like an agent's, and only an unattributed one needs a human
-approval, under the `unattributed` rule.)*
+**Human author.** *(Superseded by `kinetix-consensus-apply@v3`, which retires
+this rule: a person's proposal now publishes on agent consensus like an
+agent's, and only an unattributed one needs a human approval.)* As first
+built (v1/v2), legacy returned early when the submitter was not an active
+agent; here `authorKind` was `agent` only under exactly that test, and the
+retired `human-authored` rule demanded a human approval the agent tally could
+not supply, turning that early return into a stated reason.
 
 **Clinical case.** Legacy refuses it in its first three lines. Here the risk
 profile carries a `clinical_case` tag, the rule matches on it, and the
