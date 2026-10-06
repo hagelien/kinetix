@@ -336,6 +336,40 @@ async function rewriteJsonDocuments(
 }
 
 /**
+ * Lock the pending proposals that cite `citationId` (other than queued paper
+ * reviews), in id order, before the merge touches any review row.
+ *
+ * Agent consensus publishing an ingested fact holds the fact's row and then
+ * takes its cited papers' review rows FOR SHARE (`lockPendingEditSourceReviews`):
+ * proposal first, review evidence second. Inside a transaction (the
+ * `resolveCitation` fold), the merge would otherwise update the loser's
+ * `paper_reviews` row first and only then reach the proposals citing it — the
+ * reverse order, which PostgreSQL resolves by aborting one of the two as a
+ * deadlock. Taking the proposals up front gives both paths one order. Without
+ * a transaction (the CLI over http) each statement commits on its own and this
+ * is a no-op. Returns the locked ids.
+ */
+export async function lockPendingEditsCitingCitation(
+  db: Db,
+  citationId: number,
+): Promise<number[]> {
+  const result = await db.execute<{ id: number }>(sql`
+    SELECT id FROM pending_edits
+    WHERE status = 'pending'
+      AND edit_type <> 'paper_review'
+      AND (
+        reference_id = ${citationId}
+        OR ${citationId} = ANY(reference_ids)
+        OR proposed_value -> 'attrs' -> 'referenceIds' @> ${JSON.stringify([citationId])}::jsonb
+        OR proposed_meta -> 'unverifiedReferenceIds' @> ${JSON.stringify([citationId])}::jsonb
+      )
+    ORDER BY id
+    FOR NO KEY UPDATE
+  `);
+  return (result.rows ?? []).map((row) => Number(row.id));
+}
+
+/**
  * Move the loser's paper review onto the winner, or drop it when the winner
  * already has one. Revisions follow the surviving review either way.
  *
@@ -1134,6 +1168,9 @@ export async function mergeCitations(
   // depend on anything below; the only ordering the merge really requires is
   // that everything precede the citation delete.
   stats.rowsRepointed += await repointReferenceCohorts(db, winnerId, loserId);
+
+  // Before any paper-review row: see the note on the function.
+  await lockPendingEditsCitingCitation(db, loserId);
 
   const reviewResult = await mergePaperReviews(db, winnerId, loserId);
   stats.reviewsDropped = reviewResult.dropped;
