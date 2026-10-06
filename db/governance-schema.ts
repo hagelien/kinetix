@@ -68,7 +68,7 @@ export const kgSpaces = pgTable('kg_spaces', {
   id: serial('id').primaryKey(),
   slug: varchar('slug', { length: 64 }).notNull().unique(),
   name: text('name').notNull(),
-  /** e.g. `kinetix-consensus@v1`. The current default, never retroactive. */
+  /** e.g. `kinetix-consensus@v2`. The current default, never retroactive. */
   activePolicyVersion: varchar('active_policy_version', { length: 120 }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),

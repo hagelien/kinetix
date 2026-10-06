@@ -292,7 +292,7 @@ describe('2. adding an open dispute never makes a held proposal publishable', ()
   });
 
   it('holds every proposal that carries a dispute verdict (consensus policy)', () => {
-    // `kinetix-consensus@v1` is fed by a tally that has never heard of the
+    // `kinetix-consensus` is fed by a tally that has never heard of the
     // unified disputes table, so the mechanism it reads is the dispute
     // *verdict*. Same invariant, stated against the input this policy has.
     fc.assert(

@@ -161,11 +161,11 @@ export const KINETIX_APPLY_POLICY_VERSION = 'v3';
 /**
  * The whole agent-consensus auto-apply gate (Phase 6).
  *
- * A *second* policy rather than a rule added to `kinetix-consensus@v1`, for two
+ * A *second* policy rather than a rule added to `kinetix-consensus`, for two
  * reasons. The narrow one is that editing a versioned policy in place is what
  * the note above forbids: persisted records name the version. The substantive
  * one is that these are genuinely different questions.
- * `kinetix-consensus@v1` answers "what is the hold reason for this tally?" and
+ * `kinetix-consensus` answers "what is the hold reason for this tally?" and
  * is authoritative through delegation. This one answers "may
  * `applyOnAgentConsensus` publish this?", which the legacy path decides with
  * checks that live outside the tally entirely — a clinical case is refused

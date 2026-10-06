@@ -7,7 +7,12 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import en from '../../src/locales/en.json';
 import nb from '../../src/locales/nb.json';
-import { KINETIX_POLICY_ID, KINETIX_POLICY_VERSION } from '../../src/lib/assurance/policy.js';
+import {
+  KINETIX_APPLY_POLICY_ID,
+  KINETIX_APPLY_POLICY_VERSION,
+  KINETIX_POLICY_ID,
+  KINETIX_POLICY_VERSION,
+} from '../../src/lib/assurance/policy.js';
 
 type Reasons = {
   review: { consensus: { reason: Record<string, string> }; errors: Record<string, string> };
@@ -119,6 +124,41 @@ describe('the retired "people never publish on consensus" rule', () => {
       }
     };
     for (const root of roots) walk(root);
+    expect(offenders).toEqual([]);
+  });
+
+  // Persisted decisions and the space pointer name the current versions, so
+  // no live source, schema or test may present an older one as current. A
+  // fixture that seeds an old pointer on purpose is the one exception.
+  it('names no superseded policy version as current in code, schema or tests', () => {
+    const current: Record<string, string> = {
+      [KINETIX_POLICY_ID]: KINETIX_POLICY_VERSION,
+      [KINETIX_APPLY_POLICY_ID]: KINETIX_APPLY_POLICY_VERSION,
+    };
+    const fixtures = new Set([
+      'tests/integration/kinetix-space-policy-pointer.test.ts',
+      'tests/api/human-consensus-copy.test.ts',
+    ]);
+    const offenders: string[] = [];
+    const walk = (path: string) => {
+      for (const name of readdirSync(path)) {
+        const entry = `${path}/${name}`;
+        if (entry.includes('node_modules')) continue;
+        if (statSync(entry).isDirectory()) {
+          walk(entry);
+          continue;
+        }
+        if (!/\.(?:ts|tsx)$/.test(entry) || fixtures.has(entry)) continue;
+        readFileSync(entry, 'utf8')
+          .split('\n')
+          .forEach((line, n) => {
+            for (const m of line.matchAll(/(kinetix-consensus(?:-apply)?)@(v\d+)/g)) {
+              if (current[m[1]!] !== m[2]) offenders.push(`${entry}:${n + 1}: ${m[0]}`);
+            }
+          });
+      }
+    };
+    for (const root of ['api', 'src', 'db', 'tests']) walk(root);
     expect(offenders).toEqual([]);
   });
 });
