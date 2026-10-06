@@ -279,6 +279,64 @@ describe('the sweep', () => {
     // Idempotent: nothing left to return.
     expect(await sweepUnquotedAgentEdits()).toEqual([]);
   });
+
+  it('pages past older proposals that need no quote instead of stalling on them', async () => {
+    // Older than the unquoted proposal, and all passing the SQL pre-filter:
+    // updates that omit the quote but restate the reading, so the stored
+    // sentence carries over and the gate finds them quoted.
+    const author = (await seedAgent('author-keeper', 'mid')).userId;
+    const drugId = await seedDrug(db, { slug: 'kept' });
+    const older = new Date(Date.now() - 60 * 60 * 1000);
+    for (let i = 0; i < 3; i++) {
+      const [entry] = await db
+        .insert(parameterEntries)
+        .values({ drugId, parameter: 'halfLife', low: '2', high: '4', unit: 'h', sourceQuote: `Half-life was 2 to 4 h (${i}).`, createdBy: author } as never)
+        .returning({ id: parameterEntries.id });
+      await db.insert(pendingEdits).values({
+        editType: 'param_entry',
+        targetId: entry!.id,
+        parameter: 'halfLife',
+        proposedValue: { op: 'update', patch: { low: 2, high: 4, unit: 'h' } },
+        submittedBy: author,
+        status: 'pending',
+        submittedAt: older,
+      });
+    }
+    const unquoted = await seedEdit({ authorIsAgent: true, quote: null, approvals: 1 });
+
+    // A window of two: the old sweep spent it on the first two carried-over
+    // updates every pass and never reached the unquoted proposal.
+    expect(await sweepUnquotedAgentEdits(2)).toEqual([unquoted]);
+  });
+
+  it('returns a proposal whose agent dispute a moderator has overruled', async () => {
+    const id = await seedEdit({ authorIsAgent: true, quote: null, approvals: 1 });
+    const disputer = await seedAgent('overruled-disputer', 'mid');
+    await db.insert(agentVerifications).values({
+      agentId: disputer.agentId,
+      targetType: 'pending_edit',
+      targetId: id,
+      verdict: 'dispute',
+      verifierTier: 'mid',
+      rationaleMd: 'Tabell 2 oppgir en annen verdi enn forslaget.',
+      updatedAt: new Date(Date.now() - 60 * 1000),
+    });
+    const moderator = await seedUser(db, { email: 'mod2@example.com', username: 'mod2', role: 'editor' });
+    // The verdict stays as testimony; the ruling against it is what clears it.
+    await db.insert(disputes).values({
+      targetType: 'pending_edit',
+      targetId: id,
+      status: 'resolved',
+      resolution: 'rejected',
+      resolvedBy: moderator,
+      resolvedAt: new Date(),
+      source: 'agent',
+      reasonMd: 'Tabell 2 oppgir en annen verdi enn forslaget.',
+      createdBy: disputer.userId,
+    });
+
+    expect(await sweepUnquotedAgentEdits()).toEqual([id]);
+  });
 });
 
 describe('at submission', () => {
