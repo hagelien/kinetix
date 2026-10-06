@@ -352,6 +352,39 @@ describe('GET /api/drug-discussions?id= (following a "discussion #N" reference)'
     });
   });
 
+  it('deep-links a drug-parameter comment to that parameter\'s discussion', async () => {
+    const comment = {
+      id: 7,
+      drugId: 12,
+      wikiPageId: null,
+      parameter: 'half_life',
+      parentId: null,
+      body: 'b',
+    };
+    mockSequence([comment], []);
+    const { res, state } = createResponse();
+    await handler(createRequest('id=7'), res);
+    expect(state.statusCode).toBe(200);
+    expect(JSON.parse(state.body).url).toBe(
+      '/wiki/drug/12?param=half_life&view=discussion&comment=7',
+    );
+  });
+
+  it('keeps the bare monograph url for a fact-keyed drug comment', async () => {
+    const comment = {
+      id: 8,
+      drugId: 12,
+      wikiPageId: null,
+      parameter: 'fact:3',
+      parentId: null,
+      body: 'b',
+    };
+    mockSequence([comment], []);
+    const { res, state } = createResponse();
+    await handler(createRequest('id=8'), res);
+    expect(JSON.parse(state.body).url).toBe('/wiki/drug/12');
+  });
+
   it('links a topic-page comment to its page by slug', async () => {
     const comment = {
       id: 5,
