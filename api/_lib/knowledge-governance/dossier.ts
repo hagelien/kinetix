@@ -111,7 +111,9 @@ function legacyOutcomeFromFacts(
 ): 'apply' | 'hold' {
   if (!facts) return 'hold';
   if (facts.editType === 'clinical_case') return 'hold';
-  if (!facts.submitterIsAgent) return 'hold';
+  // A person's proposal publishes on consensus like an agent's; only one with
+  // no recorded author is refused before the tally (`legacyConsensusHold`).
+  if (facts.submittedBy === null) return 'hold';
   if (facts.hasOpenHumanDispute) return 'hold';
   if (facts.summary.disputeCount > 0) return 'hold';
   if (facts.summary.approveCount < facts.quorum) return 'hold';

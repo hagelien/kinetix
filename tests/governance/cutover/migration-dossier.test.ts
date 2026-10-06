@@ -75,19 +75,21 @@ interface World {
 
 /** A wiki_fact edit that clears the gate, optionally left unapproved. */
 async function seedWorld(
-  opts: { approvals?: number; editType?: string } = {},
+  opts: { approvals?: number; editType?: string; humanAuthor?: boolean } = {},
 ): Promise<World> {
   const authorId = await seedUser(db, {
     email: 'author@example.com',
     username: 'author',
     role: 'contributor',
   });
-  await db.insert(agents).values({
-    userId: authorId,
-    name: 'author-agent',
-    slug: 'author-agent',
-    status: 'active',
-  });
+  if (!opts.humanAuthor) {
+    await db.insert(agents).values({
+      userId: authorId,
+      name: 'author-agent',
+      slug: 'author-agent',
+      status: 'active',
+    });
+  }
 
   const verifierIds: number[] = [];
   for (const n of [1, 2]) {
@@ -215,6 +217,20 @@ describe('buildDossier', () => {
     expect(dossier.authorityKey).toBe('pending_edit:wiki_fact');
     expect(dossier.eligible).toBe(true);
     expect(dossier.coverage).toMatchObject({ rows: 1, mirrored: 1, ratio: 1 });
+    expect(dossier.policy.observed).toBe(1);
+    expect(dossier.policy.severity1).toHaveLength(0);
+  });
+
+  it('agrees with the generic engine on a person’s proposal that clears consensus', async () => {
+    // Both engines now publish a person's proposal at quorum; a dossier whose
+    // legacy reconstruction still held every human author would report a
+    // severity-1 divergence and block cutover on a disagreement that is not
+    // there.
+    await enableMirroring();
+    const world = await seedWorld({ humanAuthor: true });
+    await mirror(world.editId);
+
+    const dossier = await buildDossier('wiki_fact', { db });
     expect(dossier.policy.observed).toBe(1);
     expect(dossier.policy.severity1).toHaveLength(0);
   });
