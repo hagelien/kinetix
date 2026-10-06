@@ -52,7 +52,12 @@ import { agentVerifications, agents } from '../../../db/schema.js';
 import { KINETIX_SPACE } from './actor-context.js';
 import { recordAuditEvent } from './store/audit.js';
 import { recordAssessment } from './store/assessments.js';
-import { ensureSpace, ensureTarget, setActivePolicyVersion } from './store/spaces.js';
+import {
+  advanceActivePolicyVersion,
+  ensureSpace,
+  ensureTarget,
+  findSpace,
+} from './store/spaces.js';
 import {
   KINETIX_POLICY_ID,
   KINETIX_POLICY_VERSION as KINETIX_POLICY_RULES_VERSION,
@@ -89,12 +94,33 @@ export async function ensureKinetixSpace(
   // An existing space keeps whatever version it was created under
   // (`ensureSpace` does nothing on conflict), so advance its pointer when the
   // policy has moved on. Not retroactive: decision records carry their own
-  // version (`setActivePolicyVersion`).
+  // version.
   if (policyPointerIsOlder(space.activePolicyVersion)) {
-    await setActivePolicyVersion(db, space.id, KINETIX_POLICY_VERSION);
-    return { ...space, activePolicyVersion: KINETIX_POLICY_VERSION };
+    const advanced = await advanceSpacePolicyPointer(db, space.id);
+    if (advanced) return { ...space, activePolicyVersion: KINETIX_POLICY_VERSION };
+    return (await findSpace(db, KINETIX_SPACE)) ?? space;
   }
   return space;
+}
+
+/**
+ * Move a space's pointer to this build's policy version, only if the pointer
+ * it holds at the moment of the write is older (or unset). The comparison is
+ * the write's own predicate (`advanceActivePolicyVersion`): two builds
+ * overlapping a deploy can both read an old pointer, and the older build's
+ * write must lose to the newer one's rather than drag it back. Returns whether
+ * this call moved it.
+ */
+export async function advanceSpacePolicyPointer(
+  db: GovernanceDb,
+  spaceId: number,
+): Promise<boolean> {
+  const m = /^(.+)@v(\d+)$/.exec(KINETIX_POLICY_VERSION);
+  if (!m) return false;
+  return advanceActivePolicyVersion(db, spaceId, {
+    policyId: m[1]!,
+    version: Number(m[2]),
+  });
 }
 
 /**

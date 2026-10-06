@@ -7,7 +7,7 @@
  * inserting the same space twice.
  */
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { kgSpaces, kgTargets } from '../../../../db/governance-schema.js';
 import type { GovernanceDb, SpaceRecord, TargetRecord } from './interface.js';
 
@@ -72,6 +72,45 @@ export async function setActivePolicyVersion(
     .update(kgSpaces)
     .set({ activePolicyVersion, updatedAt: new Date() })
     .where(eq(kgSpaces.id, spaceId));
+}
+
+function escapeRegex(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Point a space at `<policyId>@v<version>` only if the pointer it holds at the
+ * moment of the write is unset or an older version of the same policy.
+ *
+ * The comparison is in the UPDATE's own predicate rather than in a value read
+ * before it, so concurrent callers on different builds cannot move the pointer
+ * backwards. A pointer this cannot read is left alone. CASE rather than AND:
+ * SQL does not promise to test the shape before attempting the cast.
+ */
+export async function advanceActivePolicyVersion(
+  db: GovernanceDb,
+  spaceId: number,
+  target: { policyId: string; version: number },
+): Promise<boolean> {
+  const prefix = escapeRegex(`${target.policyId}@v`);
+  const updated = await db
+    .update(kgSpaces)
+    .set({
+      activePolicyVersion: `${target.policyId}@v${target.version}`,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(kgSpaces.id, spaceId),
+        sql`(${kgSpaces.activePolicyVersion} is null or case
+          when ${kgSpaces.activePolicyVersion} ~ ${`^${prefix}[0-9]{1,9}$`}
+            then substring(${kgSpaces.activePolicyVersion} from ${`^${prefix}([0-9]+)$`})::int < ${target.version}
+          else false
+        end)`,
+      ),
+    )
+    .returning({ id: kgSpaces.id });
+  return updated.length > 0;
 }
 
 /** Find or create the generic handle for one host-domain object. */
