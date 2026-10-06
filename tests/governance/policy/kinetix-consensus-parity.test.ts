@@ -362,7 +362,8 @@ describe('decision records behind the legacy answer', () => {
       }),
     );
     expect(decision.policyId).toBe('kinetix-consensus');
-    expect(decision.policyVersion).toBe('v1');
+    // v2 retired `human-authored` and added `unattributed`.
+    expect(decision.policyVersion).toBe('v2');
     expect(decision.allowed).toBe(false);
   });
 
