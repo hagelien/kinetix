@@ -49,6 +49,7 @@ import { LearningContentDiff } from './LearningContentDiff';
 import { UserBadge } from '@/components/ui/UserBadge';
 import type { RejectionReason } from '@/lib/rejectionReasons';
 import { ReferenceText } from './ReferenceText';
+import { ReferenceMarkdown } from './ReferenceMarkdown';
 
 // Map stable server error codes to localized strings, falling back to the
 // server's English prose for codes the UI hasn't been taught yet (AGENTS.md
@@ -371,13 +372,11 @@ function DisputePanel({
               </span>
               <span>· {new Date(d.createdAt).toLocaleString()}</span>
             </div>
-            <p className="whitespace-pre-wrap leading-snug">
-              {d.reasonMd.trim() ? (
-                <ReferenceText text={d.reasonMd.trim()} />
-              ) : (
-                t('review.dispute.noReason')
-              )}
-            </p>
+            {d.reasonMd.trim() ? (
+              <ReferenceMarkdown text={d.reasonMd.trim()} />
+            ) : (
+              <p className="leading-snug">{t('review.dispute.noReason')}</p>
+            )}
             {d.evidenceRefs.length > 0 ? (
               <div className="text-[11px] text-muted-foreground">
                 <span className="font-medium">
