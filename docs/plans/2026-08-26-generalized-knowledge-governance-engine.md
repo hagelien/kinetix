@@ -1313,7 +1313,7 @@ Each phase below should normally be one or several focused PRs. Do not combine s
    - `isHighRiskPendingEdit`;
    - self-review;
    - dispute blocking;
-   - human edit non-auto-apply;
+   - ~~human edit non-auto-apply~~ → human edit held to an agent's bar; unattributed edit non-auto-apply (v2);
    - `applyApprovedEdit` invariants;
    - reference gates;
    - stale review/apply races.
@@ -1482,7 +1482,7 @@ open-dispute mismatch              critical
 
 - no unexplained critical divergence over a representative sample;
 - Kinetix high-risk cases reproduce current flagship and full-quorum rules;
-- human-authored edits always generic-hold for human decision;
+- ~~human-authored edits always generic-hold for human decision~~ → unattributed edits always generic-hold for human decision; a person's proposal is held to an agent's bar (v2);
 - clinical cases always generic-hold for human expert decision.
 
 ---

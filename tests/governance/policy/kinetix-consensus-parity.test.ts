@@ -317,9 +317,9 @@ describe('the projected context the legacy gate implies', () => {
     ).toEqual({ level: 'low', tags: [] });
   });
 
-  it('treats the author as an agent, so the human-authored rule never fires here', () => {
-    // applyOnAgentConsensus returns early for a non-agent submitter, so this
-    // gate is only ever reached for agent-authored proposals.
+  it('treats the author as an agent, so no authorship rule fires here', () => {
+    // The tally this stands in for never considered authorship; since v2 the
+    // only authorship rule is `unattributed`, refused before any tally.
     const context = projectLegacyConsensusContext({
       summary,
       quorum: 2,
@@ -328,6 +328,7 @@ describe('the projected context the legacy gate implies', () => {
     expect(context.author.kind).toBe('agent');
     const decision = KINETIX_POLICY.evaluate(context);
     expect(decision.matchedRuleIds).not.toContain('human-authored');
+    expect(decision.matchedRuleIds).not.toContain('unattributed');
   });
 
   it('leaves the pool size unknown rather than back-deriving one from the quorum', () => {

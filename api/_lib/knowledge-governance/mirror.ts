@@ -276,8 +276,8 @@ async function ensureMirroredVersion(
           authorActorRef: version.authorRef ?? 'unknown',
           // Same rule as the importer, and for the same reason: an author
           // reference exists on every row, so inferring `agent` from its presence
-          // labels a person's proposal as an agent's and the policy's
-          // `human-authored` rule never fires for it.
+          // labels a person's proposal as an agent's, which misstates the pool
+          // arithmetic and the decision record's account of who wrote it.
           authorKind: await resolveAuthorKind(db, version.authorRef),
           state: snapshot?.genericState ?? 'pending',
           createdAt: new Date(version.createdAt),

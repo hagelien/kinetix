@@ -3,7 +3,7 @@
  * nothing a moderator or an agent reads may still say it cannot. The
  * `human_submitted` hold now means only a proposal with no recorded author.
  */
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import en from '../../src/locales/en.json';
 import nb from '../../src/locales/nb.json';
@@ -77,17 +77,44 @@ describe('the retired "people never publish on consensus" rule', () => {
     expect(permissions).toContain(`knowledge-governance policy (${KINETIX_POLICY_ID}@${KINETIX_POLICY_VERSION})`);
   });
 
-  it('is marked retired wherever the governance plans list it as a standing invariant', () => {
-    for (const file of [
-      'docs/plans/2026-08-26-general-knowledge-governance-extraction.md',
-      'docs/plans/2026-08-26-generalized-knowledge-governance-engine.md',
-    ]) {
-      const text = readFileSync(file, 'utf8');
-      for (const line of text.split('\n')) {
-        if (/human-authored[^\n]*never[^\n]*(?:auto-appl|auto-publish)/i.test(line)) {
-          expect({ file, line, retired: /~~|retired|v2/.test(line) }).toEqual({ file, line, retired: true });
+  // Repository-wide rather than a hand-kept file list: the retired rule kept
+  // turning up in places a list did not name. A line may still mention it if
+  // it marks it retired (struck through, "retired", or naming v2), or is about
+  // something that still holds (a clinical case, an unattributed proposal, a
+  // dispute, or an agent moderating from /review).
+  it('is not stated as current anywhere in the code, docs, prompts or tests', () => {
+    const roots = ['api', 'src', 'docs', 'agents', 'tests', 'AGENTS.md'];
+    const self = 'tests/api/human-consensus-copy.test.ts';
+    const states = [
+      /(?:human|person)[^.\n]{0,60}\b(?:never|always|cannot)\b[^.\n]{0,60}(?:auto-?appl|auto-?publish|agent consensus|generic-hold|by consensus)/i,
+      /`human-authored` rule (?:then )?(?:never fires|requires)/i,
+      /consensus never stands in for (?:a|the) moderator/i,
+      /human[^.\n]{0,30}non-auto-apply/i,
+      /anything a human submitted/i,
+    ];
+    const stillHolds = /~~|retired|hold for human review|requiresHumanReview|\bv2\b|\bv3\b|clinical|unattributed|no recorded author|dispute|moderat(?:e|ing) (?:a|one)|\/review|superseded/i;
+    const offenders: string[] = [];
+    const walk = (path: string) => {
+      const entries = statSync(path).isDirectory()
+        ? readdirSync(path).map((name) => `${path}/${name}`)
+        : [path];
+      for (const entry of entries) {
+        if (entry.includes('node_modules')) continue;
+        if (statSync(entry).isDirectory()) {
+          walk(entry);
+          continue;
         }
+        if (!/\.(?:ts|tsx|md)$/.test(entry) || entry === self) continue;
+        readFileSync(entry, 'utf8')
+          .split('\n')
+          .forEach((line, n) => {
+            if (states.some((re) => re.test(line)) && !stillHolds.test(line)) {
+              offenders.push(`${entry}:${n + 1}: ${line.trim()}`);
+            }
+          });
       }
-    }
+    };
+    for (const root of roots) walk(root);
+    expect(offenders).toEqual([]);
   });
 });

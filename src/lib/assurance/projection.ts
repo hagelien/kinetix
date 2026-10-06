@@ -168,8 +168,8 @@ export function consensusHoldReasonFromDecision(
  * The same first-unmet-requirement projection as
  * {@link consensusHoldReasonFromDecision}, but for `kinetix-consensus-apply`
  * (the whole `applyOnAgentConsensus` gate) rather than the base-quorum-only
- * `kinetix-consensus` policy. That policy's extra rules — a human author, a
- * missing source quote, a clinical case, an open dispute — each need their own
+ * `kinetix-consensus` policy. That policy's extra rules — an unattributed
+ * author, a missing source quote, a clinical case, an open dispute — each need their own
  * word instead of collapsing into `quorum_unmet`, so a maintainer reading
  * `POST /api/agent-consensus-sweep`'s response can tell a held edit needing a
  * flagship approval from one that can never clear the generic gate at all
@@ -215,8 +215,8 @@ export function genericConsensusHoldReason(
   //
   // The source-quote gate (`highRiskProposalWouldPublishUnquoted`) runs before
   // the generic engine is even consulted, so it outranks everything below.
-  // `legacyConsensusHold` then refuses a clinical case, then a human author,
-  // before it ever computes a tally.
+  // `legacyConsensusHold` then refuses a clinical case, then an unattributed
+  // author, before it ever computes a tally.
   //
   // The tally itself (`consensusApprovalHoldReason`/`frozenHoldReason`) checks
   // the pool-adjusted base quorum FIRST — `disputeCount === 0 && approveCount
