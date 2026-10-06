@@ -134,6 +134,24 @@ function renderBlock(token: Token): ReactNode {
 }
 
 function renderListItem(item: Tokens.ListItem): ReactNode {
+  const body = renderListItemBody(item);
+  if (!item.task) return body;
+  // Marked strips the `[x]` / `[ ]` marker from the text; keep it visible.
+  return (
+    <>
+      <input
+        type="checkbox"
+        checked={!!item.checked}
+        disabled
+        readOnly
+        className="mr-1.5 align-middle"
+      />
+      {body}
+    </>
+  );
+}
+
+function renderListItemBody(item: Tokens.ListItem): ReactNode {
   // Tight list items wrap their text in a bare `text` block token; render it
   // inline so bullets don't get paragraph spacing.
   if (item.tokens.length === 1 && item.tokens[0]?.type === 'text') {

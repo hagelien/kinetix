@@ -63,4 +63,18 @@ describe('ReferenceMarkdown', () => {
     expect(container.querySelector('a')).toBeNull();
     expect(container.textContent).toContain('lenke');
   });
+
+  it('keeps the checked state of task-list items', () => {
+    render(
+      <MemoryRouter>
+        <ReferenceMarkdown text={'- [x] verified\n- [ ] pending'} />
+      </MemoryRouter>,
+    );
+    const boxes = screen.getAllByRole('checkbox');
+    expect(boxes).toHaveLength(2);
+    expect(boxes[0]).toBeChecked();
+    expect(boxes[1]).not.toBeChecked();
+    expect(boxes[0]).toBeDisabled();
+    expect(screen.getByText('verified')).toBeInTheDocument();
+  });
 });
