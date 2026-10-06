@@ -2,10 +2,10 @@
 
 .github/workflows/codex-gate.yml signs off on a Codex review whose only
 findings are P2/P3 once each has a reply, by someone who can push, linking an
-issue labelled review-debt (`deferred_verdict`). That is a merge decision, so
+open issue labelled review-debt (`deferred_verdict`). That is a merge decision, so
 every way it can wrongly say yes is pinned down here: a P1 on the head, an
 unbadged finding, an unfiled finding, a reply from a non-writer (including a
-MEMBER who only holds read), a linked issue without the label, and a link that
+MEMBER who only holds read), a linked issue without the label, a closed one, and a link that
 is really a pull request.
 
 The function is read out of the workflow as shipped and run under bash with
@@ -60,12 +60,14 @@ REVIEWS = [
     {"id": 2, "user": {"login": BOT}, "commit_id": "old"},
 ]
 
-# Issues the mock serves: 70/71 are filed debt, 72 lacks the label, 73 is a PR.
+# Issues the mock serves: 70/71 are filed debt, 72 lacks the label, 73 is a PR,
+# 74 is debt that has already been closed.
 ISSUES = {
-    70: {"pull_request": None, "labels": [{"name": "P2"}, {"name": "review-debt"}]},
-    71: {"pull_request": None, "labels": [{"name": "P3"}, {"name": "review-debt"}]},
-    72: {"pull_request": None, "labels": [{"name": "P2"}]},
-    73: {"pull_request": {"url": "x"}, "labels": [{"name": "review-debt"}]},
+    70: {"pull_request": None, "state": "open", "labels": [{"name": "P2"}, {"name": "review-debt"}]},
+    71: {"pull_request": None, "state": "open", "labels": [{"name": "P3"}, {"name": "review-debt"}]},
+    72: {"pull_request": None, "state": "open", "labels": [{"name": "P2"}]},
+    73: {"pull_request": {"url": "x"}, "state": "open", "labels": [{"name": "review-debt"}]},
+    74: {"pull_request": None, "state": "closed", "labels": [{"name": "P2"}, {"name": "review-debt"}]},
 }
 PERMISSIONS = {"hagelien": "admin", "maintainer": "write", "triager": "read", "rando": "none"}
 
@@ -97,6 +99,9 @@ CASES: dict[str, tuple[list[dict], bool]] = {
     ], False),
     "link is a pull request": ([
         finding(10, badge("P2")), reply(11, 10, "#73"),
+    ], False),
+    "linked review-debt issue is already closed": ([
+        finding(10, badge("P2")), reply(11, 10, "#74"),
     ], False),
     "HTML entity is not an issue link": ([
         finding(10, badge("P2")), reply(11, 10, "see &#70;"),
