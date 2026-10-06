@@ -28,7 +28,9 @@ import { eq } from 'drizzle-orm';
 import {
   agentVerifications,
   agents,
+  citations,
   disputes,
+  paperReviews,
   pendingEdits,
   wikiPages,
 } from '../../db/schema.js';
@@ -1316,6 +1318,105 @@ describe('agent consensus hold, re-stamp and retry', () => {
       .from(pendingEdits)
       .where(eq(pendingEdits.id, edit!.id));
     expect(held!.status).toBe('pending');
+  });
+
+  it('holds an ingested fact citing an unread paper until that paper is read in full', async () => {
+    // Conversation ingestion stages a fact whose papers nobody read in full as
+    // a pending proposal, naming them in `unverifiedReferenceIds`, so the
+    // full-text check happens before it publishes. Agents verifying the claim
+    // do not perform that check, so their quorum alone must not publish it.
+    const admin = await seedUser(db, {
+      email: 'admin@example.com',
+      username: 'admin',
+      role: 'admin',
+    });
+    const peerA = await seedAgent('peer-a');
+    const peerB = await seedAgent('peer-b');
+    const [page] = await db
+      .insert(wikiPages)
+      .values({
+        slug: 'diazepam',
+        title: 'Diazepam',
+        pageType: 'drug_monograph',
+        content: {
+          version: 2,
+          sections: { pk: { body: { type: 'doc', content: [] } } },
+        },
+        status: 'published',
+        createdBy: admin,
+        updatedBy: admin,
+      })
+      .returning({ id: wikiPages.id });
+    const [paper] = await db
+      .insert(citations)
+      .values({ type: 'pmid', identifier: '12345678' })
+      .returning({ id: citations.id });
+    const [edit] = await db
+      .insert(pendingEdits)
+      .values({
+        editType: 'wiki_fact',
+        targetId: page!.id,
+        sectionId: 'pk',
+        factOperation: 'add',
+        factStatement: 'Halveringstiden er 20–100 timer.',
+        proposedValue: {
+          type: 'fact',
+          attrs: { factId: 'f-1', referenceIds: [paper!.id] },
+          content: [{ type: 'text', text: 'Halveringstiden er 20–100 timer.' }],
+        },
+        proposedMeta: {
+          source: 'conversation_ingestion',
+          unverifiedSourceKeys: ['S1'],
+          unverifiedReferenceIds: [paper!.id],
+        },
+        referenceIds: [paper!.id],
+        referenceId: paper!.id,
+        submittedBy: admin,
+        status: 'pending',
+      })
+      .returning({ id: pendingEdits.id });
+    await approve(peerA.agentId, edit!.id);
+    await approve(peerB.agentId, edit!.id);
+
+    // Out of the sweep window, and held however it is reached.
+    expect(await sweepAgentConsensus()).toEqual([]);
+    expect(
+      await runAgentConsensus({
+        pendingEditId: edit!.id,
+        approverUserId: peerA.userId,
+      }),
+    ).toEqual({ outcome: 'held', reason: 'unverified_sources' });
+    expect(await agentConsensusStatus(edit!.id)).toMatchObject({
+      ready: false,
+      reason: 'unverified_sources',
+    });
+    expect((await collectConsensusFacts(edit!.id))?.disputeHoldCause).toBe(
+      'unverified_sources',
+    );
+    // An abstract-only review does not lift it.
+    await db.insert(paperReviews).values({
+      citationId: paper!.id,
+      reviewMarkdown: 'Abstract only.',
+      readInFull: false,
+      createdBy: peerA.userId,
+    });
+    expect(await sweepAgentConsensus()).toEqual([]);
+
+    // Once an agent reads the paper in full, the next sweep publishes it with
+    // no further verdict and no person.
+    await db
+      .update(paperReviews)
+      .set({ readInFull: true, reviewMarkdown: 'Read in full.' })
+      .where(eq(paperReviews.citationId, paper!.id));
+    expect((await collectConsensusFacts(edit!.id))?.disputeHoldCause).toBeNull();
+    expect(await sweepAgentConsensus()).toEqual([
+      { pendingEditId: edit!.id, outcome: 'applied' },
+    ]);
+    const [published] = await db
+      .select({ status: pendingEdits.status })
+      .from(pendingEdits)
+      .where(eq(pendingEdits.id, edit!.id));
+    expect(published!.status).toBe('approved');
   });
 
   it('never attributes a publication to an implicit approval', async () => {

@@ -38,6 +38,7 @@ import {
   effectiveConsensusQuorum,
   isHighRiskPendingEdit,
   pendingEditTargetOpenToAgents,
+  pendingEditCitesUnreadSources,
   isSelfReviewAgentUser,
   summariseVerificationsForTargets,
   type VerificationSummary,
@@ -396,6 +397,7 @@ async function collectDisputeHoldCause(
   pendingEditId: number,
 ): Promise<ConsensusDisputeHoldCause | null> {
   if (!(await pendingEditTargetOpenToAgents(pending))) return 'target_unpublished';
+  if (await pendingEditCitesUnreadSources(pending)) return 'unverified_sources';
   if (await hasOpenDispute({ targetType: 'pending_edit', targetId: pendingEditId })) {
     return 'open_dispute';
   }

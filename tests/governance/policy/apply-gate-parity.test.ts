@@ -283,6 +283,7 @@ describe('required parity matrix', () => {
       'upheld_dispute',
       'returned_unrevised',
       'target_unpublished',
+      'unverified_sources',
     ] as const) {
       const { evaluation } = compare(
         facts({

@@ -61,6 +61,7 @@ export type AgentConsensusHold =
   | 'upheld_dispute'
   | 'returned_unrevised'
   | 'target_unpublished'
+  | 'unverified_sources'
   | 'apply_failed';
 
 export type AgentConsensusStatus =

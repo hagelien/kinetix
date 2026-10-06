@@ -1742,6 +1742,55 @@ export async function pendingEditTargetOpenToAgents(pending: {
 }
 
 /**
+ * True when a conversation-ingestion proposal still cites a paper nobody has
+ * read in full. Ingestion stages such a fact as `pending` precisely so someone
+ * does the full-text check the assistant could not, and records which papers
+ * in `proposedMeta.unverifiedReferenceIds`. Agent verifiers judge the claim,
+ * not whether the paper was read, so their approvals alone must not publish
+ * it. The hold lifts once every listed paper carries a read-in-full review —
+ * a live one, or a pending submission that attests it, the same evidence the
+ * agent reference gate accepts — or when a moderator approves the edit.
+ * A listed reference that cannot be reviewed at all (a missing or `freetext`
+ * citation) keeps the hold: only a person can clear it. Checked by both
+ * engines.
+ */
+export async function pendingEditCitesUnreadSources(pending: {
+  proposedMeta: unknown;
+}): Promise<boolean> {
+  const listed = (pending.proposedMeta as { unverifiedReferenceIds?: unknown } | null)
+    ?.unverifiedReferenceIds;
+  if (!Array.isArray(listed)) return false;
+  const ids = [
+    ...new Set(
+      listed.filter((n): n is number => Number.isInteger(n) && (n as number) > 0),
+    ),
+  ];
+  if (ids.length === 0) return false;
+
+  const db = getDb();
+  const live = await db
+    .select({ citationId: paperReviews.citationId })
+    .from(paperReviews)
+    .where(and(inArray(paperReviews.citationId, ids), eq(paperReviews.readInFull, true)));
+  const pendingReviews = await db
+    .select({ targetId: pendingEdits.targetId, proposedValue: pendingEdits.proposedValue })
+    .from(pendingEdits)
+    .where(
+      and(
+        eq(pendingEdits.editType, 'paper_review'),
+        eq(pendingEdits.status, 'pending'),
+        inArray(pendingEdits.targetId, ids),
+      ),
+    );
+  const read = new Set<number>(live.map((r) => r.citationId));
+  for (const row of pendingReviews) {
+    const pv = row.proposedValue as { readInFull?: unknown } | null;
+    if (row.targetId != null && pv?.readInFull === true) read.add(row.targetId);
+  }
+  return ids.some((id) => !read.has(id));
+}
+
+/**
  * True when `approverUserId` still casts an approval consensus counts on this
  * pending edit: an active agent (active status, contributor+ backing role)
  * with a current `approve` verdict on it, and — when it is the edit's author —

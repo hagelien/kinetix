@@ -26,6 +26,7 @@ import {
   approverCountsForConsensus,
   lockPendingEditTargetPage,
   pendingEditTargetOpenToAgents,
+  pendingEditCitesUnreadSources,
   lockConsensusEligibility,
   consensusApprovalHoldReason,
   countActiveVerifierAgents,
@@ -781,7 +782,9 @@ export type AgentConsensusHold =
   // A reviewer returned this version with a note; it must be revised first.
   | 'returned_unrevised'
   // A wiki edit whose page is not (or no longer) published.
-  | 'target_unpublished';
+  | 'target_unpublished'
+  // An ingested fact citing a paper nobody has read in full yet.
+  | 'unverified_sources';
 
 export type AgentConsensusOutcome =
   | { outcome: 'applied' }
@@ -939,7 +942,12 @@ async function legacyConsensusHold(
   if (!(await pendingEditTargetOpenToAgents(pending))) {
     return { reason: 'target_unpublished' };
   }
-
+  // A conversation-ingestion fact that cites a paper nobody read in full was
+  // staged for that full-text check; agent approvals of the claim do not
+  // perform it.
+  if (await pendingEditCitesUnreadSources(pending)) {
+    return { reason: 'unverified_sources' };
+  }
 
   // Adapt the quorum to the active-agent pool. A fixed quorum of 2 is
   // unreachable for agent-authored edits whenever fewer than three agents are
@@ -1462,6 +1470,39 @@ export async function sweepAgentConsensus(
         and not ${submitterIsActiveAgentSql})
     )
   )`;
+  // An ingested fact whose `unverifiedReferenceIds` name a paper with no
+  // read-in-full review, live or pending (`pendingEditCitesUnreadSources`).
+  // It holds as `unverified_sources` on every retry, so it stays out of the
+  // window until the review lands — the sweep is what publishes it then, since
+  // no new verdict on the fact need ever arrive.
+  const citesUnreadSources = sql`exists (
+    select 1
+    from (
+      -- Positive integers only, as the helper reads them; the CASE keeps the
+      -- cast off anything else (AND does not short-circuit in SQL).
+      select case
+        when jsonb_typeof(e.v) = 'number' and e.v #>> '{}' ~ '^[0-9]{1,15}$'
+        then (e.v #>> '{}')::bigint
+      end as id
+      from jsonb_array_elements(
+        case when jsonb_typeof(${pendingEdits.proposedMeta}->'unverifiedReferenceIds') = 'array'
+          then ${pendingEdits.proposedMeta}->'unverifiedReferenceIds'
+          else '[]'::jsonb end
+      ) as e(v)
+    ) as u
+    where u.id > 0
+      and not exists (
+        select 1 from paper_reviews pr
+        where pr.citation_id = u.id and pr.read_in_full
+      )
+      and not exists (
+        select 1 from pending_edits pr_pe
+        where pr_pe.edit_type = 'paper_review'
+          and pr_pe.status = 'pending'
+          and pr_pe.target_id = u.id
+          and pr_pe.proposed_value->'readInFull' = 'true'::jsonb
+      )
+  )`;
   // A calculation-driving edit never rides the degraded single-approval path
   // (`consensusApprovalHoldReason`), so its bar is the full design target even
   // when the pool's floor is 1. Without it, 25 older high-risk rows sitting at
@@ -1543,6 +1584,7 @@ export async function sweepAgentConsensus(
         // person's calculation-driving entry update is left out whatever its
         // payload says (see `unquotedCalculationDriving`).
         not(unquotedCalculationDriving),
+        not(citesUnreadSources),
         // Same content gate as the verifier queue: a wiki edit only while its
         // page is published, so draft-backed rows neither publish nor fill
         // the window.
