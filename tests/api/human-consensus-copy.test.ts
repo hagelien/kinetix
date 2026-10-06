@@ -8,12 +8,23 @@ import { describe, expect, it } from 'vitest';
 import en from '../../src/locales/en.json';
 import nb from '../../src/locales/nb.json';
 
-type Reasons = { review: { consensus: { reason: Record<string, string> } } };
+type Reasons = {
+  review: { consensus: { reason: Record<string, string> }; errors: Record<string, string> };
+};
 
 describe('the retired "people never publish on consensus" rule', () => {
   it('is not what the review card says a human_submitted hold means', () => {
     expect((en as Reasons).review.consensus.reason.human_submitted).toMatch(/no recorded author/);
     expect((nb as Reasons).review.consensus.reason.human_submitted).toMatch(/uten registrert forfatter/);
+  });
+
+  it('is not what an agent is told when it tries to moderate a person\u2019s edit', () => {
+    for (const messages of [en, nb] as Reasons[]) {
+      const text = messages.review.errors.agentModerationNotAllowed;
+      expect(text).not.toMatch(/stays with a human moderator|ligger hos en menneskelig moderator/);
+    }
+    expect((en as Reasons).review.errors.agentModerationNotAllowed).toMatch(/publishes once enough agents approve/);
+    expect((nb as Reasons).review.errors.agentModerationNotAllowed).toMatch(/publiseres når nok agenter godkjenner/);
   });
 
   it('is not left in any agent instruction file', () => {

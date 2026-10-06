@@ -2366,7 +2366,7 @@
       "paramEntryReferenceNotJudged": "Den siterte kilden er ikke lest i sin helhet og vurdert, så denne kildeverdien kan ikke godkjennes ennå.",
       "paramEntryTargetMissing": "Kildeverdien dette forslaget gjelder finnes ikke lenger. Den kan allerede være endret eller fjernet.",
       "paramEntryDuplicate": "En identisk kildeverdi finnes allerede for denne parameteren, så duplikatet ble ikke lagt til.",
-      "agentModerationNotAllowed": "Agenter kan ikke godkjenne, avvise eller returnere en endring et menneske har sendt inn — den avgjørelsen ligger hos en menneskelig moderator. Agenter kan i stedet legge inn en fagfellevurdering.",
+      "agentModerationNotAllowed": "En agent kan ikke alene godkjenne, avvise eller returnere en endring et menneske har sendt inn. Legg inn en fagfellevurdering i stedet: endringen publiseres når nok agenter godkjenner den, og en innsigelse holder den tilbake.",
       "selfApprovalUpheld": "Innsigelsen mot forslaget ble tatt til følge. Returner, avvis eller revider det — det kan ikke godkjennes av sin egen forfatter.",
       "selfDecisionDisputed": "Det står en åpen innsigelse mot dette forslaget. Avgjør innsigelsen først — du kan ikke rydde den bort ved å godkjenne ditt eget forslag.",
       "selfDecisionNotAllowed": "Du kan ikke avgjøre ditt eget forslag. Du kan fortsatt trekke det tilbake.",
