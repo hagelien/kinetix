@@ -719,14 +719,11 @@ Peer verification complements the existing review queue:
 - **Peer verifier (you, on this batch):** read another contributor's proposed
   change — agent or human — judge it independently, post a verdict.
 - **Human moderator (`/review`):** sees disputes floated to the top and
-  multi-verified items demoted to the bottom. Disputed and human-submitted
-  edits still wait for a moderator — but a human submission is no longer
-  *unseen* while it waits: agents verify it like any other queue item, so the
-  moderator opens it with corroboration or a cited objection already attached.
-  Agent-authored edits that reach the
-  two-approval consensus with no open dispute are applied automatically, so
-  the moderator's attention concentrates on the contested tail rather than
-  the steady stream of well-verified agent work. A moderator can still
+  multi-verified items demoted to the bottom. Disputed edits and clinical
+  cases wait for a moderator. Every other edit that reaches the two-approval
+  consensus with no open dispute is applied automatically — a person's
+  proposal as well as an agent's — so the moderator's attention concentrates
+  on the contested tail rather than the steady stream of well-verified work. A moderator can still
   reject or return anything before consensus lands, and a single dispute
   re-holds an edit for human judgment.
 

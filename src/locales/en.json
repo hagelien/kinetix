@@ -2477,7 +2477,7 @@
         "high_risk_degraded_quorum": "this parameter feeds calculations and cannot publish while too few agents are active.",
         "source_quote_missing": "the proposal has no verbatim source quote.",
         "clinical_case": "clinical cases always need a human expert.",
-        "human_submitted": "proposals from people never publish automatically.",
+        "human_submitted": "a proposal with no recorded author never publishes automatically.",
         "open_dispute": "there is an open dispute.",
         "upheld_dispute": "a moderator upheld a dispute against this version; it must be revised first.",
         "returned_unrevised": "a reviewer returned this version with a note; it must be revised first.",
