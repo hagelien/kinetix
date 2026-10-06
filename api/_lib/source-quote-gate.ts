@@ -1,5 +1,6 @@
 import {
   highRiskEditNeedsSourceQuote,
+  isActiveAgentUser,
   pendingEditSourceQuote,
 } from './agent-verifications.js';
 import { quoteAfterUpdate } from './parameter-entries-store.js';
@@ -90,4 +91,36 @@ export async function highRiskProposalWouldPublishUnquoted(
     onError?.(err);
     return true;
   }
+}
+
+/** The refusal an agent gets for an unquoted calculation-driving proposal. */
+export const SOURCE_QUOTE_REQUIRED_MESSAGE =
+  'An agent proposal for a calculation-driving parameter must carry the ' +
+  'verbatim sentence (or table row) from the primary source that states this ' +
+  'value: `input.quote` for a new source value, `quote` in an update, ' +
+  '`sourceQuote` for an authored parameter. Without it the value can never ' +
+  'publish on peer consensus, so it is refused here rather than queued.';
+
+/**
+ * True when an active agent is about to queue a calculation-driving proposal
+ * that consensus could never publish for want of a quote.
+ *
+ * Refusing at submission lets the agent add the sentence in the same cycle,
+ * before any peer spends a verification on it; queued, it would only come
+ * back (`returnUnquotedAgentEdit`). A human contributor is not refused: their
+ * proposal goes to a person in any case, and a reviewer may approve it
+ * without one. A fault while resolving the effective quote does not refuse
+ * either — the consensus gate still holds the proposal (it fails closed).
+ */
+export async function agentProposalLacksSourceQuote(
+  submitterUserId: number,
+  pending: Parameters<typeof highRiskProposalWouldPublishUnquoted>[0],
+): Promise<boolean> {
+  if (!highRiskEditNeedsSourceQuote(pending)) return false;
+  if (!(await isActiveAgentUser(submitterUserId))) return false;
+  let faulted = false;
+  const unquoted = await highRiskProposalWouldPublishUnquoted(pending, () => {
+    faulted = true;
+  });
+  return unquoted && !faulted;
 }

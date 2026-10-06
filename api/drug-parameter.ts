@@ -52,6 +52,10 @@ import {
 } from './_lib/parameterApplicabilityStore.js';
 import { recordImplicitAgentApproval } from './_lib/agent-verifications.js';
 import {
+  agentProposalLacksSourceQuote,
+  SOURCE_QUOTE_REQUIRED_MESSAGE,
+} from './_lib/source-quote-gate.js';
+import {
   isNormalizationInput,
   recomputeSummariesForDrug,
 } from './_lib/parameter-entries-store.js';
@@ -327,6 +331,17 @@ async function handleUpdate(
     !(await callerCan(auth.role, CAP['edit.directWrite'])) ||
     parsed.data.submitForReview
   ) {
+    if (
+      await agentProposalLacksSourceQuote(auth.userId, {
+        editType: 'parameter',
+        parameter,
+        proposedValue: valid.data,
+        proposedMeta: { sourceQuote: parsed.data.sourceQuote },
+      })
+    ) {
+      error(res, 400, SOURCE_QUOTE_REQUIRED_MESSAGE, 'source_quote_required');
+      return;
+    }
     // At most one OPEN pending edit per (drug, parameter). The pre-check returns
     // a clean 409 carrying the existing row id so a contributor (or an agent)
     // can endorse/refine it instead of re-proposing; the unique index
