@@ -1741,6 +1741,58 @@ export async function pendingEditTargetOpenToAgents(pending: {
   return page?.status === 'published';
 }
 
+function unverifiedReferenceIdsOf(proposedMeta: unknown): number[] {
+  const listed = (proposedMeta as { unverifiedReferenceIds?: unknown } | null)
+    ?.unverifiedReferenceIds;
+  if (!Array.isArray(listed)) return [];
+  return [
+    ...new Set(
+      listed.filter((n): n is number => Number.isInteger(n) && (n as number) > 0),
+    ),
+  ].sort((a, b) => a - b);
+}
+
+/**
+ * Lock the review evidence {@link pendingEditCitesUnreadSources} reads, for
+ * the rest of the apply transaction, so its re-check serializes with that
+ * evidence going away: a pending `paper_review` being withdrawn or rejected,
+ * or a live review losing its read-in-full attestation (the PDF-replacement
+ * path flips it off). A plain read could see the old qualifying state while
+ * that change is in flight, and the fact would then publish on a paper nobody
+ * has read by the time it commits.
+ *
+ * FOR SHARE: the apply never writes these rows, and the changes that matter
+ * are updates, which this mode blocks. Pending review rows before
+ * `paper_reviews`, the order a review approval writes them, so the two cannot
+ * deadlock. A review that appears meanwhile only adds evidence. No-op unless
+ * the edit lists unverified references.
+ */
+export async function lockPendingEditSourceReviews(pending: {
+  proposedMeta: unknown;
+}): Promise<void> {
+  const ids = unverifiedReferenceIdsOf(pending.proposedMeta);
+  if (ids.length === 0) return;
+  const db = getDb();
+  await db
+    .select({ id: pendingEdits.id })
+    .from(pendingEdits)
+    .where(
+      and(
+        eq(pendingEdits.editType, 'paper_review'),
+        eq(pendingEdits.status, 'pending'),
+        inArray(pendingEdits.targetId, ids),
+      ),
+    )
+    .orderBy(asc(pendingEdits.id))
+    .for('share');
+  await db
+    .select({ id: paperReviews.id })
+    .from(paperReviews)
+    .where(inArray(paperReviews.citationId, ids))
+    .orderBy(asc(paperReviews.id))
+    .for('share');
+}
+
 /**
  * True when a conversation-ingestion proposal still cites a paper nobody has
  * read in full. Ingestion stages such a fact as `pending` precisely so someone
@@ -1757,14 +1809,7 @@ export async function pendingEditTargetOpenToAgents(pending: {
 export async function pendingEditCitesUnreadSources(pending: {
   proposedMeta: unknown;
 }): Promise<boolean> {
-  const listed = (pending.proposedMeta as { unverifiedReferenceIds?: unknown } | null)
-    ?.unverifiedReferenceIds;
-  if (!Array.isArray(listed)) return false;
-  const ids = [
-    ...new Set(
-      listed.filter((n): n is number => Number.isInteger(n) && (n as number) > 0),
-    ),
-  ];
+  const ids = unverifiedReferenceIdsOf(pending.proposedMeta);
   if (ids.length === 0) return false;
 
   const db = getDb();
