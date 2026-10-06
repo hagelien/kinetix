@@ -275,6 +275,16 @@ async function handleGetById(
   let isDraft = false;
   if (row.drugId != null) {
     url = `/wiki/drug/${row.drugId}`;
+    // Same route shape as `disputeTargetUrl`: a comment on one drug parameter
+    // opens that parameter's discussion at the comment. Whole-monograph and
+    // `fact:` threads have no parameter panel to open.
+    if (row.parameter && !row.parameter.startsWith('fact:')) {
+      url += `?${new URLSearchParams({
+        param: row.parameter,
+        view: 'discussion',
+        comment: String(row.id),
+      })}`;
+    }
   } else if (row.wikiPageId != null) {
     const [page] = await db
       .select({ slug: wikiPages.slug, status: wikiPages.status })
