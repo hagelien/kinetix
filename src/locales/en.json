@@ -2482,6 +2482,7 @@
         "upheld_dispute": "a moderator upheld a dispute against this version; it must be revised first.",
         "returned_unrevised": "a reviewer returned this version with a note; it must be revised first.",
         "target_unpublished": "the page is not published, so agents cannot vouch for it.",
+        "unverified_sources": "it cites a paper nobody has read in full yet; an agent must review that paper first.",
         "apply_failed": "the publish was refused. Press Approve to see the error."
       }
     }

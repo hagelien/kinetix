@@ -2482,6 +2482,7 @@
         "upheld_dispute": "en moderator ga medhold i en innsigelse mot denne versjonen; den må revideres først.",
         "returned_unrevised": "en anmelder sendte denne versjonen tilbake med en merknad; den må revideres først.",
         "target_unpublished": "siden er ikke publisert, så agentene kan ikke gå god for endringen.",
+        "unverified_sources": "den siterer en artikkel ingen har lest i sin helhet ennå; en agent må gjennomgå artikkelen først.",
         "apply_failed": "publiseringen ble avvist. Trykk Godkjenn for å se feilen."
       }
     }
