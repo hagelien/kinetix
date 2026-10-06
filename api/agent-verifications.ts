@@ -1432,6 +1432,12 @@ export async function sweepAgentConsensus(
   const humanAuthorQuorum = effectiveConsensusQuorum(activeVerifiers, {
     authorSelfReviews: true,
   });
+  const submitterIsActiveAgentSql = sql`exists (
+    select 1 from ${agents} sa join ${users} su on su.id = sa.user_id
+    where sa.user_id = ${pendingEdits.submittedBy}
+      and sa.status = 'active'
+      and su.role in (${sql.join(ACTIVE_AGENT_ROLES.map((r) => sql`${r}`), sql`, `)})
+  )`;
   const blankQuote = (expr: ReturnType<typeof sql>) => sql`nullif(btrim(${expr}), '') is null`;
   const unquotedCalculationDriving = sql`(
     ${pendingEdits.parameter} in (${sql.join(
@@ -1446,21 +1452,15 @@ export async function sweepAgentConsensus(
       or (${pendingEdits.editType} = 'param_entry'
         and ${pendingEdits.proposedValue}->>'op' = 'create'
         and ${blankQuote(sql`${pendingEdits.proposedValue}->'input'->>'quote'`)})
+      -- A person's entry update, whatever its payload says: whether the write
+      -- keeps a quote turns on the stored row and the evidence fields the
+      -- patch moves (quoteAfterUpdate), which this filter cannot evaluate in
+      -- bulk, and a person's held update is not returned to them. Left out
+      -- conservatively; a new verdict on it still runs consensus directly.
       or (${pendingEdits.editType} = 'param_entry'
         and ${pendingEdits.proposedValue}->>'op' = 'update'
-        and ${blankQuote(sql`${pendingEdits.proposedValue}->'patch'->>'quote'`)}
-        and not exists (
-          select 1 from parameter_entries stored
-          where stored.id = ${pendingEdits.targetId}
-            and nullif(btrim(stored.source_quote), '') is not null
-        ))
+        and not ${submitterIsActiveAgentSql})
     )
-  )`;
-  const submitterIsActiveAgentSql = sql`exists (
-    select 1 from ${agents} sa join ${users} su on su.id = sa.user_id
-    where sa.user_id = ${pendingEdits.submittedBy}
-      and sa.status = 'active'
-      and su.role in (${sql.join(ACTIVE_AGENT_ROLES.map((r) => sql`${r}`), sql`, `)})
   )`;
   // A calculation-driving edit never rides the degraded single-approval path
   // (`consensusApprovalHoldReason`), so its bar is the full design target even
@@ -1539,8 +1539,9 @@ export async function sweepAgentConsensus(
         // A calculation-driving proposal with no quote never publishes on
         // consensus. An agent's is returned to it by the unquoted sweep; a
         // person's stays pending for a moderator, and without this 25 of them
-        // at quorum would hold every window on `source_quote_missing`. An
-        // update that omits the quote but keeps a stored one is not excluded.
+        // at quorum would hold every window on `source_quote_missing`. A
+        // person's calculation-driving entry update is left out whatever its
+        // payload says (see `unquotedCalculationDriving`).
         not(unquotedCalculationDriving),
         // Same content gate as the verifier queue: a wiki edit only while its
         // page is published, so draft-backed rows neither publish nor fill
