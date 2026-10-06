@@ -489,16 +489,17 @@ describe('mergeCitations — folding a split pair (#1018)', () => {
       proposedValue: { type: 'fact', attrs: { factId: 'f', referenceIds: [loser] } },
     });
     const byMarker = await insert({ proposedMeta: { unverifiedReferenceIds: [loser] } });
-    // Not locked: a queued review (the merge writes those after the reviews),
-    // a decided proposal, and one citing only the winner.
+    // Whatever its status: a draft or returned one can turn pending mid-merge.
+    const returned = await insert({ referenceId: loser, status: 'returned' });
+    // Not locked: a queued review (the merge writes those after the reviews)
+    // and one citing only the winner.
     await insert({ editType: 'paper_review', targetId: loser, proposedValue: {} });
-    await insert({ referenceId: loser, status: 'approved' });
     await insert({ referenceId: winner });
 
     const locked = await db.transaction((tx) =>
       lockPendingEditsCitingCitation(tx as never, loser),
     );
-    expect(locked).toEqual([byColumn, byArray, byNode, byMarker]);
+    expect(locked).toEqual([byColumn, byArray, byNode, byMarker, returned]);
   });
 
   it("repoints an ingested fact's unread-paper marker", async () => {

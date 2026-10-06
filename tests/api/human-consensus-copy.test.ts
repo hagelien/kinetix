@@ -104,6 +104,8 @@ describe('the retired "people never publish on consensus" rule', () => {
       /invisible on the published page until a human approves/i,
       /verify\s+before the human reviewer does/i,
       /routes exactly those to the human review queue/i,
+      /refuses a (?:human|person)'?s? (?:proposal|edit)/i,
+      /(?:human|person)'?s? (?:proposal|edit)[^.\n]{0,40}whatever the (?:count|tally)/i,
     ];
     const stillHolds = /~~|retired|hold for human review|requiresHumanReview|\bv2\b|\bv3\b|clinical|unattributed|no recorded author|dispute|moderat(?:e|ing) (?:a|one)|\/review|superseded/i;
     const offenders: string[] = [];
