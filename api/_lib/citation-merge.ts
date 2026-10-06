@@ -301,26 +301,36 @@ async function rewriteJsonDocuments(
   // has a read-in-full review (`pendingEditCitesUnreadSources`). Left on the
   // loser, that lookup would query a deleted citation forever, so a review of
   // the surviving paper could never release the fact.
+  //
+  // One statement, touching only that key: the row's other metadata is not
+  // this merge's to write, and a whole-object copy read beforehand could
+  // overwrite a marker written meanwhile (a reviewer's `returnedAt`, a
+  // `conflict`). The UPDATE reads the row it writes.
   const marked = await db
-    .select({ id: pendingEdits.id, proposedMeta: pendingEdits.proposedMeta })
-    .from(pendingEdits)
+    .update(pendingEdits)
+    .set({
+      proposedMeta: sql`jsonb_set(
+        ${pendingEdits.proposedMeta},
+        '{unverifiedReferenceIds}',
+        (
+          select coalesce(jsonb_agg(m.v order by m.first), '[]'::jsonb)
+          from (
+            select
+              case when e.v = to_jsonb(${winnerId}::int) or e.v = to_jsonb(${loserId}::int)
+                then to_jsonb(${winnerId}::int) else e.v end as v,
+              min(e.ord) as first
+            from jsonb_array_elements(${pendingEdits.proposedMeta} -> 'unverifiedReferenceIds')
+              with ordinality as e(v, ord)
+            group by 1
+          ) as m
+        )
+      )`,
+    })
     .where(
       sql`${pendingEdits.proposedMeta}->'unverifiedReferenceIds' @> ${JSON.stringify([loserId])}::jsonb`,
-    );
-  for (const edit of marked) {
-    const meta = edit.proposedMeta as { unverifiedReferenceIds?: unknown } | null;
-    if (!meta || !Array.isArray(meta.unverifiedReferenceIds)) continue;
-    const ids = [
-      ...new Set(
-        meta.unverifiedReferenceIds.map((id) => (id === loserId ? winnerId : id)),
-      ),
-    ];
-    await db
-      .update(pendingEdits)
-      .set({ proposedMeta: { ...meta, unverifiedReferenceIds: ids } as never })
-      .where(eq(pendingEdits.id, edit.id));
-    rewritten += 1;
-  }
+    )
+    .returning({ id: pendingEdits.id });
+  rewritten += marked.length;
 
   return rewritten;
 }

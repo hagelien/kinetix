@@ -196,3 +196,64 @@ describe('nextProposedMetaPreservingConflict over real SQL', () => {
     expect(meta?.editSummary).toBe('Edited.');
   });
 });
+
+describe('the conversation-ingestion marker survives a revision', () => {
+  // `unverifiedReferenceIds` holds agent consensus until the cited papers are
+  // read in full (`pendingEditCitesUnreadSources`). A revision reads no paper,
+  // so whatever meta it supplies — none at all, or an object without the key —
+  // the row's marker must come through.
+  const MARKER = {
+    unverifiedReferenceIds: [41, 42],
+    unverifiedSourceKeys: ['S1', 'S2'],
+  };
+
+  async function seedMarkedEdit(userId: number): Promise<number> {
+    const [row] = await db
+      .insert(pendingEdits)
+      .values({
+        editType: 'wiki_fact',
+        targetId: 3,
+        proposedValue: { type: 'fact', attrs: { factId: 'f-1', referenceIds: [41] } },
+        proposedMeta: { source: 'conversation_ingestion', ...MARKER },
+        status: 'pending',
+        submittedBy: userId,
+      })
+      .returning({ id: pendingEdits.id });
+    return row!.id;
+  }
+
+  it.each([
+    ['null', null],
+    ['an object without the marker', { editSummary: 'Reworded.' }],
+    ['a forged replacement marker', { unverifiedReferenceIds: [] }],
+  ])('keeps the stored marker when the revision supplies %s', async (_label, nextMeta) => {
+    const userId = await seedUser(db, {
+      email: 'ingest@example.com',
+      username: 'ingest',
+      role: 'admin',
+    });
+    const id = await seedMarkedEdit(userId);
+    const snapshot = { source: 'conversation_ingestion', ...MARKER };
+
+    await writeWithExpr(id, nextMeta, snapshot, true);
+
+    expect(await readMeta(id)).toMatchObject(MARKER);
+  });
+
+  it('adds nothing to an edit ingestion did not mark', async () => {
+    const userId = await seedUser(db, {
+      email: 'plain@example.com',
+      username: 'plain',
+      role: 'contributor',
+    });
+    const id = await seedConflictedEdit(userId);
+    await db
+      .update(pendingEdits)
+      .set({ proposedMeta: { editSummary: 'Plain.' } })
+      .where(eq(pendingEdits.id, id));
+
+    await writeWithExpr(id, null, { editSummary: 'Plain.' }, true);
+
+    expect(await readMeta(id)).toBeNull();
+  });
+});

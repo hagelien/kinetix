@@ -478,6 +478,8 @@ describe('mergeCitations — folding a split pair (#1018)', () => {
           source: 'conversation_ingestion',
           unverifiedSourceKeys: ['S1', 'S2'],
           unverifiedReferenceIds: [loser, winner],
+          // Not the merge's to write: it touches the marker key alone.
+          returnedAt: '2026-10-06T00:00:00.000Z',
         },
         submittedBy: userId,
       })
@@ -493,6 +495,7 @@ describe('mergeCitations — folding a split pair (#1018)', () => {
       source: 'conversation_ingestion',
       unverifiedSourceKeys: ['S1', 'S2'],
       unverifiedReferenceIds: [winner],
+      returnedAt: '2026-10-06T00:00:00.000Z',
     });
   });
 });
