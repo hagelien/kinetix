@@ -52,7 +52,11 @@ import { agentVerifications, agents } from '../../../db/schema.js';
 import { KINETIX_SPACE } from './actor-context.js';
 import { recordAuditEvent } from './store/audit.js';
 import { recordAssessment } from './store/assessments.js';
-import { ensureSpace, ensureTarget } from './store/spaces.js';
+import { ensureSpace, ensureTarget, setActivePolicyVersion } from './store/spaces.js';
+import {
+  KINETIX_POLICY_ID,
+  KINETIX_POLICY_VERSION as KINETIX_POLICY_RULES_VERSION,
+} from '../../../src/lib/assurance/policy.js';
 import { findByLegacy, linkLegacyRecord } from './store/legacy-links.js';
 import {
   legacyProvenance,
@@ -62,8 +66,11 @@ import {
 } from './store/interface.js';
 import type { TargetRef } from 'assurance-core';
 
-/** The policy set Kinetix's space evaluates under (Phase 1). */
-export const KINETIX_POLICY_VERSION = 'kinetix-consensus@v1';
+/**
+ * The policy set Kinetix's space evaluates under, read off the policy itself
+ * so the space's pointer cannot lag behind a version bump.
+ */
+export const KINETIX_POLICY_VERSION = `${KINETIX_POLICY_ID}@${KINETIX_POLICY_RULES_VERSION}`;
 
 /**
  * Create the Kinetix space if it is missing.
@@ -74,11 +81,20 @@ export const KINETIX_POLICY_VERSION = 'kinetix-consensus@v1';
 export async function ensureKinetixSpace(
   db: GovernanceDb = getDb(),
 ): Promise<SpaceRecord> {
-  return ensureSpace(db, {
+  const space = await ensureSpace(db, {
     slug: KINETIX_SPACE,
     name: 'Kinetix',
     activePolicyVersion: KINETIX_POLICY_VERSION,
   });
+  // An existing space keeps whatever version it was created under
+  // (`ensureSpace` does nothing on conflict), so advance its pointer when the
+  // policy has moved on. Not retroactive: decision records carry their own
+  // version (`setActivePolicyVersion`).
+  if (space.activePolicyVersion !== KINETIX_POLICY_VERSION) {
+    await setActivePolicyVersion(db, space.id, KINETIX_POLICY_VERSION);
+    return { ...space, activePolicyVersion: KINETIX_POLICY_VERSION };
+  }
+  return space;
 }
 
 /**
