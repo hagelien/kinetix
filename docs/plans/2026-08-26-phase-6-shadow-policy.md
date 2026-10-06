@@ -55,7 +55,10 @@ this publish?"*, and adds the one requirement the tally has no way to express:
 agent. Here `authorKind` is `agent` only under exactly that test, and the
 `human-authored` rule then requires a human approval the agent tally cannot
 supply. "Consensus never stands in for a moderator on a person's work" stops
-being an early return and becomes a stated reason.
+being an early return and becomes a stated reason. *(Superseded: `v3` of this
+policy retires `human-authored`; a person's proposal publishes on agent
+consensus like an agent's, and only an unattributed one needs a human
+approval, under the `unattributed` rule.)*
 
 **Clinical case.** Legacy refuses it in its first three lines. Here the risk
 profile carries a `clinical_case` tag, the rule matches on it, and the
