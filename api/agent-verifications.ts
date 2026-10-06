@@ -11,7 +11,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { and, asc, desc, eq, exists, inArray, ne, not, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, exists, inArray, isNotNull, ne, not, or, sql } from 'drizzle-orm';
 import { json, error, withErrorHandling } from './_lib/response.js';
 import { getDb, inTransaction } from './_lib/db.js';
 import { getUserFromRequest } from './_lib/auth.js';
@@ -1429,9 +1429,9 @@ export async function sweepAgentConsensus(
     isHighRiskPendingEdit({ editType: 'parameter', parameter: id }),
   );
   // Edits that consensus can never publish are filtered out here, before the
-  // LIMIT, not left to `legacyConsensusHold`: otherwise 25 old human-submitted
-  // or clinical rows would fill every sweep and starve the agent-authored edits
-  // behind them whose hold actually cleared. The same reasoning covers a
+  // LIMIT, not left to `legacyConsensusHold`: otherwise 25 old unattributed
+  // or clinical rows would fill every sweep and starve the edits behind them
+  // whose hold actually cleared. The same reasoning covers a
   // permanently sub-quorum tally (issue #1367): without it, 25+ edits stuck at
   // one approval in a two-approval pool would occupy the oldest-first window on
   // every cycle and starve out newer edits whose tally already clears the bar.
@@ -1467,17 +1467,6 @@ export async function sweepAgentConsensus(
         sql`, `,
       )}) then ${highRiskQuorumFloor}::int else ${quorumFloor}::int end`,
     );
-  const authorIsActiveAgent = db
-    .select({ one: sql`1` })
-    .from(agents)
-    .innerJoin(users, eq(users.id, agents.userId))
-    .where(
-      and(
-        eq(agents.userId, pendingEdits.submittedBy),
-        eq(agents.status, 'active'),
-        inArray(users.role, ACTIVE_AGENT_ROLES),
-      ),
-    );
   const openHumanDispute = db
     .select({ one: sql`1` })
     .from(disputes)
@@ -1495,7 +1484,9 @@ export async function sweepAgentConsensus(
       and(
         eq(pendingEdits.status, 'pending'),
         ne(pendingEdits.editType, 'clinical_case'),
-        exists(authorIsActiveAgent),
+        // A person's proposal is retried too: it publishes on consensus like
+        // an agent's. Only an unattributed one never can.
+        isNotNull(pendingEdits.submittedBy),
         exists(approvalsAtLeastQuorumFloor),
         not(exists(verdictOn('dispute'))),
         not(exists(openHumanDispute)),

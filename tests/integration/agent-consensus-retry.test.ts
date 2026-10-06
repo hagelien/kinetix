@@ -348,8 +348,9 @@ describe('agent consensus hold, re-stamp and retry', () => {
       username: 'human',
       role: 'contributor',
     });
-    // Three permanently held edits, all older than the one that can publish.
-    const humanEdit = await seedHighRiskEdit(human);
+    // Permanently held edits, all older than the one that can publish: a
+    // clinical case, and one a person disputes. (A person's own proposal is no
+    // longer one of them; see the next test.)
     const clinical = await seedHighRiskEdit(author.userId);
     await db
       .update(pendingEdits)
@@ -363,7 +364,7 @@ describe('agent consensus hold, re-stamp and retry', () => {
       reasonMd: 'Verdien stemmer ikke med kilden.',
     });
     const eligible = await seedHighRiskEdit(author.userId);
-    for (const id of [humanEdit, clinical, humanDisputed, eligible]) {
+    for (const id of [clinical, humanDisputed, eligible]) {
       await approve(b.agentId, id);
       await approve(c.agentId, id);
     }
@@ -371,6 +372,27 @@ describe('agent consensus hold, re-stamp and retry', () => {
     // With a window of one, the eligible edit is still the one retried.
     const results = await sweepAgentConsensus(1);
     expect(results.map((r) => r.pendingEditId)).toEqual([eligible]);
+  });
+
+  it("retries a person's proposal like an agent's", async () => {
+    await seedAgent('b');
+    const b = await seedAgent('b2');
+    const c = await seedAgent('c');
+    const human = await seedUser(db, {
+      email: 'person@example.com',
+      username: 'person',
+      role: 'contributor',
+    });
+    const edit = await seedHighRiskEdit(human);
+    await approve(b.agentId, edit, { tier: 'flagship' });
+    await approve(c.agentId, edit);
+
+    // Picked up by the sweep and through every consensus gate: it reaches the
+    // write. (The seed payload is the minimal shape the other cases use, which
+    // the entry write itself refuses — that refusal is the write's, not a hold.)
+    const results = await sweepAgentConsensus();
+    const mine = results.find((r) => r.pendingEditId === edit);
+    expect(mine).toMatchObject({ outcome: 'held', reason: 'apply_failed' });
   });
 
   it('keeps a permanently sub-quorum tally from occupying the sweep window (#1367)', async () => {
