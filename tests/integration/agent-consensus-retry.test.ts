@@ -461,6 +461,34 @@ describe('agent consensus hold, re-stamp and retry', () => {
     expect(stuckAfter!.status).toBe('pending');
   });
 
+  it("keeps a person's unquoted calculation-driving proposal out of the sweep window", async () => {
+    // It can never publish on consensus (no quote), and unlike an agent's it is
+    // not returned; left in the window, older rows like it would hold every
+    // slot on source_quote_missing.
+    const author = await seedAgent('author');
+    const b = await seedAgent('b');
+    const c = await seedAgent('c');
+    const human = await seedUser(db, {
+      email: 'person@example.com',
+      username: 'person',
+      role: 'contributor',
+    });
+    const unquoted = await seedHighRiskEdit(human);
+    await db
+      .update(pendingEdits)
+      .set({ proposedValue: { op: 'create', input: { value: 0.35 } } as never })
+      .where(eq(pendingEdits.id, unquoted));
+    await approve(b.agentId, unquoted, { tier: 'flagship' });
+    await approve(c.agentId, unquoted);
+    await new Promise((r) => setTimeout(r, 5));
+    const eligible = await seedHighRiskEdit(author.userId);
+    await approve(b.agentId, eligible, { tier: 'flagship' });
+    await approve(c.agentId, eligible);
+
+    const results = await sweepAgentConsensus(1);
+    expect(results.map((r) => r.pendingEditId)).toEqual([eligible]);
+  });
+
   it("holds a person's proposal to the pool's full quorum when filtering the sweep window", async () => {
     // Two active agents: an agent author's floor is 1 (its one peer), but a
     // person's proposal has both agents eligible, so its quorum is 2. A human

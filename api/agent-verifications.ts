@@ -1432,6 +1432,30 @@ export async function sweepAgentConsensus(
   const humanAuthorQuorum = effectiveConsensusQuorum(activeVerifiers, {
     authorSelfReviews: true,
   });
+  const blankQuote = (expr: ReturnType<typeof sql>) => sql`nullif(btrim(${expr}), '') is null`;
+  const unquotedCalculationDriving = sql`(
+    ${pendingEdits.parameter} in (${sql.join(
+      DRUG_PARAMETER_IDS.filter((id) =>
+        isHighRiskPendingEdit({ editType: 'parameter', parameter: id }),
+      ).map((id) => sql`${id}`),
+      sql`, `,
+    )})
+    and (
+      (${pendingEdits.editType} = 'parameter'
+        and ${blankQuote(sql`${pendingEdits.proposedMeta}->>'sourceQuote'`)})
+      or (${pendingEdits.editType} = 'param_entry'
+        and ${pendingEdits.proposedValue}->>'op' = 'create'
+        and ${blankQuote(sql`${pendingEdits.proposedValue}->'input'->>'quote'`)})
+      or (${pendingEdits.editType} = 'param_entry'
+        and ${pendingEdits.proposedValue}->>'op' = 'update'
+        and ${blankQuote(sql`${pendingEdits.proposedValue}->'patch'->>'quote'`)}
+        and not exists (
+          select 1 from parameter_entries stored
+          where stored.id = ${pendingEdits.targetId}
+            and nullif(btrim(stored.source_quote), '') is not null
+        ))
+    )
+  )`;
   const submitterIsActiveAgentSql = sql`exists (
     select 1 from ${agents} sa join ${users} su on su.id = sa.user_id
     where sa.user_id = ${pendingEdits.submittedBy}
@@ -1512,6 +1536,12 @@ export async function sweepAgentConsensus(
         exists(approvalsAtLeastQuorumFloor),
         not(exists(verdictOn('dispute'))),
         not(exists(openHumanDispute)),
+        // A calculation-driving proposal with no quote never publishes on
+        // consensus. An agent's is returned to it by the unquoted sweep; a
+        // person's stays pending for a moderator, and without this 25 of them
+        // at quorum would hold every window on `source_quote_missing`. An
+        // update that omits the quote but keeps a stored one is not excluded.
+        not(unquotedCalculationDriving),
         // Same content gate as the verifier queue: a wiki edit only while its
         // page is published, so draft-backed rows neither publish nor fill
         // the window.
