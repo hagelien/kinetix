@@ -42,8 +42,10 @@ export const KINETIX_POLICY_ID = 'kinetix-consensus';
  * Bump on any change to the rules below, and never edit a rule in place
  * without bumping: persisted decision records name this version, and a
  * silently-changed `v1` would claim old content was published under new rules.
+ *
+ * v2 retires `human-authored` and adds `unattributed` (see the rule).
  */
-export const KINETIX_POLICY_VERSION = 'v1';
+export const KINETIX_POLICY_VERSION = 'v2';
 
 /**
  * Two independent approvals. The same design target the legacy
@@ -74,7 +76,9 @@ export const KINETIX_UNQUOTED_TAG = 'unquoted_calculation_driving';
 /** Stable rule ids. These reach persisted decision records — do not renumber. */
 export const KINETIX_RULE_IDS = {
   base: 'base',
+  /** Retired in `kinetix-consensus@v2` / `kinetix-consensus-apply@v3`; kept because persisted v1/v2 records name it. */
   humanAuthored: 'human-authored',
+  unattributed: 'unattributed',
   highRisk: 'high-risk',
   clinicalCase: 'clinical-case',
   unquoted: 'unquoted-calculation-driving',
@@ -103,12 +107,13 @@ export function buildKinetixPolicy(): PolicySet {
         independentApprovalsFromPool(),
       ],
     })
+    // v2 retires `human-authored`: a person's proposal publishes on agent
+    // consensus under the same bar as an agent's. What still needs a person is
+    // a proposal nobody can be named as the author of (`unattributed`), a
+    // clinical case, and anything a dispute holds.
     .rule({
-      id: KINETIX_RULE_IDS.humanAuthored,
-      when: { authorKind: 'human' },
-      // Agents peer-review every proposal, human-authored ones included — a
-      // dispute floats it, approvals corroborate it. What agent consensus never
-      // does is stand in for the moderator on a person's proposal.
+      id: KINETIX_RULE_IDS.unattributed,
+      when: { authorKind: 'system' },
       require: [humanApproval()],
     })
     .rule({
@@ -145,8 +150,12 @@ export const KINETIX_APPLY_POLICY_ID = 'kinetix-consensus-apply';
  * version, and a silently-extended `v1` would claim decisions made under the
  * old rule set had been made under the new one. Cheap here because this policy
  * is still shadow-only — no published decision was ever taken under it.
+ *
+ * v3 retires `human-authored` (a person's proposal publishes on agent
+ * consensus like an agent's) and adds `unattributed` for a proposal with no
+ * recorded author, which still needs a person.
  */
-export const KINETIX_APPLY_POLICY_VERSION = 'v2';
+export const KINETIX_APPLY_POLICY_VERSION = 'v3';
 
 /**
  * The whole agent-consensus auto-apply gate (Phase 6).
@@ -159,8 +168,8 @@ export const KINETIX_APPLY_POLICY_VERSION = 'v2';
  * is authoritative through delegation. This one answers "may
  * `applyOnAgentConsensus` publish this?", which the legacy path decides with
  * checks that live outside the tally entirely — a clinical case is refused
- * before any counting happens, a human's proposal is refused whatever the
- * count, and a human dispute lives in a table the tally never reads.
+ * before any counting happens, an unattributed proposal is refused whatever
+ * the count, and a human dispute lives in a table the tally never reads.
  *
  * Nothing routes through this yet. It is evaluated in `shadow` mode and
  * compared against the legacy outcome.
@@ -191,8 +200,8 @@ export function buildKinetixApplyPolicy(): PolicySet {
       ],
     })
     .rule({
-      id: KINETIX_RULE_IDS.humanAuthored,
-      when: { authorKind: 'human' },
+      id: KINETIX_RULE_IDS.unattributed,
+      when: { authorKind: 'system' },
       require: [humanApproval()],
     })
     .rule({
