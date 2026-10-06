@@ -25,6 +25,7 @@ import {
   AGENT_CONSENSUS_APPROVE_QUORUM,
   approverCountsForConsensus,
   lockPendingEditTargetPage,
+  lockPendingEditSourceReviews,
   pendingEditTargetOpenToAgents,
   pendingEditCitesUnreadSources,
   lockConsensusEligibility,
@@ -1281,6 +1282,7 @@ export async function runAgentConsensus(args: {
         revalidate: async () => {
           await lockConsensusEligibility();
           await lockPendingEditTargetPage(pending);
+          await lockPendingEditSourceReviews(pending);
           const recheck = await legacyConsensusHold(args.pendingEditId, pending, {
             authorSelfReviews: args.authorSelfReviews,
             log: false,

@@ -20,6 +20,7 @@ import { pendingEditPageHydrationFor } from '../../../../agent-verifications-que
 import {
   approverCountsForConsensus,
   lockPendingEditTargetPage,
+  lockPendingEditSourceReviews,
   isHighRiskPendingEdit,
   lockConsensusEligibility,
 } from '../../../agent-verifications.js';
@@ -451,11 +452,18 @@ export const pendingEditAdapter: KnowledgeTargetAdapter<
       revalidate: async () => {
         await lockConsensusEligibility();
         const [target] = await getDb()
-          .select({ editType: pendingEdits.editType, targetId: pendingEdits.targetId })
+          .select({
+            editType: pendingEdits.editType,
+            targetId: pendingEdits.targetId,
+            proposedMeta: pendingEdits.proposedMeta,
+          })
           .from(pendingEdits)
           .where(eq(pendingEdits.id, pendingEditId))
           .limit(1);
-        if (target) await lockPendingEditTargetPage(target);
+        if (target) {
+          await lockPendingEditTargetPage(target);
+          await lockPendingEditSourceReviews(target);
+        }
         const facts = await collectConsensusFacts(pendingEditId);
         const recheck = facts ? evaluateShadowPolicy(facts) : null;
         if (!recheck || recheck.outcome !== 'apply') {
