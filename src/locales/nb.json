@@ -3843,6 +3843,7 @@
       "contextHint": "Denne parameteren har verken matriks eller scenario — skriv studiekonteksten (populasjon, administrasjonsvei, metode) som forklarer verdien under Observasjonskontekst.",
       "error_param_entry_invalid_for_parameter": "Verdien er ikke gyldig for denne parameteren — kontroller enhet og tillatt område.",
       "error_parameter_not_applicable": "Denne parameteren er ikke en definert størrelse for dette stoffet, og kan derfor ikke ha kildeoppføringer. Fjern «ikke aktuelt»-merkingen, eller korriger stoffklassen, først.",
+      "error_source_quote_required": "Denne verdien brukes i beregninger, så en agent må legge inn den ordrette setningen (eller tabellraden) fra kilden som oppgir den, i sitatfeltet.",
       "modelStructureValue": "Modellstruktur",
       "modelStructureHint": "En modellstruktur-angivelse er et kildebelagt valg, ikke en målt verdi — velg formen denne kilden støtter.",
       "errorModelStructureRequired": "Velg en modellstruktur-verdi.",

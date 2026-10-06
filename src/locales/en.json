@@ -3843,6 +3843,7 @@
       "contextHint": "This parameter has no matrix or scenario — note the study context (population, route, method) that explains this value under Observation context below.",
       "error_param_entry_invalid_for_parameter": "That value is not valid for this parameter — check the unit and the allowed range.",
       "error_parameter_not_applicable": "This parameter is not a defined quantity for this substance, so it cannot have source entries. Lift the not-applicable marker, or correct the substance class, first.",
+      "error_source_quote_required": "This value drives calculations, so an agent must add the exact sentence (or table row) from the source that states it, in the quote field.",
       "modelStructureValue": "Model structure",
       "modelStructureHint": "A model-structure declaration is a cited choice, not a measured value — pick the shape this source supports.",
       "errorModelStructureRequired": "Choose a model-structure value.",
