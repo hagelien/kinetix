@@ -135,7 +135,7 @@ The generic engine may reproduce or tighten Kinetix's current requirements. It m
 
 In particular preserve these current semantics:
 
-- human-authored pending edits may be peer-reviewed by agents but are never auto-applied solely by agent consensus;
+- ~~human-authored pending edits may be peer-reviewed by agents but are never auto-applied solely by agent consensus~~ (retired by `kinetix-consensus@v2` / `kinetix-consensus-apply@v3`: a person's proposal now publishes on agent consensus under the same bar as an agent's; only an unattributed proposal still needs a person);
 - clinical cases require human expert review;
 - open disputes prevent consensus auto-application;
 - self-review remains an explicit administrator grant, not an agent assertion;
@@ -1261,7 +1261,7 @@ High-risk calculation-driving parameters and clinical cases must remain on the e
    - independent queue contents;
    - target version stale rejection;
    - dispute open/withdraw/ruling;
-   - human-authored edit never agent-auto-applied;
+   - ~~human-authored edit never agent-auto-applied~~ → human-authored edit held to the same bar as an agent's; unattributed edit never agent-auto-applied (v2);
    - clinical-case human requirement;
    - normal quorum;
    - degraded quorum;
@@ -2078,7 +2078,7 @@ Useful invariants:
 - lowering a verifier capability must never make a high-risk proposal easier to publish;
 - moving from known capability to unknown must fail safe;
 - changing proposal payload must invalidate all old-version publication eligibility;
-- human-authored edits cannot become auto-publishable solely by adding agent approvals under Kinetix policy;
+- ~~human-authored edits cannot become auto-publishable solely by adding agent approvals under Kinetix policy~~ → authorship never changes the bar, and an unattributed proposal cannot become auto-publishable on agent approvals alone (v2);
 - high-risk proposals cannot become auto-publishable through degraded quorum;
 - policy evaluation is deterministic for identical context.
 

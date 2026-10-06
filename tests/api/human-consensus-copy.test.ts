@@ -7,6 +7,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import en from '../../src/locales/en.json';
 import nb from '../../src/locales/nb.json';
+import { KINETIX_POLICY_ID, KINETIX_POLICY_VERSION } from '../../src/lib/assurance/policy.js';
 
 type Reasons = {
   review: { consensus: { reason: Record<string, string> }; errors: Record<string, string> };
@@ -39,9 +40,13 @@ describe('the retired "people never publish on consensus" rule', () => {
       'api/_lib/knowledge-governance/actor-context.ts',
       'api/_lib/knowledge-governance/policy-shadow.ts',
       'api/_lib/knowledge-governance/dossier.ts',
+      'api/agent-verifications-queue.ts',
+      'api/_lib/source-quote-gate.ts',
     ];
     const retired = [
       /human'?s? (?:proposal|edit) (?:never publishes|always waits)/i,
+      /agent verdicts on human work[\s\S]{0,120}never publish/i,
+      /their\s+(?:\*\s+)?proposal goes to a person in any case/i,
       /only an agent-submitted edit can be\s+(?:\*\s+)?published/i,
       /consensus never stands in for (?:a|the) moderator/i,
     ];
@@ -63,6 +68,25 @@ describe('the retired "people never publish on consensus" rule', () => {
       const text = readFileSync(`agents/${file}`, 'utf8');
       for (const phrase of retired) {
         expect({ file, match: phrase.exec(text)?.[0] ?? null }).toEqual({ file, match: null });
+      }
+    }
+  });
+
+  it('names the current policy version where operators read it', () => {
+    const permissions = readFileSync('src/lib/permissions.ts', 'utf8');
+    expect(permissions).toContain(`knowledge-governance policy (${KINETIX_POLICY_ID}@${KINETIX_POLICY_VERSION})`);
+  });
+
+  it('is marked retired wherever the governance plans list it as a standing invariant', () => {
+    for (const file of [
+      'docs/plans/2026-08-26-general-knowledge-governance-extraction.md',
+      'docs/plans/2026-08-26-generalized-knowledge-governance-engine.md',
+    ]) {
+      const text = readFileSync(file, 'utf8');
+      for (const line of text.split('\n')) {
+        if (/human-authored[^\n]*never[^\n]*(?:auto-appl|auto-publish)/i.test(line)) {
+          expect({ file, line, retired: /~~|retired|v2/.test(line) }).toEqual({ file, line, retired: true });
+        }
       }
     }
   });
