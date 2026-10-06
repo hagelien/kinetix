@@ -655,7 +655,7 @@ const DEGRADED_QUORUM_WARN_THROTTLE_MS = 10 * 60_000;
 function warnDegradedConsensusQuorum(
   activeAgents: number,
   quorum: number,
-  authorSelfReviews = false,
+  author: 'agent' | 'self_review' | 'human' = 'agent',
 ): void {
   const now = Date.now();
   if (now - _lastDegradedQuorumWarnAt < DEGRADED_QUORUM_WARN_THROTTLE_MS) {
@@ -668,13 +668,19 @@ function warnDegradedConsensusQuorum(
   // restore the design target. With it, the lone approval is the author's own
   // and a SECOND agent is already enough — the author counts itself, so the
   // pool reaches quorum 2 one agent sooner.
-  const detail = authorSelfReviews
-    ? `The author reviews its own work (agents.self_review_enabled), so this ` +
-      `edit can be carried by its own verdict alone; adding a second active ` +
-      `agent restores two-reviewer consensus.`
-    : `Agent-authored edits now auto-apply on a single independent peer ` +
-      `approval; add a third active agent to restore ` +
-      `two-independent-reviewer consensus.`;
+  // A person's proposal is a third case: its author holds no seat, so the
+  // lone approval is an agent's, and one more active agent restores the bar.
+  const detail =
+    author === 'self_review'
+      ? `The author reviews its own work (agents.self_review_enabled), so this ` +
+        `edit can be carried by its own verdict alone; adding a second active ` +
+        `agent restores two-reviewer consensus.`
+      : author === 'human'
+        ? `A person's proposal now publishes on a single agent approval; add ` +
+          `a second active agent to restore two-reviewer consensus.`
+        : `Agent-authored edits now auto-apply on a single independent peer ` +
+          `approval; add a third active agent to restore ` +
+          `two-independent-reviewer consensus.`;
   console.warn(
     `[agent-consensus] degraded quorum: ${activeAgents} active agent(s) ` +
       `support a quorum of only ${quorum} (design target ` +
@@ -976,7 +982,9 @@ async function legacyConsensusHold(
     warnDegradedConsensusQuorum(
       activeAgents,
       quorum,
-      quorumOpts.authorSelfReviews,
+      // The pool arithmetic treats a person like a self-reviewing author, but
+      // the operator needs to hear who actually carried the edit.
+      !submitterIsAgent ? 'human' : quorumOpts.authorSelfReviews ? 'self_review' : 'agent',
     );
   }
 

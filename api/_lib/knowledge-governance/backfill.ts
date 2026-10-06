@@ -90,11 +90,29 @@ export async function ensureKinetixSpace(
   // (`ensureSpace` does nothing on conflict), so advance its pointer when the
   // policy has moved on. Not retroactive: decision records carry their own
   // version (`setActivePolicyVersion`).
-  if (space.activePolicyVersion !== KINETIX_POLICY_VERSION) {
+  if (policyPointerIsOlder(space.activePolicyVersion)) {
     await setActivePolicyVersion(db, space.id, KINETIX_POLICY_VERSION);
     return { ...space, activePolicyVersion: KINETIX_POLICY_VERSION };
   }
   return space;
+}
+
+/**
+ * True when a space's pointer names an older version of this policy (or none),
+ * so advancing it moves forward only. During an overlapping deployment an
+ * older build must not drag back a pointer the newer build already advanced,
+ * and a pointer this build cannot read is left alone rather than overwritten.
+ */
+export function policyPointerIsOlder(current: string | null): boolean {
+  if (current === null) return true;
+  const parse = (v: string) => {
+    const m = /^(.+)@v(\d+)$/.exec(v);
+    return m ? { id: m[1]!, n: Number(m[2]) } : null;
+  };
+  const have = parse(current);
+  const want = parse(KINETIX_POLICY_VERSION);
+  if (!have || !want || have.id !== want.id) return false;
+  return have.n < want.n;
 }
 
 /**

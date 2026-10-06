@@ -8,6 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   ensureKinetixSpace,
   KINETIX_POLICY_VERSION,
+  policyPointerIsOlder,
 } from '../../api/_lib/knowledge-governance/backfill.js';
 import { ensureSpace, findSpace } from '../../api/_lib/knowledge-governance/store/spaces.js';
 import { KINETIX_SPACE } from '../../api/_lib/knowledge-governance/actor-context.js';
@@ -52,5 +53,24 @@ describe('the Kinetix space policy pointer', () => {
     expect((await findSpace(db as never, KINETIX_SPACE))!.activePolicyVersion).toBe(
       KINETIX_POLICY_VERSION,
     );
+  });
+
+  it('never moves a newer pointer back', async () => {
+    // An older build running beside a newer one during a deploy.
+    const newer = `${KINETIX_POLICY_ID}@v${Number(RULES_VERSION.slice(1)) + 1}`;
+    await ensureSpace(db as never, { slug: KINETIX_SPACE, name: 'Kinetix', activePolicyVersion: newer });
+
+    await ensureKinetixSpace(db as never);
+
+    expect((await findSpace(db as never, KINETIX_SPACE))!.activePolicyVersion).toBe(newer);
+  });
+
+  it('advances only an older version of the same policy', () => {
+    expect(policyPointerIsOlder(null)).toBe(true);
+    expect(policyPointerIsOlder(`${KINETIX_POLICY_ID}@v1`)).toBe(true);
+    expect(policyPointerIsOlder(KINETIX_POLICY_VERSION)).toBe(false);
+    expect(policyPointerIsOlder(`${KINETIX_POLICY_ID}@v99`)).toBe(false);
+    expect(policyPointerIsOlder('some-other-policy@v1')).toBe(false);
+    expect(policyPointerIsOlder('unparseable')).toBe(false);
   });
 });
