@@ -578,6 +578,24 @@ describe('PUT /api/drug-parameter duplicate guard', () => {
     expect(insert).not.toHaveBeenCalled();
   });
 
+  it('refuses it on the direct-write path too, before anything is written', async () => {
+    // An agent granted direct writes (here: the admin role's capability) would
+    // otherwise publish the unquoted value at once.
+    getUserFromRequestMock.mockResolvedValue({ userId: 1, role: 'admin' });
+    agentProposalLacksSourceQuoteMock.mockResolvedValueOnce(true);
+    const { insert } = mockPendingDb({ openEdit: [] });
+
+    const { res, state } = createResponse();
+    await handler(
+      createPutRequest('/api/drug-parameter?drugId=42&parameter=molecularWeight', { value: 180.16 }),
+      res,
+    );
+
+    expect(state.statusCode).toBe(400);
+    expect(JSON.parse(state.body)).toMatchObject({ code: 'source_quote_required' });
+    expect(insert).not.toHaveBeenCalled();
+  });
+
   it('returns 409 with the existing pendingEditId when an open edit already exists', async () => {
     getUserFromRequestMock.mockResolvedValue({ userId: 7, role: 'contributor' });
     // Pre-check finds an open pending edit (submitted by anyone) for this field.

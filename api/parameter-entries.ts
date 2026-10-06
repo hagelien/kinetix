@@ -354,6 +354,20 @@ async function handleCreate(
   }
   if (!(await gateCitation(input.citationId, auth.userId, res))) return;
 
+  // Before choosing queued versus direct: an agent granted direct writes
+  // would otherwise publish the unquoted value at once.
+  if (
+    await agentProposalLacksSourceQuote(auth.userId, {
+      editType: 'param_entry',
+      parameter: input.parameter,
+      targetId: input.drugId,
+      proposedValue: { op: 'create', input },
+    })
+  ) {
+    error(res, 400, SOURCE_QUOTE_REQUIRED_MESSAGE, 'source_quote_required');
+    return;
+  }
+
   // Distinct create proposals coexist (a parameter is multi-value), so there is
   // no open-edit dedup — but an EXACT duplicate observation is rejected below,
   // both here (direct insert) and at approval, so it can't be pooled twice.
@@ -370,17 +384,6 @@ async function handleCreate(
     (await mustQueueModelStructure(auth.userId, auth.role, input.parameter)) ||
     data.submitForReview
   ) {
-    if (
-      await agentProposalLacksSourceQuote(auth.userId, {
-        editType: 'param_entry',
-        parameter: input.parameter,
-        targetId: input.drugId,
-        proposedValue: { op: 'create', input },
-      })
-    ) {
-      error(res, 400, SOURCE_QUOTE_REQUIRED_MESSAGE, 'source_quote_required');
-      return;
-    }
     // Every drug the proposal names — the target and any dose-context drug —
     // is locked in one sorted set and re-read under the locks before the
     // insert (`withParamEntryPayloadLocks`), so a concurrent delete or merge
@@ -523,22 +526,24 @@ async function handleUpdate(
   }
   if (!(await gateCitation(patch.citationId, auth.userId, res))) return;
 
+  // Before choosing queued versus direct: an agent granted direct writes
+  // would otherwise publish the unquoted value at once.
+  if (
+    await agentProposalLacksSourceQuote(auth.userId, {
+      editType: 'param_entry',
+      parameter: existing.parameter,
+      targetId: id,
+      proposedValue: { op: 'update', patch },
+    })
+  ) {
+    error(res, 400, SOURCE_QUOTE_REQUIRED_MESSAGE, 'source_quote_required');
+    return;
+  }
   if (
     !(await callerCan(auth.role, CAP['edit.directWrite'])) ||
     (await mustQueueModelStructure(auth.userId, auth.role, existing.parameter)) ||
     data.submitForReview
   ) {
-    if (
-      await agentProposalLacksSourceQuote(auth.userId, {
-        editType: 'param_entry',
-        parameter: existing.parameter,
-        targetId: id,
-        proposedValue: { op: 'update', patch },
-      })
-    ) {
-      error(res, 400, SOURCE_QUOTE_REQUIRED_MESSAGE, 'source_quote_required');
-      return;
-    }
     if (await hasOpenMutationEdit(id, existing.parameter)) {
       json(res, 409, {
         error: 'A pending edit already exists for this entry',

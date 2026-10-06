@@ -326,22 +326,25 @@ async function handleUpdate(
     effectiveReferenceIds = unionReferenceIds(referenceIds, currentRefs);
   }
 
+  // Before choosing queued versus direct: an agent granted direct writes
+  // would otherwise publish the unquoted value at once.
+  if (
+    await agentProposalLacksSourceQuote(auth.userId, {
+      editType: 'parameter',
+      parameter,
+      proposedValue: valid.data,
+      proposedMeta: { sourceQuote: parsed.data.sourceQuote },
+    })
+  ) {
+    error(res, 400, SOURCE_QUOTE_REQUIRED_MESSAGE, 'source_quote_required');
+    return;
+  }
+
   // Non-admin users, or admins explicitly choosing review, create a pending edit.
   if (
     !(await callerCan(auth.role, CAP['edit.directWrite'])) ||
     parsed.data.submitForReview
   ) {
-    if (
-      await agentProposalLacksSourceQuote(auth.userId, {
-        editType: 'parameter',
-        parameter,
-        proposedValue: valid.data,
-        proposedMeta: { sourceQuote: parsed.data.sourceQuote },
-      })
-    ) {
-      error(res, 400, SOURCE_QUOTE_REQUIRED_MESSAGE, 'source_quote_required');
-      return;
-    }
     // At most one OPEN pending edit per (drug, parameter). The pre-check returns
     // a clean 409 carrying the existing row id so a contributor (or an agent)
     // can endorse/refine it instead of re-proposing; the unique index
