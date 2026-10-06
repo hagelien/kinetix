@@ -27,7 +27,8 @@ badge we do not recognise is treated as P0 until someone says otherwise.
 nothing but P2 findings blocked the merge until they were fixed — the opposite of
 this policy, and the reason deferrals were not happening. It now also accepts a
 review whose every finding carries a P2 or P3 badge and has a reply, from someone
-with write access, linking an issue labelled `review-debt`. A P0, P1 or unbadged
+with write access, linking an issue labelled `review-debt` that is still open — leave it open
+until the PR that fixes it merges. A P0, P1 or unbadged
 finding on the head still blocks. Adding the `findings-deferred` label asks the
 gate to re-check; the label itself proves nothing.
 
