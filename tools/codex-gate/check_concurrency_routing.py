@@ -50,6 +50,7 @@ WORKFLOW = Path(".github/workflows/codex-gate.yml")
 # These mirror the workflow's own values. They are duplicated on purpose: if
 # one is changed there without being changed here, the controls below fail.
 OVERRIDE_LABEL = "merge-when-green"
+DEFERRED_LABEL = "findings-deferred"
 CODEX = "chatgpt-codex-connector[bot]"
 # Any account can be named like this on a public repository.
 LOOKALIKE = "evil-codex"
@@ -209,7 +210,7 @@ def build_cases() -> list[tuple[str, dict]]:
                       "pull_request": {"url": "x"} if is_pr else None},
         }))
     actions = ["opened", "synchronize", "reopened", "ready_for_review", "labeled"]
-    labels = [OVERRIDE_LABEL, "codex-approved", None]
+    labels = [OVERRIDE_LABEL, DEFERRED_LABEL, "codex-approved", None]
     for action, draft, label in itertools.product(actions, bools, labels):
         cases.append(("pull_request", {
             "action": action,
@@ -259,6 +260,12 @@ CONTROLS: list[tuple[str, str, dict, bool]] = [
     (f"labeled {OVERRIDE_LABEL}", "pull_request",
      {"action": "labeled", "label": {"name": OVERRIDE_LABEL},
       "pull_request": {"number": 42, "draft": False}}, True),
+    (f"labeled {DEFERRED_LABEL}", "pull_request",
+     {"action": "labeled", "label": {"name": DEFERRED_LABEL},
+      "pull_request": {"number": 42, "draft": False}}, True),
+    (f"labeled {DEFERRED_LABEL}, draft", "pull_request",
+     {"action": "labeled", "label": {"name": DEFERRED_LABEL},
+      "pull_request": {"number": 42, "draft": True}}, False),
     ("labeled codex-approved", "pull_request",
      {"action": "labeled", "label": {"name": "codex-approved"},
       "pull_request": {"number": 42, "draft": False}}, False),

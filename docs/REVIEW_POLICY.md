@@ -20,6 +20,17 @@ becomes tracked debt that is handled deliberately.
 A pull request is never merged with an open P0 or P1 finding. A finding with a
 badge we do not recognise is treated as P0 until someone says otherwise.
 
+## The merge gate follows the same rule
+
+`codex-gate` merges only on a Codex sign-off for the current head. Until
+2026-10-06 the only sign-off it recognised was a clean review, so a review with
+nothing but P2 findings blocked the merge until they were fixed — the opposite of
+this policy, and the reason deferrals were not happening. It now also accepts a
+review whose every finding carries a P2 or P3 badge and has a reply, from someone
+with write access, linking an issue labelled `review-debt`. A P0, P1 or unbadged
+finding on the head still blocks. Adding the `findings-deferred` label asks the
+gate to re-check; the label itself proves nothing.
+
 ## Escalation rule
 
 A finding that touches any of the following is treated as **at least P1** and
@@ -38,6 +49,11 @@ fixed immediately, whatever lower severity the review assigned it:
 
 The rule only raises severity, never lowers it: a P2 or P3 here becomes P1, and
 a P0 stays P0.
+
+A finding touches these areas when the defect it describes would itself cause
+harm there — a wrong or unattributed value, a bypassable provenance or approval
+check, an unauthorised write, a lost audit record — not merely because the code
+sits on such a path. Whoever escalates names that harm in the thread reply.
 
 Rationale: in these areas "less severe" is a judgement that can only be checked
 once the damage is done. This kind of risk must not accumulate in a backlog.

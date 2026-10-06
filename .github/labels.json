@@ -27,6 +27,11 @@
       "description": "Deferred review finding awaiting the milestone backlog review."
     },
     {
+      "name": "findings-deferred",
+      "color": "ededed",
+      "description": "Every P2/P3 review finding on this PR is filed as review-debt: asks the Codex gate to re-check."
+    },
+    {
       "name": "blocked",
       "color": "5319e7",
       "description": "Waiting on another issue, a decision, or an external dependency."
