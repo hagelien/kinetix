@@ -376,6 +376,70 @@ describe('agent consensus hold, re-stamp and retry', () => {
     expect(results.map((r) => r.pendingEditId)).toEqual([eligible]);
   });
 
+  it('keeps a proposal with no metadata and an unreviewed citation in the sweep window', async () => {
+    // Only an ingested fact is held for unread sources; an ordinary proposal
+    // with no `proposed_meta` at all must not fall out of the filter on a NULL.
+    const author = await seedAgent('author');
+    const b = await seedAgent('b');
+    const c = await seedAgent('c');
+    const [paper] = await db
+      .insert(citations)
+      .values({ type: 'pmid', identifier: '12345678' })
+      .returning({ id: citations.id });
+    const id = await seedHighRiskEdit(author.userId);
+    await db
+      .update(pendingEdits)
+      .set({ proposedMeta: null, referenceIds: [paper!.id], referenceId: paper!.id })
+      .where(eq(pendingEdits.id, id));
+    await approve(b.agentId, id);
+    await approve(c.agentId, id);
+
+    const results = await sweepAgentConsensus(1);
+    expect(results.map((r) => r.pendingEditId)).toEqual([id]);
+  });
+
+  it('keeps a returned, unrevised proposal out of the sweep window', async () => {
+    // A comment-only return keeps the approvals; resubmitted unchanged, the
+    // row sits at quorum and holds as `returned_unrevised` on every retry.
+    const author = await seedAgent('author');
+    const b = await seedAgent('b');
+    const c = await seedAgent('c');
+    const returned = await seedHighRiskEdit(author.userId);
+    await db
+      .update(pendingEdits)
+      .set({ proposedMeta: { returnedAt: '2026-10-06T10:00:00.000Z' } })
+      .where(eq(pendingEdits.id, returned));
+    // Revised before the return: the return still stands.
+    const revisedEarlier = await seedHighRiskEdit(author.userId);
+    await db
+      .update(pendingEdits)
+      .set({
+        proposedMeta: {
+          revisedAt: '2026-10-06T09:00:00.000Z',
+          returnedAt: '2026-10-06T10:00:00.000Z',
+        },
+      })
+      .where(eq(pendingEdits.id, revisedEarlier));
+    // Revised after it: eligible again.
+    const revisedSince = await seedHighRiskEdit(author.userId);
+    await db
+      .update(pendingEdits)
+      .set({
+        proposedMeta: {
+          returnedAt: '2026-10-06T10:00:00.000Z',
+          revisedAt: '2026-10-06T11:00:00.000Z',
+        },
+      })
+      .where(eq(pendingEdits.id, revisedSince));
+    for (const id of [returned, revisedEarlier, revisedSince]) {
+      await approve(b.agentId, id);
+      await approve(c.agentId, id);
+    }
+
+    const results = await sweepAgentConsensus(1);
+    expect(results.map((r) => r.pendingEditId)).toEqual([revisedSince]);
+  });
+
   it("retries a person's proposal like an agent's", async () => {
     await seedAgent('b');
     const b = await seedAgent('b2');

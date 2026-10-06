@@ -1511,6 +1511,16 @@ export async function sweepAgentConsensus(
         )
     )
   )`;
+  // COALESCE: with no meta every term is NULL, and NOT NULL would drop the
+  // row from the window.
+  const returnStandsUnrevisedSql = sql`coalesce(
+    jsonb_typeof(${pendingEdits.proposedMeta}->'returnedAt') = 'string'
+    and (
+      jsonb_typeof(${pendingEdits.proposedMeta}->'revisedAt') is distinct from 'string'
+      or ${pendingEdits.proposedMeta}->>'revisedAt' <= ${pendingEdits.proposedMeta}->>'returnedAt'
+    ),
+    false
+  )`;
   // A calculation-driving edit never rides the degraded single-approval path
   // (`consensusApprovalHoldReason`), so its bar is the full design target even
   // when the pool's floor is 1. Without it, 25 older high-risk rows sitting at
@@ -1591,8 +1601,18 @@ export async function sweepAgentConsensus(
         // at quorum would hold every window on `source_quote_missing`. A
         // person's calculation-driving entry update is left out whatever its
         // payload says (see `unquotedCalculationDriving`).
-        not(unquotedCalculationDriving),
-        not(citesUnreadSources),
+        // COALESCE throughout: a NULL from a missing field would make NOT drop
+        // a row the filter never meant to exclude.
+        not(sql`coalesce(${unquotedCalculationDriving}, false)`),
+        not(sql`coalesce(${citesUnreadSources}, false)`),
+        // A reviewer's comment-only return keeps the approvals, so a row
+        // resubmitted unchanged sits at quorum and holds as
+        // `returned_unrevised` on every retry (`returnStandsUnrevised`). Only
+        // a revision can clear it, and that wipes the verdicts and re-runs
+        // consensus on its own, so the row has no business in the window.
+        // Both markers are the server's ISO-8601 stamps, which compare as
+        // text; anything else is left in and held by the gate as before.
+        not(returnStandsUnrevisedSql),
         // Same content gate as the verifier queue: a wiki edit only while its
         // page is published, so draft-backed rows neither publish nor fill
         // the window.

@@ -42,6 +42,7 @@ import pendingEditsHandler from '../../../api/pending-edits.js';
 import disputesHandler from '../../../api/disputes.js';
 import { verificationTargetVersion } from '../../../api/_lib/agent-verifications.js';
 import {
+  agentConsensusStatus,
   applyOnAgentConsensus,
   sweepAgentConsensus,
 } from '../../../api/agent-verifications.js';
@@ -1101,14 +1102,13 @@ describe('10. a comment-only return, then an unchanged resubmit', () => {
     expect(await statusOf(world.editId)).toBe('pending');
     expect(await explicitVerdictCount(world.editId)).toBe(2);
 
-    const results = await sweepAgentConsensus();
-    expect(results).toEqual([
-      expect.objectContaining({
-        pendingEditId: world.editId,
-        outcome: 'held',
-        reason: 'returned_unrevised',
-      }),
-    ]);
+    // Held, and kept out of the sweep window altogether: only a revision can
+    // clear the return, so retrying it would only occupy a slot.
+    expect(await agentConsensusStatus(world.editId)).toMatchObject({
+      ready: false,
+      reason: 'returned_unrevised',
+    });
+    expect(await sweepAgentConsensus()).toEqual([]);
     expect(await statusOf(world.editId)).toBe('pending');
     expect(await factText(world.pageId)).toBeNull();
   });
