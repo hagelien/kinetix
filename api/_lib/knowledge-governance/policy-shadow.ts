@@ -184,7 +184,11 @@ export async function collectConsensusFacts(
     },
     activeAgents,
     authorSelfReviews,
-    quorum: effectiveConsensusQuorum(activeAgents, { authorSelfReviews }),
+    // A person is not in the agent pool, so every active agent is eligible to
+    // verify their proposal: the arithmetic of an author whose seat counts.
+    quorum: effectiveConsensusQuorum(activeAgents, {
+      authorSelfReviews: authorSelfReviews || !submitterIsAgent,
+    }),
     highRisk: isHighRiskPendingEdit({
       editType: pending.editType,
       parameter: pending.parameter,
@@ -208,12 +212,10 @@ export async function collectConsensusFacts(
  * Two mappings carry the weight:
  *
  *  - **`authorKind`** is `agent` only when the submitter is an *active*
- *    registered agent, which is exactly the test the legacy gate applies before
- *    it will auto-apply anything. A human's proposal — or an agent whose status
- *    was revoked — becomes `human`, and the `human-authored` rule then requires
- *    a human approval the agent tally cannot supply. That is how "consensus
- *    never stands in for a moderator on a person's work" becomes a policy fact
- *    rather than an early `return false`.
+ *    registered agent; a person's proposal (or one by an agent whose status was
+ *    revoked) is `human`, and publishes on agent consensus under the same bar.
+ *    A proposal with no recorded author is `system`, and the `unattributed`
+ *    rule requires a human approval for it, as the legacy gate does.
  *  - **`clinical_case`** is a risk tag rather than a special case. Legacy
  *    refuses it in the first three lines of the function; here the risk profile
  *    carries the tag, the `clinical-case` rule matches on it, and the
@@ -239,7 +241,14 @@ export function projectConsensusContext(facts: ConsensusFacts): PolicyContext {
     author: snapshotActor({
       actorRef:
         facts.submittedBy === null ? 'unknown' : `user:${facts.submittedBy}`,
-      kind: facts.submitterIsAgent ? 'agent' : 'human',
+      // `system` for a proposal with no recorded author: the `unattributed`
+      // rule's subject, the one authorship that still needs a person.
+      kind:
+        facts.submittedBy === null
+          ? 'system'
+          : facts.submitterIsAgent
+            ? 'agent'
+            : 'human',
       capabilities: [],
     }),
     risk: riskProfile(facts.highRisk ? 'high' : 'medium', tags),

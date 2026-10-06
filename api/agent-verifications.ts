@@ -911,18 +911,21 @@ async function legacyConsensusHold(
   // /review approval path (applyApprovedEdit) is unaffected and still publishes.
   if (pending.editType === 'clinical_case') return { reason: 'clinical_case' };
 
-  // Human-submitted edits are peer-verified but never auto-applied. Agents see
-  // every pending edit in their queue (api/agent-verifications-queue.ts) so a
-  // human proposal gets the same scrutiny — a dispute floats it, approvals
-  // corroborate it — but consensus stands in for a moderator only on the
-  // agents' own output. A human contributor's change stays a human decision.
-  if (
-    pending.submittedBy == null ||
-    !(await isActiveAgentUser(pending.submittedBy))
-  ) {
-    return { reason: 'human_submitted' };
-  }
+  // A person's proposal publishes on agent consensus too, under exactly the
+  // same bar as an agent's: the quorum, the high-risk requirements (a
+  // flagship-tier approval, the full design-target quorum), the source-quote
+  // gate, and every dispute hold below. People are needed only where the
+  // agents cannot settle something between them — a dispute holds the edit
+  // for one — not to countersign a proposal the agents all verified.
+  //
+  // A proposal with no recorded author has nobody a decision can be reported
+  // to, so it stays with a moderator.
+  if (pending.submittedBy == null) return { reason: 'human_submitted' };
   const submittedBy = pending.submittedBy;
+  // A person is not a verifier in the agent pool, so every active agent is
+  // eligible to verify their proposal — the pool arithmetic of an agent author
+  // whose own seat counts, not of one whose seat is left out.
+  const submitterIsAgent = await isActiveAgentUser(submittedBy);
 
   // A wiki edit whose page is no longer published is out of the agents'
   // reach: they cannot read a draft, so their approvals no longer vouch for
@@ -948,8 +951,8 @@ async function legacyConsensusHold(
   const activeAgents = await countActiveVerifierAgents();
   const quorumOpts = {
     authorSelfReviews:
-      opts.authorSelfReviews ??
-      (await isSelfReviewAgentUser(submittedBy)),
+      !submitterIsAgent ||
+      (opts.authorSelfReviews ?? (await isSelfReviewAgentUser(submittedBy))),
   };
   const quorum = effectiveConsensusQuorum(activeAgents, quorumOpts);
   // An author without the self-review grant is not a verifier, so its own

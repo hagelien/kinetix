@@ -48,7 +48,7 @@ describe('the Kinetix policy set', () => {
     // proposal reports.
     expect(KINETIX_POLICY.rules.map((r) => r.id)).toEqual([
       KINETIX_RULE_IDS.base,
-      KINETIX_RULE_IDS.humanAuthored,
+      KINETIX_RULE_IDS.unattributed,
       KINETIX_RULE_IDS.highRisk,
       KINETIX_RULE_IDS.clinicalCase,
     ]);
@@ -94,43 +94,40 @@ describe('the Kinetix policy set', () => {
     });
   });
 
-  describe('human-authored rule', () => {
-    it('requires a human approval no matter how many agents approved', () => {
+  describe('authorship', () => {
+    it('publishes a person\u2019s proposal on agent approvals, like an agent\u2019s', () => {
       const decision = KINETIX_POLICY.evaluate(
         makeContext({
           author: HUMAN_AUTHOR,
+          assurance: { independentApprovers: 2, agentApprovals: 2 },
+        }),
+      );
+      expect(decision.matchedRuleIds).not.toContain(KINETIX_RULE_IDS.humanAuthored);
+      expect(decision.allowed).toBe(true);
+    });
+
+    it('requires a human approval for a proposal with no recorded author', () => {
+      const decision = KINETIX_POLICY.evaluate(
+        makeContext({
+          author: { ...HUMAN_AUTHOR, kind: 'system' },
           assurance: { independentApprovers: 4, agentApprovals: 4 },
         }),
       );
-      expect(decision.matchedRuleIds).toContain(KINETIX_RULE_IDS.humanAuthored);
+      expect(decision.matchedRuleIds).toContain(KINETIX_RULE_IDS.unattributed);
       expect(decision.allowed).toBe(false);
       expect(decision.unmet.map((o) => o.requirementId)).toEqual([
         'assurance.humanApproval',
       ]);
     });
 
-    it('is satisfied once a person approves', () => {
-      const decision = KINETIX_POLICY.evaluate(
-        makeContext({
-          author: HUMAN_AUTHOR,
-          assurance: {
-            independentApprovers: 2,
-            agentApprovals: 1,
-            humanApprovals: 1,
-          },
-        }),
-      );
-      expect(decision.allowed).toBe(true);
-    });
-
-    it('does not apply to an agent-authored proposal', () => {
+    it('does not apply the unattributed rule to an agent-authored proposal', () => {
       const decision = KINETIX_POLICY.evaluate(
         makeContext({
           author: AGENT_AUTHOR,
           assurance: { independentApprovers: 2, agentApprovals: 2 },
         }),
       );
-      expect(decision.matchedRuleIds).not.toContain(KINETIX_RULE_IDS.humanAuthored);
+      expect(decision.matchedRuleIds).not.toContain(KINETIX_RULE_IDS.unattributed);
       expect(decision.allowed).toBe(true);
     });
   });
@@ -253,17 +250,17 @@ describe('the Kinetix policy set', () => {
     });
   });
 
-  it('stacks every applicable rule for a human-authored high-risk clinical case', () => {
+  it('stacks every applicable rule for an unattributed high-risk clinical case', () => {
     const decision = KINETIX_POLICY.evaluate(
       makeContext({
-        author: HUMAN_AUTHOR,
+        author: { ...HUMAN_AUTHOR, kind: 'system' },
         risk: riskProfile('high', [KINETIX_CLINICAL_CASE_TAG]),
         assurance: { disputingAssessors: 1 },
       }),
     );
     expect(decision.matchedRuleIds).toEqual([
       KINETIX_RULE_IDS.base,
-      KINETIX_RULE_IDS.humanAuthored,
+      KINETIX_RULE_IDS.unattributed,
       KINETIX_RULE_IDS.highRisk,
       KINETIX_RULE_IDS.clinicalCase,
     ]);
