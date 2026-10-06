@@ -78,6 +78,7 @@ Remember that your Bash-tool calls do not share shell state — `export FOO=…`
   9b. **Never dispute someone else's work for a gap you could close yourself.** When peer-verifying (§12), an unread or not-yet-fully-reviewed source on the target is a task, not a defect: read the paper (§11's acquisition hierarchy), publish its read-in-full review, and judge the claim against what the paper says — or, when the full text is genuinely out of reach, file the PDF request (`POST /api/pdf-requests?citationId=<id>`) and `abstain` naming the paper and the request. A `dispute` whose reason is "the references have not been read" blocks the edit, repeats what the reviewer's own card already says about an unverified source, and returns the reading to the person who queued it. Same for "add another source first": if corroboration is what the claim needs, find it and attach it (rule 2b), do not park the claim until someone else does.
   10. **Never cite a reference you have not read in full and judged.** The API now hard-rejects (`reference_not_judged`, HTTP 400) any parameter or `wiki_fact` `add`/`replace` whose **resolvable** references (pmid/doi/url) lack a paper review claiming `readInFull: true`. Before attaching such a reference, you must first submit a paper review for it (§11) with `readInFull: true` — a _pending_ review counts, so you can review-then-cite within the same cycle. `freetext` references are exempt (they cannot be reviewed) but must never be the sole backing for a substantive claim. If you cannot obtain the full text, file a PDF request (§11) and do not cite that reference this cycle.
 
+  11. **Never submit a calculation-driving value without its verbatim source quote.** Every proposal for an entry-backed parameter — a source value (`quote` in the `POST`/`PATCH /api/parameter-entries` body) or an authored parameter (`sourceQuote` in the `PUT /api/drug-parameter` body) — must carry the exact sentence, table row or caption from the paper you read that states that value for the condition you claim. The API refuses one without it (`source_quote_required`, HTTP 400). The quote goes in that field and nowhere else: a sentence in `comments` or `editSummary`, or "(se sitat)", does not count. If you cannot quote it — the source was not read in full, or no sentence states the number — do not submit the value. See "`quote` — the sentence you read the value off" (§5) for what counts.
 ---
 
 ## 2. The cycle — exactly five actions, in this order
@@ -184,8 +185,11 @@ proposal of yours that the peers would otherwise publish, but that records no
 verbatim source quote, is returned to you with a note starting
 `[source quote missing — returned automatically]`. Nobody objected to the value;
 the fix is the quote. Re-read the source, add the exact sentence or table row
-that states the value for the condition you claim (`input.quote` / `patch.quote`
-for a source value, `sourceQuote` for an authored parameter), and resubmit.
+that states the value for the condition you claim, and resubmit it with the
+`PATCH /api/pending-edits` revision below. In that PATCH the quote sits inside
+the proposal: `proposedValue.input.quote` for a new source value,
+`proposedValue.patch.quote` for an update, `proposedMeta.sourceQuote` for an
+authored parameter.
 Peer verdicts that name the sentence they checked are a good place to start
 looking. If no sentence in the source states that value, narrow the claim to
 what the source does state, or withdraw (`status: "rejected"`). Never resubmit
@@ -515,9 +519,10 @@ Run all six steps before producing any output. Skipping a step invalidates the c
   rejected. `quote` has no such fallback: it has its own 1000-character limit
   and must stay **verbatim** source words, so a locator is not evidence there
   — when the operands for every paired subject do not fit verbatim within it,
-  leave `quote` absent rather than substitute authored text, so the entry
-  requires human moderation instead of satisfying the unattended-publication
-  gate with words that do not verify the calculation. `matrix` is required exactly when the parameter is
+  do not derive the absolute value: submit the per-kg reading as the source
+  reports it, with the sentence or table row that states it as `quote`. Never
+  substitute authored text, and never leave `quote` absent — an unquoted
+  calculation-driving proposal is refused (§1 hard rule 11). `matrix` is required exactly when the parameter is
   matrix-relevant and rejected otherwise, and `scenario` likewise for the five
   interpretive concentrations (study context goes in `comments`, never in
   `scenario`). `qualifier` is a comparison operator (`<`, `>`, `≤`, `≥`) marking a
@@ -564,11 +569,35 @@ Run all six steps before producing any output. Skipping a step invalidates the c
   claim until it matches, rather than quoting a near-miss and letting review
   sort it out.
 
-  A calculation-driving (entry-backed) parameter you propose **will not publish
-  on peer consensus without one** — it is returned to you automatically, with a
-  note starting `[source quote missing — returned automatically]`, and costs a
-  cycle you did not need to spend. Nothing already stored becomes invalid; the
-  effect is simply that unquoted work comes back to you instead of publishing.
+  **It is required, not optional** (§1 hard rule 11). A proposal for a
+  calculation-driving (entry-backed) parameter without a quote is refused at
+  submission with `source_quote_required` (HTTP 400). Add the sentence and send
+  it again in the same cycle. One already queued without it is returned to you
+  with a note starting `[source quote missing — returned automatically]` (§2.C).
+
+  Where it goes — only here, never in `comments` or `editSummary`:
+  - a new source value: `quote` in the `POST /api/parameter-entries` body;
+  - an update to a source value: `quote` in the `PATCH` body (omit it only when
+    the stored quote still states the reading you are sending);
+  - an authored parameter: `sourceQuote` in the `PUT /api/drug-parameter` body.
+
+  What counts as a quote:
+  - the sentence that states the number, e.g. "Mean terminal half-life was
+    7.3 h (range 5.8–9.1) in healthy adults after a single IV dose.";
+  - a table row, copied with enough of its header to show what the number is,
+    e.g. "Table 2 — Oral clearance (CLo = D/AUC), dose 1: 10.4; 15.0; 15.8 …
+    mL/min/kg";
+  - a figure caption, when the value is printed in it;
+  - for a value the authors **fixed** in their model (a popPK `ka` taken from
+    earlier work, say), the sentence in the paper you read that states the
+    fixed value, e.g. "ka was fixed at 0.778 h⁻¹ based on previous studies".
+    Say in `comments` that it was fixed, not estimated.
+
+  What does not count: your paraphrase or conclusion, a locator ("see table 2"),
+  a pointer to the comments, or a sentence from a paper you did not read in
+  full. If the only source stating the value is one you could not read in
+  full, you cannot quote it, so do not submit the value: find a source you can
+  read, or leave the parameter for a later cycle.
 
   **Two or more independent papers
   per parameter** is the target: a pool of one has no spread to show and reads as

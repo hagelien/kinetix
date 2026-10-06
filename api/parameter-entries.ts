@@ -74,6 +74,10 @@ import {
 } from './_lib/parameter-entries-store.js';
 import { validateEntryForParameter } from '../src/lib/parameterEntries.js';
 import {
+  agentProposalLacksSourceQuote,
+  SOURCE_QUOTE_REQUIRED_MESSAGE,
+} from './_lib/source-quote-gate.js';
+import {
   lockDrugForEntryApplicability,
   parameterWriteBlockedBy,
 } from './_lib/parameterApplicabilityStore.js';
@@ -366,6 +370,17 @@ async function handleCreate(
     (await mustQueueModelStructure(auth.userId, auth.role, input.parameter)) ||
     data.submitForReview
   ) {
+    if (
+      await agentProposalLacksSourceQuote(auth.userId, {
+        editType: 'param_entry',
+        parameter: input.parameter,
+        targetId: input.drugId,
+        proposedValue: { op: 'create', input },
+      })
+    ) {
+      error(res, 400, SOURCE_QUOTE_REQUIRED_MESSAGE, 'source_quote_required');
+      return;
+    }
     // Every drug the proposal names — the target and any dose-context drug —
     // is locked in one sorted set and re-read under the locks before the
     // insert (`withParamEntryPayloadLocks`), so a concurrent delete or merge
@@ -513,6 +528,17 @@ async function handleUpdate(
     (await mustQueueModelStructure(auth.userId, auth.role, existing.parameter)) ||
     data.submitForReview
   ) {
+    if (
+      await agentProposalLacksSourceQuote(auth.userId, {
+        editType: 'param_entry',
+        parameter: existing.parameter,
+        targetId: id,
+        proposedValue: { op: 'update', patch },
+      })
+    ) {
+      error(res, 400, SOURCE_QUOTE_REQUIRED_MESSAGE, 'source_quote_required');
+      return;
+    }
     if (await hasOpenMutationEdit(id, existing.parameter)) {
       json(res, 409, {
         error: 'A pending edit already exists for this entry',

@@ -9,6 +9,7 @@ import { agentVerifications, agents, disputes, parameterEntries, pendingEdits } 
 import { runAgentConsensus, sweepUnquotedAgentEdits } from '../../api/agent-verifications.js';
 import { returnStandsUnrevised } from '../../api/_lib/pending-edit-review-token.js';
 import { UNQUOTED_RETURN_PREFIX } from '../../api/_lib/unquoted-edit-return.js';
+import { agentProposalLacksSourceQuote } from '../../api/_lib/source-quote-gate.js';
 import {
   resetIntegrationDb,
   setupIntegrationDb,
@@ -277,5 +278,25 @@ describe('the sweep', () => {
 
     // Idempotent: nothing left to return.
     expect(await sweepUnquotedAgentEdits()).toEqual([]);
+  });
+});
+
+describe('at submission', () => {
+  it('refuses only an agent’s unquoted calculation-driving proposal', async () => {
+    const agent = (await seedAgent('submitter', 'mid')).userId;
+    const human = await seedUser(db, { email: 'person@example.com', username: 'person', role: 'contributor' });
+    const unquoted = {
+      editType: 'parameter',
+      parameter: 'halfLife',
+      proposedValue: { value: 33 },
+      proposedMeta: {},
+    };
+    const quoted = { ...unquoted, proposedMeta: { sourceQuote: 'Half-life was 33 h.' } };
+    const blankQuote = { ...unquoted, proposedMeta: { sourceQuote: '   ' } };
+
+    expect(await agentProposalLacksSourceQuote(agent, unquoted)).toBe(true);
+    expect(await agentProposalLacksSourceQuote(agent, blankQuote)).toBe(true);
+    expect(await agentProposalLacksSourceQuote(agent, quoted)).toBe(false);
+    expect(await agentProposalLacksSourceQuote(human, unquoted)).toBe(false);
   });
 });
