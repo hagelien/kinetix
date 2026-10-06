@@ -201,6 +201,27 @@ describe('applyOnAgentConsensus — human-only gates', () => {
     expect(outcome).toMatchObject({ outcome: 'held', reason: 'quorum_unmet' });
   });
 
+  // The pool arithmetic treats a person like a self-reviewing author, but the
+  // degraded-quorum warning must not tell the operator the author's own
+  // verdict carried the edit: a person holds no seat.
+  it('names the agent approval, not the author, in a degraded human-edit warning', async () => {
+    getDbMock.mockReturnValue(dbReturningEdit('wiki_fact', HUMAN_USER_ID));
+    countActiveMock.mockResolvedValue(1);
+    summariseMock.mockReturnValue(new Map([[1, { approveCount: 1, disputeCount: 0 }]]));
+    // Past the warning throttle, whatever an earlier case logged.
+    const now = vi.spyOn(Date, 'now').mockReturnValue(Number.MAX_SAFE_INTEGER);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await runAgentConsensus({ pendingEditId: 1, approverUserId: 7 });
+      const logged = warn.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(logged).toContain("A person's proposal");
+      expect(logged).not.toContain('self_review_enabled');
+    } finally {
+      warn.mockRestore();
+      now.mockRestore();
+    }
+  });
+
   // Nobody can be told about a decision on a proposal with no recorded
   // author, so that one stays with a moderator.
   it('does NOT auto-apply an edit with no recorded author', async () => {
