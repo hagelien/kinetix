@@ -309,6 +309,35 @@ describe('the sweep', () => {
     expect(await sweepUnquotedAgentEdits(2)).toEqual([unquoted]);
   });
 
+  it('tells the author of a stale proposal to rebase, not only to add the quote', async () => {
+    const author = (await seedAgent('author-stale', 'mid')).userId;
+    const drugId = await seedDrug(db, { slug: 'stale' });
+    const [entry] = await db
+      .insert(parameterEntries)
+      .values({ drugId, parameter: 'halfLife', low: '2', high: '4', unit: 'h', createdBy: author } as never)
+      .returning({ id: parameterEntries.id });
+    // Marked stale by a direct write to its target since it was proposed.
+    const [edit] = await db
+      .insert(pendingEdits)
+      .values({
+        editType: 'param_entry',
+        targetId: entry!.id,
+        parameter: 'halfLife',
+        proposedValue: { op: 'update', patch: { low: 3, high: 5, unit: 'h' } },
+        proposedMeta: { conflict: { reason: 'direct_admin_write', id: 'c1', at: new Date().toISOString() } },
+        submittedBy: author,
+        status: 'pending',
+      })
+      .returning({ id: pendingEdits.id });
+
+    expect(await sweepUnquotedAgentEdits()).toEqual([edit!.id]);
+    const [row] = await db.select().from(pendingEdits).where(eq(pendingEdits.id, edit!.id));
+    expect(row!.rejectionComment).toContain(UNQUOTED_RETURN_PREFIX);
+    expect(row!.rejectionComment).toMatch(/stale/);
+    // The marker stays: only the author's rebase clears it.
+    expect((row!.proposedMeta as Record<string, unknown>).conflict).toBeTruthy();
+  });
+
   it('returns a proposal whose agent dispute a moderator has overruled', async () => {
     const id = await seedEdit({ authorIsAgent: true, quote: null, approvals: 1 });
     const disputer = await seedAgent('overruled-disputer', 'mid');

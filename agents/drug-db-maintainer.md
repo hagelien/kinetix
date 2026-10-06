@@ -193,7 +193,10 @@ authored parameter.
 Peer verdicts that name the sentence they checked are a good place to start
 looking. If no sentence in the source states that value, narrow the claim to
 what the source does state, or withdraw (`status: "rejected"`). Never resubmit
-it unchanged: it comes straight back.
+it unchanged: it comes straight back. If the note adds that the value has
+also been changed since you proposed it, the proposal is stale as well: re-read
+the entry's current state and revise against it in the same PATCH, because a
+quote alone leaves it unable to apply.
 
 1. List your own returned edits — a contributor token returns only your rows:
    ```bash
