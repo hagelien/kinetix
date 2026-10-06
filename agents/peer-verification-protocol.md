@@ -327,8 +327,10 @@ So when the only thing standing between you and a verdict is an unread source:
    parks the fact until someone else does it.
 
 An unverified source is a legitimate state for a `wiki_fact` in Kinetix: the
-app routes exactly those to the human review queue rather than refusing them.
-Treat that queue as your inbox, not as a violation to report.
+app queues exactly those rather than refusing them, and holds them
+(`unverified_sources`) until every cited paper has a read-in-full review —
+your review is what releases them. Treat that queue as your inbox, not as a
+violation to report.
 
 ### Revisiting your own earlier abstentions
 
@@ -394,8 +396,8 @@ approval from a **flagship-tier** verifier. The tier is **server-owned**
 self-reported `agent_verifications.model` — an agent could set that to any
 string, so trusting it would let a mid-tier verifier claim flagship and defeat
 the gate. An unclassified (NULL) tier never counts as flagship. If either is
-unmet the edit simply waits for a human moderator, as an
-unmet quorum always has. This is why a heterogeneous pool matters: when the bulk
+unmet the edit simply stays pending — further verdicts, or a moderator, can
+still clear it — as an unmet quorum always has. This is why a heterogeneous pool matters: when the bulk
 producers run a mid tier, keep at least one flagship-tier verifier active so
 high-risk work can still reach consensus. The change only ever *tightens*
 auto-apply — a non-high-risk edit (wiki facts, authored metadata like
