@@ -2477,7 +2477,7 @@
         "high_risk_degraded_quorum": "parameteret brukes i beregninger og kan ikke publiseres når for få agenter er aktive.",
         "source_quote_missing": "forslaget mangler et ordrett sitat fra kilden.",
         "clinical_case": "kliniske kasus krever alltid en menneskelig ekspert.",
-        "human_submitted": "forslag fra mennesker publiseres aldri automatisk.",
+        "human_submitted": "et forslag uten registrert forfatter publiseres aldri automatisk.",
         "open_dispute": "det finnes en åpen innsigelse.",
         "upheld_dispute": "en moderator ga medhold i en innsigelse mot denne versjonen; den må revideres først.",
         "returned_unrevised": "en anmelder sendte denne versjonen tilbake med en merknad; den må revideres først.",
