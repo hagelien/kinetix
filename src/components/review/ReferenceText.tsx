@@ -10,6 +10,7 @@ import {
   type ReferenceKind,
 } from '@/lib/referenceLinks';
 import { fetchDisputeById } from '@/lib/disputesApi';
+import { ReferenceMarkdown } from './ReferenceMarkdown';
 import { fetchDiscussionById, type DrugDiscussionDTO } from '@/lib/drugApi';
 
 const linkClass =
@@ -216,9 +217,11 @@ function DisputePreview({
         </span>
         <span>· {new Date(dispute.createdAt).toLocaleString()}</span>
       </Meta>
-      <p className="whitespace-pre-wrap leading-snug">
-        {dispute.reasonMd.trim() || t('review.dispute.noReason')}
-      </p>
+      {dispute.reasonMd.trim() ? (
+        <ReferenceMarkdown text={dispute.reasonMd.trim()} />
+      ) : (
+        <p className="leading-snug">{t('review.dispute.noReason')}</p>
+      )}
       {dispute.evidenceRefs.length > 0 ? (
         <div className="text-xs text-muted-foreground">
           <span className="font-medium">

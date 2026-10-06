@@ -63,7 +63,7 @@ function unwrapElement(element: Element): void {
   element.replaceWith(...Array.from(element.childNodes));
 }
 
-function isSafeMarkdownUrl(raw: string): boolean {
+export function isSafeMarkdownUrl(raw: string): boolean {
   const value = raw.trim();
   if (!value || value.startsWith('//')) return false;
   if (value.startsWith('#')) return true;
