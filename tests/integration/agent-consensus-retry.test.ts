@@ -1351,6 +1351,18 @@ describe('agent consensus hold, re-stamp and retry', () => {
       .insert(citations)
       .values({ type: 'pmid', identifier: '12345678' })
       .returning({ id: citations.id });
+    // A second source the fact cites, read in full at ingestion and so not
+    // marked.
+    const [readPaper] = await db
+      .insert(citations)
+      .values({ type: 'pmid', identifier: '87654321' })
+      .returning({ id: citations.id });
+    await db.insert(paperReviews).values({
+      citationId: readPaper!.id,
+      reviewMarkdown: 'Read in full at ingestion.',
+      readInFull: true,
+      createdBy: admin,
+    });
     const [edit] = await db
       .insert(pendingEdits)
       .values({
@@ -1361,7 +1373,7 @@ describe('agent consensus hold, re-stamp and retry', () => {
         factStatement: 'Halveringstiden er 20–100 timer.',
         proposedValue: {
           type: 'fact',
-          attrs: { factId: 'f-1', referenceIds: [paper!.id] },
+          attrs: { factId: 'f-1', referenceIds: [paper!.id, readPaper!.id] },
           content: [{ type: 'text', text: 'Halveringstiden er 20–100 timer.' }],
         },
         proposedMeta: {
@@ -1369,7 +1381,7 @@ describe('agent consensus hold, re-stamp and retry', () => {
           unverifiedSourceKeys: ['S1'],
           unverifiedReferenceIds: [paper!.id],
         },
-        referenceIds: [paper!.id],
+        referenceIds: [paper!.id, readPaper!.id],
         referenceId: paper!.id,
         submittedBy: admin,
         status: 'pending',
@@ -1402,12 +1414,33 @@ describe('agent consensus hold, re-stamp and retry', () => {
     });
     expect(await sweepAgentConsensus()).toEqual([]);
 
-    // Once an agent reads the paper in full, the next sweep publishes it with
-    // no further verdict and no person.
     await db
       .update(paperReviews)
       .set({ readInFull: true, reviewMarkdown: 'Read in full.' })
       .where(eq(paperReviews.citationId, paper!.id));
+
+    // Every source the fact cites now counts, not only the marked one: a
+    // source read at ingestion that has since lost its attestation (a PDF
+    // replacement flips it off) holds the fact too.
+    await db
+      .update(paperReviews)
+      .set({ readInFull: false })
+      .where(eq(paperReviews.citationId, readPaper!.id));
+    expect(await sweepAgentConsensus()).toEqual([]);
+    expect(await agentConsensusStatus(edit!.id)).toMatchObject({
+      ready: false,
+      reason: 'unverified_sources',
+    });
+    expect((await collectConsensusFacts(edit!.id))?.disputeHoldCause).toBe(
+      'unverified_sources',
+    );
+
+    // Once every cited paper is read in full, the next sweep publishes it with
+    // no further verdict and no person.
+    await db
+      .update(paperReviews)
+      .set({ readInFull: true })
+      .where(eq(paperReviews.citationId, readPaper!.id));
     expect((await collectConsensusFacts(edit!.id))?.disputeHoldCause).toBeNull();
     expect(await sweepAgentConsensus()).toEqual([
       { pendingEditId: edit!.id, outcome: 'applied' },

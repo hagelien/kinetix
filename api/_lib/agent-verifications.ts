@@ -1741,13 +1741,38 @@ export async function pendingEditTargetOpenToAgents(pending: {
   return page?.status === 'published';
 }
 
-function unverifiedReferenceIdsOf(proposedMeta: unknown): number[] {
-  const listed = (proposedMeta as { unverifiedReferenceIds?: unknown } | null)
+export interface SourceCheckedPendingEdit {
+  proposedMeta: unknown;
+  proposedValue: unknown;
+  referenceIds: number[] | null;
+  referenceId: number | null;
+}
+
+/**
+ * What an ingested fact's unread-sources hold has to examine. Null for any
+ * edit conversation ingestion did not stage for a full-text check — the
+ * `proposedMeta.unverifiedReferenceIds` marker is what says it did. For one
+ * that carries it, EVERY reference the edit cites now (its reference columns
+ * and the fact node's own `referenceIds`), plus the marked ones: a source
+ * reviewed at ingestion can lose its read-in-full attestation since, and a
+ * revision can add one nobody has read, so the frozen marker alone is not the
+ * set to check.
+ */
+function sourceCheckSetOf(pending: SourceCheckedPendingEdit): number[] | null {
+  const listed = (pending.proposedMeta as { unverifiedReferenceIds?: unknown } | null)
     ?.unverifiedReferenceIds;
-  if (!Array.isArray(listed)) return [];
+  if (!Array.isArray(listed)) return null;
+  const nodeIds = (pending.proposedValue as { attrs?: { referenceIds?: unknown } } | null)
+    ?.attrs?.referenceIds;
+  const candidates: unknown[] = [
+    ...listed,
+    ...(pending.referenceIds ?? []),
+    pending.referenceId,
+    ...(Array.isArray(nodeIds) ? nodeIds : []),
+  ];
   return [
     ...new Set(
-      listed.filter((n): n is number => Number.isInteger(n) && (n as number) > 0),
+      candidates.filter((n): n is number => Number.isInteger(n) && (n as number) > 0),
     ),
   ].sort((a, b) => a - b);
 }
@@ -1764,14 +1789,14 @@ function unverifiedReferenceIdsOf(proposedMeta: unknown): number[] {
  * FOR SHARE: the apply never writes these rows, and the changes that matter
  * are updates, which this mode blocks. Pending review rows before
  * `paper_reviews`, the order a review approval writes them, so the two cannot
- * deadlock. A review that appears meanwhile only adds evidence. No-op unless
- * the edit lists unverified references.
+ * deadlock. A review that appears meanwhile only adds evidence. No-op for an
+ * edit ingestion did not mark.
  */
-export async function lockPendingEditSourceReviews(pending: {
-  proposedMeta: unknown;
-}): Promise<void> {
-  const ids = unverifiedReferenceIdsOf(pending.proposedMeta);
-  if (ids.length === 0) return;
+export async function lockPendingEditSourceReviews(
+  pending: SourceCheckedPendingEdit,
+): Promise<void> {
+  const ids = sourceCheckSetOf(pending);
+  if (!ids || ids.length === 0) return;
   const db = getDb();
   await db
     .select({ id: pendingEdits.id })
@@ -1794,23 +1819,23 @@ export async function lockPendingEditSourceReviews(pending: {
 }
 
 /**
- * True when a conversation-ingestion proposal still cites a paper nobody has
- * read in full. Ingestion stages such a fact as `pending` precisely so someone
- * does the full-text check the assistant could not, and records which papers
- * in `proposedMeta.unverifiedReferenceIds`. Agent verifiers judge the claim,
- * not whether the paper was read, so their approvals alone must not publish
- * it. The hold lifts once every listed paper carries a read-in-full review —
- * a live one, or a pending submission that attests it, the same evidence the
- * agent reference gate accepts — or when a moderator approves the edit.
- * A listed reference that cannot be reviewed at all (a missing or `freetext`
- * citation) keeps the hold: only a person can clear it. Checked by both
- * engines.
+ * True when a conversation-ingestion proposal cites a paper nobody has read
+ * in full. Ingestion stages such a fact as `pending` precisely so someone does
+ * the full-text check the assistant could not, marking it with
+ * `proposedMeta.unverifiedReferenceIds`. Agent verifiers judge the claim, not
+ * whether the paper was read, so their approvals alone must not publish it.
+ * The hold lifts once every paper the edit cites now (see
+ * {@link sourceCheckSetOf}) carries a read-in-full review — a live one, or a
+ * pending submission that attests it, the same evidence the agent reference
+ * gate accepts — or when a moderator approves the edit. A reference that
+ * cannot be reviewed at all (a missing or `freetext` citation) keeps the
+ * hold: only a person can clear it. Checked by both engines.
  */
-export async function pendingEditCitesUnreadSources(pending: {
-  proposedMeta: unknown;
-}): Promise<boolean> {
-  const ids = unverifiedReferenceIdsOf(pending.proposedMeta);
-  if (ids.length === 0) return false;
+export async function pendingEditCitesUnreadSources(
+  pending: SourceCheckedPendingEdit,
+): Promise<boolean> {
+  const ids = sourceCheckSetOf(pending);
+  if (!ids || ids.length === 0) return false;
 
   const db = getDb();
   const live = await db

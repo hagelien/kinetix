@@ -1472,38 +1472,45 @@ export async function sweepAgentConsensus(
         and not ${submitterIsActiveAgentSql})
     )
   )`;
-  // An ingested fact whose `unverifiedReferenceIds` name a paper with no
-  // read-in-full review, live or pending (`pendingEditCitesUnreadSources`).
-  // It holds as `unverified_sources` on every retry, so it stays out of the
-  // window until the review lands — the sweep is what publishes it then, since
-  // no new verdict on the fact need ever arrive.
-  const citesUnreadSources = sql`exists (
-    select 1
-    from (
-      -- Positive integers only, as the helper reads them; the CASE keeps the
-      -- cast off anything else (AND does not short-circuit in SQL).
-      select case
-        when jsonb_typeof(e.v) = 'number' and e.v #>> '{}' ~ '^[0-9]{1,15}$'
-        then (e.v #>> '{}')::bigint
-      end as id
-      from jsonb_array_elements(
-        case when jsonb_typeof(${pendingEdits.proposedMeta}->'unverifiedReferenceIds') = 'array'
-          then ${pendingEdits.proposedMeta}->'unverifiedReferenceIds'
-          else '[]'::jsonb end
-      ) as e(v)
-    ) as u
-    where u.id > 0
-      and not exists (
-        select 1 from paper_reviews pr
-        where pr.citation_id = u.id and pr.read_in_full
-      )
-      and not exists (
-        select 1 from pending_edits pr_pe
-        where pr_pe.edit_type = 'paper_review'
-          and pr_pe.status = 'pending'
-          and pr_pe.target_id = u.id
-          and pr_pe.proposed_value->'readInFull' = 'true'::jsonb
-      )
+  // An ingested fact (one carrying `unverifiedReferenceIds`) citing a paper
+  // with no read-in-full review, live or pending — the same set
+  // `pendingEditCitesUnreadSources` checks: the marked ids plus every
+  // reference the edit cites now. It holds as `unverified_sources` on every
+  // retry, so it stays out of the window until the review lands — the sweep
+  // is what publishes it then, since no new verdict on the fact need arrive.
+  const jsonbArray = (expr: ReturnType<typeof sql>) =>
+    sql`case when jsonb_typeof(${expr}) = 'array' then ${expr} else '[]'::jsonb end`;
+  const citesUnreadSources = sql`(
+    jsonb_typeof(${pendingEdits.proposedMeta}->'unverifiedReferenceIds') = 'array'
+    and exists (
+      select 1
+      from (
+        -- Positive integers only, as the helper reads them; the CASE keeps
+        -- the cast off anything else (AND does not short-circuit in SQL).
+        select case
+          when jsonb_typeof(e.v) = 'number' and e.v #>> '{}' ~ '^[0-9]{1,15}$'
+          then (e.v #>> '{}')::bigint
+        end as id
+        from jsonb_array_elements(
+          ${jsonbArray(sql`${pendingEdits.proposedMeta}->'unverifiedReferenceIds'`)}
+          || ${jsonbArray(sql`${pendingEdits.proposedValue}->'attrs'->'referenceIds'`)}
+          || coalesce(to_jsonb(${pendingEdits.referenceIds}), '[]'::jsonb)
+          || coalesce(jsonb_build_array(${pendingEdits.referenceId}), '[]'::jsonb)
+        ) as e(v)
+      ) as u
+      where u.id > 0
+        and not exists (
+          select 1 from paper_reviews pr
+          where pr.citation_id = u.id and pr.read_in_full
+        )
+        and not exists (
+          select 1 from pending_edits pr_pe
+          where pr_pe.edit_type = 'paper_review'
+            and pr_pe.status = 'pending'
+            and pr_pe.target_id = u.id
+            and pr_pe.proposed_value->'readInFull' = 'true'::jsonb
+        )
+    )
   )`;
   // A calculation-driving edit never rides the degraded single-approval path
   // (`consensusApprovalHoldReason`), so its bar is the full design target even

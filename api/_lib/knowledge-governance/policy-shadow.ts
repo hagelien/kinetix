@@ -39,6 +39,7 @@ import {
   isHighRiskPendingEdit,
   pendingEditTargetOpenToAgents,
   pendingEditCitesUnreadSources,
+  type SourceCheckedPendingEdit,
   isSelfReviewAgentUser,
   summariseVerificationsForTargets,
   type VerificationSummary,
@@ -127,6 +128,8 @@ export async function collectConsensusFacts(
       targetId: pendingEdits.targetId,
       proposedValue: pendingEdits.proposedValue,
       proposedMeta: pendingEdits.proposedMeta,
+      referenceIds: pendingEdits.referenceIds,
+      referenceId: pendingEdits.referenceId,
     })
     .from(pendingEdits)
     .where(eq(pendingEdits.id, pendingEditId))
@@ -391,9 +394,8 @@ export async function recordShadowDecision(
 }
 
 async function collectDisputeHoldCause(
-  pending: Parameters<typeof pendingEditTargetOpenToAgents>[0] & {
-    proposedMeta: unknown;
-  },
+  pending: Parameters<typeof pendingEditTargetOpenToAgents>[0] &
+    SourceCheckedPendingEdit,
   pendingEditId: number,
 ): Promise<ConsensusDisputeHoldCause | null> {
   if (!(await pendingEditTargetOpenToAgents(pending))) return 'target_unpublished';

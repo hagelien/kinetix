@@ -456,6 +456,9 @@ export const pendingEditAdapter: KnowledgeTargetAdapter<
             editType: pendingEdits.editType,
             targetId: pendingEdits.targetId,
             proposedMeta: pendingEdits.proposedMeta,
+            proposedValue: pendingEdits.proposedValue,
+            referenceIds: pendingEdits.referenceIds,
+            referenceId: pendingEdits.referenceId,
           })
           .from(pendingEdits)
           .where(eq(pendingEdits.id, pendingEditId))

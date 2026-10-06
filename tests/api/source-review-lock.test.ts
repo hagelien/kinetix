@@ -41,7 +41,10 @@ describe('lockPendingEditSourceReviews', () => {
     const { db, locks } = recordingDb();
     getDbMock.mockReturnValue(db);
     await lockPendingEditSourceReviews({
-      proposedMeta: { unverifiedReferenceIds: [7, 3] },
+      proposedMeta: { unverifiedReferenceIds: [7] },
+      proposedValue: { attrs: { referenceIds: [7, 3] } },
+      referenceIds: [7, 3],
+      referenceId: 7,
     });
     expect(locks).toEqual([
       { table: 'pending_edits', mode: 'share' },
@@ -49,12 +52,23 @@ describe('lockPendingEditSourceReviews', () => {
     ]);
   });
 
-  it('takes no lock for an edit that lists no unverified references', async () => {
+  it('takes no lock for an edit ingestion did not mark, or one citing nothing', async () => {
     const { db, locks } = recordingDb();
     getDbMock.mockReturnValue(db);
-    await lockPendingEditSourceReviews({ proposedMeta: { source: 'x' } });
-    await lockPendingEditSourceReviews({ proposedMeta: { unverifiedReferenceIds: [] } });
-    await lockPendingEditSourceReviews({ proposedMeta: null });
+    // Cited references alone do not make an edit one ingestion marked.
+    const cited = {
+      proposedValue: { attrs: { referenceIds: [3] } },
+      referenceIds: [3],
+      referenceId: 3,
+    };
+    await lockPendingEditSourceReviews({ ...cited, proposedMeta: { source: 'x' } });
+    await lockPendingEditSourceReviews({ ...cited, proposedMeta: null });
+    await lockPendingEditSourceReviews({
+      proposedMeta: { unverifiedReferenceIds: [] },
+      proposedValue: null,
+      referenceIds: null,
+      referenceId: null,
+    });
     expect(locks).toEqual([]);
     expect(getDbMock).not.toHaveBeenCalled();
   });
