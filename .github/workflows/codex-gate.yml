@@ -433,14 +433,28 @@ jobs:
           # nothing otherwise. A P0, P1 or unrecognised badge can never pass
           # here, whatever the replies say.
           deferred_verdict() {
-            local ids rc findings fid badge issues n labels ok filed=""
+            local ids rc writers login perm findings fid badge issues n labels ok filed=""
             ids="$(jq -c --arg re "$BOT_RE" --arg head "$HEAD" \
               '[.[] | select(.user.login|test($re;"i")) | select(.commit_id==$head) | .id]' <<<"$REVIEWS")"
             [ "$ids" != "[]" ] || return 0
 
             rc="$(gh api --paginate "repos/$REPO/pulls/$PR/comments?per_page=100" | jq -s 'add // []')" || return 0
+
+            # Only a reply by someone who can push here may defer a finding.
+            # author_association is a relationship, not a permission: a MEMBER
+            # or COLLABORATOR can hold read or triage. So ask for each author's
+            # actual permission; legacy `permission` folds maintain into write
+            # and triage into read.
+            writers="[]"
+            for login in $(jq -r '[.[] | select(.in_reply_to_id != null) | .user.login] | unique | .[]' <<<"$rc"); do
+              perm="$(gh api "repos/$REPO/collaborators/$login/permission" --jq .permission 2>/dev/null)" || continue
+              case "$perm" in
+                admin|write) writers="$(jq -c --arg l "$login" '. + [$l]' <<<"$writers")" ;;
+              esac
+            done
+
             # fid|badge|issue numbers linked from writer replies
-            findings="$(jq -r --arg re "$BOT_RE" --argjson ids "$ids" --arg repo "$REPO" '
+            findings="$(jq -r --arg re "$BOT_RE" --argjson ids "$ids" --arg repo "$REPO" --argjson writers "$writers" '
               . as $all
               | .[] | select(.user.login|test($re;"i"))
               | select(.in_reply_to_id == null)
@@ -448,7 +462,7 @@ jobs:
               | .id as $fid
               | ((.body | capture("!\\[(?<b>P[0-9]+) Badge\\]") | .b) // "none") as $badge
               | [ $all[] | select(.in_reply_to_id == $fid)
-                  | select(.author_association | test("^(OWNER|MEMBER|COLLABORATOR)$"))
+                  | select(.user.login as $u | any($writers[]; . == $u))
                   | .body
                   | (scan("github\\.com/" + $repo + "/issues/([0-9]+)"), scan("(?:^|[^&\\w])#([0-9]+)\\b"))
                   | .[0] ] | unique | join(" ")
