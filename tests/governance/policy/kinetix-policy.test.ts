@@ -4,7 +4,7 @@
  * The consensus half of this policy is pinned against the frozen legacy
  * algorithm in `kinetix-consensus-parity.test.ts`. This file covers the rest:
  * the rules that state invariants Kinetix enforces elsewhere in the request
- * path (a human's proposal never publishes on agent consensus; a clinical case
+ * path (an unattributed proposal never publishes on agent consensus; a clinical case
  * needs a qualified person), and the 0–3 projection §7.3 of the extraction plan
  * requires the host to keep owning.
  */

@@ -93,8 +93,9 @@ export type UnquotedReturnOutcome =
  * be overwritten by a note that says only the quote is missing.
  *
  * Not returned, and left for the ordinary hold:
- * - a human contributor's proposal: it never publishes on agent consensus,
- *   and agents do not moderate human work;
+ * - a human contributor's proposal: it publishes on agent consensus like an
+ *   agent's, but a missing quote is not sent back to a person automatically,
+ *   so it waits in the ordinary hold for a moderator;
  * - a payload that states a quote: the write treats it as an echo of the
  *   stored sentence, and re-sending it cannot clear that;
  * - a proposal anyone disputes, by agent verdict or human dispute: the note

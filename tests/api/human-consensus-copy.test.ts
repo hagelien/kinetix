@@ -27,6 +27,32 @@ describe('the retired "people never publish on consensus" rule', () => {
     expect((nb as Reasons).review.errors.agentModerationNotAllowed).toMatch(/publiseres når nok agenter godkjenner/);
   });
 
+  it('is not stated as a contract in the governance source', () => {
+    // Comments that describe an invariant are what the next change to it reads
+    // first; one still stating the retired rule invites restoring it.
+    const files = [
+      'src/lib/assurance/policy.ts',
+      'src/lib/assurance/projection.ts',
+      'api/_lib/agent-verifications.ts',
+      'api/agent-verifications.ts',
+      'api/_lib/unquoted-edit-return.ts',
+      'api/_lib/knowledge-governance/actor-context.ts',
+      'api/_lib/knowledge-governance/policy-shadow.ts',
+      'api/_lib/knowledge-governance/dossier.ts',
+    ];
+    const retired = [
+      /human'?s? (?:proposal|edit) (?:never publishes|always waits)/i,
+      /only an agent-submitted edit can be\s+(?:\*\s+)?published/i,
+      /consensus never stands in for (?:a|the) moderator/i,
+    ];
+    for (const file of files) {
+      const text = readFileSync(file, 'utf8');
+      for (const phrase of retired) {
+        expect({ file, match: phrase.exec(text)?.[0] ?? null }).toEqual({ file, match: null });
+      }
+    }
+  });
+
   it('is not left in any agent instruction file', () => {
     const retired = [
       /never (?:applied|auto-applied) by (?:agent )?consensus/i,
