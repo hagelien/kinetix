@@ -296,7 +296,7 @@ drafts and are what gives a reviewer any signal at all.
 
 **So a draft is never "green" in CI, and you must not wait for it to be.** A
 draft's definition of done is: the cheap checks passing, a clean Codex review on
-the current head, and the suites below run and clean *locally*, reported in the
+the current head (or one whose only findings are P2/P3, each filed), and the suites below run and clean *locally*, reported in the
 PR body. Say plainly in that body that the expensive suites have not run in CI
 yet and why.
 
@@ -384,7 +384,10 @@ In short:
   merge. A P0 takes priority over everything else on that pull request.
 - **P2 and P3 findings are not fixed in that pull request.** Each one becomes a
   GitHub issue labelled `P2` and `review-debt`, linked back to
-  the review comment.
+  the review comment. "The code is new in this PR" or "it is small" is not an
+  exception. Once each is filed and its thread answered with the issue link,
+  add the `findings-deferred` label; `codex-gate` then merges on that review
+  instead of waiting for a clean one.
 - **Any finding that touches the escalation areas listed in the policy is
   treated as at least P1**, whatever lower severity the reviewer assigned. The
   rule only raises severity: a P0 there stays a P0.

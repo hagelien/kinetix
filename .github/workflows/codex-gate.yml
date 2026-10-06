@@ -179,7 +179,8 @@ concurrency:
     && github.event.comment.user.login != 'chatgpt-codex-connector[bot]')
     || (github.event_name == 'pull_request'
     && github.event.action == 'labeled'
-    && github.event.label.name != 'merge-when-green')
+    && github.event.label.name != 'merge-when-green'
+    && github.event.label.name != 'findings-deferred')
     || github.event.pull_request.draft == true
     || (github.event_name == 'workflow_run'
     && (github.event.workflow_run.conclusion != 'success'
@@ -215,8 +216,8 @@ jobs:
     #     labelling its own PR `codex-approved` was re-triggering itself
     #   * a draft PR is skipped in-job anyway
     #   * an `issue_comment` on a plain issue has no PR to gate
-    # The literal below must stay in step with OVERRIDE_LABEL; `env` is not
-    # in scope in a job-level `if`. The Codex reviewer is matched by its exact
+    # The literals below must stay in step with OVERRIDE_LABEL and
+    # DEFERRED_LABEL; `env` is not in scope in a job-level `if`. The Codex reviewer is matched by its exact
     # bot login: the repository is public, and any account whose name merely
     # contains "codex" must never count as a sign-off.
     if: >-
@@ -231,7 +232,8 @@ jobs:
       || (github.event_name == 'pull_request'
       && github.event.pull_request.draft == false
       && (github.event.action != 'labeled'
-      || github.event.label.name == 'merge-when-green'))
+      || github.event.label.name == 'merge-when-green'
+      || github.event.label.name == 'findings-deferred'))
       || (github.event_name == 'pull_request_review'
       && github.event.pull_request.draft == false
       && github.event.review.user.login == 'chatgpt-codex-connector[bot]')
@@ -250,6 +252,11 @@ jobs:
       BOT_RE: '^chatgpt-codex-connector\[bot\]$'
       CLEAN_RE: "no (major |minor |critical |blocking |obvious |significant )?(issues|problems|concerns|findings|bugs)|did ?n.t find|found no|nothing to flag|nothing blocking|no blockers|lgtm|looks good|all good|approved"
       OVERRIDE_LABEL: merge-when-green
+      # Wake signal only, never trusted on its own: the agent adds it after
+      # filing every P2/P3 finding on the head as a review-debt issue, and the
+      # gate then re-checks that itself (deferred_verdict below). It is removed
+      # on every evaluation so the next deferral round can add it again.
+      DEFERRED_LABEL: findings-deferred
       IGNORE_CHECKS_RE: "^(gate|Codex gate)$"
       # Checks that must have actually *succeeded* on the head before a merge —
       # not merely "not failing". Everything else here is snapshot logic: `bad`
@@ -402,7 +409,64 @@ jobs:
               echo "OK|thumbs-up reaction"; return
             fi
 
-            echo ""
+            deferred_verdict
+          }
+
+          # docs/REVIEW_POLICY.md: P2 and P3 findings are not fixed in the pull
+          # request that raised them, they are filed as review-debt issues. A
+          # Codex review that only has such findings is therefore a sign-off
+          # once each one is filed — otherwise the gate demands the very fixes
+          # the policy defers, and the only way to merge is to make them.
+          #
+          # Emits OK|<reason> when every inline finding Codex left on the
+          # current head carries a P2 or P3 badge and has a reply, from someone
+          # with write access, linking an issue labelled review-debt. Emits
+          # nothing otherwise. A P0, P1 or unrecognised badge can never pass
+          # here, whatever the replies say.
+          deferred_verdict() {
+            local ids rc findings fid badge issues n labels ok filed=""
+            ids="$(jq -c --arg re "$BOT_RE" --arg head "$HEAD" \
+              '[.[] | select(.user.login|test($re;"i")) | select(.commit_id==$head) | .id]' <<<"$REVIEWS")"
+            [ "$ids" != "[]" ] || return 0
+
+            rc="$(gh api --paginate "repos/$REPO/pulls/$PR/comments?per_page=100" | jq -s 'add // []')" || return 0
+            # fid|badge|issue numbers linked from writer replies
+            findings="$(jq -r --arg re "$BOT_RE" --argjson ids "$ids" --arg repo "$REPO" '
+              . as $all
+              | .[] | select(.user.login|test($re;"i"))
+              | select(.in_reply_to_id == null)
+              | select(.pull_request_review_id as $r | any($ids[]; . == $r))
+              | .id as $fid
+              | ((.body | capture("!\\[(?<b>P[0-9]+) Badge\\]") | .b) // "none") as $badge
+              | [ $all[] | select(.in_reply_to_id == $fid)
+                  | select(.author_association | test("^(OWNER|MEMBER|COLLABORATOR)$"))
+                  | .body
+                  | (scan("github\\.com/" + $repo + "/issues/([0-9]+)"), scan("(?:^|[^&\\w])#([0-9]+)\\b"))
+                  | .[0] ] | unique | join(" ")
+              | "\($fid)|\($badge)|\(.)"' <<<"$rc")"
+            [ -n "$findings" ] || return 0
+
+            while IFS='|' read -r fid badge issues; do
+              case "$badge" in
+                P2|P3) ;;
+                none) echo "Codex finding $fid on ${HEAD:0:7} has no severity badge — treated as P0" >&2; return 0 ;;
+                *) echo "Codex finding $fid on ${HEAD:0:7} is $badge — fixed in this PR, never deferred" >&2; return 0 ;;
+              esac
+              ok=""
+              for n in $issues; do
+                labels="$(gh api "repos/$REPO/issues/$n" --jq \
+                  'select(.pull_request == null) | .labels[].name' 2>/dev/null)" || continue
+                if grep -qx review-debt <<<"$labels"; then
+                  ok="#$n"; break
+                fi
+              done
+              if [ -z "$ok" ]; then
+                echo "Codex $badge finding $fid on ${HEAD:0:7} has no linked review-debt issue yet" >&2; return 0
+              fi
+              filed="${filed:+$filed, }$ok"
+            done <<<"$findings"
+
+            echo "OK|only P2/P3 findings, each filed ($filed)"
           }
 
           # Is it worth holding this job open for a verdict on the head commit?
@@ -463,6 +527,11 @@ jobs:
             fi
             HEAD_DATE="$(gh api "repos/$REPO/commits/$HEAD" --jq '.commit.committer.date')"
             OVERRIDE="$(jq -r --arg l "$OVERRIDE_LABEL" '[.labels[].name | select(. == $l)] | length' <<<"$pr_json")"
+            # Consumed here, so the next round of deferrals can raise it again.
+            # The evaluation below reads the deferrals themselves, not the label.
+            if jq -e --arg l "$DEFERRED_LABEL" 'any(.labels[]; .name == $l)' <<<"$pr_json" >/dev/null; then
+              gh pr edit "$PR" --repo "$REPO" --remove-label "$DEFERRED_LABEL" || true
+            fi
 
             load_signoff_inputs
             load_checks

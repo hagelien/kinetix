@@ -46,6 +46,14 @@ The rule only ever raises severity. A P2 or P3 in these areas becomes P1; a
 finding already marked P0 stays P0 and keeps its priority over everything else
 on the pull request.
 
+"Touches" means the defect the finding describes would itself do harm in one of
+those areas: a wrong or unattributed value, a provenance or approval check that
+can be bypassed, an unauthorised write, a lost audit record. It does not mean the
+code merely lives near them. A P2 about untranslated error text, scan fairness,
+query cost, or the wording of a message on a provenance code path stays P2. When
+you escalate, name in the thread reply the concrete harm the defect would cause;
+if you cannot name one, the finding is not escalated.
+
 A deferred finding in these areas is not technical debt, it is unmanaged risk.
 "Less severe" here is a judgement that can only be checked after the damage is
 done.
@@ -63,6 +71,17 @@ Never merge a pull request with an open P0 or P1 finding.
 
 ## P2 and P3 findings — file an issue, do not fix here
 
+In this repository P2 and P3 findings from any review bot are **optional
+findings**: they never start a push. This overrides any general instruction to
+treat every bot finding as a bug report to fix. The escalation rule above is the
+only way a P2 or P3 is fixed in the pull request that raised it. None of these
+is a reason to fix one here instead of filing it:
+
+- "the code was introduced by this pull request" or "the path is new here";
+- "it is small" or "it is quick" (see item 4 for the one narrow ride-along);
+- "the gate will not merge otherwise" — it will, see *Ask for a fresh verdict*
+  below.
+
 1. Do **not** change code for a P2 or P3 finding in this pull request. It widens
    the diff and delays the review it came from.
 2. Open a GitHub issue with labels `P2` and `review-debt`. Both are declared in
@@ -79,7 +98,11 @@ Never merge a pull request with an open P0 or P1 finding.
    which is why an agent labelling through REST never has to stop, but do not
    rely on that here: the label is then grey and description-less until the sync
    runs.) Use the template below.
-3. Reply on the review thread with the issue link, then resolve the thread.
+3. Reply on the review thread with the issue's full URL, then resolve the
+   thread. The merge gate reads that reply: it accepts a P2 or P3 finding as
+   handled only when a reply on its thread links an issue labelled
+   `review-debt`. If Codex raises a finding that is already filed, reply with
+   the existing issue's URL rather than filing a duplicate.
 4. If such a finding is a one-line change in a file the pull request already
    touches, it may ride along in a push that was happening anyway — but still
    file the issue, and leave it open until the fixing pull request merges
@@ -122,9 +145,16 @@ for a new verdict explicitly:
 - After a **fix**, the push is enough — `synchronize` wakes the gate and starts
   a fresh review of the new head. On a **draft** it is not: the reviewer
   ignores pushes to a draft, so comment `@codex review` there too.
-- After a **deferral**, nothing changed on the branch, so comment
-  `@codex review` on the pull request. That is an `issue_comment`: it both wakes
-  the gate and makes the reviewer produce a verdict on the current head.
+- After a **deferral**, nothing changed on the branch. Do **not** comment
+  `@codex review`: the reviewer has no memory of the deferral and re-raises the
+  same findings on the same head. Instead, once every P2/P3 finding on the
+  current head has its issue and its reply, add the `findings-deferred` label to
+  the pull request. That wakes the gate, which checks for itself that every
+  Codex finding on the head carries a P2 or P3 badge and a reply linking a
+  `review-debt` issue, and treats that review as a sign-off. One P0, P1 or
+  unbadged finding on the head, or one P2/P3 without a filed issue, and it does
+  not. The gate removes the label each time it evaluates, so add it again after
+  a later round of deferrals.
 
 ## A draft pull request needs its first review asked for
 
@@ -140,16 +170,14 @@ it, and again after any push you want re-reviewed. Costs nothing, and without it
 the first review arrives only when the draft is marked ready — which is the point
 you wanted it merged, not the point the feedback was cheap to act on.
 
-Without this, a pull request whose only review contains a deferred finding sits
-unmerged until the two-hourly sweep or a human intervenes.
-
 ## A draft is never CI-green, and that is not a blocker
 
 `unit-tests` and `migrations` are gated on `draft == false`, so on a draft they
 never run and the pull request can never reach a green rollup. **Do not read that
 as red, do not wait it out, and do not mark the pull request ready to force the
 runs.** A draft is finished when the cheap path-filtered workflows pass, the
-Codex review on the current head is clean, and the local checklist in *Opening a
+Codex review on the current head is clean (or its only findings are P2/P3,
+each filed as above), and the local checklist in *Opening a
 pull request* ([AGENTS.md](../../../AGENTS.md)) has been run and reported in the
 PR body. Then stop and say so.
 
