@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ReferenceMarkdown } from './ReferenceMarkdown';
 import {
   fetchVerificationsForTarget,
   type AgentVerificationRow,
@@ -109,9 +110,13 @@ export function VerificationRationaleList({
               · {new Date(r.createdAt).toLocaleString()}
             </span>
           </div>
-          <p className="whitespace-pre-wrap leading-snug">
-            {r.rationaleMd.trim() || t('review.verification.noRationale')}
-          </p>
+          {r.rationaleMd.trim() ? (
+            <ReferenceMarkdown text={r.rationaleMd.trim()} />
+          ) : (
+            <p className="leading-snug">
+              {t('review.verification.noRationale')}
+            </p>
+          )}
           {r.evidenceRefs.length > 0 ? (
             <div className="text-[11px] text-muted-foreground">
               <span className="font-medium">
