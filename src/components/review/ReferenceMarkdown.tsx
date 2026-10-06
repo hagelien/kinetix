@@ -1,14 +1,14 @@
-import { Fragment, type ReactNode } from 'react';
-import { marked, type Token, type Tokens } from 'marked';
-import { isSafeMarkdownUrl } from '@/lib/renderMarkdown';
-import { ReferenceText } from './ReferenceText';
+import { Fragment, type ReactNode } from "react";
+import { marked, type Token, type Tokens } from "marked";
+import { isSafeMarkdownUrl } from "@/lib/renderMarkdown";
+import { ReferenceText } from "./ReferenceText";
 
 const ENTITIES: Record<string, string> = {
-  '&amp;': '&',
-  '&lt;': '<',
-  '&gt;': '>',
-  '&quot;': '"',
-  '&#39;': "'",
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": '"',
+  "&#39;": "'",
 };
 
 function decodeEntities(text: string): string {
@@ -35,45 +35,50 @@ function renderBlocks(tokens: Token[]): ReactNode[] {
 
 function renderBlock(token: Token): ReactNode {
   switch (token.type) {
-    case 'space':
+    case "space":
       return null;
-    case 'paragraph':
+    case "paragraph":
       return (
         <p className="whitespace-pre-wrap">
           {renderInline((token as Tokens.Paragraph).tokens)}
         </p>
       );
-    case 'heading':
+    case "heading":
       return (
         <p className="font-semibold">
           {renderInline((token as Tokens.Heading).tokens)}
         </p>
       );
-    case 'blockquote':
+    case "blockquote":
       return (
         <blockquote className="space-y-2 border-l-2 border-border pl-2 text-muted-foreground">
           {renderBlocks((token as Tokens.Blockquote).tokens)}
         </blockquote>
       );
-    case 'hr':
+    case "hr":
       return <hr className="border-border" />;
-    case 'code':
+    case "code":
       return (
         <pre className="overflow-x-auto whitespace-pre-wrap rounded bg-muted p-2 font-mono text-[11px]">
           {(token as Tokens.Code).text}
         </pre>
       );
-    case 'list': {
+    case "list": {
       const list = token as Tokens.List;
       const items = list.items.map((item, i) => (
-        <li key={i} className="space-y-1">
+        <li
+          key={i}
+          className={
+            item.task ? "flex list-none items-start gap-1.5" : "space-y-1"
+          }
+        >
           {renderListItem(item)}
         </li>
       ));
       return list.ordered ? (
         <ol
           className="list-decimal space-y-0.5 pl-5"
-          start={typeof list.start === 'number' ? list.start : undefined}
+          start={typeof list.start === "number" ? list.start : undefined}
         >
           {items}
         </ol>
@@ -81,7 +86,7 @@ function renderBlock(token: Token): ReactNode {
         <ul className="list-disc space-y-0.5 pl-5">{items}</ul>
       );
     }
-    case 'table': {
+    case "table": {
       const table = token as Tokens.Table;
       return (
         <div className="overflow-x-auto">
@@ -113,7 +118,7 @@ function renderBlock(token: Token): ReactNode {
         </div>
       );
     }
-    case 'text': {
+    case "text": {
       const t = token as Tokens.Text;
       return (
         <p className="whitespace-pre-wrap">
@@ -127,7 +132,7 @@ function renderBlock(token: Token): ReactNode {
     }
     default:
       // Raw HTML and anything unrecognised is shown verbatim, never injected.
-      return 'raw' in token && token.raw.trim() ? (
+      return "raw" in token && token.raw.trim() ? (
         <p className="whitespace-pre-wrap">{token.raw}</p>
       ) : null;
   }
@@ -144,9 +149,9 @@ function renderListItem(item: Tokens.ListItem): ReactNode {
         checked={!!item.checked}
         disabled
         readOnly
-        className="mr-1.5 align-middle"
+        className="mt-[0.2em] shrink-0"
       />
-      {body}
+      <div className="min-w-0 space-y-1">{body}</div>
     </>
   );
 }
@@ -154,7 +159,7 @@ function renderListItem(item: Tokens.ListItem): ReactNode {
 function renderListItemBody(item: Tokens.ListItem): ReactNode {
   // Tight list items wrap their text in a bare `text` block token; render it
   // inline so bullets don't get paragraph spacing.
-  if (item.tokens.length === 1 && item.tokens[0]?.type === 'text') {
+  if (item.tokens.length === 1 && item.tokens[0]?.type === "text") {
     const t = item.tokens[0] as Tokens.Text;
     return t.tokens ? (
       renderInline(t.tokens)
@@ -173,33 +178,33 @@ function renderInline(tokens: Token[], inLink = false): ReactNode[] {
 
 function renderInlineToken(token: Token, inLink: boolean): ReactNode {
   switch (token.type) {
-    case 'text': {
+    case "text": {
       const t = token as Tokens.Text;
       if (t.tokens) return renderInline(t.tokens, inLink);
       const text = decodeEntities(t.text);
       return inLink ? text : <ReferenceText text={text} />;
     }
-    case 'escape':
+    case "escape":
       return (token as Tokens.Escape).text;
-    case 'strong':
+    case "strong":
       return (
         <strong className="font-semibold">
           {renderInline((token as Tokens.Strong).tokens, inLink)}
         </strong>
       );
-    case 'em':
+    case "em":
       return <em>{renderInline((token as Tokens.Em).tokens, inLink)}</em>;
-    case 'del':
+    case "del":
       return <s>{renderInline((token as Tokens.Del).tokens, inLink)}</s>;
-    case 'codespan':
+    case "codespan":
       return (
         <code className="rounded bg-muted px-1 font-mono text-[0.95em]">
           {decodeEntities((token as Tokens.Codespan).text)}
         </code>
       );
-    case 'br':
+    case "br":
       return <br />;
-    case 'link': {
+    case "link": {
       const link = token as Tokens.Link;
       const children = renderInline(link.tokens, true);
       if (inLink || !isSafeMarkdownUrl(link.href)) return children;
@@ -216,6 +221,6 @@ function renderInlineToken(token: Token, inLink: boolean): ReactNode {
       );
     }
     default:
-      return 'raw' in token ? token.raw : null;
+      return "raw" in token ? token.raw : null;
   }
 }
