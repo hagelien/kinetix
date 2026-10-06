@@ -2165,7 +2165,7 @@ For every additive migration:
 
 At minimum:
 
-1. human wiki fact proposal -> agent reviews -> human approves -> live;
+1. human wiki fact proposal -> independent agent quorum -> auto-apply (since kinetix-consensus@v2; it was "human approves" before);
 2. agent wiki fact -> independent quorum -> auto-apply;
 3. agent wiki fact -> dispute -> held -> human ruling;
 4. high-risk parameter -> two mid approvals -> held;

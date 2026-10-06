@@ -1883,7 +1883,8 @@ agent proposal -> two peer approvals -> auto apply
 agent high-risk proposal -> two mid approvals -> hold
 agent high-risk proposal -> mid + flagship -> apply
 high-risk degraded pool -> flagship single approval -> hold
-human proposal -> many agent approvals -> hold for human
+human proposal -> independent agent quorum -> auto apply (since kinetix-consensus@v2)
+unattributed proposal -> many agent approvals -> hold for human
 proposal -> dispute -> approvals -> hold
 proposal -> dispute overruled -> policy re-evaluate
 clinical case -> agent quorum -> hold for human expert

@@ -107,6 +107,11 @@ describe('the retired "people never publish on consensus" rule', () => {
       /refuses a (?:human|person)'?s? (?:proposal|edit)/i,
       /(?:human|person)'?s? (?:proposal|edit)[^.\n]{0,40}whatever the (?:count|tally)/i,
     ];
+    // Arrow-form scenario lines (`human proposal -> … -> hold for human`) are
+    // checked on their own: the general `hold for human review` exemption
+    // below is for the fail-safe direction, not for a human-authored outcome.
+    const arrowStates =
+      /^\s*(?:\d+\.\s*)?human[^\n]{0,30}(?:proposal|edit|fact)[^\n]*->[^\n]*(?:hold for human|human approves)/i;
     const stillHolds = /~~|retired|hold for human review|requiresHumanReview|\bv2\b|\bv3\b|clinical|unattributed|no recorded author|dispute|moderat(?:e|ing) (?:a|one)|\/review|superseded/i;
     const offenders: string[] = [];
     const walk = (path: string) => {
@@ -123,7 +128,10 @@ describe('the retired "people never publish on consensus" rule', () => {
         readFileSync(entry, 'utf8')
           .split('\n')
           .forEach((line, n) => {
-            if (states.some((re) => re.test(line)) && !stillHolds.test(line)) {
+            if (
+              (states.some((re) => re.test(line)) && !stillHolds.test(line)) ||
+              (arrowStates.test(line) && !/~~|retired|\bv2\b/i.test(line))
+            ) {
               offenders.push(`${entry}:${n + 1}: ${line.trim()}`);
             }
           });
