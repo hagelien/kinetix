@@ -3682,14 +3682,14 @@ async function handlePatch(
     return;
   }
 
-  // A human's proposal is moderated by a human. Agents peer-verify every
-  // pending edit — human-submitted ones included, which is how those stop
-  // waiting unseen — but a verdict is evidence, not a decision: an agent
-  // carrying an editor role must not approve, reject, or return a person's
-  // edit through the moderator path either. The consensus auto-apply path
-  // enforces the same rule (api/agent-verifications.ts); this closes the
-  // direct route. Agent-submitted edits are unaffected: agents still moderate
-  // each other.
+  // No single agent decides a person's proposal. Agents peer-verify every
+  // pending edit, human-submitted ones included, and since kinetix-consensus@v2
+  // their consensus publishes a person's proposal at quorum exactly as it does
+  // an agent's (api/agent-verifications.ts). What this closes is the
+  // one-agent route: an agent carrying an editor role must not approve,
+  // reject, or return a person's edit through the moderator path, which would
+  // let one agent stand in for the quorum. Agent-submitted edits are
+  // unaffected here: agents still moderate each other.
   if (
     (requestedStatus === 'approved' ||
       requestedStatus === 'rejected' ||

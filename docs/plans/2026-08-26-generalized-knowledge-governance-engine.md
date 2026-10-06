@@ -1324,7 +1324,7 @@ Each phase below should normally be one or several focused PRs. Do not combine s
 
 - every safety-significant branch above has at least one test;
 - tests fail if high-risk degraded quorum is accidentally allowed;
-- tests fail if human proposals can auto-publish through agent consensus;
+- ~~tests fail if human proposals can auto-publish through agent consensus~~ → tests fail if an unattributed proposal can auto-publish through agent consensus, or if authorship changes the bar a person's proposal is held to (v2);
 - tests fail if peer-review responses expose peer verdicts;
 - tests fail if stale content can be approved.
 

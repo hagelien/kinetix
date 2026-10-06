@@ -91,6 +91,10 @@ describe('the retired "people never publish on consensus" rule', () => {
       /consensus never stands in for (?:a|the) moderator/i,
       /human[^.\n]{0,30}non-auto-apply/i,
       /anything a human submitted/i,
+      /human (?:proposals?|edits?|submissions?) can auto-?publish/i,
+      /human'?s? (?:proposal|edit|work|change) is (?:moderated|decided) by a human/i,
+      /consensus auto-apply path\s+(?:\/\/\s*)?enforces the same rule/i,
+      /only on the agents' own (?:output|work)/i,
     ];
     const stillHolds = /~~|retired|hold for human review|requiresHumanReview|\bv2\b|\bv3\b|clinical|unattributed|no recorded author|dispute|moderat(?:e|ing) (?:a|one)|\/review|superseded/i;
     const offenders: string[] = [];
