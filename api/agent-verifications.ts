@@ -1523,3 +1523,93 @@ export async function sweepAgentConsensus(
   return results;
 }
 
+/**
+ * Hand unquoted calculation-driving proposals back to the agents that wrote
+ * them, however many approvals they have.
+ *
+ * Consensus only reaches the source-quote gate when a verdict lands or the
+ * retry sweep above picks the edit up, and that sweep takes only edits whose
+ * tally already clears the quorum floor. An unquoted proposal with one
+ * approval — or none — therefore sat in /review for a person, though the fix
+ * is the author's and costs nobody else anything. This pass finds them
+ * directly and returns each to its author (`returnUnquotedAgentEdit`, which
+ * decides under the row lock and leaves alone anything disputed, already
+ * returned or quoting an echo).
+ *
+ * The SQL pre-filter only keeps the window for rows the return can act on: an
+ * agent's pending parameter or source-value proposal whose payload carries no
+ * quote, with no dispute against it and no reviewer return still standing.
+ * The gate itself (`highRiskProposalWouldPublishUnquoted`) decides each one.
+ */
+export async function sweepUnquotedAgentEdits(
+  limit = CONSENSUS_SWEEP_LIMIT,
+): Promise<number[]> {
+  const db = getDb();
+  const highRiskParameterIds = DRUG_PARAMETER_IDS.filter((id) =>
+    isHighRiskPendingEdit({ editType: 'parameter', parameter: id }),
+  );
+  if (highRiskParameterIds.length === 0) return [];
+  const blank = (expr: ReturnType<typeof sql>) => sql`nullif(btrim(${expr}), '') is null`;
+  const candidates = await db.execute<{ id: number }>(sql`
+    SELECT pe.id
+    FROM pending_edits pe
+    WHERE pe.status = 'pending'
+      AND pe.edit_type IN ('parameter', 'param_entry')
+      AND pe.parameter IN (${sql.join(highRiskParameterIds.map((id) => sql`${id}`), sql`, `)})
+      AND EXISTS (
+        SELECT 1 FROM agents a JOIN users u ON u.id = a.user_id
+        WHERE a.user_id = pe.submitted_by AND a.status = 'active'
+          AND u.role IN (${sql.join(ACTIVE_AGENT_ROLES.map((r) => sql`${r}`), sql`, `)})
+      )
+      -- No quote in the payload at all (a stated quote may be an echo, which
+      -- the author cannot fix by re-sending it).
+      AND CASE pe.edit_type
+        WHEN 'parameter' THEN ${blank(sql`pe.proposed_meta->>'sourceQuote'`)}
+        ELSE ${blank(sql`coalesce(pe.proposed_value->'input'->>'quote', pe.proposed_value->'patch'->>'quote')`)}
+      END
+      AND NOT EXISTS (
+        SELECT 1 FROM agent_verifications v
+        WHERE v.target_type = 'pending_edit' AND v.target_id = pe.id
+          AND v.verdict = 'dispute' AND v.is_implicit = false
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM disputes d
+        WHERE d.target_type = 'pending_edit' AND d.target_id = pe.id AND d.status = 'open'
+      )
+      -- A reviewer's return the author has not revised since.
+      AND NOT (
+        pe.proposed_meta->>'returnedAt' IS NOT NULL
+        AND (
+          pe.proposed_meta->>'revisedAt' IS NULL
+          OR pe.proposed_meta->>'revisedAt' <= pe.proposed_meta->>'returnedAt'
+        )
+      )
+    ORDER BY pe.submitted_at ASC, pe.id ASC
+    LIMIT ${limit}
+  `);
+  const returned: number[] = [];
+  for (const { id } of candidates.rows) {
+    try {
+      const pending = await readConsensusPendingRow(id);
+      if (!pending || pending.status !== 'pending') continue;
+      let unresolved = false;
+      const unquoted = await highRiskProposalWouldPublishUnquoted(pending, () => {
+        unresolved = true;
+      });
+      if (!unquoted || unresolved) continue;
+      const sent = await returnUnquotedAgentEdit({
+        pendingEditId: id,
+        submittedAt: pending.submittedAt,
+      });
+      if (sent.returned) returned.push(id);
+    } catch (err) {
+      // One bad row must not stop the sweep.
+      console.error(
+        `[agent-consensus] unquoted-return sweep failed for ${id}: ` +
+          `${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+  return returned;
+}
+

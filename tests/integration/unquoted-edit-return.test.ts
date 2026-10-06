@@ -6,7 +6,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { agentVerifications, agents, disputes, parameterEntries, pendingEdits } from '../../db/schema.js';
-import { runAgentConsensus } from '../../api/agent-verifications.js';
+import { runAgentConsensus, sweepUnquotedAgentEdits } from '../../api/agent-verifications.js';
 import { returnStandsUnrevised } from '../../api/_lib/pending-edit-review-token.js';
 import { UNQUOTED_RETURN_PREFIX } from '../../api/_lib/unquoted-edit-return.js';
 import {
@@ -221,5 +221,61 @@ describe('a source-value update that only echoes the stored quote', () => {
     expect(outcome).toMatchObject({ outcome: 'held', reason: 'source_quote_missing' });
     const [row] = await db.select().from(pendingEdits).where(eq(pendingEdits.id, edit!.id));
     expect(row!.status).toBe('pending');
+  });
+});
+
+describe('the sweep', () => {
+  async function seedEdit(opts: { authorIsAgent: boolean; quote: string | null; approvals: number }) {
+    const suffix = Math.random().toString(36).slice(2, 8);
+    const author = opts.authorIsAgent
+      ? (await seedAgent(`author-${suffix}`, 'mid')).userId
+      : await seedUser(db, { email: `h-${suffix}@example.com`, username: `h-${suffix}`, role: 'contributor' });
+    const verifier = await seedAgent(`verifier-${suffix}`, 'flagship');
+    const drugId = await seedDrug(db, { slug: `drug-${suffix}` });
+    const [edit] = await db
+      .insert(pendingEdits)
+      .values({
+        editType: 'parameter',
+        targetId: drugId,
+        parameter: 'halfLife',
+        proposedValue: { value: 33 },
+        proposedMeta: opts.quote === null ? null : { sourceQuote: opts.quote },
+        submittedBy: author,
+        status: 'pending',
+      })
+      .returning({ id: pendingEdits.id });
+    for (let i = 0; i < opts.approvals; i++) {
+      await db.insert(agentVerifications).values({
+        agentId: verifier.agentId,
+        targetType: 'pending_edit',
+        targetId: edit!.id,
+        verdict: 'approve',
+        verifierTier: 'flagship',
+        rationaleMd: '',
+      });
+    }
+    return edit!.id;
+  }
+
+  it('returns an unquoted agent proposal whatever its tally, and nothing else', async () => {
+    const oneApproval = await seedEdit({ authorIsAgent: true, quote: null, approvals: 1 });
+    const noApproval = await seedEdit({ authorIsAgent: true, quote: null, approvals: 0 });
+    const quoted = await seedEdit({ authorIsAgent: true, quote: 'Half-life was 33 h.', approvals: 1 });
+    const human = await seedEdit({ authorIsAgent: false, quote: null, approvals: 1 });
+
+    const returned = await sweepUnquotedAgentEdits();
+    expect(returned.sort()).toEqual([oneApproval, noApproval].sort());
+
+    const statuses = await db
+      .select({ id: pendingEdits.id, status: pendingEdits.status })
+      .from(pendingEdits);
+    const statusOf = (id: number) => statuses.find((r) => r.id === id)!.status;
+    expect(statusOf(oneApproval)).toBe('returned');
+    expect(statusOf(noApproval)).toBe('returned');
+    expect(statusOf(quoted)).toBe('pending');
+    expect(statusOf(human)).toBe('pending');
+
+    // Idempotent: nothing left to return.
+    expect(await sweepUnquotedAgentEdits()).toEqual([]);
   });
 });

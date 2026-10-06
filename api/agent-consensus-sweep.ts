@@ -1,8 +1,10 @@
 /**
  * Retry sweep for agent consensus (issue #1357).
  *
- *   POST  — re-run consensus over the oldest pending edits that have at least
- *           one explicit agent approval and no dispute verdict.
+ *   POST  — return unquoted calculation-driving agent proposals to their
+ *           authors (`returnedForQuote`), then re-run consensus over the
+ *           oldest pending edits that have at least one explicit agent
+ *           approval and no dispute verdict.
  *
  * Consensus is otherwise evaluated only at the instant an `approve` verdict
  * lands. An edit held at that moment (an agent's tier not yet set, a transient
@@ -25,7 +27,7 @@ import { assertSameOrigin } from './_lib/validate.js';
 import { callerCan } from './_lib/permissions-store.js';
 import { CAP } from '../src/lib/permissions.js';
 import { resolveActiveAgent } from './_lib/agent-verifications.js';
-import { sweepAgentConsensus } from './agent-verifications.js';
+import { sweepAgentConsensus, sweepUnquotedAgentEdits } from './agent-verifications.js';
 
 export default withErrorHandling(async function handler(
   req: IncomingMessage,
@@ -49,6 +51,10 @@ export default withErrorHandling(async function handler(
     return;
   }
 
+  // Unquoted calculation-driving proposals go back to their authors first,
+  // whatever their tally: the consensus retry below only reaches edits that
+  // already clear the quorum floor.
+  const returnedForQuote = await sweepUnquotedAgentEdits();
   const results = await sweepAgentConsensus();
   const applied = results
     .filter((r) => r.outcome === 'applied')
@@ -61,7 +67,7 @@ export default withErrorHandling(async function handler(
   json(
     res,
     200,
-    { checked: results.length, applied, held },
+    { checked: results.length, applied, held, returnedForQuote },
     { headers: noStoreHeaders() },
   );
 });
