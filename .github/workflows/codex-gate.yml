@@ -392,12 +392,21 @@ jobs:
               echo "OK|formal approval"; return
             fi
 
+            # Only Codex's own words count. Its "Codex Review Summary" comment
+            # is a status table, edited in place while a review runs, and its
+            # boilerplate — on reviews too, inside <details> — says it "reacts
+            # with 👍 once all reviews finish with no findings". CLEAN_RE reads
+            # that as a clean review while findings are still being written,
+            # so the summary is skipped and every <details> block stripped.
             bodies="$( { jq -r --arg re "$BOT_RE" --arg d "$HEAD_DATE" \
                           '.[] | select(.user.login|test($re;"i"))
-                           | select((.submitted_at // "1970") > $d) | (.body // "")' <<<"$REVIEWS"
+                           | select((.submitted_at // "1970") > $d) | (.body // "")
+                           | gsub("<details>[\\s\\S]*?</details>"; "")' <<<"$REVIEWS"
                         jq -r --arg re "$BOT_RE" --arg d "$HEAD_DATE" \
                           '.[] | select(.user.login|test($re;"i"))
-                           | select(.created_at > $d) | (.body // "")' <<<"$COMMENTS"; } | tr '\n' ' ')"
+                           | select(.created_at > $d) | (.body // "")
+                           | select(test("codex-pull-request-review-summary") | not)
+                           | gsub("<details>[\\s\\S]*?</details>"; "")' <<<"$COMMENTS"; } | tr '\n' ' ')"
             if grep -qiE "$CLEAN_RE" <<<"${bodies:-}"; then
               echo "OK|clean comment"; return
             fi
