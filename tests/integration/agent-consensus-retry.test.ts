@@ -489,6 +489,40 @@ describe('agent consensus hold, re-stamp and retry', () => {
     expect(results.map((r) => r.pendingEditId)).toEqual([eligible]);
   });
 
+  it("keeps a person's calculation-driving entry update out of the sweep window, quote or not", async () => {
+    // Whether an update keeps a quote is decided by the write against the
+    // stored row (an echoed or inherited quote can be cleared when the reading
+    // moves); the window filter cannot evaluate that in bulk, and a person's
+    // held update is not returned, so it is left out.
+    const author = await seedAgent('author');
+    const b = await seedAgent('b');
+    const c = await seedAgent('c');
+    const human = await seedUser(db, {
+      email: 'person@example.com',
+      username: 'person',
+      role: 'contributor',
+    });
+    const update = await seedHighRiskEdit(human);
+    await db
+      .update(pendingEdits)
+      .set({
+        proposedValue: {
+          op: 'update',
+          patch: { value: 0.4, quote: 'An echoed sentence the write may clear.' },
+        } as never,
+      })
+      .where(eq(pendingEdits.id, update));
+    await approve(b.agentId, update, { tier: 'flagship' });
+    await approve(c.agentId, update);
+    await new Promise((r) => setTimeout(r, 5));
+    const eligible = await seedHighRiskEdit(author.userId);
+    await approve(b.agentId, eligible, { tier: 'flagship' });
+    await approve(c.agentId, eligible);
+
+    const results = await sweepAgentConsensus(1);
+    expect(results.map((r) => r.pendingEditId)).toEqual([eligible]);
+  });
+
   it("holds a person's proposal to the pool's full quorum when filtering the sweep window", async () => {
     // Two active agents: an agent author's floor is 1 (its one peer), but a
     // person's proposal has both agents eligible, so its quorum is 2. A human
