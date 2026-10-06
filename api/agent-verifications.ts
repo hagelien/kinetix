@@ -1550,12 +1550,20 @@ export async function sweepUnquotedAgentEdits(
   );
   if (highRiskParameterIds.length === 0) return [];
   const blank = (expr: ReturnType<typeof sql>) => sql`nullif(btrim(${expr}), '') is null`;
-  const candidates = await db.execute<{ id: number }>(sql`
-    SELECT pe.id
+  // The cursor carries submitted_at as text: a JS Date would drop its
+  // microseconds and re-read the last row of every page.
+  const page = (after: { submittedAt: string; id: number } | null) =>
+    db.execute<{ id: number; submitted_at_key: string }>(sql`
+    SELECT pe.id, pe.submitted_at::text AS submitted_at_key
     FROM pending_edits pe
     WHERE pe.status = 'pending'
-      AND pe.edit_type IN ('parameter', 'param_entry')
       AND pe.parameter IN (${sql.join(highRiskParameterIds.map((id) => sql`${id}`), sql`, `)})
+      -- Only proposals that assert a value: a source-value delete needs no
+      -- quote (highRiskEditNeedsSourceQuote).
+      AND (
+        pe.edit_type = 'parameter'
+        OR (pe.edit_type = 'param_entry' AND pe.proposed_value->>'op' IN ('create', 'update'))
+      )
       AND EXISTS (
         SELECT 1 FROM agents a JOIN users u ON u.id = a.user_id
         WHERE a.user_id = pe.submitted_by AND a.status = 'active'
@@ -1567,10 +1575,22 @@ export async function sweepUnquotedAgentEdits(
         WHEN 'parameter' THEN ${blank(sql`pe.proposed_meta->>'sourceQuote'`)}
         ELSE ${blank(sql`coalesce(pe.proposed_value->'input'->>'quote', pe.proposed_value->'patch'->>'quote')`)}
       END
+      -- No dispute verdict still standing: the predicate of
+      -- unresolvedDisputeVerdictCounts, under which a moderator's ruling
+      -- against the disputing agent clears its verdict.
       AND NOT EXISTS (
         SELECT 1 FROM agent_verifications v
+        LEFT JOIN agents va ON va.id = v.agent_id
         WHERE v.target_type = 'pending_edit' AND v.target_id = pe.id
           AND v.verdict = 'dispute' AND v.is_implicit = false
+          AND NOT EXISTS (
+            SELECT 1 FROM disputes rd
+            WHERE rd.target_type = v.target_type AND rd.target_id = v.target_id
+              AND rd.created_by = va.user_id
+              AND rd.status = 'resolved'
+              AND rd.resolved_at IS NOT NULL
+              AND rd.resolved_at >= v.updated_at
+          )
       )
       AND NOT EXISTS (
         SELECT 1 FROM disputes d
@@ -1584,31 +1604,49 @@ export async function sweepUnquotedAgentEdits(
           OR pe.proposed_meta->>'revisedAt' <= pe.proposed_meta->>'returnedAt'
         )
       )
+      ${after ? sql`AND (pe.submitted_at, pe.id) > (${after.submittedAt}::timestamp, ${after.id})` : sql``}
     ORDER BY pe.submitted_at ASC, pe.id ASC
     LIMIT ${limit}
   `);
+
+  // The window counts proposals actually returned, not rows the SQL let
+  // through. An UPDATE that omits its quote usually keeps the stored one, which
+  // only the gate can tell, and a proposal under an upheld ruling is refused
+  // by the return itself; were the limit spent on those, a backlog of them
+  // older than everything else would fill every pass and starve the proposals
+  // this sweep exists for. So it pages on past them until `limit` proposals
+  // have gone back or the candidates run out.
   const returned: number[] = [];
-  for (const { id } of candidates.rows) {
-    try {
-      const pending = await readConsensusPendingRow(id);
-      if (!pending || pending.status !== 'pending') continue;
-      let unresolved = false;
-      const unquoted = await highRiskProposalWouldPublishUnquoted(pending, () => {
-        unresolved = true;
-      });
-      if (!unquoted || unresolved) continue;
-      const sent = await returnUnquotedAgentEdit({
-        pendingEditId: id,
-        submittedAt: pending.submittedAt,
-      });
-      if (sent.returned) returned.push(id);
-    } catch (err) {
-      // One bad row must not stop the sweep.
-      console.error(
-        `[agent-consensus] unquoted-return sweep failed for ${id}: ` +
-          `${err instanceof Error ? err.message : String(err)}`,
-      );
+  let after: { submittedAt: string; id: number } | null = null;
+  while (returned.length < limit) {
+    const { rows } = await page(after);
+    if (rows.length === 0) break;
+    const last = rows[rows.length - 1]!;
+    after = { submittedAt: last.submitted_at_key, id: last.id };
+    for (const { id } of rows) {
+      if (returned.length >= limit) break;
+      try {
+        const pending = await readConsensusPendingRow(id);
+        if (!pending || pending.status !== 'pending') continue;
+        let unresolved = false;
+        const unquoted = await highRiskProposalWouldPublishUnquoted(pending, () => {
+          unresolved = true;
+        });
+        if (!unquoted || unresolved) continue;
+        const sent = await returnUnquotedAgentEdit({
+          pendingEditId: id,
+          submittedAt: pending.submittedAt,
+        });
+        if (sent.returned) returned.push(id);
+      } catch (err) {
+        // One bad row must not stop the sweep.
+        console.error(
+          `[agent-consensus] unquoted-return sweep failed for ${id}: ` +
+            `${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
     }
+    if (rows.length < limit) break;
   }
   return returned;
 }
