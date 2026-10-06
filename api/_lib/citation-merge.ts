@@ -296,6 +296,32 @@ async function rewriteJsonDocuments(
     rewritten += 1;
   }
 
+  // A conversation-ingestion fact names the papers nobody has read in full in
+  // `proposedMeta.unverifiedReferenceIds`, and consensus holds it until each
+  // has a read-in-full review (`pendingEditCitesUnreadSources`). Left on the
+  // loser, that lookup would query a deleted citation forever, so a review of
+  // the surviving paper could never release the fact.
+  const marked = await db
+    .select({ id: pendingEdits.id, proposedMeta: pendingEdits.proposedMeta })
+    .from(pendingEdits)
+    .where(
+      sql`${pendingEdits.proposedMeta}->'unverifiedReferenceIds' @> ${JSON.stringify([loserId])}::jsonb`,
+    );
+  for (const edit of marked) {
+    const meta = edit.proposedMeta as { unverifiedReferenceIds?: unknown } | null;
+    if (!meta || !Array.isArray(meta.unverifiedReferenceIds)) continue;
+    const ids = [
+      ...new Set(
+        meta.unverifiedReferenceIds.map((id) => (id === loserId ? winnerId : id)),
+      ),
+    ];
+    await db
+      .update(pendingEdits)
+      .set({ proposedMeta: { ...meta, unverifiedReferenceIds: ids } as never })
+      .where(eq(pendingEdits.id, edit.id));
+    rewritten += 1;
+  }
+
   return rewritten;
 }
 

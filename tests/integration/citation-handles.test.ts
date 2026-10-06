@@ -461,6 +461,40 @@ describe('mergeCitations — folding a split pair (#1018)', () => {
       .where(eq(pendingEdits.id, otherEdit!.id));
     expect(untouched?.targetId).toBe(loser);
   });
+
+  it("repoints an ingested fact's unread-paper marker", async () => {
+    // Consensus holds the fact until every listed paper has a read-in-full
+    // review; left on the loser, the marker would wait on a deleted citation
+    // and no review of the surviving paper could release it.
+    const winner = await seedCitation({ type: 'pmid', identifier: PMID });
+    const loser = await seedCitation({ type: 'doi', identifier: DOI });
+    const [fact] = await db
+      .insert(pendingEdits)
+      .values({
+        editType: 'wiki_fact',
+        targetId: 1,
+        proposedValue: { factStatement: 'Usjekket påstand.' },
+        proposedMeta: {
+          source: 'conversation_ingestion',
+          unverifiedSourceKeys: ['S1', 'S2'],
+          unverifiedReferenceIds: [loser, winner],
+        },
+        submittedBy: userId,
+      })
+      .returning({ id: pendingEdits.id });
+
+    await mergeCitations(db, winner, loser, { actorUserId: userId });
+
+    const [moved] = await db
+      .select({ proposedMeta: pendingEdits.proposedMeta })
+      .from(pendingEdits)
+      .where(eq(pendingEdits.id, fact!.id));
+    expect(moved?.proposedMeta).toEqual({
+      source: 'conversation_ingestion',
+      unverifiedSourceKeys: ['S1', 'S2'],
+      unverifiedReferenceIds: [winner],
+    });
+  });
 });
 
 describe('mergeCitations — parameter summary recompute (#1018)', () => {
