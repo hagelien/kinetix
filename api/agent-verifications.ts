@@ -1543,6 +1543,7 @@ export async function sweepAgentConsensus(
  */
 export async function sweepUnquotedAgentEdits(
   limit = CONSENSUS_SWEEP_LIMIT,
+  opts: { scanBudget?: number; startId?: number } = {},
 ): Promise<number[]> {
   const db = getDb();
   const highRiskParameterIds = DRUG_PARAMETER_IDS.filter((id) =>
@@ -1550,11 +1551,26 @@ export async function sweepUnquotedAgentEdits(
   );
   if (highRiskParameterIds.length === 0) return [];
   const blank = (expr: ReturnType<typeof sql>) => sql`nullif(btrim(${expr}), '') is null`;
-  // The cursor carries submitted_at as text: a JS Date would drop its
-  // microseconds and re-read the last row of every page.
-  const page = (after: { submittedAt: string; id: number } | null) =>
-    db.execute<{ id: number; submitted_at_key: string }>(sql`
-    SELECT pe.id, pe.submitted_at::text AS submitted_at_key
+  // Bounded, and rotated rather than oldest-first. The window counts
+  // proposals actually returned, not rows the SQL let through: an UPDATE that
+  // omits its quote usually keeps the stored one, which only the gate can
+  // tell, and a proposal under an upheld ruling is refused by the return
+  // itself. Spending the window on those, oldest first, let a backlog of them
+  // fill every pass and starve the proposals this sweep exists for; walking
+  // past all of them in one request could outrun the function's deadline and
+  // take the consensus sweep after it down too. So each pass examines at most
+  // `scanBudget` rows, starting from a random id and wrapping around, and
+  // successive passes cover the whole backlog without keeping a cursor.
+  const scanBudget = opts.scanBudget ?? limit * 8;
+  let start = opts.startId;
+  if (start === undefined) {
+    const max = await db.execute<{ max: number | null }>(
+      sql`SELECT max(id)::int AS max FROM pending_edits`,
+    );
+    start = Math.floor(Math.random() * ((max.rows[0]?.max ?? 0) + 1));
+  }
+  const { rows } = await db.execute<{ id: number }>(sql`
+    SELECT pe.id
     FROM pending_edits pe
     WHERE pe.status = 'pending'
       AND pe.parameter IN (${sql.join(highRiskParameterIds.map((id) => sql`${id}`), sql`, `)})
@@ -1604,49 +1620,33 @@ export async function sweepUnquotedAgentEdits(
           OR pe.proposed_meta->>'revisedAt' <= pe.proposed_meta->>'returnedAt'
         )
       )
-      ${after ? sql`AND (pe.submitted_at, pe.id) > (${after.submittedAt}::timestamp, ${after.id})` : sql``}
-    ORDER BY pe.submitted_at ASC, pe.id ASC
-    LIMIT ${limit}
+    ORDER BY (pe.id < ${start}), pe.id
+    LIMIT ${scanBudget}
   `);
 
-  // The window counts proposals actually returned, not rows the SQL let
-  // through. An UPDATE that omits its quote usually keeps the stored one, which
-  // only the gate can tell, and a proposal under an upheld ruling is refused
-  // by the return itself; were the limit spent on those, a backlog of them
-  // older than everything else would fill every pass and starve the proposals
-  // this sweep exists for. So it pages on past them until `limit` proposals
-  // have gone back or the candidates run out.
   const returned: number[] = [];
-  let after: { submittedAt: string; id: number } | null = null;
-  while (returned.length < limit) {
-    const { rows } = await page(after);
-    if (rows.length === 0) break;
-    const last = rows[rows.length - 1]!;
-    after = { submittedAt: last.submitted_at_key, id: last.id };
-    for (const { id } of rows) {
-      if (returned.length >= limit) break;
-      try {
-        const pending = await readConsensusPendingRow(id);
-        if (!pending || pending.status !== 'pending') continue;
-        let unresolved = false;
-        const unquoted = await highRiskProposalWouldPublishUnquoted(pending, () => {
-          unresolved = true;
-        });
-        if (!unquoted || unresolved) continue;
-        const sent = await returnUnquotedAgentEdit({
-          pendingEditId: id,
-          submittedAt: pending.submittedAt,
-        });
-        if (sent.returned) returned.push(id);
-      } catch (err) {
-        // One bad row must not stop the sweep.
-        console.error(
-          `[agent-consensus] unquoted-return sweep failed for ${id}: ` +
-            `${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
+  for (const { id } of rows) {
+    if (returned.length >= limit) break;
+    try {
+      const pending = await readConsensusPendingRow(id);
+      if (!pending || pending.status !== 'pending') continue;
+      let unresolved = false;
+      const unquoted = await highRiskProposalWouldPublishUnquoted(pending, () => {
+        unresolved = true;
+      });
+      if (!unquoted || unresolved) continue;
+      const sent = await returnUnquotedAgentEdit({
+        pendingEditId: id,
+        submittedAt: pending.submittedAt,
+      });
+      if (sent.returned) returned.push(id);
+    } catch (err) {
+      // One bad row must not stop the sweep.
+      console.error(
+        `[agent-consensus] unquoted-return sweep failed for ${id}: ` +
+          `${err instanceof Error ? err.message : String(err)}`,
+      );
     }
-    if (rows.length < limit) break;
   }
   return returned;
 }

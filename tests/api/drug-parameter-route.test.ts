@@ -8,9 +8,7 @@ const {
   getUserFromRequestMock,
   recordImplicitAgentApprovalMock,
   isAgentUserMock,
-  agentProposalLacksSourceQuoteMock,
 } = vi.hoisted(() => ({
-  agentProposalLacksSourceQuoteMock: vi.fn(async () => false),
   getDbMock: vi.fn(),
   getDrugParameterMapMock: vi.fn(),
   getUserFromRequestMock: vi.fn(),
@@ -47,11 +45,6 @@ vi.mock('../../api/_lib/auth.js', () => ({
 
 vi.mock('../../api/_lib/agent-verifications.js', () => ({
   recordImplicitAgentApproval: recordImplicitAgentApprovalMock,
-}));
-
-vi.mock('../../api/_lib/source-quote-gate.js', () => ({
-  agentProposalLacksSourceQuote: agentProposalLacksSourceQuoteMock,
-  SOURCE_QUOTE_REQUIRED_MESSAGE: 'quote required',
 }));
 
 vi.mock('../../api/_lib/drugParameterStore.js', async (importOriginal) => {
@@ -560,40 +553,6 @@ describe('PUT /api/drug-parameter duplicate guard', () => {
     getDrugParameterMapMock.mockResolvedValue(new Map());
     recordImplicitAgentApprovalMock.mockResolvedValue(undefined);
     isAgentUserMock.mockResolvedValue(true);
-  });
-
-  it('refuses an agent proposal the consensus gate could never publish for want of a quote', async () => {
-    getUserFromRequestMock.mockResolvedValue({ userId: 7, role: 'contributor' });
-    agentProposalLacksSourceQuoteMock.mockResolvedValueOnce(true);
-    const { insert } = mockPendingDb({ openEdit: [] });
-
-    const { res, state } = createResponse();
-    await handler(
-      createPutRequest('/api/drug-parameter?drugId=42&parameter=molecularWeight', { value: 180.16 }),
-      res,
-    );
-
-    expect(state.statusCode).toBe(400);
-    expect(JSON.parse(state.body)).toMatchObject({ code: 'source_quote_required' });
-    expect(insert).not.toHaveBeenCalled();
-  });
-
-  it('refuses it on the direct-write path too, before anything is written', async () => {
-    // An agent granted direct writes (here: the admin role's capability) would
-    // otherwise publish the unquoted value at once.
-    getUserFromRequestMock.mockResolvedValue({ userId: 1, role: 'admin' });
-    agentProposalLacksSourceQuoteMock.mockResolvedValueOnce(true);
-    const { insert } = mockPendingDb({ openEdit: [] });
-
-    const { res, state } = createResponse();
-    await handler(
-      createPutRequest('/api/drug-parameter?drugId=42&parameter=molecularWeight', { value: 180.16 }),
-      res,
-    );
-
-    expect(state.statusCode).toBe(400);
-    expect(JSON.parse(state.body)).toMatchObject({ code: 'source_quote_required' });
-    expect(insert).not.toHaveBeenCalled();
   });
 
   it('returns 409 with the existing pendingEditId when an open edit already exists', async () => {

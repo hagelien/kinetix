@@ -98,7 +98,7 @@ export const SOURCE_QUOTE_REQUIRED_MESSAGE =
   'An agent proposal for a calculation-driving parameter must carry the ' +
   'verbatim sentence (or table row) from the primary source that states this ' +
   'value: `input.quote` for a new source value, `quote` in an update, ' +
-  '`sourceQuote` for an authored parameter. Without it the value can never ' +
+  '`proposedMeta.sourceQuote` for a parameter proposal. Without it the value can never ' +
   'publish on peer consensus, so it is refused here rather than queued or written.';
 
 /**

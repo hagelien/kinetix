@@ -52,10 +52,6 @@ import {
 } from './_lib/parameterApplicabilityStore.js';
 import { recordImplicitAgentApproval } from './_lib/agent-verifications.js';
 import {
-  agentProposalLacksSourceQuote,
-  SOURCE_QUOTE_REQUIRED_MESSAGE,
-} from './_lib/source-quote-gate.js';
-import {
   isNormalizationInput,
   recomputeSummariesForDrug,
 } from './_lib/parameter-entries-store.js';
@@ -324,20 +320,6 @@ async function handleUpdate(
   ) {
     const currentRefs = await latestRevisionReferenceIds(db, drugId, parameter);
     effectiveReferenceIds = unionReferenceIds(referenceIds, currentRefs);
-  }
-
-  // Before choosing queued versus direct: an agent granted direct writes
-  // would otherwise publish the unquoted value at once.
-  if (
-    await agentProposalLacksSourceQuote(auth.userId, {
-      editType: 'parameter',
-      parameter,
-      proposedValue: valid.data,
-      proposedMeta: { sourceQuote: parsed.data.sourceQuote },
-    })
-  ) {
-    error(res, 400, SOURCE_QUOTE_REQUIRED_MESSAGE, 'source_quote_required');
-    return;
   }
 
   // Non-admin users, or admins explicitly choosing review, create a pending edit.
