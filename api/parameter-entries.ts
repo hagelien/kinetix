@@ -75,6 +75,7 @@ import {
 import { validateEntryForParameter } from '../src/lib/parameterEntries.js';
 import {
   agentProposalLacksSourceQuote,
+  agentWriteMustCarryQuote,
   SOURCE_QUOTE_REQUIRED_MESSAGE,
 } from './_lib/source-quote-gate.js';
 import {
@@ -648,21 +649,42 @@ async function handleUpdate(
   // lock inside the UPDATE only converts the race into a silent post-delete
   // no-op — the update returns no row, but without a lock+outcome check we
   // would still respond 200 as though the patch was saved.
-  type DirectOutcome = { kind: 'ok' } | { kind: 'gone' };
-  const directOutcome = await inTransaction<DirectOutcome>(async () => {
-    await lockDrugForEntryApplicability(existing.drugId);
-    const row = await updateParameterEntryRow(id, patch);
-    if (!row) return { kind: 'gone' };
-    await markEntryMutationsConflicted(id);
-    await recomputeCache(row.drugId, row.parameter, auth.userId);
-    return { kind: 'ok' };
+  //
+  // An agent's write is also checked against what the UPDATE actually left:
+  // the quote check above read the row before this lock, and a writer that
+  // moved the reading since would make the write clear the quote it saw
+  // preserved. Throwing rolls the update back.
+  const mustCarryQuote = await agentWriteMustCarryQuote(auth.userId, {
+    editType: 'param_entry',
+    parameter: existing.parameter,
+    proposedValue: { op: 'update', patch },
   });
+  type DirectOutcome = { kind: 'ok' } | { kind: 'gone' };
+  let directOutcome: DirectOutcome;
+  try {
+    directOutcome = await inTransaction<DirectOutcome>(async () => {
+      await lockDrugForEntryApplicability(existing.drugId);
+      const row = await updateParameterEntryRow(id, patch);
+      if (!row) return { kind: 'gone' };
+      if (mustCarryQuote && !row.sourceQuote?.trim()) throw new UnquotedDirectWrite();
+      await markEntryMutationsConflicted(id);
+      await recomputeCache(row.drugId, row.parameter, auth.userId);
+      return { kind: 'ok' };
+    });
+  } catch (err) {
+    if (!(err instanceof UnquotedDirectWrite)) throw err;
+    error(res, 400, SOURCE_QUOTE_REQUIRED_MESSAGE, 'source_quote_required');
+    return;
+  }
   if (directOutcome.kind === 'gone') {
     error(res, 404, 'Parameter entry not found', 'param_entry_not_found');
     return;
   }
   json(res, 200, { id });
 }
+
+/** Rolls back an agent's direct update that would have left no quote. */
+class UnquotedDirectWrite extends Error {}
 
 async function handleDelete(
   req: IncomingMessage,
