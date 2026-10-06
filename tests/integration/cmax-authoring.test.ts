@@ -358,6 +358,42 @@ describe('revising a Cmax proposal through PATCH /api/pending-edits', () => {
     return state;
   }
 
+  it('refuses an agent putting an unquoted proposal back in the queue', async () => {
+    const drugId = await seedDrug(db, { slug: 'kokain' });
+    const citationId = await seedAdmissibleCitation(db);
+    const agentUser = await seedUser(db, { email: 'agent@example.com', username: 'agent', role: 'contributor' });
+    await db.insert(agents).values({ userId: agentUser, name: 'agent', slug: 'agent', status: 'active', modelTier: 'mid' });
+    const input = cmaxInput(drugId, citationId);
+    const editId = await queueCreate(input, agentUser);
+    // Returned for the missing quote, as the sweep does.
+    await db
+      .update(pendingEdits)
+      .set({ status: 'returned', proposedMeta: { returnedAt: new Date().toISOString() } as never })
+      .where(eq(pendingEdits.id, editId));
+
+    // A bare resubmit, and a revision that still carries no quote.
+    for (const body of [
+      { status: 'pending' },
+      { status: 'pending', proposedValue: { op: 'create', input: { ...input, n: 13 } } },
+    ]) {
+      const state = await patch(editId, body, agentUser);
+      expect(JSON.parse(state.body)).toMatchObject({ code: 'source_quote_required' });
+      expect(state.statusCode).toBe(400);
+    }
+    const [still] = await db.select().from(pendingEdits).where(eq(pendingEdits.id, editId));
+    expect(still!.status).toBe('returned');
+
+    // With the quote it goes back in.
+    const fixed = await patch(
+      editId,
+      { status: 'pending', proposedValue: { op: 'create', input: { ...input, quote: 'Mean Cmax was 84 ng/mL (SD 14).' } } },
+      agentUser,
+    );
+    expect(fixed.statusCode).toBe(200);
+    const [after] = await db.select().from(pendingEdits).where(eq(pendingEdits.id, editId));
+    expect(after!.status).toBe('pending');
+  });
+
   it('refuses a revision whose administered drug has been deleted', async () => {
     const metabolite = await seedDrug(db, { slug: 'benzoylekgonin' });
     const parent = await seedDrug(db, { slug: 'kokain' });

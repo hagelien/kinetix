@@ -338,6 +338,32 @@ describe('the sweep', () => {
     expect((row!.proposedMeta as Record<string, unknown>).conflict).toBeTruthy();
   });
 
+  it('examines at most its scan budget per pass, and rotates where it starts', async () => {
+    const author = (await seedAgent('author-budget', 'mid')).userId;
+    const drugId = await seedDrug(db, { slug: 'budget' });
+    for (let i = 0; i < 3; i++) {
+      const [entry] = await db
+        .insert(parameterEntries)
+        .values({ drugId, parameter: 'halfLife', low: '2', high: '4', unit: 'h', sourceQuote: `Half-life was 2 to 4 h (${i}).`, createdBy: author } as never)
+        .returning({ id: parameterEntries.id });
+      await db.insert(pendingEdits).values({
+        editType: 'param_entry',
+        targetId: entry!.id,
+        parameter: 'halfLife',
+        proposedValue: { op: 'update', patch: { low: 2, high: 4, unit: 'h' } },
+        submittedBy: author,
+        status: 'pending',
+      });
+    }
+    const unquoted = await seedEdit({ authorIsAgent: true, quote: null, approvals: 0 });
+
+    // From the bottom, a budget of two rows ends among the carried-over
+    // updates: the pass stops instead of walking the whole backlog.
+    expect(await sweepUnquotedAgentEdits(1, { scanBudget: 2, startId: 0 })).toEqual([]);
+    // A pass that starts elsewhere reaches it.
+    expect(await sweepUnquotedAgentEdits(1, { scanBudget: 2, startId: unquoted })).toEqual([unquoted]);
+  });
+
   it('returns a proposal whose agent dispute a moderator has overruled', async () => {
     const id = await seedEdit({ authorIsAgent: true, quote: null, approvals: 1 });
     const disputer = await seedAgent('overruled-disputer', 'mid');
@@ -385,5 +411,19 @@ describe('at submission', () => {
     expect(await agentProposalLacksSourceQuote(agent, blankQuote)).toBe(true);
     expect(await agentProposalLacksSourceQuote(agent, quoted)).toBe(false);
     expect(await agentProposalLacksSourceQuote(human, unquoted)).toBe(false);
+  });
+
+  it('leaves an authored parameter alone: the gate covers entry-backed ones only', async () => {
+    // PUT /api/drug-parameter refuses every entry-backed parameter, so the
+    // parameters it does take sit outside the consensus quote gate as well.
+    const agent = (await seedAgent('author-authored', 'mid')).userId;
+    expect(
+      await agentProposalLacksSourceQuote(agent, {
+        editType: 'parameter',
+        parameter: 'molecularWeight',
+        proposedValue: { value: 180.16 },
+        proposedMeta: {},
+      }),
+    ).toBe(false);
   });
 });

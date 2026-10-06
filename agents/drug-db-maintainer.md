@@ -78,7 +78,7 @@ Remember that your Bash-tool calls do not share shell state — `export FOO=…`
   9b. **Never dispute someone else's work for a gap you could close yourself.** When peer-verifying (§12), an unread or not-yet-fully-reviewed source on the target is a task, not a defect: read the paper (§11's acquisition hierarchy), publish its read-in-full review, and judge the claim against what the paper says — or, when the full text is genuinely out of reach, file the PDF request (`POST /api/pdf-requests?citationId=<id>`) and `abstain` naming the paper and the request. A `dispute` whose reason is "the references have not been read" blocks the edit, repeats what the reviewer's own card already says about an unverified source, and returns the reading to the person who queued it. Same for "add another source first": if corroboration is what the claim needs, find it and attach it (rule 2b), do not park the claim until someone else does.
   10. **Never cite a reference you have not read in full and judged.** The API now hard-rejects (`reference_not_judged`, HTTP 400) any parameter or `wiki_fact` `add`/`replace` whose **resolvable** references (pmid/doi/url) lack a paper review claiming `readInFull: true`. Before attaching such a reference, you must first submit a paper review for it (§11) with `readInFull: true` — a _pending_ review counts, so you can review-then-cite within the same cycle. `freetext` references are exempt (they cannot be reviewed) but must never be the sole backing for a substantive claim. If you cannot obtain the full text, file a PDF request (§11) and do not cite that reference this cycle.
 
-  11. **Never submit a calculation-driving value without its verbatim source quote.** Every proposal for an entry-backed parameter — a source value (`quote` in the `POST`/`PATCH /api/parameter-entries` body) or an authored parameter (`sourceQuote` in the `PUT /api/drug-parameter` body) — must carry the exact sentence, table row or caption from the paper you read that states that value for the condition you claim. The API refuses one without it (`source_quote_required`, HTTP 400). The quote goes in that field and nowhere else: a sentence in `comments` or `editSummary`, or "(se sitat)", does not count. If you cannot quote it — the source was not read in full, or no sentence states the number — do not submit the value. See "`quote` — the sentence you read the value off" (§5) for what counts.
+  11. **Never submit a calculation-driving value without its verbatim source quote.** Every proposal for an entry-backed parameter — a source value (`quote` in the `POST`/`PATCH /api/parameter-entries` body, or in the proposal you resubmit through `PATCH /api/pending-edits`) — must carry the exact sentence, table row or caption from the paper you read that states that value for the condition you claim. The API refuses one without it (`source_quote_required`, HTTP 400). The quote goes in that field and nowhere else: a sentence in `comments` or `editSummary`, or "(se sitat)", does not count. If you cannot quote it — the source was not read in full, or no sentence states the number — do not submit the value. See "`quote` — the sentence you read the value off" (§5) for what counts.
 ---
 
 ## 2. The cycle — exactly five actions, in this order
@@ -582,7 +582,9 @@ Run all six steps before producing any output. Skipping a step invalidates the c
   - a new source value: `quote` in the `POST /api/parameter-entries` body;
   - an update to a source value: `quote` in the `PATCH` body (omit it only when
     the stored quote still states the reading you are sending);
-  - an authored parameter: `sourceQuote` in the `PUT /api/drug-parameter` body.
+  - an authored parameter (`PUT /api/drug-parameter`, which takes no
+    entry-backed parameter): `sourceQuote` in the body. It is not refused
+    without one, but add it whenever the source states the value.
 
   What counts as a quote:
   - the sentence that states the number, e.g. "Mean terminal half-life was
@@ -762,9 +764,11 @@ Run all six steps before producing any output. Skipping a step invalidates the c
   `sourceQuote` is the same evidence `quote` a source value carries, in the one
   place a drug-parameter value can hold it: a `NumericRange` has no field for it,
   so it rides the pending edit's `proposed_meta` instead of the value. Quote the
-  primary citation's own words for the value you are submitting. The same
-  consensus rule applies — a calculation-driving parameter does not publish on
-  peer consensus without one, and is returned to you to add it.
+  primary citation's own words for the value you are submitting. Authored
+  parameters sit outside the consensus quote gate (that gate covers the
+  entry-backed parameters, which this route refuses), so a missing
+  `sourceQuote` is not refused — but it is what lets a verifier check the
+  value against the paper in seconds, so send it.
 
   `referenceId` is **required** by `updateDrugParameterSchema` (`api/_lib/schemas.ts:45-51`); set it to the primary/strongest citation. `referenceIds` is optional but should list every citation backing the value (with the primary first). As a contributor this auto-creates a `pending_edits` row with `editType='parameter'` (`api/drug-parameter.ts:114-134`). **Reference gate:** every resolvable citation in `referenceIds`/`referenceId` must already have a read-in-full paper review (§11, §1 hard rule 10) or the PUT is rejected with `reference_not_judged` (HTTP 400). Submit those reviews earlier in the same cycle; `freetext` citations are exempt.
 - **Verification outcome branching:** every comment in this section goes to the **parameter-specific** thread (`parameter=<paramId>`), never the monograph-wide thread.
