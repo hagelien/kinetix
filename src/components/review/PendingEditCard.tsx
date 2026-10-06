@@ -94,6 +94,8 @@ const REVIEW_ERROR_KEYS: Record<string, string> = {
   approval_self_not_allowed: 'review.errors.selfDecisionNotAllowed',
   return_self_not_allowed: 'review.errors.selfDecisionNotAllowed',
   pending_edit_decision_with_payload_change: 'review.errors.decideAfterRevising',
+  // An agent resubmitting a calculation-driving proposal with no quote.
+  source_quote_required: 'review.errors.sourceQuoteRequired',
 };
 
 interface PendingEditCardProps {

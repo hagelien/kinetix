@@ -1,5 +1,6 @@
 import {
   highRiskEditNeedsSourceQuote,
+  isActiveAgentUser,
   pendingEditSourceQuote,
 } from './agent-verifications.js';
 import { quoteAfterUpdate } from './parameter-entries-store.js';
@@ -90,4 +91,54 @@ export async function highRiskProposalWouldPublishUnquoted(
     onError?.(err);
     return true;
   }
+}
+
+/** The refusal an agent gets for an unquoted calculation-driving proposal. */
+export const SOURCE_QUOTE_REQUIRED_MESSAGE =
+  'An agent proposal for a calculation-driving parameter must carry the ' +
+  'verbatim sentence (or table row) from the primary source that states this ' +
+  'value: `input.quote` for a new source value, `quote` in an update, ' +
+  '`proposedMeta.sourceQuote` for a parameter proposal. Without it the value can never ' +
+  'publish on peer consensus, so it is refused here rather than queued or written.';
+
+/**
+ * True when an active agent is about to queue a calculation-driving proposal
+ * that consensus could never publish for want of a quote — or, holding direct
+ * writes, to publish one with no quote at all. The routes ask before choosing
+ * queued versus direct, so neither path takes it.
+ *
+ * Refusing at submission lets the agent add the sentence in the same cycle,
+ * before any peer spends a verification on it; queued, it would only come
+ * back (`returnUnquotedAgentEdit`). A human contributor is not refused: their
+ * proposal goes to a person in any case, and a reviewer may approve it
+ * without one. A fault while resolving the effective quote does not refuse
+ * either — the consensus gate still holds the proposal (it fails closed).
+ */
+export async function agentProposalLacksSourceQuote(
+  submitterUserId: number,
+  pending: Parameters<typeof highRiskProposalWouldPublishUnquoted>[0],
+): Promise<boolean> {
+  if (!(await agentWriteMustCarryQuote(submitterUserId, pending))) return false;
+  let faulted = false;
+  const unquoted = await highRiskProposalWouldPublishUnquoted(pending, () => {
+    faulted = true;
+  });
+  return unquoted && !faulted;
+}
+
+/**
+ * True when this writer, writing this, must leave a quote on the row: an
+ * active agent asserting a calculation-driving value.
+ *
+ * The direct-write UPDATE checks what it actually wrote against this, inside
+ * its transaction. The check before it (`agentProposalLacksSourceQuote`)
+ * reads the row a moment earlier, and a concurrent writer that moves the
+ * reading in between makes the write clear a quote the check saw preserved.
+ */
+export async function agentWriteMustCarryQuote(
+  submitterUserId: number,
+  pending: Parameters<typeof highRiskEditNeedsSourceQuote>[0],
+): Promise<boolean> {
+  if (!highRiskEditNeedsSourceQuote(pending)) return false;
+  return isActiveAgentUser(submitterUserId);
 }

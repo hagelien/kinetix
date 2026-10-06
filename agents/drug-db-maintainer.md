@@ -78,6 +78,7 @@ Remember that your Bash-tool calls do not share shell state — `export FOO=…`
   9b. **Never dispute someone else's work for a gap you could close yourself.** When peer-verifying (§12), an unread or not-yet-fully-reviewed source on the target is a task, not a defect: read the paper (§11's acquisition hierarchy), publish its read-in-full review, and judge the claim against what the paper says — or, when the full text is genuinely out of reach, file the PDF request (`POST /api/pdf-requests?citationId=<id>`) and `abstain` naming the paper and the request. A `dispute` whose reason is "the references have not been read" blocks the edit, repeats what the reviewer's own card already says about an unverified source, and returns the reading to the person who queued it. Same for "add another source first": if corroboration is what the claim needs, find it and attach it (rule 2b), do not park the claim until someone else does.
   10. **Never cite a reference you have not read in full and judged.** The API now hard-rejects (`reference_not_judged`, HTTP 400) any parameter or `wiki_fact` `add`/`replace` whose **resolvable** references (pmid/doi/url) lack a paper review claiming `readInFull: true`. Before attaching such a reference, you must first submit a paper review for it (§11) with `readInFull: true` — a _pending_ review counts, so you can review-then-cite within the same cycle. `freetext` references are exempt (they cannot be reviewed) but must never be the sole backing for a substantive claim. If you cannot obtain the full text, file a PDF request (§11) and do not cite that reference this cycle.
 
+  11. **Never submit a calculation-driving value without its verbatim source quote.** Every proposal for an entry-backed parameter — a source value (`quote` in the `POST`/`PATCH /api/parameter-entries` body, or in the proposal you resubmit through `PATCH /api/pending-edits`) — must carry the exact sentence, table row or caption from the paper you read that states that value for the condition you claim. The API refuses one without it (`source_quote_required`, HTTP 400). The quote goes in that field and nowhere else: a sentence in `comments` or `editSummary`, or "(se sitat)", does not count. If you cannot quote it — the source was not read in full, or no sentence states the number — do not submit the value. See "`quote` — the sentence you read the value off" (§5) for what counts.
 ---
 
 ## 2. The cycle — exactly five actions, in this order
@@ -88,7 +89,7 @@ Run the two pre-cycle steps first — **§2.A pre-cycle learning** and **§2.B d
 2. **One wiki-content fact** — on **either** a drug monograph or a topic article (§1 "Wiki content is two page types"): add, revise, verify, or flag-as-unreferenced one atomic fact. Lower priority than step 1: if the parameter action ran long or hit a hard ambiguity, it is acceptable to downscope step 2 to a single unreferenced-flag (§6) rather than padding it. Within the slot, prefer a drug-monograph gap unless a topic article carries a flag or is the clearly higher-value target this cycle (§3).
 3. **Discussion & approval sweep (§7)** — process unprocessed comments and recently approved edits that the hook routine has not evaluated. This step always runs; it drains any backlog from the hook routine and acts as the sole evaluator when `CLAUDE_CODE_AGENT_HOOKS_DISABLED=1`.
 4. **One paper review (§11)** — produce a structured quality review of one cited scientific paper and post it via `POST /api/paper-reviews`, following the methodology spec `agents/kinectics_science_paper_review_agent_instructions.md`. This action always runs and **must reach a real outcome**: either a posted review (`submitted_pending`) or, when nothing is reviewable this cycle (no unreviewed in-use citation, or full text unavailable — in which case file a PDF request, see §11), a logged `paper_review` `no_change` row (§8).
-5. **Peer verification (§12)** — pull a small batch (5 items by default) of other contributors' output (other agents' *and* humans') from `GET /api/agent-verifications-queue`, judge each independently per the protocol in `agents/peer-verification-protocol.md`, and POST a verdict (`approve` / `dispute` / `abstain`) for every item pulled. **Every pulled item must end in a posted verdict** — even an unjudgeable source becomes an `abstain` POST with a one-line rationale. Skipping the POST leaves the target eligible in your queue every cycle (the queue filters by *verdicted-by-this-agent*, not pulled-by-this-agent), so silent skips starve fresh work. Logging is automatic on POST. Mission priority: this is the lowest-priority cycle action and may be downscoped to 2–3 items if the parameter or fact action ran long. After posting, call `scripts/kinetix-api.sh POST '/api/agent-consensus-sweep'` once (it takes no body). It re-runs consensus on pending edits that already have approvals, so an edit held when its last approval landed (a tier not yet set, a transient refusal) publishes now instead of waiting for a human. It needs no judgment and is safe every cycle; the response's `held[]` list says why each remaining edit is still waiting.
+5. **Peer verification (§12)** — pull a small batch (5 items by default) of other contributors' output (other agents' *and* humans') from `GET /api/agent-verifications-queue`, judge each independently per the protocol in `agents/peer-verification-protocol.md`, and POST a verdict (`approve` / `dispute` / `abstain`) for every item pulled. **Every pulled item must end in a posted verdict** — even an unjudgeable source becomes an `abstain` POST with a one-line rationale. Skipping the POST leaves the target eligible in your queue every cycle (the queue filters by *verdicted-by-this-agent*, not pulled-by-this-agent), so silent skips starve fresh work. Logging is automatic on POST. Mission priority: this is the lowest-priority cycle action and may be downscoped to 2–3 items if the parameter or fact action ran long. After posting, call `scripts/kinetix-api.sh POST '/api/agent-consensus-sweep'` once (it takes no body). It re-runs consensus on pending edits that already have approvals, so an edit held when its last approval landed (a tier not yet set, a transient refusal) publishes now instead of waiting for a human. It also returns any agent's unquoted calculation-driving proposal to its author (`returnedForQuote`), whatever its approval count, so it never waits on a human for a quote. It needs no judgment and is safe every cycle; the response's `held[]` list says why each remaining edit is still waiting.
 
 Stop after these five actions. Do not chain extra cycles.
 
@@ -184,12 +185,18 @@ proposal of yours that the peers would otherwise publish, but that records no
 verbatim source quote, is returned to you with a note starting
 `[source quote missing — returned automatically]`. Nobody objected to the value;
 the fix is the quote. Re-read the source, add the exact sentence or table row
-that states the value for the condition you claim (`input.quote` / `patch.quote`
-for a source value, `sourceQuote` for an authored parameter), and resubmit.
+that states the value for the condition you claim, and resubmit it with the
+`PATCH /api/pending-edits` revision below. In that PATCH the quote sits inside
+the proposal: `proposedValue.input.quote` for a new source value,
+`proposedValue.patch.quote` for an update, `proposedMeta.sourceQuote` for an
+authored parameter.
 Peer verdicts that name the sentence they checked are a good place to start
 looking. If no sentence in the source states that value, narrow the claim to
 what the source does state, or withdraw (`status: "rejected"`). Never resubmit
-it unchanged: it comes straight back.
+it unchanged: it comes straight back. If the note adds that the value has
+also been changed since you proposed it, the proposal is stale as well: re-read
+the entry's current state and revise against it in the same PATCH, because a
+quote alone leaves it unable to apply.
 
 1. List your own returned edits — a contributor token returns only your rows:
    ```bash
@@ -515,9 +522,10 @@ Run all six steps before producing any output. Skipping a step invalidates the c
   rejected. `quote` has no such fallback: it has its own 1000-character limit
   and must stay **verbatim** source words, so a locator is not evidence there
   — when the operands for every paired subject do not fit verbatim within it,
-  leave `quote` absent rather than substitute authored text, so the entry
-  requires human moderation instead of satisfying the unattended-publication
-  gate with words that do not verify the calculation. `matrix` is required exactly when the parameter is
+  do not derive the absolute value: submit the per-kg reading as the source
+  reports it, with the sentence or table row that states it as `quote`. Never
+  substitute authored text, and never leave `quote` absent — an unquoted
+  calculation-driving proposal is refused (§1 hard rule 11). `matrix` is required exactly when the parameter is
   matrix-relevant and rejected otherwise, and `scenario` likewise for the five
   interpretive concentrations (study context goes in `comments`, never in
   `scenario`). `qualifier` is a comparison operator (`<`, `>`, `≤`, `≥`) marking a
@@ -564,11 +572,37 @@ Run all six steps before producing any output. Skipping a step invalidates the c
   claim until it matches, rather than quoting a near-miss and letting review
   sort it out.
 
-  A calculation-driving (entry-backed) parameter you propose **will not publish
-  on peer consensus without one** — it is returned to you automatically, with a
-  note starting `[source quote missing — returned automatically]`, and costs a
-  cycle you did not need to spend. Nothing already stored becomes invalid; the
-  effect is simply that unquoted work comes back to you instead of publishing.
+  **It is required, not optional** (§1 hard rule 11). A proposal for a
+  calculation-driving (entry-backed) parameter without a quote is refused at
+  submission with `source_quote_required` (HTTP 400). Add the sentence and send
+  it again in the same cycle. One already queued without it is returned to you
+  with a note starting `[source quote missing — returned automatically]` (§2.C).
+
+  Where it goes — only here, never in `comments` or `editSummary`:
+  - a new source value: `quote` in the `POST /api/parameter-entries` body;
+  - an update to a source value: `quote` in the `PATCH` body (omit it only when
+    the stored quote still states the reading you are sending);
+  - an authored parameter (`PUT /api/drug-parameter`, which takes no
+    entry-backed parameter): `sourceQuote` in the body. It is not refused
+    without one, but add it whenever the source states the value.
+
+  What counts as a quote:
+  - the sentence that states the number, e.g. "Mean terminal half-life was
+    7.3 h (range 5.8–9.1) in healthy adults after a single IV dose.";
+  - a table row, copied with enough of its header to show what the number is,
+    e.g. "Table 2 — Oral clearance (CLo = D/AUC), dose 1: 10.4; 15.0; 15.8 …
+    mL/min/kg";
+  - a figure caption, when the value is printed in it;
+  - for a value the authors **fixed** in their model (a popPK `ka` taken from
+    earlier work, say), the sentence in the paper you read that states the
+    fixed value, e.g. "ka was fixed at 0.778 h⁻¹ based on previous studies".
+    Say in `comments` that it was fixed, not estimated.
+
+  What does not count: your paraphrase or conclusion, a locator ("see table 2"),
+  a pointer to the comments, or a sentence from a paper you did not read in
+  full. If the only source stating the value is one you could not read in
+  full, you cannot quote it, so do not submit the value: find a source you can
+  read, or leave the parameter for a later cycle.
 
   **Two or more independent papers
   per parameter** is the target: a pool of one has no spread to show and reads as
@@ -730,9 +764,11 @@ Run all six steps before producing any output. Skipping a step invalidates the c
   `sourceQuote` is the same evidence `quote` a source value carries, in the one
   place a drug-parameter value can hold it: a `NumericRange` has no field for it,
   so it rides the pending edit's `proposed_meta` instead of the value. Quote the
-  primary citation's own words for the value you are submitting. The same
-  consensus rule applies — a calculation-driving parameter does not publish on
-  peer consensus without one, and is returned to you to add it.
+  primary citation's own words for the value you are submitting. Authored
+  parameters sit outside the consensus quote gate (that gate covers the
+  entry-backed parameters, which this route refuses), so a missing
+  `sourceQuote` is not refused — but it is what lets a verifier check the
+  value against the paper in seconds, so send it.
 
   `referenceId` is **required** by `updateDrugParameterSchema` (`api/_lib/schemas.ts:45-51`); set it to the primary/strongest citation. `referenceIds` is optional but should list every citation backing the value (with the primary first). As a contributor this auto-creates a `pending_edits` row with `editType='parameter'` (`api/drug-parameter.ts:114-134`). **Reference gate:** every resolvable citation in `referenceIds`/`referenceId` must already have a read-in-full paper review (§11, §1 hard rule 10) or the PUT is rejected with `reference_not_judged` (HTTP 400). Submit those reviews earlier in the same cycle; `freetext` citations are exempt.
 - **Verification outcome branching:** every comment in this section goes to the **parameter-specific** thread (`parameter=<paramId>`), never the monograph-wide thread.
