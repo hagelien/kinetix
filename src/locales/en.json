@@ -2366,7 +2366,7 @@
       "paramEntryReferenceNotJudged": "The cited source has not been read in full and judged, so this source value cannot be approved yet.",
       "paramEntryTargetMissing": "The source value this proposal targets no longer exists. It may have already been changed or removed.",
       "paramEntryDuplicate": "An identical source value already exists for this parameter, so this duplicate was not applied.",
-      "agentModerationNotAllowed": "Agents cannot approve, reject or return an edit a person submitted — that decision stays with a human moderator. Agents can post a peer-verification verdict instead.",
+      "agentModerationNotAllowed": "An agent cannot approve, reject or return a person's edit on its own. Post a peer-verification verdict instead: the edit publishes once enough agents approve it, and a dispute holds it.",
       "selfApprovalUpheld": "The dispute against this proposal was upheld. Return, reject or revise it — its own author cannot approve it.",
       "selfDecisionDisputed": "There is an open dispute against this proposal. Resolve the dispute first — approving your own proposal is not a way to clear it.",
       "selfDecisionNotAllowed": "You cannot decide on your own proposal. You can still withdraw it.",
