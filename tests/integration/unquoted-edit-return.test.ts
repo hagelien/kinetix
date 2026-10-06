@@ -3,7 +3,7 @@
  * it, not to a human moderator: the agents agree, and the missing quote is
  * something the author can supply (api/_lib/unquoted-edit-return.ts).
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { agentVerifications, agents, disputes, parameterEntries, pendingEdits } from '../../db/schema.js';
 import { runAgentConsensus, sweepUnquotedAgentEdits } from '../../api/agent-verifications.js';
@@ -362,6 +362,47 @@ describe('the sweep', () => {
     expect(await sweepUnquotedAgentEdits(1, { scanBudget: 2, startId: 0 })).toEqual([]);
     // A pass that starts elsewhere reaches it.
     expect(await sweepUnquotedAgentEdits(1, { scanBudget: 2, startId: unquoted })).toEqual([unquoted]);
+  });
+
+  it('draws its start from the candidates, not from the whole table', async () => {
+    const author = (await seedAgent('author-draw', 'mid')).userId;
+    const drugId = await seedDrug(db, { slug: 'draw' });
+    for (let i = 0; i < 3; i++) {
+      const [entry] = await db
+        .insert(parameterEntries)
+        .values({ drugId, parameter: 'halfLife', low: '2', high: '4', unit: 'h', sourceQuote: `Half-life was 2 to 4 h (${i}).`, createdBy: author } as never)
+        .returning({ id: parameterEntries.id });
+      await db.insert(pendingEdits).values({
+        editType: 'param_entry',
+        targetId: entry!.id,
+        parameter: 'halfLife',
+        proposedValue: { op: 'update', patch: { low: 2, high: 4, unit: 'h' } },
+        submittedBy: author,
+        status: 'pending',
+      });
+    }
+    const unquoted = await seedEdit({ authorIsAgent: true, quote: null, approvals: 0 });
+    // Decided history above every candidate, as most of the table is.
+    for (let i = 0; i < 20; i++) {
+      await db.insert(pendingEdits).values({
+        editType: 'parameter',
+        targetId: drugId,
+        parameter: 'halfLife',
+        proposedValue: { value: i },
+        submittedBy: author,
+        status: 'approved',
+      });
+    }
+
+    // A draw near the top: over the table's id range it lands past every
+    // candidate and wraps to the carried-over updates; over the candidates it
+    // lands on the last one.
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0.99);
+    try {
+      expect(await sweepUnquotedAgentEdits(1, { scanBudget: 2 })).toEqual([unquoted]);
+    } finally {
+      random.mockRestore();
+    }
   });
 
   it('returns a proposal whose agent dispute a moderator has overruled', async () => {
