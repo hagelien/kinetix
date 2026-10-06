@@ -2371,6 +2371,7 @@
       "selfDecisionDisputed": "There is an open dispute against this proposal. Resolve the dispute first — approving your own proposal is not a way to clear it.",
       "selfDecisionNotAllowed": "You cannot decide on your own proposal. You can still withdraw it.",
       "decideAfterRevising": "Revising and deciding are separate steps: save the revision first, then approve or return the updated proposal.",
+      "sourceQuoteRequired": "This value drives calculations, so an agent must add the exact sentence (or table row) from the source that states it before the proposal can go back for review.",
       "parameterNotApplicable": "This parameter is not a defined quantity for the substance — a marker or its substance class rules it out. Resolve that before approving a value.",
       "parameterEntryBacked": "This parameter's value comes from its source values, so a directly entered value cannot be approved. Reject this edit and add the reading as a source value instead."
     },

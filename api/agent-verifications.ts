@@ -1559,20 +1559,11 @@ export async function sweepUnquotedAgentEdits(
   // fill every pass and starve the proposals this sweep exists for; walking
   // past all of them in one request could outrun the function's deadline and
   // take the consensus sweep after it down too. So each pass examines at most
-  // `scanBudget` rows, starting from a random id and wrapping around, and
-  // successive passes cover the whole backlog without keeping a cursor.
+  // `scanBudget` rows, starting from a random candidate and wrapping around,
+  // and successive passes cover the whole backlog without keeping a cursor.
   const scanBudget = opts.scanBudget ?? limit * 8;
-  let start = opts.startId;
-  if (start === undefined) {
-    const max = await db.execute<{ max: number | null }>(
-      sql`SELECT max(id)::int AS max FROM pending_edits`,
-    );
-    start = Math.floor(Math.random() * ((max.rows[0]?.max ?? 0) + 1));
-  }
-  const { rows } = await db.execute<{ id: number }>(sql`
-    SELECT pe.id
-    FROM pending_edits pe
-    WHERE pe.status = 'pending'
+  const eligible = sql`
+    pe.status = 'pending'
       AND pe.parameter IN (${sql.join(highRiskParameterIds.map((id) => sql`${id}`), sql`, `)})
       -- Only proposals that assert a value: a source-value delete needs no
       -- quote (highRiskEditNeedsSourceQuote).
@@ -1620,6 +1611,28 @@ export async function sweepUnquotedAgentEdits(
           OR pe.proposed_meta->>'revisedAt' <= pe.proposed_meta->>'returnedAt'
         )
       )
+  `;
+  // The start is drawn from the eligible rows themselves, not from the id
+  // range of the whole table: most of `pending_edits` is decided history, so a
+  // start drawn up to max(id) would nearly always land past every candidate
+  // and wrap round to the same first rows.
+  let start = opts.startId;
+  if (start === undefined) {
+    const counted = await db.execute<{ n: number }>(
+      sql`SELECT count(*)::int AS n FROM pending_edits pe WHERE ${eligible}`,
+    );
+    const n = counted.rows[0]?.n ?? 0;
+    if (n === 0) return [];
+    const picked = await db.execute<{ id: number }>(sql`
+      SELECT pe.id FROM pending_edits pe WHERE ${eligible}
+      ORDER BY pe.id OFFSET ${Math.floor(Math.random() * n)} LIMIT 1
+    `);
+    start = picked.rows[0]?.id ?? 0;
+  }
+  const { rows } = await db.execute<{ id: number }>(sql`
+    SELECT pe.id
+    FROM pending_edits pe
+    WHERE ${eligible}
     ORDER BY (pe.id < ${start}), pe.id
     LIMIT ${scanBudget}
   `);
