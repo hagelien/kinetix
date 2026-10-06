@@ -336,8 +336,10 @@ async function rewriteJsonDocuments(
 }
 
 /**
- * Lock the pending proposals that cite `citationId` (other than queued paper
- * reviews), in id order, before the merge touches any review row.
+ * Lock the proposals that cite `citationId` (other than queued paper reviews),
+ * in id order, before the merge touches any review row. Whatever their status:
+ * a draft or returned proposal can be resubmitted as pending mid-merge, and
+ * consensus could then take it before the merge reaches it.
  *
  * Agent consensus publishing an ingested fact holds the fact's row and then
  * takes its cited papers' review rows FOR SHARE (`lockPendingEditSourceReviews`):
@@ -355,8 +357,7 @@ export async function lockPendingEditsCitingCitation(
 ): Promise<number[]> {
   const result = await db.execute<{ id: number }>(sql`
     SELECT id FROM pending_edits
-    WHERE status = 'pending'
-      AND edit_type <> 'paper_review'
+    WHERE edit_type <> 'paper_review'
       AND (
         reference_id = ${citationId}
         OR ${citationId} = ANY(reference_ids)

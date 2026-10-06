@@ -13,9 +13,10 @@
  * comparing that helper against the engine would compare the engine to itself.
  * Phase 6 compares something wider and genuinely independent: the whole
  * `applyOnAgentConsensus` gate. That gate refuses a clinical case before any
- * counting happens, refuses a human's proposal whatever the count, and blocks
- * on human disputes that live in a table the tally never reads. Three of its
- * five checks are outside the delegated function entirely.
+ * counting happens, refuses a proposal with no recorded author whatever the
+ * count, holds a fact citing a paper nobody has read in full, and blocks on
+ * human disputes that live in a table the tally never reads. Most of its
+ * checks are outside the delegated function entirely.
  *
  * The legacy side of the comparison is a **frozen pure reference** of that gate
  * (in the parity test, deliberately not imported), for the same reason Phase 1
