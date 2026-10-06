@@ -118,11 +118,27 @@ export async function agentProposalLacksSourceQuote(
   submitterUserId: number,
   pending: Parameters<typeof highRiskProposalWouldPublishUnquoted>[0],
 ): Promise<boolean> {
-  if (!highRiskEditNeedsSourceQuote(pending)) return false;
-  if (!(await isActiveAgentUser(submitterUserId))) return false;
+  if (!(await agentWriteMustCarryQuote(submitterUserId, pending))) return false;
   let faulted = false;
   const unquoted = await highRiskProposalWouldPublishUnquoted(pending, () => {
     faulted = true;
   });
   return unquoted && !faulted;
+}
+
+/**
+ * True when this writer, writing this, must leave a quote on the row: an
+ * active agent asserting a calculation-driving value.
+ *
+ * The direct-write UPDATE checks what it actually wrote against this, inside
+ * its transaction. The check before it (`agentProposalLacksSourceQuote`)
+ * reads the row a moment earlier, and a concurrent writer that moves the
+ * reading in between makes the write clear a quote the check saw preserved.
+ */
+export async function agentWriteMustCarryQuote(
+  submitterUserId: number,
+  pending: Parameters<typeof highRiskEditNeedsSourceQuote>[0],
+): Promise<boolean> {
+  if (!highRiskEditNeedsSourceQuote(pending)) return false;
+  return isActiveAgentUser(submitterUserId);
 }

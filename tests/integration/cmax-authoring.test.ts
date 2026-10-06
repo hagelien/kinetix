@@ -18,6 +18,17 @@ vi.mock('../../api/_lib/auth.js', () => ({
   getUserFromRequest: authMock,
   requestHasAuthCookie: () => true,
 }));
+// Lets one test stand in for a stale pre-lock read (see the race test below);
+// every other test runs the real check.
+const { staleQuoteCheck } = vi.hoisted(() => ({ staleQuoteCheck: { on: false } }));
+vi.mock('../../api/_lib/source-quote-gate.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../api/_lib/source-quote-gate.js')>();
+  return {
+    ...actual,
+    agentProposalLacksSourceQuote: (...args: Parameters<typeof actual.agentProposalLacksSourceQuote>) =>
+      staleQuoteCheck.on ? Promise.resolve(false) : actual.agentProposalLacksSourceQuote(...args),
+  };
+});
 
 import parameterEntriesHandler from '../../api/parameter-entries.js';
 import pendingEditsHandler from '../../api/pending-edits.js';
@@ -43,6 +54,7 @@ afterAll(async () => {
 beforeEach(async () => {
   await resetIntegrationDb(db);
   authMock.mockReset();
+  staleQuoteCheck.on = false;
 });
 
 /** A complete release-C Cmax input: a 2 mg single oral dose, mean ± SD. */
@@ -108,6 +120,21 @@ async function post(body: unknown, userId: number, role: string) {
   return state;
 }
 
+async function patchEntry(id: number, body: unknown, userId: number, role: string) {
+  const req = Readable.from([JSON.stringify(body)]) as IncomingMessage;
+  req.method = 'PATCH';
+  req.url = `/api/parameter-entries?id=${id}`;
+  req.headers = {
+    host: 'localhost',
+    origin: 'http://localhost',
+    'content-type': 'application/json',
+  };
+  authMock.mockResolvedValue({ userId, role });
+  const { res, state } = createResponse();
+  await parameterEntriesHandler(req, res);
+  return state;
+}
+
 async function queueCreate(input: Record<string, unknown>, submittedBy: number) {
   const [edit] = await db
     .insert(pendingEdits)
@@ -128,6 +155,31 @@ async function queueCreate(input: Record<string, unknown>, submittedBy: number) 
 // Release C (#1341): Cmax is authorable through the generic entry API, on
 // both its branches, with the self-administered default.
 describe('authoring Cmax through POST /api/parameter-entries', () => {
+  it('rolls back an agent direct update that the write itself leaves unquoted', async () => {
+    // The check before the lock read the row a moment earlier; a writer that
+    // moved the reading since makes the write clear the quote it saw kept.
+    // Stood in for by a check that answers from that stale read.
+    const drugId = await seedDrug(db, { slug: 'kokain' });
+    const citationId = await seedAdmissibleCitation(db);
+    const human = await seedUser(db, { role: 'admin' });
+    const sentence = 'Terminal half-life ranged from 2 to 4 h.';
+    const [entry] = await db
+      .insert(parameterEntries)
+      .values({ drugId, parameter: 'halfLife', citationId, low: '2', high: '4', unit: 'h', sourceQuote: sentence, createdBy: human } as never)
+      .returning({ id: parameterEntries.id });
+
+    const agentUser = await seedUser(db, { role: 'admin', email: 'agent@example.com', username: 'agent' });
+    await db.insert(agents).values({ userId: agentUser, name: 'agent', slug: 'agent', status: 'active', modelTier: 'flagship' });
+    staleQuoteCheck.on = true;
+    const state = await patchEntry(entry!.id, { citationId, low: 3, high: 5, unit: 'h' }, agentUser, 'admin');
+
+    expect(JSON.parse(state.body)).toMatchObject({ code: 'source_quote_required' });
+    expect(state.statusCode).toBe(400);
+    const [after] = await db.select().from(parameterEntries).where(eq(parameterEntries.id, entry!.id));
+    expect(after!.sourceQuote).toBe(sentence);
+    expect(Number(after!.low)).toBe(2);
+  });
+
   it('refuses an agent holding direct writes that sends no quote, before writing anything', async () => {
     // The direct-write branch would otherwise publish the unquoted value at
     // once: no consensus gate stands behind it.
