@@ -461,6 +461,62 @@ describe('agent consensus hold, re-stamp and retry', () => {
     expect(stuckAfter!.status).toBe('pending');
   });
 
+  it("holds a person's proposal to the pool's full quorum when filtering the sweep window", async () => {
+    // Two active agents: an agent author's floor is 1 (its one peer), but a
+    // person's proposal has both agents eligible, so its quorum is 2. A human
+    // row at one approval can never publish without a new verdict, and must
+    // not occupy the window.
+    const author = await seedAgent('author');
+    const b = await seedAgent('b');
+    const human = await seedUser(db, {
+      email: 'person@example.com',
+      username: 'person',
+      role: 'contributor',
+    });
+    const [page] = await db
+      .insert(wikiPages)
+      .values({
+        slug: 'diazepam',
+        title: 'Diazepam',
+        pageType: 'drug_monograph',
+        content: { version: 2, sections: { pk: { body: { type: 'doc', content: [] } } } },
+        status: 'published',
+        createdBy: author.userId,
+        updatedBy: author.userId,
+      })
+      .returning({ id: wikiPages.id });
+    async function seedWikiFactEdit(submittedBy: number, factId: string, statement: string) {
+      const [edit] = await db
+        .insert(pendingEdits)
+        .values({
+          editType: 'wiki_fact',
+          targetId: page!.id,
+          sectionId: 'pk',
+          factOperation: 'add',
+          factStatement: statement,
+          proposedValue: {
+            type: 'fact',
+            attrs: { factId, referenceIds: [] },
+            content: [{ type: 'text', text: statement }],
+          },
+          submittedBy,
+          status: 'pending',
+        })
+        .returning({ id: pendingEdits.id });
+      return edit!.id;
+    }
+
+    const stuck = await seedWikiFactEdit(human, 'f-1', 'Halveringstiden er 20–100 timer.');
+    await approve(b.agentId, stuck);
+    await new Promise((r) => setTimeout(r, 5));
+    // An agent's proposal at its (relaxed) quorum of one.
+    const ready = await seedWikiFactEdit(author.userId, 'f-2', 'Distribusjonsvolumet er ca. 1 L/kg.');
+    await approve(b.agentId, ready);
+
+    const results = await sweepAgentConsensus(1);
+    expect(results.map((r) => r.pendingEditId)).toEqual([ready]);
+  });
+
   it("counts only approvals the gate counts when filtering the sweep window (issue 1398)", async () => {
     // A pool of three, so the floor is the full two approvals.
     const author = await seedAgent('author');

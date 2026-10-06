@@ -1421,9 +1421,23 @@ export async function sweepAgentConsensus(
   // never clear consensus without a new verdict landing — and a new verdict
   // retries consensus directly (the primary trigger), so the periodic sweep
   // has nothing to gain by holding a slot for it.
-  const quorumFloor = effectiveConsensusQuorum(await countActiveVerifierAgents(), {
+  const activeVerifiers = await countActiveVerifierAgents();
+  const quorumFloor = effectiveConsensusQuorum(activeVerifiers, {
     authorSelfReviews: false,
   });
+  // A person's proposal has every active agent as an eligible verifier, so its
+  // bar is the pool's full quorum, not the agent-author floor: with two active
+  // agents it is 2, not 1. Without this, 25 older human proposals sitting at one
+  // approval would fill every sweep window with `quorum_unmet`.
+  const humanAuthorQuorum = effectiveConsensusQuorum(activeVerifiers, {
+    authorSelfReviews: true,
+  });
+  const submitterIsActiveAgentSql = sql`exists (
+    select 1 from ${agents} sa join ${users} su on su.id = sa.user_id
+    where sa.user_id = ${pendingEdits.submittedBy}
+      and sa.status = 'active'
+      and su.role in (${sql.join(ACTIVE_AGENT_ROLES.map((r) => sql`${r}`), sql`, `)})
+  )`;
   // A calculation-driving edit never rides the degraded single-approval path
   // (`consensusApprovalHoldReason`), so its bar is the full design target even
   // when the pool's floor is 1. Without it, 25 older high-risk rows sitting at
@@ -1473,7 +1487,7 @@ export async function sweepAgentConsensus(
       sql`count(*) >= case when ${pendingEdits.editType} in ('parameter', 'param_entry') and ${pendingEdits.parameter} in (${sql.join(
         highRiskParameterIds.map((id) => sql`${id}`),
         sql`, `,
-      )}) then ${highRiskQuorumFloor}::int else ${quorumFloor}::int end`,
+      )}) then ${highRiskQuorumFloor}::int when not ${submitterIsActiveAgentSql} then ${humanAuthorQuorum}::int else ${quorumFloor}::int end`,
     );
   const openHumanDispute = db
     .select({ one: sql`1` })
