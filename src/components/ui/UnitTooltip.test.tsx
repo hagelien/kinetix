@@ -77,7 +77,7 @@ describe('UnitTooltip', () => {
     );
   });
 
-  it('splits a low–high range so both endpoints align on their decimal point', () => {
+  it('splits a low–high range into right-aligned endpoint columns', () => {
     const { container } = render(
       <UnitTooltip low={0.429} high={2.993} unit="µmol/L" molecularWeight={303}>
         0.429–2.993 µmol/L
@@ -88,17 +88,9 @@ describe('UnitTooltip', () => {
       container.querySelectorAll('[role="tooltip"] > span > span'),
     ).map((cell) => cell.textContent);
 
-    // qualifier | low integer | low fraction | dash | high integer | high
-    // fraction | unit — the range no longer lands in one opaque cell.
-    expect(cells.slice(0, 7)).toEqual([
-      '',
-      '0',
-      '.13',
-      '–',
-      '0',
-      '.907',
-      ' mg/L',
-    ]);
+    // qualifier | low | dash | high | unit — the range no longer lands in
+    // one opaque cell.
+    expect(cells.slice(0, 5)).toEqual(['', '0.13', '–', '0.907', ' mg/L']);
   });
 
   it('keeps a bound qualifier in its own cell', () => {
@@ -114,14 +106,18 @@ describe('UnitTooltip', () => {
 
     // A single endpoint leaves the dash and high columns empty, so they
     // collapse and the unit sits straight after the number.
-    expect(cells.slice(0, 7)).toEqual([
-      '\u2265 ',
-      '0',
-      '.13',
-      '',
-      '',
-      '',
-      ' mg/L',
-    ]);
+    expect(cells.slice(0, 5)).toEqual(['\u2265 ', '0.13', '', '', ' mg/L']);
+  });
+
+  it('collapses a range whose endpoints are equal into a single figure', () => {
+    const { container } = render(
+      <UnitTooltip low={2.76} high={2.76} unit="µmol/L" molecularWeight={309.4}>
+        2.76 µmol/L
+      </UnitTooltip>,
+    );
+
+    const tooltip = container.querySelector('[role="tooltip"]')?.textContent;
+    expect(tooltip).not.toContain('–');
+    expect(tooltip).toContain('0.854');
   });
 });
