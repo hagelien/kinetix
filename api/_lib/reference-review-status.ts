@@ -1,6 +1,7 @@
-import { and, eq, inArray, isNull, ne } from 'drizzle-orm';
+import { and, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { citations, paperReviews } from '../../db/schema.js';
 import { getDb } from './db.js';
+import { SITE_LANDING_PAGE_URL_PATTERN } from '../../src/lib/publicDatabaseRecord.js';
 
 /**
  * Of the given citation ids, return those that are **resolvable** (pmid/doi/url,
@@ -14,6 +15,10 @@ import { getDb } from './db.js';
  * review was later rejected, or a review since flipped to `readInFull: false`.
  * Surfacing those is the whole point: agents must not let an abstract-only (or
  * never-reviewed) source back a factual claim.
+ *
+ * A URL citation that is only a site's front page is always flagged, review or
+ * not: it names no specific source, so no review of it can back a claim, and
+ * the claim needs re-citing (`agents/fulltext-acquisition.md` §0c).
  *
  * `freetext` citations cannot be reviewed, so they are never flagged. Only the
  * live, approved `paper_reviews` table counts here — a review that is merely
@@ -45,7 +50,13 @@ export async function findCitationsNeedingFullReview(
       and(
         inArray(citations.id, ids),
         ne(citations.type, 'freetext'),
-        isNull(paperReviews.id),
+        or(
+          isNull(paperReviews.id),
+          and(
+            eq(citations.type, 'url'),
+            sql`btrim(${citations.identifier}) ~* ${SITE_LANDING_PAGE_URL_PATTERN}`,
+          ),
+        ),
       ),
     );
 
