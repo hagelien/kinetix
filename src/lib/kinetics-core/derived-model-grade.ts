@@ -29,9 +29,11 @@
  *   - **uncertainty-semantics** — a derived route is `fixed(median)` with no
  *     observation-error layer, so the engine emits a bare point estimate. CV-3b's
  *     band widening reaches the disclosure but no simulation path applies it.
- *   - **parameter-provenance** — the grade record carries no per-input citation
- *     fact, and a drug-level value can come from a seeded or backfilled cache row
- *     with nothing cited behind it.
+ *   - **parameter-provenance**, for a route any of whose values is uncited — a
+ *     drug-level value can come from a seeded or backfilled cache row with nothing
+ *     cited behind it. Generation records each input's source (`inputSources`), so
+ *     a route whose every catalog value pools cited entries reaches C here; the
+ *     others stay D until a curator cites their values.
  *
  * Weakest-link therefore lands every derived model at **D**, which §5.1 admits only
  * to a reviewer holding a recorded per-model acknowledgement. That acknowledgement
@@ -44,7 +46,8 @@
  *
  * Pure and portable: no DB, no engine change, no `CORE_VERSION` bump.
  */
-import type { DerivedRouteGrade } from './derived-grade.js';
+import type { DerivedRouteGrade, InputSource } from './derived-grade.js';
+import { requiredParametersFor, type RequiredParam } from './model-structure.js';
 import type { DimensionAssessment, DimensionGrade } from './grade-policy.js';
 
 type LetterGrade = Exclude<DimensionGrade, 'hard-stop'>;
@@ -106,6 +109,69 @@ function simplifiedAxes(route: DerivedRouteGrade): ('disposition' | 'elimination
   return (['disposition', 'elimination', 'absorption'] as const).filter(
     (axis) => route.simplifiedFrom?.[axis] !== undefined,
   );
+}
+
+const UNCITED_REASON_TEXT: Record<Extract<InputSource, { basis: 'uncited' }>['reason'], string> = {
+  'authored-value': 'a hand-entered catalog value with no source entry behind it',
+  'uncited-entry': 'pooled from at least one entry that names no citation',
+  'stale-cache': 'a cached value that no longer matches its source entries',
+};
+
+/**
+ * The parameter-provenance assessment for one derived route (see step 3 of
+ * `assessDerivedModel`). The inputs judged are every role the route's family
+ * requires, every role with a recorded source and every inferred role, minus the
+ * defaulted ones. Starting from the family rather than from the record means a
+ * record missing a required role's source fails closed instead of passing on the
+ * roles it happens to list.
+ */
+function assessParameterProvenance(route: DerivedRouteGrade): DimensionAssessment {
+  const inferred = route.inferredParameters ?? [];
+  const inferredNote =
+    inferred.length > 0
+      ? ` ${inferred.join(', ')} was solved from another stored observable rather than measured, and is judged by that observable’s source.`
+      : '';
+  const sources = route.inputSources;
+  if (!sources) {
+    return {
+      dimension: 'parameter-provenance',
+      grade: 'D',
+      reason: `This model was generated before per-input sources were recorded, so no value can be shown to trace to a source.${inferredNote}`,
+    };
+  }
+  const defaulted = new Set(route.defaultedParameters ?? []);
+  const required = requiredParametersFor(route.family, {
+    ivInfusion: route.structure.absorption === 'iv-infusion',
+  });
+  const judged = [
+    ...new Set([...required, ...(Object.keys(sources) as RequiredParam[]), ...inferred]),
+  ]
+    .filter((role) => !defaulted.has(role))
+    .sort();
+  const unsourced = judged.filter((role) => sources[role]?.basis !== 'cited');
+  if (judged.length === 0 || unsourced.length > 0) {
+    const detail = unsourced
+      .map((role) => {
+        const source = sources[role];
+        return source?.basis === 'uncited'
+          ? `${role} (${UNCITED_REASON_TEXT[source.reason]})`
+          : `${role} (no source recorded)`;
+      })
+      .join('; ');
+    return {
+      dimension: 'parameter-provenance',
+      grade: 'D',
+      reason:
+        judged.length === 0
+          ? 'No input of this curve has a recorded source.'
+          : `Not every value this curve runs on traces to a cited source: ${detail}.${inferredNote}`,
+    };
+  }
+  return {
+    dimension: 'parameter-provenance',
+    grade: 'C',
+    reason: `Every catalog value this curve runs on (${judged.join(', ')}) is pooled from source entries that each cite a reference, but only to study level: no per-input extraction record (table or page, unit conversion, population) is kept, and several sources may pool into one number.${inferredNote}`,
+  };
 }
 
 /**
@@ -174,28 +240,21 @@ export function assessDerivedModel(
       'Assembled automatically from catalog declarations; no named qualified reviewer has attested this model. A reviewed model is one promoted into the override tier.',
   });
 
-  // 3. Parameter provenance. This CANNOT be earned from what the record carries.
-  //    A derived route takes its drug-level values from the `drug_parameters`
-  //    aggregate cache, and a cache row need not have come from a cited entry at
-  //    all — seed and backfilled t½/Vd are written to it directly, and the read
-  //    adapter deliberately accepts a bounds-only cached range. The grade record
-  //    holds no per-input citation fact, so "these values are cited" is exactly
-  //    the evidence claim this module must not manufacture: §5.1 scores an
-  //    unsourced decisive numeric input D, and an input that MIGHT be unsourced
-  //    cannot be told apart from one that is.
+  // 3. Parameter provenance, judged input by input from the sources generation
+  //    recorded (`inputSources`). Every value the curve runs on and the catalog
+  //    supplied must trace to cited entries; a defaulted role took no catalog
+  //    value and is graded under completeness instead.
   //
-  //    Lifting this needs generation to carry per-input provenance (which entry,
-  //    which citation, or none) into `DerivedRouteGrade`; until it does, D is the
-  //    honest answer and an inferred role is named on top of it.
-  const inferred = route.inferredParameters ?? [];
-  assessments.push({
-    dimension: 'parameter-provenance',
-    grade: 'D',
-    reason:
-      inferred.length > 0
-        ? `Per-input provenance is not recorded for a derived model, so no value can be shown to trace to a source; ${inferred.join(', ')} additionally was solved from another stored observable rather than measured.`
-        : 'Per-input provenance is not recorded for a derived model: values are pooled from the catalog aggregate, which may hold seeded or backfilled numbers with no citation behind them.',
-  });
+  //    D when any such input is uncited, or when the record predates sources
+  //    being recorded: §5.1 scores an unsourced decisive numeric input D, and an
+  //    input that MIGHT be unsourced cannot be told apart from one that is.
+  //
+  //    C, not better, when every input is cited. A pooled value traces to the
+  //    studies behind it, but the catalog keeps no per-input extraction record
+  //    (table or page, unit conversion, population), and several sources pool
+  //    into one number — §5.1's "traceable only to a study/table level, or
+  //    aggregation lineage incomplete but auditable".
+  assessments.push(assessParameterProvenance(route));
 
   // 4. Population applicability. The catalog pools a parameter across sources
   //    without recording the population each came from, so a derived model cannot

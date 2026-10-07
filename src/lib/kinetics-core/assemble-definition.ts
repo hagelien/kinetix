@@ -23,6 +23,7 @@
 import { assembleRouteParams, type AssemblyValues } from './assemble-model.js';
 import { requiredCovariatesForVdScaling } from './scaling.js';
 import type { DerivedModel, RouteProvenance } from './derive-model.js';
+import type { InputSource } from './derived-grade.js';
 import type { ModelStructure, RequiredParam, StructureRequirementOptions } from './model-structure.js';
 import type {
   CovariateId,
@@ -79,6 +80,12 @@ export interface RouteAssemblyInput {
    * a defaulted value must never be indistinguishable from a catalog one.
    */
   defaultedParameters?: readonly RequiredParam[];
+  /**
+   * Where each catalog-supplied role's number came from, for the grade record only — the
+   * assembler does not read it. Kept here so the read adapter can hand it to the snapshot builder
+   * with the rest of the route's grade facts.
+   */
+  inputSources?: Partial<Record<RequiredParam, InputSource>>;
   /** Basis-dependent CL/V rules, when the caller can supply them. */
   opts?: StructureRequirementOptions;
 }

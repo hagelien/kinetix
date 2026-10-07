@@ -22,7 +22,9 @@ import {
   teardownIntegrationDb,
   type IntegrationDb,
 } from './setup/harness.js';
-import { seedDrug, seedUser } from './setup/seed.js';
+import { seedAdmissibleCitation, seedDrug, seedUser } from './setup/seed.js';
+import { recomputeAndCacheParameterSummary } from '../../api/_lib/parameter-entries-store.js';
+import { runInPoolTransaction } from '../../api/_lib/db.js';
 
 /**
  * CV-2c-5 — the route-keyed read adapter. Exercises the real DB read against PGlite: the
@@ -1375,3 +1377,103 @@ describe('a cautious default for a missing bioavailability', () => {
   });
 });
 
+
+describe('per-input sources in the grade record', () => {
+  /** A drug-level or route-scoped numeric entry that cites `citationId` (null: no citation). */
+  async function insertSourced(
+    drugId: number,
+    userId: number,
+    parameter: string,
+    route: string | null,
+    median: number,
+    unit: string,
+    citationId: number | null,
+  ): Promise<void> {
+    await db.insert(parameterEntries).values({
+      drugId,
+      parameter,
+      low: String(median),
+      median: String(median),
+      unit,
+      route,
+      citationId,
+      createdBy: userId,
+      origin: 'contributor',
+    } as never);
+  }
+
+  /** Publish a drug-level aggregate the way the entry write path does. */
+  async function recompute(drugId: number, userId: number, parameter: 'halfLife' | 'volumeOfDistribution') {
+    await runInPoolTransaction(() => recomputeAndCacheParameterSummary(drugId, parameter, userId));
+  }
+
+  async function oralSources(slug: string) {
+    const build = await readDerivedRegistrySnapshot();
+    return build.derivedGrades.find((g) => g.analyte === slug)?.routes[0];
+  }
+
+  it('records cited entries behind every input the curve runs on', async () => {
+    const drugId = await seedDrug(db, { slug: 'cited-analyte', names: { en: 'cited-analyte' } });
+    const userId = await seedUser(db);
+    const c1 = await seedAdmissibleCitation(db, { identifier: '1001' });
+    const c2 = await seedAdmissibleCitation(db, { identifier: '1002' });
+    const c3 = await seedAdmissibleCitation(db, { identifier: '1003' });
+    await insertAxis(drugId, userId, 'absorptionModel', 'first-order', 'oral');
+    await insertSourced(drugId, userId, 'halfLife', null, 4, 'h', c1);
+    await insertSourced(drugId, userId, 'halfLife', null, 5, 'h', c2);
+    await insertSourced(drugId, userId, 'volumeOfDistribution', null, 0.7, 'L/kg', c2);
+    await recompute(drugId, userId, 'halfLife');
+    await recompute(drugId, userId, 'volumeOfDistribution');
+    await insertSourced(drugId, userId, 'bioavailability', 'oral', 0.75, 'fraction', c3);
+    await insertSourced(drugId, userId, 'tmax', 'oral', 1, 'h', c3);
+
+    const oral = await oralSources('cited-analyte');
+    expect(oral?.inferredParameters).toEqual(['ka']);
+    expect(oral?.inputSources).toEqual({
+      eliminationHalfLife: { basis: 'cited', citationIds: [c1, c2].sort((a, b) => a - b) },
+      vd: { basis: 'cited', citationIds: [c2] },
+      bioavailability: { basis: 'cited', citationIds: [c3] },
+      // The inferred ka carries the source of the Tmax it was solved from.
+      ka: { basis: 'cited', citationIds: [c3] },
+    });
+  });
+
+  it('marks a seeded drug-level value as authored, and leaves a defaulted F out', async () => {
+    const drugId = await seedDrug(db, { slug: 'seeded-analyte', names: { en: 'seeded-analyte' } });
+    const userId = await seedUser(db);
+    const c1 = await seedAdmissibleCitation(db, { identifier: '2001' });
+    await insertAxis(drugId, userId, 'absorptionModel', 'first-order', 'oral');
+    await setDrugLevelParameter(drugId, userId, 'halfLife', { median: 4, unit: 'h' });
+    await setDrugLevelParameter(drugId, userId, 'volumeOfDistribution', { median: 0.7, unit: 'L/kg' });
+    await insertSourced(drugId, userId, 'tmax', 'oral', 1, 'h', c1);
+
+    const oral = await oralSources('seeded-analyte');
+    expect(oral?.defaultedParameters).toEqual(['bioavailability']);
+    expect(oral?.inputSources).toEqual({
+      eliminationHalfLife: { basis: 'uncited', reason: 'authored-value' },
+      vd: { basis: 'uncited', reason: 'authored-value' },
+      ka: { basis: 'cited', citationIds: [c1] },
+    });
+  });
+
+  it('marks a pool with an uncited entry, and a cache its entries no longer reproduce', async () => {
+    const drugId = await seedDrug(db, { slug: 'mixed-analyte', names: { en: 'mixed-analyte' } });
+    const userId = await seedUser(db);
+    const c1 = await seedAdmissibleCitation(db, { identifier: '3001' });
+    await insertAxis(drugId, userId, 'absorptionModel', 'first-order', 'oral');
+    await insertSourced(drugId, userId, 'halfLife', null, 4, 'h', c1);
+    await insertSourced(drugId, userId, 'volumeOfDistribution', null, 0.7, 'L/kg', c1);
+    await recompute(drugId, userId, 'halfLife');
+    await recompute(drugId, userId, 'volumeOfDistribution');
+    // Later entries the cache was never recomputed for: the cached t½ is no longer their pool.
+    await insertSourced(drugId, userId, 'halfLife', null, 9, 'h', c1);
+    await insertSourced(drugId, userId, 'halfLife', null, 9, 'h', c1);
+    await insertSourced(drugId, userId, 'bioavailability', 'oral', 0.75, 'fraction', c1);
+    await insertSourced(drugId, userId, 'tmax', 'oral', 1, 'h', null);
+
+    const oral = await oralSources('mixed-analyte');
+    expect(oral?.inputSources?.eliminationHalfLife).toEqual({ basis: 'uncited', reason: 'stale-cache' });
+    expect(oral?.inputSources?.vd).toEqual({ basis: 'cited', citationIds: [c1] });
+    expect(oral?.inputSources?.ka).toEqual({ basis: 'uncited', reason: 'uncited-entry' });
+  });
+});
