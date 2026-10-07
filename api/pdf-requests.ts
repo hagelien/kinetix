@@ -46,6 +46,10 @@ import { createPdfRequestSchema } from './_lib/schemas.js';
 import { listFullTextGaps } from './_lib/full-text-gaps.js';
 import { citationsWithPendingInboxItems } from './_lib/pdf-inbox-store.js';
 import { CAP } from '../src/lib/permissions.js';
+import {
+  isPubChemRecordCitation,
+  PUBCHEM_RECORD_URL_PATTERN,
+} from '../src/lib/publicDatabaseRecord.js';
 import { callerCan } from './_lib/permissions-store.js';
 import {
   citationPdfs,
@@ -77,6 +81,18 @@ const publicPdfRequestColumns = {
 const citationHasNoStoredPdf = sql`not exists (
   select 1 from ${citationPdfs}
   where ${citationPdfs.citationId} = ${pdfRequests.citationId}
+)`;
+
+// A PubChem compound record needs no upload either, so it never surfaces as an
+// open request. POST refuses new ones and migration 0137 cancelled the old
+// ones, but the previous deployment keeps serving POST until this one is live
+// and can still file one in that window; filtering on read keeps such a row
+// out of the queue and the header badge instead of stranding it there.
+const citationIsNotPubChemRecord = sql`not exists (
+  select 1 from ${citations}
+  where ${citations.id} = ${pdfRequests.citationId}
+    and ${citations.type} = 'url'
+    and btrim(${citations.identifier}) ~* ${PUBCHEM_RECORD_URL_PATTERN}
 )`;
 
 export default withErrorHandling(
@@ -122,7 +138,13 @@ async function handleGet(
     const [result] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(pdfRequests)
-      .where(and(eq(pdfRequests.status, 'open'), citationHasNoStoredPdf));
+      .where(
+        and(
+          eq(pdfRequests.status, 'open'),
+          citationHasNoStoredPdf,
+          citationIsNotPubChemRecord,
+        ),
+      );
     json(
       res,
       200,
@@ -224,7 +246,13 @@ async function handleGet(
       })
       .from(pdfRequests)
       .innerJoin(citations, eq(citations.id, pdfRequests.citationId))
-      .where(and(eq(pdfRequests.status, 'open'), citationHasNoStoredPdf))
+      .where(
+        and(
+          eq(pdfRequests.status, 'open'),
+          citationHasNoStoredPdf,
+          citationIsNotPubChemRecord,
+        ),
+      )
       .orderBy(desc(pdfRequests.createdAt))
       .limit(200),
     listFullTextGaps(db),
@@ -297,7 +325,11 @@ async function handleCreate(
   }
 
   const [citation] = await db
-    .select({ id: citations.id, type: citations.type })
+    .select({
+      id: citations.id,
+      type: citations.type,
+      identifier: citations.identifier,
+    })
     .from(citations)
     .where(eq(citations.id, citationId))
     .limit(1);
@@ -311,6 +343,19 @@ async function handleCreate(
       400,
       'PDF requests require a resolvable citation',
       'pdf_request_unresolvable_citation',
+    );
+    return;
+  }
+  // A PubChem record is public structured data, not a paywalled paper: its
+  // HTML page only CAPTCHAs automated readers, and the same record is read
+  // through `node scripts/kinetix-fulltext.mjs pubchem <CID>`. A PDF request
+  // here would ask a contributor for something that does not exist.
+  if (isPubChemRecordCitation(citation)) {
+    error(
+      res,
+      400,
+      'PubChem records are public database entries; read them with the PubChem helper instead of requesting a PDF',
+      'pdf_request_public_database_record',
     );
     return;
   }

@@ -3406,6 +3406,7 @@
     "fullTextOnFile": "Fulltekst-PDF er lagret.",
     "pdfRequested": "Fulltekst er utilgjengelig — en vurderer trenger denne PDF-en for å fullføre vurderingen.",
     "pdfMissingForReview": "Denne artikkelen er ikke vurdert ennå fordi fulltekst mangler. Last den opp her for å muliggjøre en vurdering.",
+    "publicDatabaseRecord": "Dette er en offentlig databaseoppføring (PubChem), ikke en artikkel. Agentene leser den direkte fra PubChem, så ingen PDF trengs.",
     "pdfRequestReason": "Merknad fra agent",
     "uploadPdf": "Last opp en PDF",
     "dropPdf": "Slipp for å laste opp",

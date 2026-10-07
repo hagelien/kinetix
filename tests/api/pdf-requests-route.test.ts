@@ -130,6 +130,39 @@ describe('POST /api/pdf-requests', () => {
     expect(db.insert).not.toHaveBeenCalled();
   });
 
+  it('rejects PubChem record citations: they are public data, not papers', async () => {
+    const { db } = mockDb([
+      [
+        {
+          id: 12,
+          type: 'url',
+          identifier: 'https://pubchem.ncbi.nlm.nih.gov/compound/115237',
+        },
+      ],
+    ]);
+    const { res, state } = createResponse();
+
+    await handler(createJsonRequest({ reason: 'captcha' }), res);
+
+    expect(state.statusCode).toBe(400);
+    expect(JSON.parse(state.body)).toMatchObject({
+      code: 'pdf_request_public_database_record',
+    });
+    expect(db.insert).not.toHaveBeenCalled();
+  });
+
+  it('still accepts requests for other URL citations', async () => {
+    const { values } = mockDb([
+      [{ id: 12, type: 'url', identifier: 'https://example.org/paper' }],
+    ]);
+    const { res, state } = createResponse();
+
+    await handler(createJsonRequest({ reason: 'paywalled' }), res);
+
+    expect(state.statusCode).toBe(201);
+    expect(values).toHaveBeenCalled();
+  });
+
   it('lets a contributor upsert an open request (idempotent)', async () => {
     const { values } = mockDb([[{ id: 12, type: 'doi' }]]);
     const { res, state } = createResponse();
