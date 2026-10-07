@@ -1,5 +1,5 @@
 /**
- * Migration 0138 — cancel PDF requests for URL citations no PDF can satisfy:
+ * Migration 0139 — cancel PDF requests for URL citations no PDF can satisfy:
  * public database records beyond PubChem, and a site's front page.
  *
  * The pattern itself is pinned against the TypeScript classifier in
@@ -28,7 +28,7 @@ let userId: number;
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const MIGRATION = path.resolve(
   HERE,
-  '../../drizzle/0138_cancel_no_pdf_url_requests.sql',
+  '../../drizzle/0139_cancel_no_pdf_url_requests.sql',
 );
 
 async function runMigration(): Promise<void> {
@@ -73,7 +73,7 @@ beforeEach(async () => {
   userId = await seedUser(db);
 });
 
-describe('migration 0138', () => {
+describe('migration 0139', () => {
   it('cancels open requests for database records and front pages', async () => {
     const cancelled = [
       await seedRequest('https://go.drugbank.com/drugs/DB00820'),

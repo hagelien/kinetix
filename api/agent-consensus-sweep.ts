@@ -28,6 +28,7 @@ import { callerCan } from './_lib/permissions-store.js';
 import { CAP } from '../src/lib/permissions.js';
 import { resolveActiveAgent } from './_lib/agent-verifications.js';
 import { sweepAgentConsensus, sweepUnquotedAgentEdits } from './agent-verifications.js';
+import { sweepAdjudicationCases } from './_lib/adjudication/cases.js';
 
 export default withErrorHandling(async function handler(
   req: IncomingMessage,
@@ -64,10 +65,13 @@ export default withErrorHandling(async function handler(
       ? [{ pendingEditId: r.pendingEditId, reason: r.reason, detail: r.detail }]
       : [],
   );
+  // The T3 detector's backstop: opens a case the verdict-time check missed
+  // and invalidates a live case whose target has moved.
+  const adjudication = await sweepAdjudicationCases();
   json(
     res,
     200,
-    { checked: results.length, applied, held, returnedForQuote },
+    { checked: results.length, applied, held, returnedForQuote, adjudication },
     { headers: noStoreHeaders() },
   );
 });

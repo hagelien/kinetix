@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent } from '@/components/ui/card';
 import type { DrugSimResult } from '@/types/simulator';
-import { formatWithMaxDecimals } from '@/lib/rangeUtils';
+import { formatSignificant, formatWithMaxDecimals } from '@/lib/rangeUtils';
 import { LOW_ESS_RATIO } from '@/lib/compute/liteInference';
 
 interface ResultsSummaryProps {
@@ -13,7 +13,7 @@ interface ResultsSummaryProps {
 }
 
 function fmt(n: number): string {
-  return formatWithMaxDecimals(n, 3);
+  return formatSignificant(n);
 }
 
 export function ResultsSummary({
@@ -174,7 +174,7 @@ export function ResultsSummary({
                         >
                           {t('results.effectiveSampleSize', {
                             count: d.sampleCount,
-                            ess: fmt(d.effectiveSampleSize),
+                            ess: formatWithMaxDecimals(d.effectiveSampleSize),
                             pct,
                           })}
                           {low && ` — ${t('results.lowEssInline')}`}

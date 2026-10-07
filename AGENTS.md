@@ -269,43 +269,31 @@ The `clinical_case` carve-out is agent-only. Spec §12 Stage 12 asks for a human
 
 ## Opening a pull request
 
-**Open every pull request as a draft** (`gh pr create --draft`, or `draft: true`
-through the API). A draft is the default state here, not a special case: it is
-what keeps `codex-gate` from merging work the moment it goes green, so a human
-decides when a branch is live. The gate skips drafts on both its event path and
-its two-hourly sweep, so nothing a worker does can merge a draft.
+**Open every pull request ready for review — never as a draft** (`gh pr create`
+without `--draft`, or `draft: false` through the API). Opening for review is
+what wakes everything the branch needs at once:
 
-A draft is dormant on three axes — review, the two expensive suites, and the
-merge path. Two of those are dormant *on purpose* and stay that way. Review is
-the one that has to be woken by hand, so opening a draft has two required
-follow-ups, both the same comment:
+- **Review.** The Codex connector starts a review when a pull request is opened
+  for review, and a fresh one on every later push (`synchronize`). No
+  `@codex review` comment is needed.
+- **The full CI suite.** `unit-tests` and `migrations` (where its `paths:`
+  apply) run alongside the cheap path-filtered workflows (`kinetics-core`,
+  `parity`, `scripts-typecheck`, `server-shared-esm`, `catalog-sync`,
+  `prompt-registry-sync`) on every push.
+- **The merge path.** `codex-gate` merges the pull request on its own once
+  Codex has signed off on the current head and the checks are green. Do not
+  merge it yourself; the gate does that.
 
-1. **Post `@codex review` on the pull request, immediately.** The Codex
-   connector starts a review on exactly three things: a pull request opened
-   *for review*, a draft *marked ready*, and an `@codex review` comment. A push
-   to a draft raises none of them, so without the comment the draft is reviewed
-   by nobody however long it sits. One comment, right after the PR exists.
-2. **Post `@codex review` again after any push you want re-reviewed.**
-   `synchronize` only starts a fresh review once the PR is out of draft.
+**A pull request's definition of done is CI green on the current head**, a clean
+Codex review on that head (or one whose only findings are P2/P3, each filed),
+and no merge conflict. Drive it there; a red or pending suite is work, not
+something to report and walk away from.
 
-What stays dormant on purpose: `unit-tests` and `migrations` are gated on
-`draft == false` to keep their minutes off branches still being written. That
-gate is unchanged and deliberate — every "Address Codex Nth pass" commit would
-otherwise pay for a full run of a tree about to change again. The cheap
-path-filtered workflows (`kinetics-core`, `parity`, `scripts-typecheck`,
-`server-shared-esm`, `catalog-sync`, `prompt-registry-sync`) keep running on
-drafts and are what gives a reviewer any signal at all.
+Because every push runs the expensive suites, run the local checks **before**
+pushing rather than letting CI find what they would have. Every branch runs
+`npm run typecheck`, `npm run lint` and `npx vitest run`.
 
-**So a draft is never "green" in CI, and you must not wait for it to be.** A
-draft's definition of done is: the cheap checks passing, a clean Codex review on
-the current head (or one whose only findings are P2/P3, each filed), and the suites below run and clean *locally*, reported in the
-PR body. Say plainly in that body that the expensive suites have not run in CI
-yet and why.
-
-Every branch runs `npm run typecheck`, `npm run lint` and `npx vitest run`.
-
-**A branch in the `migrations` scope runs three more**, because that whole
-workflow is skipped on a draft:
+**A branch in the `migrations` scope runs three more:**
 
 ```bash
 npx tsc -p tsconfig.migrations.json                       # migration-path types
@@ -335,32 +323,25 @@ reason they are listed separately:
   excludes `tests/integration/**` and `tests/governance/**` outright, and they
   run only under `vitest.integration.config.ts`.
 
-These are exactly the checks draft status defers, so a worker who ran only the
-base three has verified nothing about the code the skipped workflow protects.
+The two real-Postgres service-container steps (deadlock shape, import
+contention) are CI-only — PGlite cannot discharge them — so only the
+`migrations` run in CI covers those.
 
-What genuinely stays CI-only is the part PGlite cannot discharge: the two
-real-Postgres service-container steps (deadlock shape, import contention). Say
-that in the PR body rather than implying the whole job was reproduced.
+**Drafts.** The workflows still treat a draft specially, for a pull request a
+human chooses to open as one: `unit-tests` and `migrations` are skipped while it
+is a draft (`draft == false` gate), `codex-gate` ignores it, and a push to it
+raises no review — comment `@codex review` to get one. Do not convert a pull
+request to draft yourself, and do not open one as a draft.
 
-**Marking a draft ready is a human's call, not a worker's.** Do not
-`gh pr ready` a pull request yourself. Marking it ready is what starts
-`unit-tests` and `migrations` and what arms the merge gate; that is the moment
-the maintainer is choosing to spend, and it is the control this whole convention
-exists to give them. (`/pr` marks drafts ready and merges by design — that is a
-maintainer running it, which is the same call made in bulk.)
-
-**Readiness does not mean "merge now".** `codex-gate` requires a *successful*
-`unit-tests` run on the head before it will merge (`REQUIRE_SUCCESS_RE`), which
-is deliberately stricter than the rest of its check logic. The rest is a
-snapshot — it asks what is failing or pending among the check runs that exist at
-that instant — and under this convention that snapshot is taken in the same
-breath as the readiness click that queues the suites, with the Codex sign-off
-already in hand from the draft review and therefore no wait to cover the gap. An
-empty snapshot and a draft's leftover `completed/skipped` run both read as green
-to a test that only asks "is anything wrong?". Requiring a success is what
-distinguishes "the suites passed" from "the suites have not started". It fails
-closed: a readiness event that queues no run holds the pull request and says so
-in the gate's verdict.
+**Success, not snapshot.** `codex-gate` requires a *successful* `unit-tests` run
+on the head before it will merge (`REQUIRE_SUCCESS_RE`), which is deliberately
+stricter than the rest of its check logic. The rest is a snapshot — it asks
+what is failing or pending among the check runs that exist at that instant — so
+a head whose suites have not registered yet, or that carries only a `skipped`
+run left from a draft period, would otherwise read as green. Requiring a
+success is what distinguishes "the suites passed" from "the suites have not
+started". It fails closed: an event that queues no run holds the pull request
+and says so in the gate's verdict.
 
 ## Reviewing a pull request
 
