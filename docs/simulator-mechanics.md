@@ -69,7 +69,9 @@ merged into one undifferentiated set:
 - each row below carries its validation status, and `literature-derived` marks a derived model;
 - a derived model discloses which of its inputs — structural axes, and possibly the
   administration route itself — were defaults rather than readings (§5, §6.3);
-- it grades **D**, so its curve is withheld unless a reviewer records an acknowledgement (§5).
+- it is graded like any model (§5): most grade **D**, and their curve is withheld unless a
+  reviewer records an acknowledgement; one that reaches **C** renders to editors and admins
+  with its limitations, and to nobody else.
 
 Read the table as "what this build can resolve", not "what has been reviewed".
 
@@ -278,10 +280,19 @@ The two tiers are treated differently, and deliberately so:
   C. Nothing else is defaulted. An absorption rate has no cautious value: faster absorption
   raises the early peak but lowers every later concentration, so any default would be wrong
   in one direction or the other depending on the time asked about. A half-life or a volume of
-  distribution has no cautious direction either. A drug missing any of these gets no curve. On the
-  current implementation these grade **D**:
-  a bare point estimate with no per-input provenance. They reach a reviewer only through a
-  recorded acknowledgement, and only when the derived tier is switched on at all.
+  distribution has no cautious direction either. A drug missing any of these gets no curve.
+  **Each input is drawn across its published spread.** Where the catalogue holds the lowest and
+  highest value an input's sources report, the model draws that input across them on a
+  triangular distribution peaked at the pooled median, so the median curve is the one the
+  median values give and a Monte Carlo run produces a band. An absorption rate solved from a
+  time to peak takes the range the reported Tmax range solves to, with the half-life held at its
+  median. Inputs are drawn independently and the extremes are treated as bounds, so the band is
+  a **plausible range** — the curves the reported values allow — and never a confidence or
+  prediction interval. An input with only one reported value stays fixed at it.
+  Most derived models grade **D**: a model-structure axis is a default, an input has no reported
+  spread, or a value traces to no cited source. Those reach a reviewer only through a recorded
+  acknowledgement. A model clear of all three can reach **C**. Either way, only when the derived
+  tier is switched on at all.
 
 ---
 
@@ -363,8 +374,8 @@ things a reviewer most often assumes work and finds do not.
    quantitative.
 5. **A band that sits on the median means "not characterised", not "precise".** Reviewed
    registry parameters are authored as single point values wherever the review did not
-   establish a defensible spread, and catalogue-derived models take the stored range's
-   median as a fixed value by current policy. For such a model the Monte Carlo run
+   establish a defensible spread, and a catalogue-derived input with only one reported
+   value stays fixed at it (§5). For a model with no spread at all the Monte Carlo run
    produces the identical curve on every draw and the reported percentiles collapse onto
    the median — the run is deterministic however many draws are requested. The model
    table in §2 marks exactly which models are in that state today, and it is the state to
