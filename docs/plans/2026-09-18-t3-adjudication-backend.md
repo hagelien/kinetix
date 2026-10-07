@@ -1,6 +1,7 @@
 # T3 adjudication backend — build plan
 
-**Status:** design for review before implementation
+**Status:** steps 1–3 implemented (records, detector, adjudicator grant and
+seats); steps 4–7 next. See *Implementation status* below.
 **Date:** 2026-09-18
 **Design authority:** `agents/drug-db-adjudication.md` (the T3 contract),
 `docs/superpowers/specs/2026-08-24-tiered-agent-cost-architecture.md` §B2–B4,
@@ -25,6 +26,35 @@ most likely to rot while the rest of the workflow moves.
 This document turns §7's numbered prerequisite list into an implementable plan.
 It does not schedule the work, and it does not argue that the work should start
 now (see §2).
+
+## Implementation status
+
+The owner chose to build the whole tier, including the narrowly scoped
+automatic closure of a converged **agent-originated** dispute that the
+non-goals below defer (human-originated disputes still close only by a
+person). The work lands in three pull requests:
+
+1. **Steps 1–3** (done): migration `0137_t3_adjudication.sql` (the plan's
+   `0120` was taken), `agents.adjudicator` / `agents.model_family` with the
+   admin provisioning path, `api/_lib/adjudication/detector.ts` and
+   `cases.ts`, and the seat claim. Where it differs from the text below:
+   - the verdict-time check runs right after the verdict commits, in its own
+     transaction under the same source-row lock, rather than inside the
+     verdict's transaction — a detector fault then never rejects a recorded
+     verdict, and the sweep (`POST /api/agent-consensus-sweep`) is the
+     backstop either way;
+   - `repeated_correction_loop` counts disputes decided upheld or rejected on
+     the target (withdrawn ones excluded), with a disagreement still live, and
+     records the count as a lower bound;
+   - `competing_scope` and `human_request` are typed but never produced: they
+     still have no persisted input (issue 1280);
+   - an agent whose verdict a case rests on cannot take a seat on it;
+   - opinions are append-only at the database: a trigger refuses every UPDATE
+     and DELETE on `adjudication_opinions`.
+2. **Steps 4–6**: the case feed, the opinion write path, sealing, typed
+   convergence and the T4 handoff.
+3. **Automatic closure and step 7**: a converged agent-originated case closes
+   its agent disputes; then the "do not schedule" banner lifts.
 
 ## Goals
 

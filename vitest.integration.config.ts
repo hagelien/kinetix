@@ -37,6 +37,7 @@ import path from 'path';
 // a 403 whenever the worker had loaded the real auth module first.
 // tests/integration-mocked-files.test.ts now enforces the sync.
 const MOCKED = [
+  'tests/integration/adjudication-cases.test.ts',
   'tests/integration/agent-audit-sample.test.ts',
   'tests/integration/agent-consensus-retry.test.ts',
   'tests/integration/agent-escalation-queue.test.ts',
