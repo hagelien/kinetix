@@ -770,9 +770,16 @@ drugs). A DB edit changes the next snapshot, never a curve already pinned.
     2. **Compose the grade CV into the emitted bands** (or land a real parameter-variability layer,
        SC-1B) so a derived curve stops being a point estimate. Until then uncertainty-semantics is D
        and no non-reviewer can be shown one.
-    3. **Carry per-input provenance** (which entry, which citation, or none) from generation into
-       `DerivedRouteGrade`, and grade absent citations conservatively per input rather than for the
-       whole route. Until then parameter-provenance is D.
+    3. ~~**Carry per-input provenance**~~ **(LANDED, 2026-10-07).** Generation records each input's
+       source in `DerivedRouteGrade.inputSources`: `cited` with its citation ids when every entry the
+       value pools names a citation, otherwise `uncited` with why (a hand-entered value, an uncited
+       or grandfathered entry, or a cache its entries no longer reproduce). An inferred `ka` carries
+       its Tmax's source; a defaulted input has none and stays with completeness. A route whose every
+       input is cited reaches C on parameter-provenance (study-level traceability, never B); any
+       uncited input keeps it at D. On the 2026-10-07 snapshot, 94 of 163 derived routes reach C.
+       This does not lift any model's overall grade on its own: uncertainty-semantics (item 2) is
+       still D everywhere, and completeness is D for the 138 routes whose drug records no
+       model-structure axis at all.
     4. Only then is extending §5.2 to the derived track a question worth asking — and only once 2
        and 3 are closed, since its floor is C and a D clears nothing.
 

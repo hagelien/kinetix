@@ -21,6 +21,25 @@ import type { AxisProvenance, DerivedModel, RouteProvenance } from './derive-mod
 import type { ModelStructure, RequiredParam } from './model-structure.js';
 import type { ModelFamily, RouteId } from './types.js';
 
+/**
+ * Where ONE engine input's number came from, as far as the catalog can show it.
+ *
+ * - `cited` — the value is the pool of source entries, and every entry the pool drew on names a
+ *   citation. `citationIds` lists them.
+ * - `uncited` — the value cannot be traced to a cited source. `reason` says why:
+ *   - `authored-value`: a hand-authored or seeded `drug_parameters` value with no entries behind
+ *     it (the grandfather rule keeps such values in place until a real source supersedes them);
+ *   - `uncited-entry`: at least one entry the value pools has no citation, or is a grandfathered
+ *     placeholder for a migrated value rather than a source;
+ *   - `stale-cache`: the cached aggregate no longer matches what its entries pool to, so which
+ *     entries it came from cannot be shown.
+ *
+ * A fact, never a grade: `assessDerivedModel` decides what it is worth.
+ */
+export type InputSource =
+  | { basis: 'cited'; citationIds: readonly number[] }
+  | { basis: 'uncited'; reason: 'authored-value' | 'uncited-entry' | 'stale-cache' };
+
 /** The grade-relevant facts about ONE assembled route of a derived model. */
 export interface DerivedRouteGrade {
   route: RouteId;
@@ -66,6 +85,14 @@ export interface DerivedRouteGrade {
    * default, D when more do. Absent when every value came from the catalog or an inference.
    */
   defaultedParameters?: readonly RequiredParam[];
+  /**
+   * Where each catalog-supplied input's number came from (see `InputSource`). An inferred role is
+   * keyed by the role it fills and carries the source of the observable it was solved from (`ka`
+   * carries the Tmax's). A defaulted role has no entry: it took no catalog value, and completeness
+   * already grades it. Absent on a record written before sources were recorded, which grades as if
+   * no input were sourced.
+   */
+  inputSources?: Partial<Record<RequiredParam, InputSource>>;
 }
 
 /** Every assembled route's grade record for one derived model, keyed by its analyte id. */

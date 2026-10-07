@@ -47,14 +47,19 @@ import {
 import { seededSubstanceClass } from '../../data/substanceClasses.js';
 import {
   aggregateEntries,
+  dropSupersededGrandfathered,
+  isAggregateCacheValue,
   type ParameterEntryValue,
 } from '../../src/lib/parameterEntryAggregation.js';
+import { getDrugParameterMap } from './drugParameterStore.js';
+import { computeParameterSummary, loadEntryValuesForParameter } from './parameter-entries-store.js';
 import {
   assembleDrugDefinition,
   assembleRouteParams,
   buildRegistrySnapshot,
   findModel,
   registeredAnalytes,
+  requiredParametersFor,
   REGISTRY_VERSION,
   ROUTE_IDS,
   type DrugDefinitionAssembly,
@@ -64,6 +69,8 @@ import {
   type RouteId,
   type DerivedModel,
   type DerivedModelGrade,
+  type InputSource,
+  type RequiredParam,
 } from '../../src/lib/kinetics-core/index.js';
 import {
   applyCautiousDefaults,
@@ -358,6 +365,92 @@ function asNumericRange(value: unknown): NumericRange | null {
   return typeof value === 'object' && value !== null ? (value as NumericRange) : null;
 }
 
+/** A catalog value together with where it came from, for the route's grade record. */
+type SourcedValue = CatalogParameterValue & { source: InputSource };
+
+const AUTHORED_VALUE: InputSource = { basis: 'uncited', reason: 'authored-value' };
+
+/**
+ * The source of a value pooled from `entries`: cited only when every entry the pool draws on names a
+ * citation and none is a grandfathered placeholder. Judged over every entry the aggregation
+ * considers rather than only those that reached the numeric pool, so an entry the pool happened to
+ * skip can make the answer more cautious but never less.
+ */
+function sourceOfEntries(entries: readonly ParameterEntryValue[]): InputSource {
+  const considered = dropSupersededGrandfathered(entries);
+  if (
+    considered.length === 0 ||
+    considered.some((entry) => entry.citationId == null || entry.origin === 'grandfathered')
+  ) {
+    return { basis: 'uncited', reason: 'uncited-entry' };
+  }
+  const citationIds = [...new Set(considered.map((entry) => entry.citationId!))].sort((a, b) => a - b);
+  return { basis: 'cited', citationIds };
+}
+
+/** Equal up to float noise — the cache and a recompute run the same arithmetic on the same rows. */
+function sameValue(a: number, b: number): boolean {
+  return Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));
+}
+
+/**
+ * The source of each drug-level cached value the derivation can use (the structural roles and
+ * Tmax). A value written by hand or by a seed carries no `derivedFromEntries` marker and is
+ * `authored-value`. A marked aggregate is recomputed from the drug's entries; if it no longer
+ * matches the cache, the entries behind the cached number cannot be shown and it is `stale-cache`.
+ */
+async function readDrugLevelSources(
+  drugId: number,
+  rows: readonly { parameter: string; value: unknown }[],
+): Promise<Map<DrugParameterId, InputSource>> {
+  const sources = new Map<DrugParameterId, InputSource>();
+  const aggregates: { parameter: DrugParameterId; cached: number | null }[] = [];
+  for (const row of rows) {
+    const p = row.parameter;
+    if (!isDrugParameterId(p) || (p !== 'tmax' && parameterRoleFor(p) === null)) continue;
+    const range = asNumericRange(row.value);
+    if (!range) continue;
+    if (!isAggregateCacheValue(row.value)) {
+      sources.set(p, AUTHORED_VALUE);
+      continue;
+    }
+    aggregates.push({ parameter: p, cached: meanRange(range) });
+  }
+  if (aggregates.length === 0) return sources;
+  const paramMap = await getDrugParameterMap(getDb(), drugId);
+  for (const { parameter, cached } of aggregates) {
+    const entries = await loadEntryValuesForParameter(drugId, parameter);
+    const summary = await computeParameterSummary(drugId, parameter, paramMap, entries);
+    const current = summary?.representative ?? null;
+    sources.set(
+      parameter,
+      cached !== null && current !== null && sameValue(cached, current)
+        ? sourceOfEntries(entries)
+        : { basis: 'uncited', reason: 'stale-cache' },
+    );
+  }
+  return sources;
+}
+
+/** The first value `tmaxHoursFrom` would read from `values`, so its source can be recorded. */
+function firstTmax<T extends CatalogParameterValue>(values: readonly T[]): T | undefined {
+  return values.find((value) => tmaxHoursFrom([value]) !== undefined);
+}
+
+/**
+ * The source behind each role of `toAssemblyValues(values)`. Mirrors its rule exactly — a later
+ * value fills a role over an earlier one, and a value that does not convert fills nothing — by
+ * asking `toAssemblyValues` itself about each value in turn.
+ */
+function roleSources(values: readonly SourcedValue[]): Partial<Record<RequiredParam, InputSource>> {
+  const out: Partial<Record<RequiredParam, InputSource>> = {};
+  for (const value of values) {
+    const role = parameterRoleFor(value.parameter);
+    if (role !== null && toAssemblyValues([value])[role] !== undefined) out[role] = value.source;
+  }
+  return out;
+}
+
 /** Push `value` onto the array stored under `key`, creating it on first use. */
 function pushInto<K, V>(map: Map<K, V[]>, key: K, value: V): void {
   const list = map.get(key);
@@ -453,18 +546,23 @@ export async function readDrugRouteAssemblyInputs(
       .limit(1),
   ]);
 
+  // Where each drug-level cached value came from, recorded beside the value for the grade.
+  const drugLevelSources = await readDrugLevelSources(drugId, drugLevelRows);
+  const drugLevelSource = (p: DrugParameterId): InputSource =>
+    drugLevelSources.get(p) ?? AUTHORED_VALUE;
+
   // Drug-level canonical values (shared across routes). Excludes route-specific `bioavailability` and
   // any route-scoped role exactly as the derivation's drug-level pool does. The Vd unit is captured for
   // `vdScaling` inference.
-  const drugLevelValues: CatalogParameterValue[] = [];
+  const drugLevelValues: SourcedValue[] = [];
   // The drug-level `tmax`, kept aside from `drugLevelValues`: it fills no engine role (so
   // `toAssemblyValues` would drop it) but it is what the `ka` inference solves against. Whether it
   // may be ATTRIBUTED to a route is decided below, where the drug's route set is visible.
-  const drugLevelTmax: CatalogParameterValue[] = [];
+  const drugLevelTmax: SourcedValue[] = [];
   // The drug-level `bioavailability`, likewise kept aside: F is route-specific (CV-2c), so it is
   // never pooled into the shared drug-level values. It is admitted below for an ATTRIBUTED route
   // only — the route the catalog did not name, whose F this drug-level figure therefore is.
-  const drugLevelBioavailability: CatalogParameterValue[] = [];
+  const drugLevelBioavailability: SourcedValue[] = [];
   let vdUnit = '';
   for (const row of drugLevelRows) {
     const p = row.parameter;
@@ -473,7 +571,12 @@ export async function readDrugRouteAssemblyInputs(
       const tmaxRange = asNumericRange(row.value);
       const tmaxRep = tmaxRange ? meanRange(tmaxRange) : null;
       if (tmaxRange && tmaxRep !== null) {
-        drugLevelTmax.push({ parameter: p, value: tmaxRep, unit: tmaxRange.unit ?? '' });
+        drugLevelTmax.push({
+          parameter: p,
+          value: tmaxRep,
+          unit: tmaxRange.unit ?? '',
+          source: drugLevelSource(p),
+        });
       }
       continue;
     }
@@ -483,7 +586,12 @@ export async function readDrugRouteAssemblyInputs(
         const fRange = asNumericRange(row.value);
         const fRep = fRange ? meanRange(fRange) : null;
         if (fRange && fRep !== null) {
-          drugLevelBioavailability.push({ parameter: p, value: fRep, unit: fRange.unit ?? '' });
+          drugLevelBioavailability.push({
+            parameter: p,
+            value: fRep,
+            unit: fRange.unit ?? '',
+            source: drugLevelSource(p),
+          });
         }
       }
       continue;
@@ -498,7 +606,7 @@ export async function readDrugRouteAssemblyInputs(
     // from entries — is not dropped and reported missing on an otherwise complete model.
     const rep = meanRange(range);
     if (rep === null) continue;
-    drugLevelValues.push({ parameter: p, value: rep, unit });
+    drugLevelValues.push({ parameter: p, value: rep, unit, source: drugLevelSource(p) });
   }
 
   // Route-scoped values: pool each (route, parameter) group to a canonical median with the shared
@@ -543,14 +651,19 @@ export async function readDrugRouteAssemblyInputs(
         .map((group) => group.route),
     );
   const routesWithScopedF = routesWithScoped('bioavailability');
-  const routeValues = new Map<RouteId, CatalogParameterValue[]>();
+  const routeValues = new Map<RouteId, SourcedValue[]>();
   for (const { route, parameter, entries } of routeEntryGroups.values()) {
     const targetUnit = canonicalUnitFor(parameter);
     if (targetUnit === null) continue;
     const summary = aggregateEntries(entries, { targetUnit, matrixRelevant: false });
     if (!summary || summary.representative === null) continue;
     // Already pooled into the canonical unit; `toAssemblyValues` re-checks it (identity).
-    pushInto(routeValues, route, { parameter, value: summary.representative, unit: targetUnit });
+    pushInto(routeValues, route, {
+      parameter,
+      value: summary.representative,
+      unit: targetUnit,
+      source: sourceOfEntries(entries),
+    });
   }
 
   const vdScaling = inferVdScaling(vdUnit);
@@ -574,6 +687,7 @@ export async function readDrugRouteAssemblyInputs(
   // peak is not an insufflated one, and guessing between them is exactly the manufactured
   // attribution the plan's "missing stays missing" rules out.
   const soleRouteTmax = derivations.length === 1 ? tmaxHoursFrom(drugLevelTmax) : undefined;
+  const soleRouteTmaxValue = derivations.length === 1 ? firstTmax(drugLevelTmax) : undefined;
 
   // Assemble one route from a derivation: pick the values it may use, run the `ka` inference, and
   // carry the provenance the grade needs. Called for the declared derivation and, when that does not
@@ -600,14 +714,12 @@ export async function readDrugRouteAssemblyInputs(
     // route-specific evidence may contradict. Such a route stays incomplete — missing stays missing.
     const attributedValues =
       admitsDrugLevelF && !routesWithScopedF.has(derived.route) ? drugLevelBioavailability : [];
-    const values = toAssemblyValues([
-      ...drugLevelValues,
-      ...attributedValues,
-      ...routeCatalogValues,
-    ]);
+    const catalogValues = [...drugLevelValues, ...attributedValues, ...routeCatalogValues];
+    const values = toAssemblyValues(catalogValues);
     // A route-scoped Tmax always wins over the drug-level figure: it is the one actually measured
     // for this route.
     const tmaxHours = tmaxHoursFrom(routeCatalogValues) ?? soleRouteTmax;
+    const tmaxSource = (firstTmax(routeCatalogValues) ?? soleRouteTmaxValue)?.source;
     const {
       values: withKa,
       inferredParameters,
@@ -624,10 +736,29 @@ export async function readDrugRouteAssemblyInputs(
       withKa,
       blocked,
     );
+    // The source of each value this route runs on: the roles its family requires, filled from the
+    // catalog. An inferred role carries the source of the Tmax it was solved from; a defaulted role
+    // took no catalog value and has none.
+    const inputSources: Partial<Record<RequiredParam, InputSource>> = {};
+    if (derived.outcome === 'modelable' && derived.family) {
+      const fromCatalog = roleSources(catalogValues);
+      for (const role of inferredParameters) if (tmaxSource) fromCatalog[role] = tmaxSource;
+      const required = requiredParametersFor(derived.family, {
+        ivInfusion: derived.structure.absorption === 'iv-infusion',
+      });
+      const defaulted = new Set<RequiredParam>(defaultedParameters);
+      for (const role of [...required].sort()) {
+        const source = fromCatalog[role];
+        if (source && !defaulted.has(role) && withDefaults[role] !== undefined) {
+          inputSources[role] = source;
+        }
+      }
+    }
     return {
       route: derived.route,
       derived,
       values: withDefaults,
+      inputSources,
       ...(defaultedParameters.length > 0 ? { defaultedParameters } : {}),
       ...(derived.routeProvenance !== 'asserted'
         ? { routeProvenance: derived.routeProvenance }
@@ -928,6 +1059,8 @@ export async function readDerivedRegistrySnapshot(): Promise<DerivedRegistryBuil
             ...(input.defaultedParameters?.length
               ? { defaultedParameters: [...input.defaultedParameters].sort() }
               : {}),
+            // Where each value came from, so the grade can judge provenance input by input.
+            inputSources: input.inputSources ?? {},
           }));
         if (routes.length > 0) {
           derivedGrades.push({ analyte: assembly.definition.analyte, routes });
