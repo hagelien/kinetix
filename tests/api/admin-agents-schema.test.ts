@@ -56,6 +56,24 @@ describe('createAgentSchema (shared admin contract)', () => {
     expect(patchAgentSchema.safeParse({ modelTier: 'nope' }).success).toBe(false);
   });
 
+  it('accepts the T3 adjudicator grant and a model family, rejects a malformed family', () => {
+    const ok = createAgentSchema.safeParse({
+      email: 'a@b.com',
+      username: 'kinetix-adjudicator',
+      name: 'Adjudicator',
+      modelTier: 'flagship',
+      adjudicator: true,
+      modelFamily: 'claude',
+    });
+    expect(ok.success && ok.data.adjudicator).toBe(true);
+    expect(ok.success && ok.data.modelFamily).toBe('claude');
+    expect(patchAgentSchema.safeParse({ adjudicator: false }).success).toBe(true);
+    expect(patchAgentSchema.safeParse({ modelFamily: null }).success).toBe(true);
+    expect(patchAgentSchema.safeParse({ modelFamily: 'gpt-5.x' }).success).toBe(true);
+    expect(patchAgentSchema.safeParse({ modelFamily: 'Has Space' }).success).toBe(false);
+    expect(patchAgentSchema.safeParse({ adjudicator: 'yes' }).success).toBe(false);
+  });
+
   it('rejects an invalid slug (uppercase)', () => {
     const r = createAgentSchema.safeParse({
       email: 'a@b.com',

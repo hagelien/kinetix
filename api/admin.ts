@@ -674,6 +674,8 @@ async function handleAgents(
         hooksEnabled: agents.hooksEnabled,
         selfReviewEnabled: agents.selfReviewEnabled,
         modelTier: agents.modelTier,
+        adjudicator: agents.adjudicator,
+        modelFamily: agents.modelFamily,
         createdAt: agents.createdAt,
         username: users.username,
         email: users.email,
@@ -905,6 +907,8 @@ async function handleAgents(
             descriptionEn: data.descriptionEn ?? null,
             maintainerUserId: data.maintainerUserId ?? null,
             modelTier: data.modelTier ?? null,
+            adjudicator: data.adjudicator ?? false,
+            modelFamily: data.modelFamily ?? null,
             status: 'active',
             statusChangedBy: auth.userId,
             statusChangedAt: new Date(),
@@ -1027,6 +1031,8 @@ async function handleAgents(
     if (data.selfReviewEnabled !== undefined)
       update.selfReviewEnabled = data.selfReviewEnabled;
     if (data.modelTier !== undefined) update.modelTier = data.modelTier;
+    if (data.adjudicator !== undefined) update.adjudicator = data.adjudicator;
+    if (data.modelFamily !== undefined) update.modelFamily = data.modelFamily;
     update.updatedAt = new Date();
 
     try {
