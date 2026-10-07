@@ -12,8 +12,9 @@
  * packet both panelists were served.
  *
  * The binding also freezes what else the panel is served or compared
- * through: the lower-tier record (copied verdicts and the open disputes on
- * the version), the decided disputes on the target, and the canonical unit and
+ * through: why the case opened and whose objection it rests on, the
+ * lower-tier record (copied verdicts and the open disputes on the version),
+ * the decided disputes on the target, and the canonical unit and
  * molecular weight the two opinions are converted with — so a dispute
  * resolved, or a molecular weight edited, between the two seats changes
  * neither what they read nor how their values compare.
@@ -32,6 +33,7 @@ import {
 type AdjudicationCase = typeof adjudicationCases.$inferSelect;
 import { fetchSingleCandidate, type QueueItem } from '../../agent-verifications-queue.js';
 import { adjudicationTargetParameter, readTargetRow } from './target.js';
+import { disputeOriginOf } from './detector.js';
 import {
   mergeOpenDisputes,
   openDisputesOnVersion,
@@ -132,6 +134,8 @@ export async function bindPanelTarget(
     adjudicatedTarget: AdjudicatedTarget | null;
     t1Snapshot: AdjudicationCase['t1Snapshot'];
     t2Snapshot: AdjudicationCase['t2Snapshot'];
+    triggers: AdjudicationCase['triggers'];
+    triggerDetail: AdjudicationCase['triggerDetail'];
   },
   viewer: { agentId: number; agentUserId: number },
 ): Promise<PanelTargetCheck> {
@@ -164,6 +168,10 @@ export async function bindPanelTarget(
       : close('target_drifted');
   }
   const parameter = await adjudicationTargetParameter(kase.targetType, kase.targetId);
+  const openDisputes = mergeOpenDisputes(
+    kase.t1Snapshot.openDisputes,
+    await openDisputesOnVersion(kase),
+  );
   const snapshot: AdjudicatedTarget = {
     served,
     sourceRow: await readTargetRow(kase.targetType, kase.targetId),
@@ -175,10 +183,12 @@ export async function bindPanelTarget(
     lowerTier: {
       t2Verdicts: kase.t2Snapshot,
       t1Verdicts: kase.t1Snapshot.verdicts,
-      openDisputes: mergeOpenDisputes(
-        kase.t1Snapshot.openDisputes,
-        await openDisputesOnVersion(kase),
-      ),
+      openDisputes,
+    },
+    context: {
+      triggers: kase.triggers,
+      triggerDetail: kase.triggerDetail as Record<string, unknown>,
+      disputeOrigin: disputeOriginOf(openDisputes),
     },
   };
   await tx

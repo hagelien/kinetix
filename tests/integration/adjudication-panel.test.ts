@@ -310,27 +310,34 @@ describe('T3 case feed', () => {
     expect(b.body.lowerTier.decidedDisputes).toEqual(a.body.lowerTier.decidedDisputes);
   });
 
-  it('serves both seats the open disputes as they stood when the panel was bound', async () => {
+  it('serves both seats the open disputes and case context as they stood when the panel was bound', async () => {
     const s = await seedCase();
     await claim(s.a.userId, s.caseId);
-    const boundOpen = (await caseFile(s.a.userId, s.caseId)).body.lowerTier.openDisputes;
-    // A new dispute on the version, merged into the case by the detector.
-    const other = await seedAgent('t1b', { tier: 'mid' });
+    const boundA = (await caseFile(s.a.userId, s.caseId)).body;
+    expect(boundA.case.disputeOrigin).toBe('agent');
+    // A person's dispute on the version, merged into the case by the
+    // detector: it changes the case's open disputes and its origin.
+    const human = await seedUser(db, { email: 'p@example.com', username: 'p', role: 'contributor' });
     await db.insert(disputes).values({
       targetType: 'pending_edit',
       targetId: s.editId,
-      createdBy: other.userId,
-      source: 'agent',
+      createdBy: human,
+      source: 'human',
       reasonMd: 'Ny innsigelse.',
       targetVersion: s.version,
     });
     await detectAdjudicationCase({ targetType: 'pending_edit', targetId: s.editId });
     const [kase] = await db.select().from(adjudicationCases).where(eq(adjudicationCases.id, s.caseId));
-    expect(kase!.t1Snapshot.openDisputes.length).toBe(boundOpen.length + 1);
+    expect(kase!.t1Snapshot.openDisputes.length).toBe(boundA.lowerTier.openDisputes.length + 1);
+    expect(kase!.disputeOrigin).not.toBe('agent');
 
     await claim(s.b.userId, s.caseId);
-    expect((await caseFile(s.a.userId, s.caseId)).body.lowerTier.openDisputes).toEqual(boundOpen);
-    expect((await caseFile(s.b.userId, s.caseId)).body.lowerTier.openDisputes).toEqual(boundOpen);
+    for (const seat of [s.a, s.b]) {
+      const file = (await caseFile(seat.userId, s.caseId)).body;
+      expect(file.lowerTier.openDisputes).toEqual(boundA.lowerTier.openDisputes);
+      expect(file.case.triggers).toEqual(boundA.case.triggers);
+      expect(file.case.disputeOrigin).toBe('agent');
+    }
   });
 
   it('withholds a case from a seated panelist once its wiki page is unpublished', async () => {
@@ -691,6 +698,33 @@ describe('T3 sealing, convergence and the T4 handoff', () => {
     const [kase] = await db.select().from(adjudicationCases).where(eq(adjudicationCases.id, s.caseId));
     expect(kase).toMatchObject({ state: 'converged' });
     expect(kase!.adjudicatedTarget!.comparison).toEqual({ canonicalUnit: 'mg/L', molecularWeight: 303.4 });
+  });
+
+  it('checks an endorsed value’s bounds with the molecular weight the panel was bound to', async () => {
+    const drugId = await seedDrug(db);
+    await db.insert(drugParameters).values({ drugId, parameter: 'molecularWeight', value: 303.4 });
+    const s = await seedCase({
+      parameter: 'therapeuticConcentration',
+      value: 0.3,
+      unit: 'mg/L',
+      edit: { targetId: drugId },
+    });
+    await claim(s.a.userId, s.caseId);
+    // Edited after binding: under the live weight, 3 000 000 µmol/L would be
+    // 9 102 000 mg/L, over the 1 000 000 mg/L bound; under the bound one it
+    // is 910 200 mg/L, inside it.
+    await db
+      .update(drugParameters)
+      .set({ value: 3034 })
+      .where(and(eq(drugParameters.drugId, drugId), eq(drugParameters.parameter, 'molecularWeight')));
+    const written = await opinion(s.a.userId, {
+      caseId: s.caseId,
+      targetVersion: s.version,
+      final: false,
+      resolvedValue: 3_000_000,
+      resolvedUnit: 'µmol/L',
+    });
+    expect(written.status).toBe(201);
   });
 
   it('compares dimensionless parameters (pKa) on their values, in the unit ""', async () => {
