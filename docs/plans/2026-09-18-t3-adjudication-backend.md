@@ -97,7 +97,9 @@ person). The work lands in three pull requests:
      check the live target against it and close the case on drift
      (`target_drifted`);
    - a seat is refused to any agent with a verdict on the target now, not only
-     those the case copied;
+     those the case copied; every opinion write re-checks the writer, and the
+     seal re-checks both seats — a seat that took a part after finalizing
+     hands the case to a person with nothing recommended (`panel_conflicted`);
    - a case about unpublished wiki content is served only to readers cleared
      for drafts, panelists (by their backing user's role) and people alike;
    - an endorsed value follows the parameter's contract — a range where
