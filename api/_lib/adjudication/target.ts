@@ -4,7 +4,8 @@
  * molecular weight (for a mass↔molar concentration conversion).
  *
  * Only range parameters — the calculation-driving, entry-backed measurements
- * with a canonical unit — carry a value an opinion endorses. Everything else
+ * with a canonical unit, the dimensionless `''` included — carry a value an
+ * opinion endorses. Everything else
  * (wiki facts, paper reviews, categorical or text parameters) is compared on
  * resolution and scope alone, and an endorsing opinion on it carries no value.
  */
@@ -89,7 +90,9 @@ export async function adjudicationTargetParameter(
   const found = await parameterAndDrug(targetType, targetId);
   if (!found || !isDrugParameterId(found.parameter)) return null;
   const spec = DRUG_PARAMETERS[found.parameter];
-  if (!isRangeSpec(spec) || !spec.canonicalUnit) return null;
+  // `''` is a real canonical unit — the dimensionless one (pKa, logP, logD) —
+  // so only an absent unit makes the target valueless.
+  if (!isRangeSpec(spec) || typeof spec.canonicalUnit !== 'string') return null;
   let molecularWeight: number | null = null;
   if (found.drugId != null) {
     const mw = (await getDrugParameterMap(getDb(), found.drugId)).get('molecularWeight');

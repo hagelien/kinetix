@@ -1781,7 +1781,8 @@ export const adjudicationOpinionSchema = z
     resolvedValue: z.number().finite().nullable().optional(),
     resolvedLow: z.number().finite().nullable().optional(),
     resolvedHigh: z.number().finite().nullable().optional(),
-    resolvedUnit: z.string().trim().min(1).max(40).nullable().optional(),
+    // `''` is the dimensionless unit (pKa, logP, logD).
+    resolvedUnit: z.string().trim().max(40).nullable().optional(),
     reasoningMd: z.string().trim().min(20).max(20000),
     evidenceRefs: z.array(evidenceRefSchema).max(40).default([]),
     confidence: z.enum(['high', 'medium', 'low']),

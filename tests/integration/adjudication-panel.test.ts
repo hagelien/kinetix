@@ -17,6 +17,7 @@ vi.mock('../../api/_lib/auth.js', () => ({
 
 import { eq } from 'drizzle-orm';
 import {
+  adjudicationCaseSeats,
   adjudicationCases,
   adjudicationOpinions,
   agentVerifications,
@@ -90,7 +91,9 @@ async function verdictOn(agentId: number, editId: number, verdict: string, tier:
 }
 
 /** A clearance entry proposal with a T1 dispute and a T2 approval, and its open case. */
-async function seedCase(opts: { humanDispute?: boolean } = {}) {
+async function seedCase(
+  opts: { humanDispute?: boolean; parameter?: string; value?: number; unit?: string } = {},
+) {
   const author = await seedAgent('author', { tier: 'mid' });
   const t1 = await seedAgent('t1', { tier: 'mid' });
   const t2 = await seedAgent('t2', { tier: 'flagship' });
@@ -99,8 +102,11 @@ async function seedCase(opts: { humanDispute?: boolean } = {}) {
     .values({
       editType: 'param_entry',
       targetId: 1,
-      parameter: 'clearance',
-      proposedValue: { op: 'create', input: { value: 60, unit: 'L/h', quote: 'CL was 60 L/h.' } },
+      parameter: opts.parameter ?? 'clearance',
+      proposedValue: {
+        op: 'create',
+        input: { value: opts.value ?? 60, unit: opts.unit ?? 'L/h', quote: 'The paper reports it.' },
+      },
       submittedBy: author.userId,
       status: 'pending',
     })
@@ -232,6 +238,26 @@ describe('T3 case feed', () => {
     });
     // Sealed now: both opinions are part of the record.
     expect((await caseFile(s.b.userId, s.caseId)).raw).toContain(secret);
+  });
+
+  it('refuses a seat to an agent that disputed the target after the case was last refreshed', async () => {
+    const s = await seedCase();
+    // No detector pass after this: only the claim's own re-read can see it.
+    await db.insert(disputes).values({
+      targetType: 'pending_edit',
+      targetId: s.editId,
+      createdBy: s.a.userId,
+      source: 'agent',
+      reasonMd: 'Verdien er feil.',
+      targetVersion: s.version,
+    });
+    const refused = await claim(s.a.userId, s.caseId);
+    expect(refused.status).toBe(409);
+    expect(refused.raw).toContain('adjudication_conflicted');
+    expect(await db.select().from(adjudicationCaseSeats)).toEqual([]);
+    // A dispute on another version says nothing about this one.
+    await db.update(disputes).set({ targetVersion: 'elsewhere|pending' }).where(eq(disputes.createdBy, s.a.userId));
+    expect((await claim(s.a.userId, s.caseId)).status).toBe(200);
   });
 
   it('keeps a case abandoned before sealing blind, whatever its state', async () => {
@@ -371,6 +397,9 @@ describe('T3 sealing, convergence and the T4 handoff', () => {
 
     const notes = await db.select().from(notifications).where(eq(notifications.userId, reviewer));
     expect(notes.map((n) => n.type)).toEqual(['adjudication_handoff']);
+    // The generated English summary never reaches the inbox; the title is
+    // localised by type, the reasons are typed.
+    expect(notes[0]!.bodyMd).toBeNull();
     // Agents read feeds, never the inbox.
     const agentNotes = await db.select().from(notifications).where(eq(notifications.userId, s.a.userId));
     expect(agentNotes).toEqual([]);
@@ -379,7 +408,10 @@ describe('T3 sealing, convergence and the T4 handoff', () => {
     const asPerson = await caseFile(reviewer, s.caseId, 'editor');
     expect(asPerson.body.outcome.handoff.caseId).toBe(s.caseId);
     const list = await call(queueHandler, { userId: reviewer, role: 'editor', method: 'GET', url: '/api/agent-adjudication-queue' });
-    expect(list.body.handoffs.map((h: { caseId: number }) => h.caseId)).toEqual([s.caseId]);
+    expect(list.body.handoffs).toMatchObject([
+      { caseId: s.caseId, reasons: ['panel_diverged'], divergenceReason: 'value_differs' },
+    ]);
+    expect(list.body.handoffs[0]).not.toHaveProperty('summary');
   });
 
   it('routes a converged case to a person when a person’s dispute is part of it', async () => {
@@ -428,14 +460,18 @@ describe('T3 sealing, convergence and the T4 handoff', () => {
     expect(kase.t1Snapshot.openDisputes.map((d) => d.source)).toEqual(['human']);
   });
 
-  it('serves a person the target as the panel adjudicated it, after the live row moved', async () => {
+  it.each([
+    ['diverged', 75],
+    ['converged', 60],
+  ])('serves a person the target as the panel adjudicated it, after the live row moved (%s)', async (state, other) => {
     const s = await seedCase();
     const reviewer = await seedUser(db, { email: 'ed@example.com', username: 'ed', role: 'editor' });
-    await panel(
+    const { kase } = await panel(
       s,
       { resolvedValue: 60, resolvedUnit: 'L/h' },
-      { resolvedValue: 75, resolvedUnit: 'L/h' },
+      { resolvedValue: other, resolvedUnit: 'L/h' },
     );
+    expect(kase.state).toBe(state);
     await db
       .update(pendingEdits)
       .set({ proposedValue: { op: 'create', input: { value: 99, unit: 'L/h', quote: 'Revised.' } } })
@@ -443,6 +479,21 @@ describe('T3 sealing, convergence and the T4 handoff', () => {
     const asPerson = await caseFile(reviewer, s.caseId, 'editor');
     expect(asPerson.body.target.asAdjudicated).toBe(true);
     expect(asPerson.body.target.row.proposedValue.input.value).toBe(60);
+  });
+
+  it('compares dimensionless parameters (pKa) on their values, in the unit ""', async () => {
+    const s = await seedCase({ parameter: 'pKa', value: 9.5, unit: '' });
+    await claim(s.a.userId, s.caseId);
+    // An endorsement on a numeric target must carry its value.
+    const bare = await opinion(s.a.userId, { caseId: s.caseId, targetVersion: s.version, final: false });
+    expect(bare.raw).toContain('value_required');
+    const { kase } = await panel(
+      s,
+      { resolvedValue: 9.5, resolvedUnit: '' },
+      { resolvedValue: 8.1, resolvedUnit: '' },
+    );
+    expect(kase).toMatchObject({ state: 'diverged', t4Required: true });
+    expect(kase.convergence).toMatchObject({ converged: false, reason: 'value_differs' });
   });
 
   it('sends a case to a person when a panelist asks for one, even on agreement', async () => {

@@ -86,13 +86,20 @@ person). The work lands in three pull requests:
      to T4 (`panel_abstained`): the version cannot open another case;
    - the seal re-reads the version's open disputes under the source-row lock,
      so a person's dispute that landed after the detector last refreshed the
-     case still makes the closing act theirs; the handoff carries the target's
-     source row as adjudicated, so a person sees the version-pinned payload;
+     case still makes the closing act theirs; a seat claim re-reads them the
+     same way, so an agent that disputed the target since cannot take a seat;
+   - every sealed case keeps the target's source row as adjudicated
+     (`adjudicated_target`), converged or handed off, so a person sees the
+     version-pinned payload;
+   - a dimensionless range parameter (pKa, logP, logD; canonical unit `''`)
+     carries a value like any other;
    - blindness is keyed on the seal itself, not the state, so a case closed
      mid-panel never unblinds;
    - the handoff notification reuses the dispute fan-out with no dispute id
-     (`notifications.type = 'adjudication_handoff'`), linking to the target;
-     the full package is served to reviewers by the case feed.
+     (`notifications.type = 'adjudication_handoff'`), linking to the target,
+     with no body: its title is localised by type, and the handoff list
+     serves typed `reasons` rather than the English summary; the full package
+     is served to reviewers by the case feed.
 3. **Automatic closure and step 7**: a converged agent-originated case closes
    its agent disputes; then the "do not schedule" banner lifts.
 

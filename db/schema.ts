@@ -2705,14 +2705,12 @@ export type AdjudicationHandoff = {
   triggers: AdjudicationTrigger[];
   /** Why a person is needed, in order of weight. */
   reasons: Array<'panel_diverged' | 'human_requested' | 'panel_abstained' | 'human_dispute'>;
-  /** One paragraph: what remains disputed. */
-  summary: string;
   /**
-   * The target's source row as the panel adjudicated it, copied at sealing
-   * under the source-row lock: the version-pinned payload, which later
-   * revisions of the live row cannot change.
+   * One paragraph, in English, of what remains disputed: the record's prose
+   * for agents and the API. A screen or email renders from `reasons` and
+   * `convergence.reason` in the reader's language instead.
    */
-  target: Record<string, unknown> | null;
+  summary: string;
   opinions: AdjudicationHandoffOpinion[];
   t2Snapshot: AdjudicationVerdictSnapshot[];
   t1Snapshot: {
@@ -2775,6 +2773,13 @@ export const adjudicationCases = pgTable(
     t4Required: boolean('t4_required').notNull().default(false),
     /** The T4 package for that person (0139). */
     handoff: jsonb('handoff').$type<AdjudicationHandoff>(),
+    /**
+     * The target's source row as the panel adjudicated it, copied at sealing
+     * under the source-row lock — for every sealed outcome, converged or
+     * handed off — so later revisions of the live row cannot change the
+     * record of what was decided (0139).
+     */
+    adjudicatedTarget: jsonb('adjudicated_target').$type<Record<string, unknown>>(),
   },
   (t) => [
     // Permanent, not "while live": a target version is adjudicated at most once.
