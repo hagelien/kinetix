@@ -525,7 +525,7 @@ export function DrugMonographSidebar({
     // Hover-revealed like every other section action; the flagged STATE stays
     // visible through the notice below, the way a parameter row carries it.
     const className =
-      'h-6 gap-1 px-1.5 text-xs opacity-0 transition-opacity group-hover/section:opacity-100 focus-visible:opacity-100 motion-reduce:transition-none';
+      'hover-actions h-6 gap-1 px-1.5 text-xs opacity-0 transition-opacity group-hover/section:opacity-100 focus-visible:opacity-100 motion-reduce:transition-none';
     return activeFlag ? (
       <Button
         variant="ghost"
@@ -1049,7 +1049,7 @@ export function DrugMonographSidebar({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-6 gap-1 px-1.5 text-xs text-muted-foreground opacity-0 transition-opacity group-hover/section:opacity-100 focus-visible:opacity-100 motion-reduce:transition-none"
+                className="hover-actions h-6 gap-1 px-1.5 text-xs text-muted-foreground opacity-0 transition-opacity group-hover/section:opacity-100 focus-visible:opacity-100 motion-reduce:transition-none"
                 onClick={() => setShowMetabolismEditor(true)}
               >
                 <Edit2 className="h-3 w-3" />
@@ -1309,7 +1309,7 @@ export function DrugMonographSidebar({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-6 gap-1 px-1.5 text-xs text-muted-foreground opacity-0 transition-opacity group-hover/section:opacity-100 focus-visible:opacity-100 motion-reduce:transition-none"
+                className="hover-actions h-6 gap-1 px-1.5 text-xs text-muted-foreground opacity-0 transition-opacity group-hover/section:opacity-100 focus-visible:opacity-100 motion-reduce:transition-none"
                 onClick={() => setShowReceptorEditor(true)}
               >
                 <Edit2 className="h-3 w-3" />
@@ -1596,7 +1596,10 @@ export function DrugMonographSidebar({
   return (
     <DrugUnitScope isEthanol={isEthanol}>
     <div
-      className="space-y-2"
+      // In tab mode there is no section box around the content, so the root
+      // is the hover group that reveals the section-level actions (edit
+      // metabolism / mechanisms, flag for agent).
+      className={section ? 'group/section space-y-2' : 'space-y-2'}
       data-testid={
         section ? `drug-monograph-section-${section}` : 'drug-monograph-sidebar'
       }
