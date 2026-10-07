@@ -39,7 +39,7 @@ import {
   type AgentVerificationEvidenceRef,
   type DisputeTargetType,
 } from '../../../db/schema.js';
-import { resolveDisputeById } from '../disputes.js';
+import { resolveDisputeById, unresolvedDisputeVerdictCount } from '../disputes.js';
 import { returnPendingEditForUpheldDispute } from '../upheld-dispute-return.js';
 import { contributionAuthorUserId, fanOutDisputeNotification } from '../notifications.js';
 import { disputeTargetUrl } from '../agent-verifications.js';
@@ -193,11 +193,43 @@ export async function closeConvergedAgentCase(args: {
       ),
     )
     .orderBy(asc(disputes.id));
-  const ids = open
-    .filter((d) => d.targetVersion === null || d.targetVersion === args.targetVersion)
-    .map((d) => d.id);
+  const onVersion = open.filter(
+    (d) => d.targetVersion === null || d.targetVersion === args.targetVersion,
+  );
   const upholding = UPHOLDING.has(args.recommendation.resolution);
+  const declineWith = (declined: AdjudicationClosureDeclined): ClosureResult => ({
+    closure: {
+      action: 'declined',
+      declined,
+      disputeIds: [],
+      pendingEditReturned: null,
+      returnSkipped: null,
+      at,
+    },
+    retryConsensusFor: null,
+  });
+  // Only the objections the panel was served: one opened after the binding
+  // reached neither seat, so the panel's agreement says nothing about it.
+  const bound = new Set(
+    (args.bound?.lowerTier.openDisputes ?? [])
+      .filter((d) => d.source === 'agent')
+      .map((d) => d.disputeId),
+  );
+  if (onVersion.some((d) => !bound.has(d.id))) return declineWith('unseen_dispute');
+  const ids = onVersion.map((d) => d.id);
   if (ids.length === 0) {
+    // Nothing to close — unless an agent's dispute verdict still stands with
+    // no row behind it (recorded before the dispute table mirrored
+    // verdicts). Closing nothing would leave it holding the proposal, and
+    // this version can open no other case: a person takes it.
+    const unanswered =
+      args.targetType === 'pending_edit'
+        ? await unresolvedDisputeVerdictCount({
+            targetType: args.targetType as DisputeTargetType,
+            targetId: args.targetId,
+          })
+        : 0;
+    if (unanswered > 0) return declineWith('unmirrored_dispute');
     return {
       closure: {
         action: 'none',
