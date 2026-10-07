@@ -996,6 +996,8 @@
     "unitsMassGroup": "Masse",
     "unitsPrimaryLabel": "Primær visningsenhet",
     "unitsPrimaryHelp": "Brukes som standard visningstype i substansregister og simulatoren. Bare aktiverte enheter vises i denne listen.",
+    "ethanolUnitLabel": "Visningsenhet for etanol",
+    "ethanolUnitHelp": "Etanolkonsentrasjoner vises i denne enheten i stedet for primærenheten over. ‰ er gram per liter og % er gram per desiliter.",
     "notificationsTitle": "Varsler",
     "notificationsHelp": "E-post er av med mindre du slår den på her. Alt nedenfor vises også i varselmenyen (bjellen).",
     "tipsTitle": "Hjelpetips",

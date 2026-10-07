@@ -26,6 +26,18 @@ export type ConcentrationUnit = MassConcentrationUnit | MolarConcentrationUnit;
 
 export type DoseUnit = 'mg' | 'g' | 'µg';
 
+/**
+ * Display-only units for ethanol: per mille (‰ = g/L) and percent (% = g/dL),
+ * the conventions blood-alcohol figures are read in. They are never a stored or
+ * authored unit and never enter `isConcentrationUnit` — a bare `%` elsewhere in
+ * the catalog means a fraction (F, protein binding), not a concentration — so
+ * they are only ever a conversion *target*, reached through
+ * {@link convertToDisplayUnit}.
+ */
+export type EthanolDisplayUnit = '‰' | '%';
+/** Any unit a concentration may be shown in: the catalog units plus ‰ and %. */
+export type DisplayConcentrationUnit = ConcentrationUnit | EthanolDisplayUnit;
+
 // --- Conversion factors to canonical units ---
 
 // All mass concentrations normalized to mg/L.
@@ -60,6 +72,13 @@ const DOSE_TO_MG: Record<DoseUnit, number> = {
   'g': 1000,
   'mg': 1,
   'µg': 0.001,
+};
+
+// 1 ‰ = 1 g/L and 1 % = 1 g/dL, matching the ethanol simulator's own scale
+// (0.02 g/dL is drawn as 0.2 ‰).
+const ETHANOL_DISPLAY_TO_MG_PER_L: Record<EthanolDisplayUnit, number> = {
+  '‰': 1000,
+  '%': 10000,
 };
 
 // --- Type guards ---
@@ -118,6 +137,28 @@ export function convertConcentration(
   const mmolPerL = value * MOLAR_TO_MMOL_PER_L[from as MolarConcentrationUnit];
   const mgPerL = mmolPerL * molecularWeight;
   return mgPerL / MASS_TO_MG_PER_L[to as MassConcentrationUnit];
+}
+
+export function isEthanolDisplayUnit(s: string): s is EthanolDisplayUnit {
+  return s === '‰' || s === '%';
+}
+
+/**
+ * Convert a catalog concentration into any display unit, ‰ and % included.
+ * Ethanol display units pivot through mg/L, so a molar source needs the
+ * molecular weight exactly as a molar → mass conversion does (throws without).
+ */
+export function convertToDisplayUnit(
+  value: number,
+  from: ConcentrationUnit,
+  to: DisplayConcentrationUnit,
+  molecularWeight?: number,
+): number {
+  if (!isEthanolDisplayUnit(to)) {
+    return convertConcentration(value, from, to, molecularWeight);
+  }
+  const mgPerL = convertConcentration(value, from, 'mg/L', molecularWeight);
+  return mgPerL / ETHANOL_DISPLAY_TO_MG_PER_L[to];
 }
 
 /** Convert between dose units. */
@@ -202,7 +243,7 @@ export function normalizeUnit(unit: string): string {
  */
 export function convertConcentrationRange(
   range: NumericRange,
-  targetUnit: ConcentrationUnit,
+  targetUnit: DisplayConcentrationUnit,
   molecularWeight?: number | null,
 ): NumericRange | null {
   if (!range.unit) return null;
@@ -213,16 +254,16 @@ export function convertConcentrationRange(
     const out: NumericRange = { ...range, unit: targetUnit };
     const mw = molecularWeight ?? undefined;
     if (typeof range.min === 'number') {
-      out.min = convertConcentration(range.min, source, targetUnit, mw);
+      out.min = convertToDisplayUnit(range.min, source, targetUnit, mw);
     }
     if (typeof range.max === 'number') {
-      out.max = convertConcentration(range.max, source, targetUnit, mw);
+      out.max = convertToDisplayUnit(range.max, source, targetUnit, mw);
     }
     if (typeof range.mean === 'number') {
-      out.mean = convertConcentration(range.mean, source, targetUnit, mw);
+      out.mean = convertToDisplayUnit(range.mean, source, targetUnit, mw);
     }
     if (typeof range.median === 'number') {
-      out.median = convertConcentration(range.median, source, targetUnit, mw);
+      out.median = convertToDisplayUnit(range.median, source, targetUnit, mw);
     }
     return out;
   } catch {

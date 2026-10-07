@@ -53,8 +53,11 @@ import { summaryToNumericRange } from '@/lib/parameterEntryAggregation';
 import {
   convertConcentrationRange,
   isConcentrationUnit,
+  isEthanolDisplayUnit,
   normalizeUnit,
 } from '@/lib/unitConversion';
+import { isEthanolDrug } from '@/lib/ethanolUnits';
+import { DrugUnitScope } from '@/components/ui/DrugUnitScope';
 import {
   primaryUnit,
   useAppStore,
@@ -234,6 +237,7 @@ export function DrugMonographSidebar({
   const [reviewingReceptor, setReviewingReceptor] = useState(false);
   const currentDrugIdRef = useRef<number | null>(null);
   const userPrimaryUnit = useAppStore(primaryUnit);
+  const ethanolUnit = useAppStore((s) => s.ethanolUnit);
   const fractionDisplay = useFractionDisplay();
   const addToBasket = useBasketStore((s) => s.addItem);
   const addComparisonParameter = useBasketStore(
@@ -473,6 +477,11 @@ export function DrugMonographSidebar({
   // to re-narrow the union (TypeScript can't track the early-return
   // through `renderParameterRow`).
   const drugRow = drug;
+  // Ethanol is shown in the reader's ethanol unit (‰ by default), every other
+  // drug in their primary unit. The scope below hands the same choice to the
+  // tooltips and source dialogs rendered inside the sidebar.
+  const isEthanol = isEthanolDrug(drugRow);
+  const displayPrimaryUnit = isEthanol ? ethanolUnit : userPrimaryUnit;
   const drugDisplayName =
     formatGenericDrugName(resolveDrugName(drugRow.names, i18n.language)) ||
     drugRow.slug;
@@ -568,11 +577,18 @@ export function DrugMonographSidebar({
     if (isConcentrationParam && displayRange) {
       const converted = convertConcentrationRange(
         displayRange,
-        userPrimaryUnit,
+        displayPrimaryUnit,
         drugRow.molecularWeight ?? null,
       );
       if (converted) displayRange = converted;
     }
+    // The tooltip converts FROM a catalog unit, which ‰ and % are not: when the
+    // figure on screen is in one of those, the tooltip works from the stored
+    // range instead (and lists its authored unit first).
+    const tooltipRange: NumericRange | null | undefined =
+      displayRange?.unit && isEthanolDisplayUnit(displayRange.unit)
+        ? (rawValue as NumericRange)
+        : displayRange;
     // A fraction parameter (F, plasma protein binding) follows the user's
     // decimal-vs-percent preference; every other kind formats as before.
     const asPercent = showFractionAsPercent(spec.kind, fractionDisplay);
@@ -782,16 +798,18 @@ export function DrugMonographSidebar({
             </span>
           ) : null}
           {!hasValue && routeSummaryEntries.length > 0 ? null : isConcentrationParam &&
-            displayRange ? (
+            displayRange &&
+            tooltipRange ? (
             <UnitTooltip
-              value={representativeValue(displayRange)}
+              value={representativeValue(tooltipRange)}
               low={
-                typeof displayRange.min === 'number' ? displayRange.min : null
+                typeof tooltipRange.min === 'number' ? tooltipRange.min : null
               }
               high={
-                typeof displayRange.max === 'number' ? displayRange.max : null
+                typeof tooltipRange.max === 'number' ? tooltipRange.max : null
               }
               unit={displayRange.unit}
+              sourceUnit={tooltipRange.unit}
               molecularWeight={drugRow.molecularWeight ?? null}
             >
               {formatted}
@@ -1461,219 +1479,221 @@ export function DrugMonographSidebar({
   }
 
   return (
-    <div className="space-y-2" data-testid="drug-monograph-sidebar">
-      {renderSectionBox({
-        id: 'favorites',
-        title: t('sidebar.favorites'),
-        testId: 'parameter-group-favorites',
-        children: () =>
-          favoriteParams.length > 0 ? (
-            <dl className="space-y-2 text-sm">
-              {favoriteParams.map((pid) => renderParameterRow(pid))}
-            </dl>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              {t('sidebar.noFavoritesOnDrug')}
-            </p>
-          ),
-      })}
+    <DrugUnitScope isEthanol={isEthanol}>
+      <div className="space-y-2" data-testid="drug-monograph-sidebar">
+        {renderSectionBox({
+          id: 'favorites',
+          title: t('sidebar.favorites'),
+          testId: 'parameter-group-favorites',
+          children: () =>
+            favoriteParams.length > 0 ? (
+              <dl className="space-y-2 text-sm">
+                {favoriteParams.map((pid) => renderParameterRow(pid))}
+              </dl>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {t('sidebar.noFavoritesOnDrug')}
+              </p>
+            ),
+        })}
 
-      {hasMetabolismData(drugRow.metabolism) || canEditMetabolism || canFlag
-        ? renderSectionBox({
-            id: 'metabolism',
-            title: t('sidebar.metabolism'),
-            testId: 'parameter-group-metabolism',
-            children: renderMetabolismSection,
-          })
-        : null}
+        {hasMetabolismData(drugRow.metabolism) || canEditMetabolism || canFlag
+          ? renderSectionBox({
+              id: 'metabolism',
+              title: t('sidebar.metabolism'),
+              testId: 'parameter-group-metabolism',
+              children: renderMetabolismSection,
+            })
+          : null}
 
-      {/* Parameter sections, grouped by category (#302). Each section is
-          its own box; only the persisted active section renders rows. */}
-      {groupsToRender.map((groupId: ParameterGroupId) => {
-        const groupDef = PARAMETER_GROUP_BY_ID.get(groupId);
-        // Model-structure axes (CV-1b) live in the pharmacokinetics group but are
-        // categorical, cited declarations — not numeric rows. They render in
-        // their own sub-section below, so keep them out of the numeric row loop.
-        const params = getParametersInGroup(groupId).filter(
-          (pid) => !isModelStructureParameter(pid),
-        );
-        const showModelStructure = groupId === 'pharmacokinetics';
-        if (!groupDef) return null;
-        return renderSectionBox({
-          id: groupId,
-          title: t(groupDef.i18nKey),
-          testId: `parameter-group-${groupId}`,
-          children: () => (
-            <>
-              {groupId === 'pharmacodynamics' ? renderMechanismsSection() : null}
-              {params.length > 0 || groupId === 'postmortem' ? (
-                <dl className="space-y-2 text-sm">
-                  {params.map((pid) => renderParameterRow(pid))}
-                  {groupId === 'postmortem' ? renderDerivedIpmrRow() : null}
-                </dl>
-              ) : null}
-              {/* The section owns its heading + divider so it renders nothing
-                  at all when a read-only monograph has no declarations. */}
-              {showModelStructure ? (
-                <ModelStructureSection
-                  drugId={drugRow.id}
-                  canEdit={canSubmitParameterEntry}
-                  isAdmin={canDirectWrite}
-                  onMutated={loadDrug}
-                />
-              ) : null}
-              {/* Cmax has no drug-level row above (a peak concentration means
-                  nothing without its dose context); its cited readings live
-                  in their own section. */}
-              {groupId === 'dose_exposure' ? (
-                <CmaxSection
-                  drugId={drugRow.id}
-                  drugName={drugDisplayName}
-                  canEdit={canSubmitParameterEntry}
-                  isAdmin={canDirectWrite}
-                  onMutated={loadDrug}
-                />
-              ) : null}
-              {groupId === 'analytics_detection'
-                ? renderMethodLimitsRows()
-                : null}
-              {/* The postmortem cohort's own row sits with the other
-                  postmortem quantities. Renders nothing without the
-                  rettstoks/admin gate. */}
-              {groupId === 'postmortem' ? (
-                <div className="mt-2">
-                  <DrugPmConcentrations
-                    drugDbId={drugRow.id}
-                    molecularWeight={drugRow.molecularWeight ?? null}
-                    compact
+        {/* Parameter sections, grouped by category (#302). Each section is
+            its own box; only the persisted active section renders rows. */}
+        {groupsToRender.map((groupId: ParameterGroupId) => {
+          const groupDef = PARAMETER_GROUP_BY_ID.get(groupId);
+          // Model-structure axes (CV-1b) live in the pharmacokinetics group but are
+          // categorical, cited declarations — not numeric rows. They render in
+          // their own sub-section below, so keep them out of the numeric row loop.
+          const params = getParametersInGroup(groupId).filter(
+            (pid) => !isModelStructureParameter(pid),
+          );
+          const showModelStructure = groupId === 'pharmacokinetics';
+          if (!groupDef) return null;
+          return renderSectionBox({
+            id: groupId,
+            title: t(groupDef.i18nKey),
+            testId: `parameter-group-${groupId}`,
+            children: () => (
+              <>
+                {groupId === 'pharmacodynamics' ? renderMechanismsSection() : null}
+                {params.length > 0 || groupId === 'postmortem' ? (
+                  <dl className="space-y-2 text-sm">
+                    {params.map((pid) => renderParameterRow(pid))}
+                    {groupId === 'postmortem' ? renderDerivedIpmrRow() : null}
+                  </dl>
+                ) : null}
+                {/* The section owns its heading + divider so it renders nothing
+                    at all when a read-only monograph has no declarations. */}
+                {showModelStructure ? (
+                  <ModelStructureSection
+                    drugId={drugRow.id}
+                    canEdit={canSubmitParameterEntry}
+                    isAdmin={canDirectWrite}
+                    onMutated={loadDrug}
                   />
-                </div>
-              ) : null}
-            </>
-          ),
-        });
-      })}
+                ) : null}
+                {/* Cmax has no drug-level row above (a peak concentration means
+                    nothing without its dose context); its cited readings live
+                    in their own section. */}
+                {groupId === 'dose_exposure' ? (
+                  <CmaxSection
+                    drugId={drugRow.id}
+                    drugName={drugDisplayName}
+                    canEdit={canSubmitParameterEntry}
+                    isAdmin={canDirectWrite}
+                    onMutated={loadDrug}
+                  />
+                ) : null}
+                {groupId === 'analytics_detection'
+                  ? renderMethodLimitsRows()
+                  : null}
+                {/* The postmortem cohort's own row sits with the other
+                    postmortem quantities. Renders nothing without the
+                    rettstoks/admin gate. */}
+                {groupId === 'postmortem' ? (
+                  <div className="mt-2">
+                    <DrugPmConcentrations
+                      drugDbId={drugRow.id}
+                      molecularWeight={drugRow.molecularWeight ?? null}
+                      compact
+                    />
+                  </div>
+                ) : null}
+              </>
+            ),
+          });
+        })}
 
-      <div className="pt-1">
-        <Link
-          to={buildSimulatorUrl({
-            id: buildDrugComponentId(drug),
-            pubchemCid: drug.pubchemCid,
-            dbId: drug.id,
-          })}
-          className="text-xs text-primary hover:underline"
-        >
-          {t('sidebar.openInSimulator')}
-        </Link>
+        <div className="pt-1">
+          <Link
+            to={buildSimulatorUrl({
+              id: buildDrugComponentId(drug),
+              pubchemCid: drug.pubchemCid,
+              dbId: drug.id,
+            })}
+            className="text-xs text-primary hover:underline"
+          >
+            {t('sidebar.openInSimulator')}
+          </Link>
+        </div>
+
+        {/* Dialogs */}
+        {showMetabolismEditor && canEditMetabolism && (
+          <MetabolismEditForm
+            drugId={drug.id}
+            drugName={drugDisplayName}
+            metabolism={drugRow.metabolism ?? null}
+            onClose={() => setShowMetabolismEditor(false)}
+            onSaved={() => {
+              setShowMetabolismEditor(false);
+              loadDrug();
+              loadMetabolismPendingEdits(drug.id);
+            }}
+          />
+        )}
+
+        {showReceptorEditor && canEditMechanisms && (
+          <ReceptorTargetEditForm
+            drugId={drug.id}
+            drugName={drugDisplayName}
+            receptorTargets={drugRow.receptorTargets ?? []}
+            onClose={() => setShowReceptorEditor(false)}
+            onSaved={() => {
+              setShowReceptorEditor(false);
+              loadDrug();
+              loadReceptorPendingEdits(drug.id);
+            }}
+          />
+        )}
+
+        {dialog?.kind === 'edit' && canEdit && (
+          <ParameterEditForm
+            drugId={drug.id}
+            parameter={dialog.parameter}
+            currentValue={readDrugMetadataValue(
+              drug as unknown as Record<string, unknown>,
+              dialog.parameter,
+            )}
+            onClose={() => setDialog(null)}
+            onSaved={() => {
+              setDialog(null);
+              loadDrug();
+              // A committed value change auto-resolves any priority flag on
+              // this parameter server-side; refetch so it disappears here too.
+              loadPriorityFlags(drug.id);
+            }}
+          />
+        )}
+
+        {dialog?.kind === 'history' && (
+          <ParameterHistoryDialog
+            drugId={drug.id}
+            parameter={dialog.parameter}
+            verification={verificationLevels[dialog.parameter]}
+            focusRevisionId={dialog.focusId}
+            onClose={closeLinkedDialog}
+          />
+        )}
+
+        {dialog?.kind === 'discussion' && (
+          <ParameterDiscussionPanel
+            drugId={drug.id}
+            parameter={dialog.parameter}
+            verification={verificationLevels[dialog.parameter]}
+            focusCommentId={dialog.focusId}
+            onClose={closeLinkedDialog}
+          />
+        )}
+
+        {dialog?.kind === 'sources' && (
+          <ParameterSourcesDialog
+            drugId={drugRow.id}
+            drugName={drugDisplayName}
+            parameter={dialog.parameter}
+            summaries={drugRow.parameterSummaries}
+            routeSummaries={drugRow.parameterRouteSummaries}
+            molecularWeight={drugRow.molecularWeight ?? null}
+            bloodPlasmaRatio={drugRow.bloodPlasmaRatio ?? null}
+            canEdit={canSubmitParameterEntry}
+            isAdmin={canDirectWrite}
+            onMutated={loadDrug}
+            onClose={() => setDialog(null)}
+          />
+        )}
+
+        {dialog?.kind === 'flag' && canFlag && (
+          <ParameterFlagDialog
+            drugId={drug.id}
+            parameter={dialog.parameter}
+            onClose={() => setDialog(null)}
+            onFlagged={() => {
+              setDialog(null);
+              loadPriorityFlags(drug.id);
+            }}
+          />
+        )}
+
+        {flagArea && canFlag && (
+          <ParameterFlagDialog
+            drugId={drug.id}
+            parameter={flagArea}
+            onClose={() => setFlagArea(null)}
+            onFlagged={() => {
+              setFlagArea(null);
+              loadPriorityFlags(drug.id);
+            }}
+          />
+        )}
       </div>
-
-      {/* Dialogs */}
-      {showMetabolismEditor && canEditMetabolism && (
-        <MetabolismEditForm
-          drugId={drug.id}
-          drugName={drugDisplayName}
-          metabolism={drugRow.metabolism ?? null}
-          onClose={() => setShowMetabolismEditor(false)}
-          onSaved={() => {
-            setShowMetabolismEditor(false);
-            loadDrug();
-            loadMetabolismPendingEdits(drug.id);
-          }}
-        />
-      )}
-
-      {showReceptorEditor && canEditMechanisms && (
-        <ReceptorTargetEditForm
-          drugId={drug.id}
-          drugName={drugDisplayName}
-          receptorTargets={drugRow.receptorTargets ?? []}
-          onClose={() => setShowReceptorEditor(false)}
-          onSaved={() => {
-            setShowReceptorEditor(false);
-            loadDrug();
-            loadReceptorPendingEdits(drug.id);
-          }}
-        />
-      )}
-
-      {dialog?.kind === 'edit' && canEdit && (
-        <ParameterEditForm
-          drugId={drug.id}
-          parameter={dialog.parameter}
-          currentValue={readDrugMetadataValue(
-            drug as unknown as Record<string, unknown>,
-            dialog.parameter,
-          )}
-          onClose={() => setDialog(null)}
-          onSaved={() => {
-            setDialog(null);
-            loadDrug();
-            // A committed value change auto-resolves any priority flag on
-            // this parameter server-side; refetch so it disappears here too.
-            loadPriorityFlags(drug.id);
-          }}
-        />
-      )}
-
-      {dialog?.kind === 'history' && (
-        <ParameterHistoryDialog
-          drugId={drug.id}
-          parameter={dialog.parameter}
-          verification={verificationLevels[dialog.parameter]}
-          focusRevisionId={dialog.focusId}
-          onClose={closeLinkedDialog}
-        />
-      )}
-
-      {dialog?.kind === 'discussion' && (
-        <ParameterDiscussionPanel
-          drugId={drug.id}
-          parameter={dialog.parameter}
-          verification={verificationLevels[dialog.parameter]}
-          focusCommentId={dialog.focusId}
-          onClose={closeLinkedDialog}
-        />
-      )}
-
-      {dialog?.kind === 'sources' && (
-        <ParameterSourcesDialog
-          drugId={drugRow.id}
-          drugName={drugDisplayName}
-          parameter={dialog.parameter}
-          summaries={drugRow.parameterSummaries}
-          routeSummaries={drugRow.parameterRouteSummaries}
-          molecularWeight={drugRow.molecularWeight ?? null}
-          bloodPlasmaRatio={drugRow.bloodPlasmaRatio ?? null}
-          canEdit={canSubmitParameterEntry}
-          isAdmin={canDirectWrite}
-          onMutated={loadDrug}
-          onClose={() => setDialog(null)}
-        />
-      )}
-
-      {dialog?.kind === 'flag' && canFlag && (
-        <ParameterFlagDialog
-          drugId={drug.id}
-          parameter={dialog.parameter}
-          onClose={() => setDialog(null)}
-          onFlagged={() => {
-            setDialog(null);
-            loadPriorityFlags(drug.id);
-          }}
-        />
-      )}
-
-      {flagArea && canFlag && (
-        <ParameterFlagDialog
-          drugId={drug.id}
-          parameter={flagArea}
-          onClose={() => setFlagArea(null)}
-          onFlagged={() => {
-            setFlagArea(null);
-            loadPriorityFlags(drug.id);
-          }}
-        />
-      )}
-    </div>
+    </DrugUnitScope>
   );
 }

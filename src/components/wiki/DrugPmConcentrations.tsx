@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { AlertTriangle, Skull } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { UnitTooltip } from '@/components/ui/UnitTooltip';
-import { useAppStore } from '@/stores/appStore';
+import { useDisplayUnits } from '@/components/ui/DrugUnitScope';
 import { useAuthStore } from '@/stores/authStore';
 import { canAccessPmConcentrations } from '@/lib/featureAccess';
 import {
@@ -87,7 +87,7 @@ export function DrugPmConcentrations({
   // Cache identity: this data is gated, and signing in as somebody else in
   // this SPA replaces the store without reloading the module.
   const identity = useAuthStore((s) => s.user?.id ?? null);
-  const preferredUnit = useAppStore((s) => s.enabledUnits)[0] ?? 'mg/L';
+  const preferredUnit = useDisplayUnits()[0] ?? 'mg/L';
   // The answer is stored WITH the drug it answers for, and rendered only when
   // the two still agree.
   //

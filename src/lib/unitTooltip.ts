@@ -1,17 +1,20 @@
 import {
-  convertConcentration,
+  convertToDisplayUnit,
   isConcentrationUnit,
+  isEthanolDisplayUnit,
   isMolarUnit,
   normalizeUnit,
   type ConcentrationUnit,
+  type DisplayConcentrationUnit,
 } from './unitConversion';
 import { formatWithMaxDecimals } from './rangeUtils';
 import { getParameterSpec } from './drugParameters';
 
 export type ConcentrationKind = 'molar' | 'mass';
 
-function kindOf(unit: ConcentrationUnit): ConcentrationKind {
-  return isMolarUnit(unit) ? 'molar' : 'mass';
+function kindOf(unit: DisplayConcentrationUnit): ConcentrationKind {
+  // ‰ and % are mass-per-volume (g/L, g/dL), so they group with the mass units.
+  return !isEthanolDisplayUnit(unit) && isMolarUnit(unit) ? 'molar' : 'mass';
 }
 
 /**
@@ -73,11 +76,11 @@ function formatDisplayValue(value: number): string {
 function safeConvert(
   value: number,
   from: ConcentrationUnit,
-  to: ConcentrationUnit,
+  to: DisplayConcentrationUnit,
   molecularWeight: number | null | undefined,
 ): number | null {
   try {
-    return convertConcentration(value, from, to, molecularWeight ?? undefined);
+    return convertToDisplayUnit(value, from, to, molecularWeight ?? undefined);
   } catch {
     // Cross-kind conversion without MW throws — treat as "not available".
     return null;
@@ -95,6 +98,18 @@ function asConcUnit(unit: string | null | undefined): ConcentrationUnit | null {
 }
 
 /**
+ * Like {@link asConcUnit}, but also accepts the ethanol display units (‰, %).
+ * Only for units something is converted *into* — a source unit stays strict,
+ * since a stored `%` is a fraction, never a concentration.
+ */
+function asTargetUnit(
+  unit: string | null | undefined,
+): DisplayConcentrationUnit | null {
+  if (unit && isEthanolDisplayUnit(unit)) return unit;
+  return asConcUnit(unit);
+}
+
+/**
  * Resolve the unit list the tooltip should iterate over. When the caller
  * supplies `enabledUnits` (the user's #306 preference), the tooltip
  * honors it; otherwise it falls back to the curated default. Unrecognized
@@ -102,12 +117,12 @@ function asConcUnit(unit: string | null | undefined): ConcentrationUnit | null {
  */
 function targetUnits(
   enabledUnits: readonly string[] | null | undefined,
-): ConcentrationUnit[] {
+): DisplayConcentrationUnit[] {
   if (!enabledUnits || enabledUnits.length === 0) return ALTERNATIVE_UNITS;
   const seen = new Set<string>();
-  const out: ConcentrationUnit[] = [];
+  const out: DisplayConcentrationUnit[] = [];
   for (const u of enabledUnits) {
-    const norm = asConcUnit(u);
+    const norm = asTargetUnit(u);
     if (norm && !seen.has(norm)) {
       seen.add(norm);
       out.push(norm);
@@ -159,7 +174,7 @@ export interface AlternativeRange {
 }
 
 export interface PreferredUnitDisplay {
-  unit: ConcentrationUnit;
+  unit: DisplayConcentrationUnit;
   /** Value(s) formatted in the preferred unit, e.g. `2 172–3 620` or `≤ 33.333`. */
   formatted: string;
 }
@@ -185,7 +200,7 @@ export function getPreferredUnitDisplay(
 ): PreferredUnitDisplay | null {
   const source = asConcUnit(sourceUnit);
   if (!source) return null;
-  const preferred = asConcUnit(enabledUnits?.[0]);
+  const preferred = asTargetUnit(enabledUnits?.[0]);
   if (!preferred || preferred === source) return null;
 
   const convert = (v: number | null | undefined) => {
@@ -237,14 +252,14 @@ export function getConversionTooltipRows(
   const { value, low, high } = args;
   const source = asConcUnit(sourceUnit);
   if (!source) return [];
-  const display = asConcUnit(displayUnit) ?? source;
+  const display = asTargetUnit(displayUnit) ?? source;
 
   // Ordered, de-duplicated target list. The authored unit comes first when it
   // isn't the one on display; the user's enabled units follow. The unit shown
   // in prose is skipped entirely.
-  const targets: ConcentrationUnit[] = [];
+  const targets: DisplayConcentrationUnit[] = [];
   const queued = new Set<string>();
-  const queue = (unit: ConcentrationUnit) => {
+  const queue = (unit: DisplayConcentrationUnit) => {
     if (unit === display || queued.has(unit)) return;
     queued.add(unit);
     targets.push(unit);
