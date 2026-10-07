@@ -24,6 +24,7 @@ import {
   agents,
   disputes,
   notifications,
+  wikiPages,
   pendingEdits,
 } from '../../db/schema.js';
 import queueHandler from '../../api/agent-adjudication-queue.js';
@@ -92,7 +93,13 @@ async function verdictOn(agentId: number, editId: number, verdict: string, tier:
 
 /** A clearance entry proposal with a T1 dispute and a T2 approval, and its open case. */
 async function seedCase(
-  opts: { humanDispute?: boolean; parameter?: string; value?: number; unit?: string } = {},
+  opts: {
+    humanDispute?: boolean;
+    parameter?: string;
+    value?: number;
+    unit?: string;
+    edit?: Record<string, unknown>;
+  } = {},
 ) {
   const author = await seedAgent('author', { tier: 'mid' });
   const t1 = await seedAgent('t1', { tier: 'mid' });
@@ -107,6 +114,7 @@ async function seedCase(
         op: 'create',
         input: { value: opts.value ?? 60, unit: opts.unit ?? 'L/h', quote: 'The paper reports it.' },
       },
+      ...opts.edit,
       submittedBy: author.userId,
       status: 'pending',
     })
@@ -196,6 +204,11 @@ describe('T3 case feed', () => {
     const listed = await call(queueHandler, { userId: s.a.userId, method: 'GET', url: '/api/agent-adjudication-queue' });
     expect(listed.status).toBe(200);
     expect(listed.body.available.map((c: { caseId: number }) => c.caseId)).toEqual([s.caseId]);
+    // Identifiers only before a claim: why the case opened and whose
+    // objection it rests on would let an adjudicator pick cases by provenance.
+    expect(Object.keys(listed.body.available[0]).sort()).toEqual(
+      ['caseId', 'openedAt', 'targetId', 'targetType', 'targetVersion'],
+    );
 
     // No content before a seat is claimed.
     expect((await caseFile(s.a.userId, s.caseId)).status).toBe(404);
@@ -335,6 +348,37 @@ describe('T3 opinions', () => {
     expect([r.status, r.body.code]).toEqual([409, 'adjudication_target_version_moved']);
     const [kase] = await db.select().from(adjudicationCases).where(eq(adjudicationCases.id, s.caseId));
     expect([kase!.state, kase!.invalidatedReason]).toEqual(['invalidated', 'target_version_moved']);
+  });
+
+  it('closes the case when the target can no longer be served, though its version is unchanged', async () => {
+    const owner = await seedUser(db, { email: 'w@example.com', username: 'w', role: 'editor' });
+    const [page] = await db
+      .insert(wikiPages)
+      .values({ slug: 'kokain', title: 'Kokain', createdBy: owner, updatedBy: owner })
+      .returning({ id: wikiPages.id });
+    const s = await seedCase({
+      edit: {
+        editType: 'wiki_page',
+        targetId: page!.id,
+        parameter: null,
+        proposedValue: { title: 'Kokain', content: {} },
+      },
+    });
+    await claim(s.a.userId, s.caseId);
+    await claim(s.b.userId, s.caseId);
+    expect((await opinion(s.a.userId, { caseId: s.caseId, targetVersion: s.version })).status).toBe(201);
+    // Unpublished under the panel: the pending edit's version does not move.
+    await db.update(wikiPages).set({ status: 'draft' }).where(eq(wikiPages.id, page!.id));
+    const refused = await opinion(s.b.userId, { caseId: s.caseId, targetVersion: s.version });
+    expect(refused.status).toBe(409);
+    expect(refused.raw).toContain('target_unavailable');
+    const [kase] = await db.select().from(adjudicationCases).where(eq(adjudicationCases.id, s.caseId));
+    expect(kase).toMatchObject({
+      state: 'invalidated',
+      invalidatedReason: 'target_unavailable',
+      sealedAt: null,
+      recommendation: null,
+    });
   });
 
   it('refuses a writer whose tier was revoked after the claim, and snapshots the tier', async () => {

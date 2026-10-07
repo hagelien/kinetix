@@ -87,7 +87,13 @@ export const LIVE_CASE_STATES = ['open', 'sealed'] as const;
  * dispute withdrawn in the control phase, a verdict changed) — the case
  * opened on a disagreement that did not survive, so the panel must not get it.
  */
-export type InvalidatedReason = 'target_version_moved' | 'disagreement_withdrawn';
+export type InvalidatedReason =
+  | 'target_version_moved'
+  | 'disagreement_withdrawn'
+  // The version is unchanged but the target can no longer be served to a
+  // panelist (a wiki page unpublished under it, say): nobody may adjudicate
+  // a proposition they cannot read.
+  | 'target_unavailable';
 
 export type DetectOutcome = {
   /** Live cases on this target closed because the target moved under them. */

@@ -93,6 +93,11 @@ person). The work lands in three pull requests:
      version-pinned payload;
    - a dimensionless range parameter (pKa, logP, logD; canonical unit `''`)
      carries a value like any other;
+   - the open-case feed serves identifiers only: triggers and dispute origin
+     are served after a claim, so nobody picks cases by provenance;
+   - an opinion write re-checks that the target can still be served to the
+     panel; one that cannot (a wiki page unpublished under an unchanged
+     version) closes the case as `target_unavailable`;
    - blindness is keyed on the seal itself, not the state, so a case closed
      mid-panel never unblinds;
    - the handoff notification reuses the dispute fan-out with no dispute id
