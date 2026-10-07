@@ -142,6 +142,10 @@ describe('CmaxSection', () => {
       expect(screen.getByTestId('cmax-entry').textContent).toContain('mg/L'),
     );
     expect(container.textContent).not.toContain('379.7 ng/mL');
+    // The tooltip keeps the authored centre, not just the interval.
+    expect(container.querySelector('[role="tooltip"]')?.textContent).toContain(
+      '379.7 (347.5–517.7) ng/mL',
+    );
   });
 
   it('keeps a reading as authored when the primary unit cannot be reached', async () => {

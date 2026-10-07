@@ -56,6 +56,19 @@ export function formatCmaxValue(e: ParameterEntryRow): string {
 }
 
 /**
+ * The authored figures without their unit — "84 (70–98)", "< 5" — so a
+ * converted reading's tooltip keeps the source's own centre, not just its
+ * interval.
+ */
+export function formatCmaxFigures(e: ParameterEntryRow): string | null {
+  const centre = e.doseContext?.centralValue ?? e.median ?? null;
+  if (e.qualifier && centre != null) return `${e.qualifier} ${centre}`;
+  const bounds = e.low != null && e.high != null ? `${e.low}–${e.high}` : null;
+  if (centre != null) return bounds ? `${centre} (${bounds})` : `${centre}`;
+  return bounds;
+}
+
+/**
  * The same reading re-expressed in `targetUnit` — the reader's primary display
  * unit (their ethanol unit on an ethanol monograph) — keeping the
  * "centre (low–high)" shape. Null when it
@@ -524,6 +537,7 @@ function CmaxReading({
       high={entry.high}
       unit={targetUnit}
       sourceUnit={entry.unit}
+      sourceFormatted={formatCmaxFigures(entry)}
       molecularWeight={molecularWeight}
     >
       {converted}
