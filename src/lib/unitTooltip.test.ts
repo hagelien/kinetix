@@ -251,3 +251,36 @@ describe('unitTooltip — isConcentrationParameterId', () => {
     expect(isConcentrationParameterId(undefined)).toBe(false);
   });
 });
+
+describe('unitTooltip — degenerate ranges', () => {
+  it('shows a range with equal endpoints as a single figure', () => {
+    const rows = getConversionTooltipRows(
+      { low: 2.76, high: 2.76 },
+      'µmol/L',
+      'µmol/L',
+      309.4,
+      ['mg/L'],
+    );
+    expect(rows.map((r) => r.formatted)).toEqual(['0.854']);
+    expect(
+      getPreferredUnitDisplay({ low: 2.76, high: 2.76 }, 'µmol/L', 309.4, ['mg/L'])
+        ?.formatted,
+    ).toBe('0.854');
+  });
+
+  it('keeps distinct endpoints a range even when they round to the same label', () => {
+    // 1.001 and 1.002 mg/L both round to "1 000" µg/L — still a range.
+    const rows = getConversionTooltipRows(
+      { low: 1.001, high: 1.002 },
+      'mg/L',
+      'mg/L',
+      null,
+      ['µg/L'],
+    );
+    expect(rows.map((r) => r.formatted)).toEqual([`1${NBSP}000–1${NBSP}000`]);
+    expect(
+      getPreferredUnitDisplay({ low: 1.001, high: 1.002 }, 'mg/L', null, ['µg/L'])
+        ?.formatted,
+    ).toBe(`1${NBSP}000–1${NBSP}000`);
+  });
+});
