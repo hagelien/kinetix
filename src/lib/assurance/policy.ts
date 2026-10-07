@@ -82,7 +82,7 @@ export const KINETIX_UNQUOTED_TAG = 'unquoted_calculation_driving';
 /** Stable rule ids. These reach persisted decision records — do not renumber. */
 export const KINETIX_RULE_IDS = {
   base: 'base',
-  /** Retired in `kinetix-consensus@v2` / `kinetix-consensus-apply@v3`; kept because persisted v1/v2 records name it. */
+  /** Retired in `kinetix-consensus v2` / `kinetix-consensus-apply@v3`; kept because persisted v1/v2 records name it. */
   humanAuthored: 'human-authored',
   unattributed: 'unattributed',
   highRisk: 'high-risk',

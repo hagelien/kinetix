@@ -1325,7 +1325,7 @@ export function abstainedByAgentBefore(
 // moderator queue untouched until a human moderator happened to look (#1006
 // follow-up — two wiki_fact proposals sat a week with zero agent activity).
 // Human-submitted edits are now queued for peer verification like any other.
-// Since kinetix-consensus@v2 there is no asymmetry left on the apply side
+// Since kinetix-consensus v2 there is no asymmetry left on the apply side
 // either: agent verdicts on a person's proposal publish it at quorum exactly
 // as they would an agent's, and a dispute holds it.
 /**

@@ -432,7 +432,7 @@ describe('5. changing the payload invalidates the old version', () => {
 });
 
 // Invariant 6 was "agent approvals alone never publish a human's proposal".
-// It was retired with `kinetix-consensus@v2` / `kinetix-consensus-apply@v3`,
+// It was retired with `kinetix-consensus v2` / `kinetix-consensus-apply@v3`,
 // when the owner decided a person's proposal publishes on agent consensus under
 // the same bar as an agent's. What replaces it is the stronger statement below
 // — authorship never moves the bar either way — plus the one authorship that
