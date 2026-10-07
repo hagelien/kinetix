@@ -527,7 +527,8 @@ describe('T3 sealing, convergence and the T4 handoff', () => {
       .where(eq(pendingEdits.id, s.editId));
     // A baseline served beside the target moves without its version moving.
     await db.update(drugs).set({ names: { nb: 'Etter', en: 'After' } }).where(eq(drugs.id, drugId));
-    expect((await caseFile(s.b.userId, s.caseId)).body.target.payload.drugName).toBe('Etter');
+    // Both the panel and a person keep the packet the panel was bound to.
+    expect((await caseFile(s.b.userId, s.caseId)).body.target.payload.drugName).toBe('Før');
     const asPerson = await caseFile(reviewer, s.caseId, 'editor');
     expect(asPerson.body.target.asAdjudicated).toBe(true);
     expect(asPerson.body.target.sourceRow.proposedValue.input.value).toBe(60);
@@ -538,6 +539,39 @@ describe('T3 sealing, convergence and the T4 handoff', () => {
       targetVersion: s.version,
     });
     expect(asPerson.body.target.served.payload).toEqual(asPanelist.body.target.payload);
+  });
+
+  it('binds both seats to one hydrated target, and closes the case when a baseline drifts between them', async () => {
+    const drugId = await seedDrug(db, { names: { nb: 'Før', en: 'Before' } });
+    const s = await seedCase({ edit: { targetId: drugId } });
+    await claim(s.a.userId, s.caseId);
+    const [bound] = await db.select().from(adjudicationCases).where(eq(adjudicationCases.id, s.caseId));
+    expect(bound!.adjudicatedTarget!.served).toMatchObject({ targetVersion: s.version });
+    expect((await opinion(s.a.userId, { caseId: s.caseId, targetVersion: s.version, resolvedValue: 60, resolvedUnit: 'L/h' })).status).toBe(201);
+
+    // The drug served beside the edit is renamed: the edit's version holds.
+    await db.update(drugs).set({ names: { nb: 'Etter', en: 'After' } }).where(eq(drugs.id, drugId));
+    // A later claim cannot seat anyone on a packet the first seat did not see.
+    const refused = await claim(s.b.userId, s.caseId);
+    expect(refused.status).toBe(409);
+    expect(refused.raw).toContain('adjudication_target_drifted');
+    const [kase] = await db.select().from(adjudicationCases).where(eq(adjudicationCases.id, s.caseId));
+    expect(kase).toMatchObject({ state: 'invalidated', invalidatedReason: 'target_drifted', sealedAt: null });
+  });
+
+  it('refuses a write once a baseline drifted after both seats were bound', async () => {
+    const drugId = await seedDrug(db, { names: { nb: 'Før', en: 'Before' } });
+    const s = await seedCase({ edit: { targetId: drugId } });
+    await claim(s.a.userId, s.caseId);
+    await claim(s.b.userId, s.caseId);
+    const value = { resolvedValue: 60, resolvedUnit: 'L/h' };
+    expect((await opinion(s.a.userId, { caseId: s.caseId, targetVersion: s.version, ...value })).status).toBe(201);
+    await db.update(drugs).set({ names: { nb: 'Etter', en: 'After' } }).where(eq(drugs.id, drugId));
+    const refused = await opinion(s.b.userId, { caseId: s.caseId, targetVersion: s.version, ...value });
+    expect(refused.status).toBe(409);
+    expect(refused.raw).toContain('target_drifted');
+    const [kase] = await db.select().from(adjudicationCases).where(eq(adjudicationCases.id, s.caseId));
+    expect(kase).toMatchObject({ state: 'invalidated', invalidatedReason: 'target_drifted', recommendation: null });
   });
 
   it('compares dimensionless parameters (pKa) on their values, in the unit ""', async () => {
