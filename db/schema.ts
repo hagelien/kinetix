@@ -2717,6 +2717,17 @@ export type AdjudicatedTarget = {
   comparison: { canonicalUnit: string | null; molecularWeight: number | null };
   /** The decided disputes on the target as served to the panel. */
   decidedDisputes: AdjudicationDecidedDispute[];
+  /**
+   * The lower-tier record as served to the panel: the copied verdicts and the
+   * open disputes on the version, read at binding. A dispute filed later
+   * still reaches the case record (and decides who closes it) at sealing,
+   * but never one seat's case file and not the other's.
+   */
+  lowerTier: {
+    t2Verdicts: AdjudicationVerdictSnapshot[];
+    t1Verdicts: AdjudicationVerdictSnapshot[];
+    openDisputes: AdjudicationDisputeSnapshot[];
+  };
 };
 
 export type AdjudicationDecidedDispute = {

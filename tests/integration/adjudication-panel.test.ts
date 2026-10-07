@@ -310,6 +310,51 @@ describe('T3 case feed', () => {
     expect(b.body.lowerTier.decidedDisputes).toEqual(a.body.lowerTier.decidedDisputes);
   });
 
+  it('serves both seats the open disputes as they stood when the panel was bound', async () => {
+    const s = await seedCase();
+    await claim(s.a.userId, s.caseId);
+    const boundOpen = (await caseFile(s.a.userId, s.caseId)).body.lowerTier.openDisputes;
+    // A new dispute on the version, merged into the case by the detector.
+    const other = await seedAgent('t1b', { tier: 'mid' });
+    await db.insert(disputes).values({
+      targetType: 'pending_edit',
+      targetId: s.editId,
+      createdBy: other.userId,
+      source: 'agent',
+      reasonMd: 'Ny innsigelse.',
+      targetVersion: s.version,
+    });
+    await detectAdjudicationCase({ targetType: 'pending_edit', targetId: s.editId });
+    const [kase] = await db.select().from(adjudicationCases).where(eq(adjudicationCases.id, s.caseId));
+    expect(kase!.t1Snapshot.openDisputes.length).toBe(boundOpen.length + 1);
+
+    await claim(s.b.userId, s.caseId);
+    expect((await caseFile(s.a.userId, s.caseId)).body.lowerTier.openDisputes).toEqual(boundOpen);
+    expect((await caseFile(s.b.userId, s.caseId)).body.lowerTier.openDisputes).toEqual(boundOpen);
+  });
+
+  it('withholds a case from a seated panelist once its wiki page is unpublished', async () => {
+    const owner = await seedUser(db, { email: 'w@example.com', username: 'w', role: 'editor' });
+    const [page] = await db
+      .insert(wikiPages)
+      .values({ slug: 'kokain', title: 'Kokain', createdBy: owner, updatedBy: owner })
+      .returning({ id: wikiPages.id });
+    const s = await seedCase({
+      edit: {
+        editType: 'wiki_page',
+        targetId: page!.id,
+        parameter: null,
+        proposedValue: { title: 'Kokain', content: {} },
+      },
+    });
+    await claim(s.a.userId, s.caseId);
+    expect((await caseFile(s.a.userId, s.caseId)).status).toBe(200);
+    await db.update(wikiPages).set({ status: 'draft' }).where(eq(wikiPages.id, page!.id));
+    const hidden = await caseFile(s.a.userId, s.caseId);
+    expect(hidden.status).toBe(404);
+    expect(hidden.raw).not.toContain('Kokain');
+  });
+
   it('keeps a case abandoned before sealing blind, whatever its state', async () => {
     const s = await seedCase();
     await claim(s.a.userId, s.caseId);

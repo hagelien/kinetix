@@ -12,7 +12,8 @@
  * packet both panelists were served.
  *
  * The binding also freezes what else the panel is served or compared
- * through: the decided disputes on the target, and the canonical unit and
+ * through: the lower-tier record (copied verdicts and the open disputes on
+ * the version), the decided disputes on the target, and the canonical unit and
  * molecular weight the two opinions are converted with — so a dispute
  * resolved, or a molecular weight edited, between the two seats changes
  * neither what they read nor how their values compare.
@@ -27,9 +28,15 @@ import {
   type AdjudicationDecidedDispute,
   type AgentVerificationTargetType,
 } from '../../../db/schema.js';
+
+type AdjudicationCase = typeof adjudicationCases.$inferSelect;
 import { fetchSingleCandidate, type QueueItem } from '../../agent-verifications-queue.js';
 import { adjudicationTargetParameter, readTargetRow } from './target.js';
-import type { InvalidatedReason } from './cases.js';
+import {
+  mergeOpenDisputes,
+  openDisputesOnVersion,
+  type InvalidatedReason,
+} from './cases.js';
 
 /** The target as the case file serves it now, or null when it cannot be served. */
 export function liveHydratedTarget(
@@ -123,6 +130,8 @@ export async function bindPanelTarget(
     targetId: number;
     targetVersion: string;
     adjudicatedTarget: AdjudicatedTarget | null;
+    t1Snapshot: AdjudicationCase['t1Snapshot'];
+    t2Snapshot: AdjudicationCase['t2Snapshot'];
   },
   viewer: { agentId: number; agentUserId: number },
 ): Promise<PanelTargetCheck> {
@@ -163,6 +172,14 @@ export async function bindPanelTarget(
       molecularWeight: parameter?.molecularWeight ?? null,
     },
     decidedDisputes: await decidedDisputesOn(kase.targetType, kase.targetId),
+    lowerTier: {
+      t2Verdicts: kase.t2Snapshot,
+      t1Verdicts: kase.t1Snapshot.verdicts,
+      openDisputes: mergeOpenDisputes(
+        kase.t1Snapshot.openDisputes,
+        await openDisputesOnVersion(kase),
+      ),
+    },
   };
   await tx
     .update(adjudicationCases)

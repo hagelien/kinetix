@@ -89,13 +89,17 @@ person). The work lands in three pull requests:
      case still makes the closing act theirs; a seat claim re-reads them the
      same way, so an agent that disputed the target since cannot take a seat;
    - the first seat claim binds the panel (`adjudicated_target`): the hydrated
-     target with its baselines and source row, the decided disputes, and the
+     target with its baselines and source row, the lower-tier record (copied
+     verdicts and open disputes on the version), the decided disputes, and the
      canonical unit and molecular weight the opinions are compared with. Both
-     seats and a person are served that binding; later claims and writes
+     seats are served that binding (a person reads the case record as it
+     stands, with any dispute merged at sealing); later claims and writes
      check the live target against it and close the case on drift
      (`target_drifted`);
    - a seat is refused to any agent with a verdict on the target now, not only
      those the case copied;
+   - a case about unpublished wiki content is served only to readers cleared
+     for drafts, panelists (by their backing user's role) and people alike;
    - an endorsed value follows the parameter's contract — a range where
      `requiresMinMax`, within the registry bounds in the canonical unit;
    - a dimensionless range parameter (pKa, logP, logD; canonical unit `''`)
