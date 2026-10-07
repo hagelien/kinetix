@@ -283,7 +283,7 @@ describe('Header', () => {
     // The slug comes from the URL even when the drug row carries none.
     expect(
       within(tabs)
-        .getByRole('link', { name: 'parameterGroups.chemistry' })
+        .getByRole('link', { name: 'monographTabs.overview' })
         .getAttribute('href'),
     ).toBe('/wiki/paracetamol/chemistry');
   });

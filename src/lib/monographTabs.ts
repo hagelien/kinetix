@@ -27,7 +27,9 @@ export type MonographTabId = (typeof MONOGRAPH_TAB_IDS)[number];
 export const DEFAULT_MONOGRAPH_TAB: MonographTabId = 'chemistry';
 
 const TAB_LABEL_KEYS: Record<MonographTabId, string> = {
-  chemistry: 'parameterGroups.chemistry',
+  // The first tab carries the drug's identity block (names, aliases, CID)
+  // as well as its chemistry parameters, so it is labelled as an overview.
+  chemistry: 'monographTabs.overview',
   pharmacodynamics: 'parameterGroups.pharmacodynamics',
   pharmacokinetics: 'parameterGroups.pharmacokinetics',
   metabolism: 'sidebar.metabolism',

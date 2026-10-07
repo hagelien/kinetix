@@ -2615,6 +2615,7 @@
     "postmortem": "Postmortem"
   },
   "monographTabs": {
+    "overview": "Overview",
     "navLabel": "{{drug}} monograph",
     "parametersLabel": "Parameters",
     "noParameters": "No parameter values recorded for this topic yet.",

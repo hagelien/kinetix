@@ -576,8 +576,9 @@ export function WikiPage() {
 
   // A drug monograph shows one tab at a time. The drug's name lives in the
   // app header (with the tab menu under it), so the page heading names the
-  // topic. The drug's identity block — names, aliases, analytical methods,
-  // seed prompt and the whole-monograph Edit — belongs to chemistry only.
+  // topic. The drug's identity block — names, aliases, seed prompt and the
+  // whole-monograph Edit — belongs to the overview (chemistry) tab only; the
+  // analytical methods that cover the drug sit with analytics & detection.
   const tabHtml = filterMonographHtmlForTab(page.contentHtml ?? '', activeTab);
   const isChemistryTab = activeTab === 'chemistry';
 
@@ -621,7 +622,9 @@ export function WikiPage() {
           {isChemistryTab && page.drugCid && (
             <DrugMetadataHeader drugCid={page.drugCid} />
           )}
-          {isChemistryTab && <DrugAnalyticalMethods drug={drugComponent} />}
+          {activeTab === 'analytics_detection' && (
+            <DrugAnalyticalMethods drug={drugComponent} />
+          )}
           {pendingEditNotice}
         </div>
 

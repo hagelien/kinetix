@@ -142,6 +142,15 @@ type DialogKind = 'edit' | 'history' | 'discussion' | 'flag' | 'sources';
 export type SidebarSectionId = 'metabolism' | ParameterGroupId;
 
 const PARAMETER_GROUP_BY_ID = new Map(PARAMETER_GROUPS.map((g) => [g.id, g]));
+
+/**
+ * Column layout for lists of short, independent items (parameter rows,
+ * mechanisms, metabolism blocks, method limits) when a section fills the
+ * monograph tab: one column on small screens, two from `md`, three from `xl`.
+ * Wide content — the postmortem cohort table, Cmax readings, free-text
+ * notes — stays full width outside these grids.
+ */
+const TAB_COLUMNS = 'grid gap-x-8 md:grid-cols-2 xl:grid-cols-3';
 const SIDEBAR_SECTION_STORAGE_KEY = 'kinetix.monographSidebar.expandedSection';
 const DEFAULT_SECTION: SidebarSectionId = 'chemistry';
 
@@ -956,7 +965,11 @@ export function DrugMonographSidebar({
         <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
           {t('sidebar.methodLimitsTitle')}
         </div>
-        <ul className="space-y-1 text-xs">
+        <ul
+          className={
+            section ? `${TAB_COLUMNS} gap-y-1 text-xs` : 'space-y-1 text-xs'
+          }
+        >
           {methodLimits.map((method) => (
             <li
               key={method.id}
@@ -1115,56 +1128,64 @@ export function DrugMonographSidebar({
     return (
       <div className="space-y-3 text-xs">
         {renderMetabolismEditorControls()}
-        {metabolism?.routes.length ? (
-          <div>
-            <h4 className="mb-1 font-medium">{t('sidebar.metabolismRoutes')}</h4>
-            <dl className="space-y-1">
-              {metabolism.routes.map((route) => (
-                <div key={route.id} className="flex justify-between gap-2">
-                  <dt className="text-muted-foreground">
-                    {/* A route resolved to the bio-entity catalog links to that
-                        entity's page, where the reverse view lists every drug
-                        routed through it. Free-text routes stay plain. */}
-                    {route.enzyme?.slug ? (
-                      <Link
-                        to={`/wiki/entity/${encodeURIComponent(route.enzyme.slug)}`}
-                        className="hover:text-foreground hover:underline"
-                      >
-                        {routeLabel(route)}
-                      </Link>
-                    ) : (
-                      routeLabel(route)
-                    )}
-                  </dt>
-                  <dd className="font-medium">
-                    {formatFractionRangePercent(route.fraction) ?? ''}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-        ) : null}
+        {/* Routes, metabolites and precursors are short lists that sit side
+            by side on a wide tab; the evidence note below spans the width. */}
+        {metabolism?.routes.length ||
+        metabolism?.metabolites.length ||
+        metabolism?.precursors.length ? (
+        <div className={section ? `${TAB_COLUMNS} gap-y-3` : 'space-y-3'}>
+          {metabolism?.routes.length ? (
+            <div>
+              <h4 className="mb-1 font-medium">{t('sidebar.metabolismRoutes')}</h4>
+              <dl className="space-y-1">
+                {metabolism.routes.map((route) => (
+                  <div key={route.id} className="flex justify-between gap-2">
+                    <dt className="text-muted-foreground">
+                      {/* A route resolved to the bio-entity catalog links to that
+                          entity's page, where the reverse view lists every drug
+                          routed through it. Free-text routes stay plain. */}
+                      {route.enzyme?.slug ? (
+                        <Link
+                          to={`/wiki/entity/${encodeURIComponent(route.enzyme.slug)}`}
+                          className="hover:text-foreground hover:underline"
+                        >
+                          {routeLabel(route)}
+                        </Link>
+                      ) : (
+                        routeLabel(route)
+                      )}
+                    </dt>
+                    <dd className="font-medium">
+                      {formatFractionRangePercent(route.fraction) ?? ''}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          ) : null}
 
-        {metabolism?.metabolites.length ? (
-          <div>
-            <h4 className="mb-1 font-medium">
-              {t('sidebar.metabolismMetabolites')}
-            </h4>
-            <ul className="space-y-1 text-muted-foreground">
-              {metabolism.metabolites.map(renderMetaboliteLink)}
-            </ul>
-          </div>
-        ) : null}
+          {metabolism?.metabolites.length ? (
+            <div>
+              <h4 className="mb-1 font-medium">
+                {t('sidebar.metabolismMetabolites')}
+              </h4>
+              <ul className="space-y-1 text-muted-foreground">
+                {metabolism.metabolites.map(renderMetaboliteLink)}
+              </ul>
+            </div>
+          ) : null}
 
-        {metabolism?.precursors.length ? (
-          <div>
-            <h4 className="mb-1 font-medium">
-              {t('sidebar.metabolismPrecursors')}
-            </h4>
-            <ul className="space-y-1 text-muted-foreground">
-              {metabolism.precursors.map(renderMetaboliteLink)}
-            </ul>
-          </div>
+          {metabolism?.precursors.length ? (
+            <div>
+              <h4 className="mb-1 font-medium">
+                {t('sidebar.metabolismPrecursors')}
+              </h4>
+              <ul className="space-y-1 text-muted-foreground">
+                {metabolism.precursors.map(renderMetaboliteLink)}
+              </ul>
+            </div>
+          ) : null}
+        </div>
         ) : null}
 
         {metabolism?.evidenceNote ? (
@@ -1374,7 +1395,13 @@ export function DrugMonographSidebar({
                   {mechanismTierLabel(tier)}
                 </dt>
                 <dd>
-                  <ul className="space-y-1.5 text-xs">
+                  <ul
+                    className={
+                      section
+                        ? `${TAB_COLUMNS} gap-y-1.5 text-xs`
+                        : 'space-y-1.5 text-xs'
+                    }
+                  >
                     {byTier
                       .get(tier)!
                       .map((target) => renderMechanismEntry(target))}
@@ -1433,9 +1460,7 @@ export function DrugMonographSidebar({
         {params.length > 0 || groupId === 'postmortem' ? (
           <dl
             className={
-              section
-                ? 'grid gap-x-8 gap-y-2 text-sm sm:grid-cols-2'
-                : 'space-y-2 text-sm'
+              section ? `${TAB_COLUMNS} gap-y-2 text-sm` : 'space-y-2 text-sm'
             }
           >
             {params.map((pid) => renderParameterRow(pid))}
