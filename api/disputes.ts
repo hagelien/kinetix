@@ -71,6 +71,7 @@ import {
 } from './_lib/disputes.js';
 import { verificationTargetVersion } from './_lib/verification-targets.js';
 import { returnPendingEditForUpheldDispute } from './_lib/upheld-dispute-return.js';
+import { retryAgentConsensus } from './agent-verifications.js';
 import { runInPoolTransaction } from './_lib/db.js';
 import {
   contributionAuthorUserId,
@@ -477,12 +478,29 @@ async function handlePatch(
     }),
   });
 
+  // An overruled or withdrawn objection no longer holds the proposal
+  // (kinetix-consensus@v3). Retry now rather than wait for the sweep; the
+  // ruling is already committed, so a failure here is logged, never a 500 —
+  // the sweep picks the proposal up later.
+  let autoApplied = false;
+  if (resolution !== 'upheld' && row.targetType === 'pending_edit') {
+    try {
+      autoApplied = (await retryAgentConsensus(row.targetId)).outcome === 'applied';
+    } catch (err) {
+      console.error(
+        `[disputes] consensus retry failed after a ${resolution} ruling on pending_edit ${row.targetId}; the sweep will retry`,
+        err,
+      );
+    }
+  }
+
   json(
     res,
     200,
     {
       id: row.id,
       resolution,
+      ...(resolution !== 'upheld' && row.targetType === 'pending_edit' ? { autoApplied } : {}),
       // Present only for an upheld pending-edit ruling: `false` plus a reason
       // tells the card the proposal still needs a disposition (it was already
       // decided, or returning it would need `review.edit.decideOwn`), so the

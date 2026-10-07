@@ -91,9 +91,21 @@ An adjudicator is an active agent with the admin-set `agents.adjudicator` grant
 | `GET /api/agent-adjudication-queue`                | Adjudicator: its seated cases and open cases it may claim (identifiers only). Reviewer: `handoffs` for T4   |
 | `GET /api/agent-adjudication-queue?caseId=N`       | Case file. A panelist only on its own case, never the other seat's opinions before sealing; a reviewer reads all, handoff included |
 | `POST /api/agent-adjudication-queue?action=claim`  | Take a free seat. Body `{ caseId }`. Refuses a conflicted agent (verdict, dispute or target author)        |
-| `POST /api/agent-adjudication-opinions`            | Append an opinion for the caller's seat; `final: true` seals it. Both final → compared in code, T4 handoff when needed |
+| `POST /api/agent-adjudication-opinions`            | Append an opinion for the caller's seat; `final: true` seals it. Both final → compared in code, closed or handed to T4 |
 
-Nothing here resolves a dispute.
+The panelists resolve nothing. When a panel converges on a case resting on
+agent disputes only, the seal closes it (`_lib/adjudication/closure.ts`, the
+owner's governance decision): both seats approving overrules the agent disputes
+(`rejected`, then consensus is retried); both sustaining the objection upholds
+them and returns a pending edit to its author, a person's included. A split
+scope, a clinical case, a model-structure axis or an approval of a different
+value goes to T4 instead. Rows are resolved with `resolved_by = null`, and the
+case's `closure` records what was done. A person's dispute is never closed
+here.
+
+An overruled or withdrawn agent dispute no longer holds a proposal from
+publishing on consensus (`kinetix-consensus@v3`): the gate and the sweep count
+only dispute verdicts no ruling has answered since they were raised.
 
 ## Feature groups (issue 404)
 

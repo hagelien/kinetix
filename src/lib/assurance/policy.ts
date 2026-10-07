@@ -45,8 +45,13 @@ export const KINETIX_POLICY_ID = 'kinetix-consensus';
  * silently-changed `v1` would claim old content was published under new rules.
  *
  * v2 retires `human-authored` and adds `unattributed` (see the rule).
+ * v3: an assessor's dispute that has been answered — a moderator or the T3
+ * panel resolved the objection after it was raised — no longer counts as
+ * disputing. Overruled, it holds nothing; upheld, it holds through the upheld
+ * ruling gate instead. The rules below are unchanged; what feeds
+ * `noDisputingAssessments` is.
  */
-export const KINETIX_POLICY_VERSION = 'v2';
+export const KINETIX_POLICY_VERSION = 'v3';
 
 /**
  * Two independent approvals. The same design target the legacy
@@ -102,6 +107,8 @@ export function buildKinetixPolicy(): PolicySet {
       require: [
         // A dispute holds the proposal however many approvals it carries:
         // approvals and disputes are not netted off against one another.
+        // Since v3 only an unanswered one: an objection that was ruled on no
+        // longer counts as disputing.
         noDisputingAssessments(),
         // Pool-adapted rather than fixed, so a small deployment does not
         // accumulate unreviewable proposals behind an unreachable bar.

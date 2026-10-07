@@ -286,6 +286,93 @@ describe('agent consensus hold, re-stamp and retry', () => {
     expect(tierOf.get(publishableId)).toBe('mid');
   });
 
+  it('publishes once an agent objection is overruled, and holds again on a fresh one (kinetix-consensus@v3)', async () => {
+    const author = await seedAgent('author');
+    const b = await seedAgent('b');
+    const c = await seedAgent('c');
+    const d = await seedAgent('d');
+    const [page] = await db
+      .insert(wikiPages)
+      .values({
+        slug: 'diazepam',
+        title: 'Diazepam',
+        pageType: 'drug_monograph',
+        content: { version: 2, sections: { pk: { body: { type: 'doc', content: [] } } } },
+        status: 'published',
+        createdBy: author.userId,
+        updatedBy: author.userId,
+      })
+      .returning({ id: wikiPages.id });
+    const [edit] = await db
+      .insert(pendingEdits)
+      .values({
+        editType: 'wiki_fact',
+        targetId: page!.id,
+        sectionId: 'pk',
+        factOperation: 'add',
+        factStatement: 'Halveringstiden er 20–100 timer.',
+        proposedValue: {
+          type: 'fact',
+          attrs: { factId: 'f-1', referenceIds: [] },
+          content: [{ type: 'text', text: 'Halveringstiden er 20–100 timer.' }],
+        },
+        submittedBy: author.userId,
+        status: 'pending',
+      })
+      .returning({ id: pendingEdits.id });
+    await approve(b.agentId, edit!.id);
+    await approve(c.agentId, edit!.id);
+    const [verdict] = await db
+      .insert(agentVerifications)
+      .values({
+        agentId: d.agentId,
+        targetType: 'pending_edit',
+        targetId: edit!.id,
+        verdict: 'dispute',
+        rationaleMd: 'Kilden oppgir en annen verdi.',
+        evidenceRefs: [],
+        isImplicit: false,
+      })
+      .returning({ id: agentVerifications.id, updatedAt: agentVerifications.updatedAt });
+    expect(await sweepAgentConsensus()).toEqual([]);
+
+    // Overruled after it was raised (by a moderator or the T3 panel): it no
+    // longer holds the proposal.
+    const [ruling] = await db
+      .insert(disputes)
+      .values({
+        targetType: 'pending_edit',
+        targetId: edit!.id,
+        createdBy: d.userId,
+        source: 'agent',
+        reasonMd: 'Kilden oppgir en annen verdi.',
+        status: 'resolved',
+        resolution: 'rejected',
+        resolvedAt: new Date(verdict!.updatedAt.getTime() + 1000),
+      })
+      .returning({ id: disputes.id });
+    // A fresh objection from the same agent, recorded after the ruling, holds
+    // again until it is ruled on in its own right.
+    await db
+      .update(agentVerifications)
+      .set({ updatedAt: new Date(verdict!.updatedAt.getTime() + 2000) })
+      .where(eq(agentVerifications.id, verdict!.id));
+    expect(await sweepAgentConsensus()).toEqual([]);
+    await db
+      .update(disputes)
+      .set({ resolvedAt: new Date(verdict!.updatedAt.getTime() + 3000) })
+      .where(eq(disputes.id, ruling!.id));
+
+    expect(await sweepAgentConsensus()).toEqual([
+      expect.objectContaining({ pendingEditId: edit!.id, outcome: 'applied' }),
+    ]);
+    const [after] = await db
+      .select({ status: pendingEdits.status })
+      .from(pendingEdits)
+      .where(eq(pendingEdits.id, edit!.id));
+    expect(after!.status).toBe('approved');
+  });
+
   it('sweeps an edit whose consensus was never re-run', async () => {
     const author = await seedAgent('author');
     const b = await seedAgent('b');

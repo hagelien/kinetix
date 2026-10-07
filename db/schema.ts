@@ -2747,6 +2747,36 @@ export type AdjudicationDecidedDispute = {
   resolvedAt: string | null;
 };
 
+/** Why a converged agent-only case was not closed automatically (0142). */
+export type AdjudicationClosureDeclined =
+  /** Split into two scopes: a product decision on representation. */
+  | 'split_scope'
+  /** A clinical case is always a person's. */
+  | 'clinical'
+  /** A categorical axis that changes the model family is admin-tier. */
+  | 'model_structure'
+  /** Both seats approved, but a value other than the proposal's own. */
+  | 'value_differs'
+  /** Both seats approved a value, but the proposal's could not be read. */
+  | 'value_unverifiable';
+
+/**
+ * What the automatic closure of a converged agent-only case did (0142):
+ * `overruled` (both seats approved the proposal; its agent disputes resolve
+ * `rejected`), `upheld` (both seats sustained the objection; they resolve
+ * `upheld` and a pending edit is returned), `none` (no agent dispute was
+ * still open), or `declined` (handed to a person instead).
+ */
+export type AdjudicationClosure = {
+  action: 'overruled' | 'upheld' | 'none' | 'declined';
+  declined: AdjudicationClosureDeclined | null;
+  disputeIds: number[];
+  /** For an upheld pending edit: whether it went back to its author. */
+  pendingEditReturned: boolean | null;
+  returnSkipped: string | null;
+  at: string;
+};
+
 /** The T4 package a person gets, so nobody reconstructs the appeal from logs (0141). */
 export type AdjudicationHandoff = {
   caseId: number;
@@ -2757,7 +2787,16 @@ export type AdjudicationHandoff = {
   triggers: AdjudicationTrigger[];
   /** Why a person is needed, in order of weight. */
   reasons: Array<
-    'panel_diverged' | 'human_requested' | 'panel_abstained' | 'human_dispute' | 'panel_conflicted'
+    | 'panel_diverged'
+    | 'human_requested'
+    | 'panel_abstained'
+    | 'human_dispute'
+    | 'panel_conflicted'
+    // The panel converged on an agent-only case, but the closure would not act
+    // on it (./closure.ts): see `AdjudicationClosure.declined`.
+    | 'closure_declined'
+    // The panel upheld the objection, but the proposal could not be returned.
+    | 'return_refused'
   >;
   /**
    * One paragraph, in English, of what remains disputed: the record's prose
@@ -2834,6 +2873,8 @@ export const adjudicationCases = pgTable(
      * cannot change the record of what was decided (0141).
      */
     adjudicatedTarget: jsonb('adjudicated_target').$type<AdjudicatedTarget>(),
+    /** What the automatic closure did with a converged agent-only case (0142). */
+    closure: jsonb('closure').$type<AdjudicationClosure>(),
   },
   (t) => [
     // Permanent, not "while live": a target version is adjudicated at most once.
