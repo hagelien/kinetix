@@ -25,6 +25,13 @@
  * Without `--resolve` the scan only finds pairs the stored metadata already
  * proves, so a first run on legacy data will want it.
  *
+ * Free-text rows have no handle, so a second pass matches them on their
+ * bibliographic record instead — first author, year and title, by
+ * `src/lib/citationWorkMatch.ts` — and folds every rewording of one reference
+ * into the strongest row for that work (its PMID row when there is one). A
+ * cluster that reaches two different resolvable handles is reported and left
+ * alone, as is a free-text row whose wording does not match its own record.
+ *
  * Which row wins
  * ──────────────
  * The one filed under the stronger handle (PMID > DOI > URL), because that is
@@ -64,7 +71,7 @@
 
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
-import { eq, inArray, sql } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { citations, paperReviews, users } from '../db/schema';
 import {
   canonicalCitationHandle,
@@ -82,6 +89,10 @@ import {
 } from '../api/_lib/citation-merge';
 import { resolveCitationCrosswalk } from '../api/_lib/citation-crosswalk';
 import { getDb, runInPoolTransaction } from '../api/_lib/db';
+import {
+  clusterSameWorks,
+  type WorkRecord,
+} from '../src/lib/citationWorkMatch';
 
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
@@ -120,6 +131,7 @@ interface CitationRow {
   type: CitationHandleType;
   identifier: string;
   altIds: CitationAltIds;
+  metadata: WorkRecord | null;
 }
 
 function groupKey(row: CitationRow): string {
@@ -174,22 +186,26 @@ async function main(): Promise<void> {
       identifier: citations.identifier,
       metadata: citations.metadata,
     })
-    .from(citations)
-    .where(sql`${citations.type} IN ('pmid', 'doi', 'url')`);
+    .from(citations);
 
-  const rows: CitationRow[] = raw.map(
+  const allRows: CitationRow[] = raw.map(
     (row: {
       id: number;
       type: string;
       identifier: string;
       metadata: unknown;
-    }) => ({
-      id: row.id,
-      type: row.type as CitationHandleType,
-      identifier: row.identifier,
-      altIds: normalizeReferenceMetadata(row.metadata)?.altIds ?? {},
-    }),
+    }) => {
+      const metadata = normalizeReferenceMetadata(row.metadata);
+      return {
+        id: row.id,
+        type: row.type as CitationHandleType,
+        identifier: row.identifier,
+        altIds: metadata?.altIds ?? {},
+        metadata,
+      };
+    },
   );
+  const rows = allRows.filter((row) => row.type !== 'freetext');
   console.log(`Scanning ${rows.length} resolvable citation rows…`);
 
   if (resolveOnline) {
@@ -218,24 +234,21 @@ async function main(): Promise<void> {
   }
 
   const splits = [...groups.entries()].filter(([, group]) => group.length > 1);
-  if (splits.length === 0) {
-    console.log('No split pairs found. Nothing to do.');
-    return;
-  }
 
-  console.log(`\nFound ${splits.length} paper(s) occupying more than one row:`);
   let merged = 0;
   let refused = 0;
   let deferred = 0;
 
-  for (const [key, group] of splits) {
-    const ordered = [...group].sort(
-      (a, b) =>
-        citationHandleRank(a.type) - citationHandleRank(b.type) || a.id - b.id,
-    );
-    const winner = ordered[0]!;
-    const losers = ordered.slice(1);
-
+  /**
+   * Report one group, then (with --apply) fold `losers` into `winner`.
+   * `ordered` is every row shown for the group, winner first.
+   */
+  const foldGroup = async (
+    label: string,
+    ordered: CitationRow[],
+    winner: CitationRow,
+    losers: CitationRow[],
+  ): Promise<void> => {
     const reviews = await db
       .select({
         id: paperReviews.id,
@@ -251,7 +264,7 @@ async function main(): Promise<void> {
         ),
       );
 
-    console.log(`\n  ${key}`);
+    console.log(`\n  ${label}`);
     for (const row of ordered) {
       const usage = await countCitationUsage(db, row.id);
       const review = reviews.find(
@@ -299,10 +312,10 @@ async function main(): Promise<void> {
     } catch (err) {
       console.log(`    REFUSED — ${err instanceof Error ? err.message : String(err)}`);
       refused += 1;
-      continue;
+      return;
     }
 
-    if (!apply) continue;
+    if (!apply) return;
 
     // In a pool transaction, so the merge's advisory lock has something to
     // hold. This runs against a live deployment: the second merge racing this
@@ -340,6 +353,96 @@ async function main(): Promise<void> {
         merged += 1;
       }
     });
+  };
+
+  if (splits.length === 0) {
+    console.log('No split pairs found.');
+  } else {
+    console.log(`\nFound ${splits.length} paper(s) occupying more than one row:`);
+  }
+  for (const [key, group] of splits) {
+    const ordered = [...group].sort(
+      (a, b) =>
+        citationHandleRank(a.type) - citationHandleRank(b.type) || a.id - b.id,
+    );
+    await foldGroup(key, ordered, ordered[0]!, ordered.slice(1));
+  }
+
+  // Second pass: free text, matched on its bibliographic record. Every
+  // resolvable row carries its handle group's key, so a PMID row and the DOI
+  // row the first pass folds into it count as one paper here, in a dry run as
+  // much as after --apply.
+  const keyOfRow = new Map<number, string>();
+  const survivorOfKey = new Map<string, CitationRow>();
+  for (const [key, group] of groups) {
+    for (const row of group) keyOfRow.set(row.id, key);
+    survivorOfKey.set(
+      key,
+      [...group].sort(
+        (a, b) =>
+          citationHandleRank(a.type) - citationHandleRank(b.type) || a.id - b.id,
+      )[0]!,
+    );
+  }
+  const clusters = clusterSameWorks(
+    allRows.map((row) => ({ ...row, handleKey: keyOfRow.get(row.id) ?? null })),
+  );
+  const ambiguous = clusters.filter((cluster) => cluster.ambiguous);
+  const foldable = clusters.filter((cluster) => !cluster.ambiguous);
+  if (foldable.length === 0) {
+    console.log('\nNo reworded free-text duplicates found.');
+  } else {
+    console.log(
+      `\nFound ${foldable.length} work(s) with free-text duplicates (matched on author, year and title):`,
+    );
+  }
+  for (const cluster of foldable) {
+    const ordered = [...cluster.rows].sort(
+      (a, b) =>
+        citationHandleRank(a.type) - citationHandleRank(b.type) || a.id - b.id,
+    );
+    // The row the first pass keeps for that paper, which is not always the one
+    // the title matched: the matched row may be the DOI twin it folds away.
+    let winner =
+      survivorOfKey.get(keyOfRow.get(ordered[0]!.id) ?? '') ?? ordered[0]!;
+    // All free text: no row is filed better than another, and the survivor's
+    // wording and record become the paper's for every claim citing it. Keep
+    // the one most of them already cite — the oldest is as likely as not a
+    // one-off wording ("…, 12th edition — Diazepam").
+    if (winner.type === 'freetext') {
+      let best = -1;
+      for (const row of ordered) {
+        const usage = await countCitationUsage(db, row.id);
+        if (usage > best) {
+          best = usage;
+          winner = row;
+        }
+      }
+    }
+    // Only the free text: resolvable rows here were folded (or reported) by
+    // the first pass.
+    const kept = winner;
+    const losers = ordered.filter(
+      (row) => row.id !== kept.id && row.type === 'freetext',
+    );
+    await foldGroup(
+      `${winner.metadata?.authors?.[0] ?? '?'} ${winner.metadata?.year ?? ''} — ${winner.metadata?.title ?? winner.identifier}`,
+      [winner, ...losers],
+      winner,
+      losers,
+    );
+  }
+  if (ambiguous.length > 0) {
+    console.log(
+      `\n${ambiguous.length} free-text cluster(s) left alone: they match more than one` +
+        ` PMID/DOI/URL, or their wordings only chain together rather than all matching` +
+        ` one another. Run with --resolve first, or merge by hand:`,
+    );
+    for (const cluster of ambiguous) {
+      console.log(
+        `  ${cluster.rows.map((row) => `#${row.id} ${row.type}:${row.identifier.slice(0, 60)}`).join('\n    ')}`,
+      );
+    }
   }
 
   if (deferred > 0) {
