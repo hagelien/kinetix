@@ -122,7 +122,12 @@ export default withErrorHandling(async function handler(
     const file = await buildCaseFile(
       caseId,
       adjudicator !== null
-        ? { kind: 'panelist', agentId: adjudicator.agentId, agentUserId: adjudicator.userId }
+        ? {
+            kind: 'panelist',
+            agentId: adjudicator.agentId,
+            agentUserId: adjudicator.userId,
+            role: auth.role,
+          }
         : { kind: 'person', role: auth.role },
     );
     if (!file) {

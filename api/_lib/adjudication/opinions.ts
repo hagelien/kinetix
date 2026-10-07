@@ -55,7 +55,11 @@ import {
 } from './convergence.js';
 import { adjudicationTargetParameter } from './target.js';
 import { disputeOriginOf } from './detector.js';
-import { openDisputesOnVersion, type InvalidatedReason } from './cases.js';
+import {
+  mergeOpenDisputes,
+  openDisputesOnVersion,
+  type InvalidatedReason,
+} from './cases.js';
 
 export interface OpinionInput {
   caseId: number;
@@ -513,20 +517,7 @@ async function sealIfComplete(
   // landed after the detector last refreshed the case still makes the closing
   // act theirs. Merged into the case's record, never narrowed.
   const openNow = await openDisputesOnVersion(kase);
-  const known = new Set(kase.t1Snapshot.openDisputes.map((d) => d.disputeId));
-  const openDisputes = [
-    ...kase.t1Snapshot.openDisputes,
-    ...openNow
-      .filter((d) => !known.has(d.id))
-      .map((d) => ({
-        disputeId: d.id,
-        source: d.source,
-        createdBy: d.createdBy,
-        reasonMd: d.reasonMd,
-        evidenceRefs: d.evidenceRefs,
-        createdAt: d.createdAt.toISOString(),
-      })),
-  ];
+  const openDisputes = mergeOpenDisputes(kase.t1Snapshot.openDisputes, openNow);
   const t1Snapshot = { ...kase.t1Snapshot, openDisputes };
   const disputeOrigin = disputeOriginOf(openDisputes);
 

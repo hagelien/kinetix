@@ -78,6 +78,30 @@ export async function openDisputesOnVersion(args: {
     .orderBy(asc(disputes.id));
 }
 
+/**
+ * A case's copied open disputes with those open on its version now, by id:
+ * merged, never narrowed.
+ */
+export function mergeOpenDisputes(
+  known: AdjudicationDisputeSnapshot[],
+  openNow: Awaited<ReturnType<typeof openDisputesOnVersion>>,
+): AdjudicationDisputeSnapshot[] {
+  const ids = new Set(known.map((d) => d.disputeId));
+  return [
+    ...known,
+    ...openNow
+      .filter((d) => !ids.has(d.id))
+      .map((d) => ({
+        disputeId: d.id,
+        source: d.source,
+        createdBy: d.createdBy,
+        reasonMd: d.reasonMd,
+        evidenceRefs: d.evidenceRefs as AdjudicationDisputeSnapshot['evidenceRefs'],
+        createdAt: d.createdAt.toISOString(),
+      })),
+  ];
+}
+
 /** States a case can still act in; the rest are terminal. */
 export const LIVE_CASE_STATES = ['open', 'sealed'] as const;
 
