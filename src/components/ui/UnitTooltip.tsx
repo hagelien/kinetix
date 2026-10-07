@@ -37,6 +37,12 @@ interface UnitTooltipProps {
   sourceFormatted?: string | null;
   /** Drug molecular weight — required for molar↔mass conversions. */
   molecularWeight: number | null | undefined;
+  /**
+   * Whether the trigger takes keyboard focus (default true). Pass `false` when
+   * the tooltip sits inside another interactive element, such as a button, so
+   * that element is the only tab stop.
+   */
+  focusable?: boolean;
   /** Optional className applied to the wrapping span. */
   className?: string;
 }
@@ -121,6 +127,7 @@ export function UnitTooltip({
   sourceUnit,
   sourceFormatted,
   molecularWeight,
+  focusable = true,
   className,
 }: UnitTooltipProps) {
   // Shared grace hook: spreading `hoverProps` on both the trigger wrapper and
@@ -270,7 +277,7 @@ export function UnitTooltip({
           <span
             ref={triggerRef}
             className="border-b border-dotted border-muted-foreground/40 cursor-help"
-            tabIndex={0}
+            tabIndex={focusable ? 0 : undefined}
             aria-describedby={tooltipId}
           >
             {split.trigger}
@@ -287,7 +294,7 @@ export function UnitTooltip({
       ref={triggerRef}
       className={`relative inline-block ${className ?? ''}`}
       {...hoverProps}
-      tabIndex={0}
+      tabIndex={focusable ? 0 : undefined}
       aria-describedby={tooltipId}
     >
       <span className="border-b border-dotted border-muted-foreground/40 cursor-help">

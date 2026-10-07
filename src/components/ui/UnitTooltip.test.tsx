@@ -12,6 +12,22 @@ describe('UnitTooltip', () => {
     vi.useRealTimers();
   });
 
+  it('is a tab stop by default and not when focusable is false', () => {
+    const { container, rerender } = render(
+      <UnitTooltip value={1} unit="mg/L" molecularWeight={100}>
+        1 mg/L
+      </UnitTooltip>,
+    );
+    expect(container.querySelector('[tabindex]')).not.toBeNull();
+
+    rerender(
+      <UnitTooltip value={1} unit="mg/L" molecularWeight={100} focusable={false}>
+        1 mg/L
+      </UnitTooltip>,
+    );
+    expect(container.querySelector('[tabindex]')).toBeNull();
+  });
+
   it('keeps the panel visible while the pointer travels into it', () => {
     const { container } = render(
       <UnitTooltip value={1} unit="mg/L" molecularWeight={100}>
