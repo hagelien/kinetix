@@ -154,4 +154,18 @@ describe('clusterSameWorks', () => {
     ]);
     expect(cluster?.ambiguous).toBe(false);
   });
+
+  it('flags a chain of wordings that do not all match one another', () => {
+    // Similarity is not transitive: the short wording is within the threshold
+    // of both long ones, which are not within it of each other.
+    const base = 'Pharmacokinetics of diazepam in healthy volunteers after administration';
+    const rec = (title: string) => ({ authors: ['Klotz U'], year: 1975, title });
+    const [cluster] = clusterSameWorks([
+      row(1, 'freetext', 'Klotz U. ' + base.replace('after', 'after oral'), rec(base.replace('after', 'after oral'))),
+      row(2, 'freetext', 'Klotz U. ' + base, rec(base)),
+      row(3, 'freetext', 'Klotz U. ' + base.replace('after', 'after intravenous'), rec(base.replace('after', 'after intravenous'))),
+    ]);
+    expect(cluster?.rows).toHaveLength(3);
+    expect(cluster?.ambiguous).toBe(true);
+  });
 });

@@ -435,7 +435,8 @@ async function main(): Promise<void> {
   if (ambiguous.length > 0) {
     console.log(
       `\n${ambiguous.length} free-text cluster(s) left alone: they match more than one` +
-        ` PMID/DOI/URL. Run with --resolve first, or merge by hand:`,
+        ` PMID/DOI/URL, or their wordings only chain together rather than all matching` +
+        ` one another. Run with --resolve first, or merge by hand:`,
     );
     for (const cluster of ambiguous) {
       console.log(
