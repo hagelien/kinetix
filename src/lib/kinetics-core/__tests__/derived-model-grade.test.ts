@@ -189,16 +189,117 @@ describe('assessDerivedModel — §5.1 dimensions', () => {
     expect(provenance?.reason).toContain('ka');
   });
 
-  it('never claims a derived value is cited, because the record cannot show it', () => {
-    // A drug-level t½ or Vd can come from a seeded or backfilled `drug_parameters`
-    // cache row with no citation behind it, and the grade record carries no
-    // per-input provenance to tell the two apart. Claiming B here would be the
-    // manufactured evidence the contract forbids.
+  it('never claims a derived value is cited when the record cannot show it', () => {
+    // A record written before sources were recorded cannot tell a cited t½ from a
+    // seeded one. Claiming better than D here would be the manufactured evidence
+    // the contract forbids.
     const provenance = assessDerivedModel(derivedDefinition(), routeGrade()).find(
       (a) => a.dimension === 'parameter-provenance',
     );
     expect(provenance?.grade).toBe('D');
-    expect(provenance?.reason).toMatch(/provenance is not recorded/);
+    expect(provenance?.reason).toMatch(/before per-input sources were recorded/);
+  });
+
+  describe('parameter provenance from recorded input sources', () => {
+    const cited = (...citationIds: number[]) => ({ basis: 'cited' as const, citationIds });
+    const provenanceOf = (route: DerivedRouteGrade) =>
+      assessDerivedModel(derivedDefinition(), route).find(
+        (a) => a.dimension === 'parameter-provenance',
+      );
+
+    it('reaches C, and no better, when every catalog input is cited', () => {
+      // Pooled values trace to studies, not to a table, page or extraction:
+      // §5.1's C, never B.
+      const provenance = provenanceOf(
+        routeGrade({
+          inputSources: {
+            eliminationHalfLife: cited(1, 2),
+            vd: cited(3),
+            ka: cited(4),
+            bioavailability: cited(5),
+          },
+        }),
+      );
+      expect(provenance?.grade).toBe('C');
+      expect(provenance?.reason).toContain('only to study level');
+    });
+
+    it('stays D when one input is a hand-entered value, and names it', () => {
+      const provenance = provenanceOf(
+        routeGrade({
+          inputSources: {
+            eliminationHalfLife: cited(1),
+            vd: { basis: 'uncited', reason: 'authored-value' },
+          },
+        }),
+      );
+      expect(provenance?.grade).toBe('D');
+      expect(provenance?.reason).toContain('vd (a hand-entered catalog value');
+    });
+
+    it('stays D for a pool with an uncited entry, or a stale cache', () => {
+      for (const reason of ['uncited-entry', 'stale-cache'] as const) {
+        const provenance = provenanceOf(
+          routeGrade({
+            inputSources: {
+              eliminationHalfLife: { basis: 'uncited', reason },
+              vd: cited(1),
+            },
+          }),
+        );
+        expect(provenance?.grade).toBe('D');
+      }
+    });
+
+    it('judges an inferred role by the source it was solved from, and D when none was recorded', () => {
+      const withSource = provenanceOf(
+        routeGrade({
+          inferredParameters: ['ka'],
+          inputSources: { eliminationHalfLife: cited(1), vd: cited(2), ka: cited(3) },
+        }),
+      );
+      expect(withSource?.grade).toBe('C');
+      expect(withSource?.reason).toContain('ka was solved from another stored observable');
+      const without = provenanceOf(
+        routeGrade({
+          inferredParameters: ['ka'],
+          inputSources: { eliminationHalfLife: cited(1), vd: cited(2) },
+        }),
+      );
+      expect(without?.grade).toBe('D');
+      expect(without?.reason).toContain('ka (no source recorded)');
+    });
+
+    it('leaves a defaulted input to completeness rather than counting it unsourced', () => {
+      const provenance = provenanceOf(
+        routeGrade({
+          defaultedParameters: ['bioavailability'],
+          inputSources: { eliminationHalfLife: cited(1), vd: cited(2), ka: cited(3) },
+        }),
+      );
+      expect(provenance?.grade).toBe('C');
+    });
+
+    it('is D when no input has a recorded source at all', () => {
+      expect(provenanceOf(routeGrade({ inputSources: {} }))?.grade).toBe('D');
+    });
+
+    it('still lands the whole model at D while its curve is a point estimate', () => {
+      // Sources lift one D. The other — a bare point estimate — is about the
+      // engine, and keeps every derived model away from non-reviewers.
+      const result = gradeOf(
+        routeGrade({
+          inputSources: {
+            eliminationHalfLife: cited(1),
+            vd: cited(2),
+            ka: cited(3),
+            bioavailability: cited(4),
+          },
+        }),
+      );
+      expect(result.grade).toBe('D');
+      expect(result.limitingDimensions).toEqual(['uncertainty-semantics']);
+    });
   });
 
   it('grades the point-estimate output D rather than calling it a range', () => {

@@ -118,7 +118,7 @@ export type {
 export { inferKaFromTmax } from "./ka-inference.js";
 export type { KaInference } from "./ka-inference.js";
 export { derivedModelFromGrade, findDerivedRouteGrade } from "./derived-grade.js";
-export type { DerivedRouteGrade, DerivedModelGrade } from "./derived-grade.js";
+export type { DerivedRouteGrade, DerivedModelGrade, InputSource } from "./derived-grade.js";
 export { assessDerivedModel } from "./derived-model-grade.js";
 export type { DerivedModelEvidence } from "./derived-model-grade.js";
 export { resolveModel, resolvableAnalyteIds, resolvedRegistryRelease } from "./registry.js";
