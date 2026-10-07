@@ -18,6 +18,8 @@ import {
   drugParameterRevisions,
   parameterEntries,
   pendingEdits,
+  wikiPages,
+  wikiRevisions,
 } from '../../../db/schema.js';
 import { getDrugParameterMap } from '../drugParameterStore.js';
 import {
@@ -69,6 +71,46 @@ async function parameterAndDrug(
     .from(parameterEntries)
     .where(eq(parameterEntries.id, edit.targetId));
   return { parameter: edit.parameter, drugId: entry?.drugId ?? null };
+}
+
+const WIKI_PAGE_EDIT_TYPES = ['wiki_page', 'wiki_fact', 'wiki_section'];
+
+/**
+ * The status of the wiki page a target's content belongs to, for the
+ * visibility rule every wiki surface applies (`callerCanReadWikiPage`):
+ * `null` when the target is not wiki content at all; `undefined` when the
+ * page is gone, which reads as unreadable. A proposed new page (`wiki_new`)
+ * is unpublished by definition.
+ */
+export async function targetWikiPageStatus(
+  targetType: string,
+  targetId: number,
+): Promise<string | null | undefined> {
+  const db = getDb();
+  let pageId: number | null | undefined = null;
+  if (targetType === 'wiki_revision') {
+    const [rev] = await db
+      .select({ pageId: wikiRevisions.pageId })
+      .from(wikiRevisions)
+      .where(eq(wikiRevisions.id, targetId));
+    pageId = rev?.pageId;
+  } else if (targetType === 'pending_edit') {
+    const [edit] = await db
+      .select({ editType: pendingEdits.editType, targetId: pendingEdits.targetId })
+      .from(pendingEdits)
+      .where(eq(pendingEdits.id, targetId));
+    if (edit?.editType === 'wiki_new') return 'draft';
+    if (!edit || !WIKI_PAGE_EDIT_TYPES.includes(edit.editType)) return null;
+    pageId = edit.targetId;
+  } else {
+    return null;
+  }
+  if (pageId == null) return undefined;
+  const [page] = await db
+    .select({ status: wikiPages.status })
+    .from(wikiPages)
+    .where(eq(wikiPages.id, pageId));
+  return page?.status;
 }
 
 /** The target's source row as it stands now, or null when it is gone. */

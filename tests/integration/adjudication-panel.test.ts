@@ -25,6 +25,7 @@ import {
   disputes,
   drugs,
   notifications,
+  permissionOverrides,
   wikiPages,
   pendingEdits,
 } from '../../db/schema.js';
@@ -38,6 +39,7 @@ import {
   type IntegrationDb,
 } from './setup/harness.js';
 import { seedDrug, seedUser } from './setup/seed.js';
+import { resetPermissionOverridesForTests } from '../../api/_lib/permissions-store.js';
 
 let db: IntegrationDb;
 
@@ -587,6 +589,41 @@ describe('T3 sealing, convergence and the T4 handoff', () => {
     );
     expect(kase).toMatchObject({ state: 'diverged', t4Required: true });
     expect(kase.convergence).toMatchObject({ converged: false, reason: 'value_differs' });
+  });
+
+  it('keeps a case about unpublished wiki content from a person who may not read drafts', async () => {
+    const owner = await seedUser(db, { email: 'w@example.com', username: 'w', role: 'editor' });
+    const [page] = await db
+      .insert(wikiPages)
+      .values({ slug: 'kokain', title: 'Kokain', createdBy: owner, updatedBy: owner })
+      .returning({ id: wikiPages.id });
+    const s = await seedCase({
+      edit: {
+        editType: 'wiki_page',
+        targetId: page!.id,
+        parameter: null,
+        proposedValue: { title: 'Kokain', content: {} },
+      },
+    });
+    const { kase } = await panel(s, { resolution: 'approve' }, { resolution: 'return' });
+    expect(kase.t4Required).toBe(true);
+
+    // An admin lowers the dispute queue to contributors.
+    const contributor = await seedUser(db, { email: 'c@example.com', username: 'c', role: 'contributor' });
+    await db.insert(permissionOverrides).values({ capability: 'dispute.queue.read', minTier: 'contributor' });
+    resetPermissionOverridesForTests();
+    try {
+      expect((await caseFile(contributor, s.caseId, 'contributor')).status).toBe(200);
+      // Unpublished: the case carries the page's content, so it follows the
+      // wiki rule — drafts are for those cleared to read them.
+      await db.update(wikiPages).set({ status: 'draft' }).where(eq(wikiPages.id, page!.id));
+      const hidden = await caseFile(contributor, s.caseId, 'contributor');
+      expect(hidden.status).toBe(404);
+      expect(hidden.raw).not.toContain('Kokain');
+      expect((await caseFile(owner, s.caseId, 'editor')).status).toBe(200);
+    } finally {
+      resetPermissionOverridesForTests();
+    }
   });
 
   it('sends a case to a person when a panelist asks for one, even on agreement', async () => {

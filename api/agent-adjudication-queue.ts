@@ -123,7 +123,7 @@ export default withErrorHandling(async function handler(
       caseId,
       adjudicator !== null
         ? { kind: 'panelist', agentId: adjudicator.agentId, agentUserId: adjudicator.userId }
-        : { kind: 'person' },
+        : { kind: 'person', role: auth.role },
     );
     if (!file) {
       // Not found, or not a case this panelist sits on: the same answer, so
