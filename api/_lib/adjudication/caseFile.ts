@@ -218,38 +218,46 @@ export async function listAdjudicatorCases(agentId: number, limit = 20) {
         eq(adjudicationCaseSeats.agentId, agentId),
       ),
     );
-  const openRows = await db
-    .select({
-      caseId: adjudicationCases.id,
-      targetType: adjudicationCases.targetType,
-      targetId: adjudicationCases.targetId,
-      targetVersion: adjudicationCases.targetVersion,
-      openedAt: adjudicationCases.openedAt,
-      t1Snapshot: adjudicationCases.t1Snapshot,
-      t2Snapshot: adjudicationCases.t2Snapshot,
-    })
-    .from(adjudicationCases)
-    .where(
-      and(
-        eq(adjudicationCases.state, 'open'),
-        notExists(mine),
-        sql`(select count(*) from (${seatCount}) as s) < 2`,
-      ),
-    )
-    .orderBy(asc(adjudicationCases.openedAt))
-    .limit(limit * 3);
-
+  // Conflicts are only known per case, in the application, so page through the
+  // queue oldest first until `limit` eligible cases are found: a limit applied
+  // before the filter would starve an adjudicator who conflicts with the head
+  // of the queue.
+  const pageSize = limit * 3;
   const available = [];
-  for (const row of openRows) {
-    if (available.length >= limit) break;
-    if ((await conflictedAgentIds(row)).has(agentId)) continue;
-    available.push({
-      caseId: row.caseId,
-      targetType: row.targetType,
-      targetId: row.targetId,
-      targetVersion: row.targetVersion,
-      openedAt: row.openedAt,
-    });
+  for (let offset = 0; available.length < limit; offset += pageSize) {
+    const openRows = await db
+      .select({
+        caseId: adjudicationCases.id,
+        targetType: adjudicationCases.targetType,
+        targetId: adjudicationCases.targetId,
+        targetVersion: adjudicationCases.targetVersion,
+        openedAt: adjudicationCases.openedAt,
+        t1Snapshot: adjudicationCases.t1Snapshot,
+        t2Snapshot: adjudicationCases.t2Snapshot,
+      })
+      .from(adjudicationCases)
+      .where(
+        and(
+          eq(adjudicationCases.state, 'open'),
+          notExists(mine),
+          sql`(select count(*) from (${seatCount}) as s) < 2`,
+        ),
+      )
+      .orderBy(asc(adjudicationCases.openedAt), asc(adjudicationCases.id))
+      .limit(pageSize)
+      .offset(offset);
+    for (const row of openRows) {
+      if (available.length >= limit) break;
+      if ((await conflictedAgentIds(row)).has(agentId)) continue;
+      available.push({
+        caseId: row.caseId,
+        targetType: row.targetType,
+        targetId: row.targetId,
+        targetVersion: row.targetVersion,
+        openedAt: row.openedAt,
+      });
+    }
+    if (openRows.length < pageSize) break;
   }
   return { seated, available };
 }
