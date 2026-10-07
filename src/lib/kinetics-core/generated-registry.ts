@@ -5,7 +5,7 @@ export const GENERATED_REGISTRY_ARTIFACT = {
   "formatVersion": 1,
   "generatedAt": "snapshot-content-addressed",
   "registryVersion": "0.9.0",
-  "checksum": "b514ea22",
+  "checksum": "518ef667",
   "derivedDefinitions": [
     {
       "analyte": "3-hydroxyphenazepam",
@@ -74,39 +74,6 @@ export const GENERATED_REGISTRY_ARTIFACT = {
       ]
     },
     {
-      "analyte": "34-methylenedioxymethamphetamine-mdma",
-      "displayName": "3,4-Methylenedioxymethamphetamine (MDMA)",
-      "modelId": "34-methylenedioxymethamphetamine-mdma-derived-v1",
-      "matrix": "plasma",
-      "validationStatus": "literature-derived",
-      "routes": {
-        "oral": {
-          "family": "one-compartment-first-order",
-          "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.7151514830455146
-          },
-          "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 7.5
-          },
-          "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 5.4
-          },
-          "bioavailability": {
-            "kind": "fixed",
-            "value": 0.78
-          }
-        }
-      },
-      "supportedCovariates": [],
-      "supportedBases": [
-        "active-moiety",
-        "parent"
-      ]
-    },
-    {
       "analyte": "9-tetrahydrocannabinol-thc",
       "displayName": "Δ9-Tetrahydrocannabinol (THC)",
       "modelId": "9-tetrahydrocannabinol-thc-derived-v1",
@@ -117,7 +84,7 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "family": "one-compartment-first-order",
           "kaPerHour": {
             "kind": "fixed",
-            "value": 1.7552286891769604
+            "value": 1.46
           },
           "eliminationHalfLifeHours": {
             "kind": "fixed",
@@ -546,7 +513,7 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "family": "one-compartment-first-order",
           "kaPerHour": {
             "kind": "fixed",
-            "value": 1.6510065765065858
+            "value": 1.64
           },
           "eliminationHalfLifeHours": {
             "kind": "fixed",
@@ -777,7 +744,7 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "family": "one-compartment-first-order",
           "kaPerHour": {
             "kind": "fixed",
-            "value": 1.1451101433460134
+            "value": 2.34
           },
           "eliminationHalfLifeHours": {
             "kind": "fixed",
@@ -876,7 +843,7 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "family": "one-compartment-first-order",
           "kaPerHour": {
             "kind": "fixed",
-            "value": 0.09484210552916993
+            "value": 0.45
           },
           "eliminationHalfLifeHours": {
             "kind": "fixed",
@@ -1140,7 +1107,7 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "family": "one-compartment-first-order",
           "kaPerHour": {
             "kind": "fixed",
-            "value": 1.782530936631256
+            "value": 8.74
           },
           "eliminationHalfLifeHours": {
             "kind": "fixed",
@@ -1351,6 +1318,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "bioavailability": {
             "kind": "fixed",
             "value": 0.7
+          }
+        }
+      },
+      "supportedCovariates": [],
+      "supportedBases": [
+        "active-moiety",
+        "parent"
+      ]
+    },
+    {
+      "analyte": "dimetyltryptamin",
+      "displayName": "N,N-Dimethyltryptamine",
+      "modelId": "dimetyltryptamin-derived-v1",
+      "matrix": "plasma",
+      "validationStatus": "literature-derived",
+      "routes": {
+        "iv": {
+          "family": "iv-one-compartment",
+          "eliminationHalfLifeHours": {
+            "kind": "fixed",
+            "value": 0.1075
+          },
+          "vdLitersPerKg": {
+            "kind": "fixed",
+            "value": 45.5
           }
         }
       },
@@ -2031,7 +2023,7 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "family": "one-compartment-first-order",
           "kaPerHour": {
             "kind": "fixed",
-            "value": 0.8346540023173015
+            "value": 0.3
           },
           "eliminationHalfLifeHours": {
             "kind": "fixed",
@@ -2955,7 +2947,7 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "family": "one-compartment-first-order",
           "kaPerHour": {
             "kind": "fixed",
-            "value": 1.8765848330924064
+            "value": 1.04
           },
           "eliminationHalfLifeHours": {
             "kind": "fixed",
@@ -3242,39 +3234,6 @@ export const GENERATED_REGISTRY_ARTIFACT = {
       ]
     },
     {
-      "analyte": "midazolam",
-      "displayName": "Midazolam",
-      "modelId": "midazolam-derived-v1",
-      "matrix": "plasma",
-      "validationStatus": "literature-derived",
-      "routes": {
-        "oral": {
-          "family": "one-compartment-first-order",
-          "kaPerHour": {
-            "kind": "fixed",
-            "value": 4.329892467562162
-          },
-          "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 2.4
-          },
-          "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 0.8
-          },
-          "bioavailability": {
-            "kind": "fixed",
-            "value": 0.46
-          }
-        }
-      },
-      "supportedCovariates": [],
-      "supportedBases": [
-        "active-moiety",
-        "parent"
-      ]
-    },
-    {
       "analyte": "mirtazapine",
       "displayName": "Mirtazapine",
       "modelId": "mirtazapine-derived-v1",
@@ -3314,11 +3273,11 @@ export const GENERATED_REGISTRY_ARTIFACT = {
       "matrix": "plasma",
       "validationStatus": "literature-derived",
       "routes": {
-        "oral": {
+        "intranasal": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
             "kind": "fixed",
-            "value": 10.576739949145686
+            "value": 1.632
           },
           "eliminationHalfLifeHours": {
             "kind": "fixed",
@@ -3327,39 +3286,6 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "vdLitersPerKg": {
             "kind": "fixed",
             "value": 3.3
-          },
-          "bioavailability": {
-            "kind": "fixed",
-            "value": 0.45
-          }
-        }
-      },
-      "supportedCovariates": [],
-      "supportedBases": [
-        "active-moiety",
-        "parent"
-      ]
-    },
-    {
-      "analyte": "nn-dimethyltryptamine-dmt",
-      "displayName": "N,N-Dimethyltryptamine (DMT)",
-      "modelId": "nn-dimethyltryptamine-dmt-derived-v1",
-      "matrix": "plasma",
-      "validationStatus": "literature-derived",
-      "routes": {
-        "oral": {
-          "family": "one-compartment-first-order",
-          "kaPerHour": {
-            "kind": "fixed",
-            "value": 60.00589512108979
-          },
-          "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 0.1075
-          },
-          "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 45.5
           },
           "bioavailability": {
             "kind": "fixed",
@@ -3809,12 +3735,8 @@ export const GENERATED_REGISTRY_ARTIFACT = {
       "matrix": "plasma",
       "validationStatus": "literature-derived",
       "routes": {
-        "oral": {
-          "family": "one-compartment-first-order",
-          "kaPerHour": {
-            "kind": "fixed",
-            "value": 4.327927013400135
-          },
+        "iv": {
+          "family": "iv-one-compartment",
           "eliminationHalfLifeHours": {
             "kind": "fixed",
             "value": 28
@@ -3822,10 +3744,6 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "vdLitersPerKg": {
             "kind": "fixed",
             "value": 1.03
-          },
-          "bioavailability": {
-            "kind": "fixed",
-            "value": 0.86
           }
         }
       },
@@ -4044,7 +3962,7 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "family": "one-compartment-first-order",
           "kaPerHour": {
             "kind": "fixed",
-            "value": 2.3300022961844244
+            "value": 1.9
           },
           "eliminationHalfLifeHours": {
             "kind": "fixed",
@@ -4287,7 +4205,7 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           },
           "bioavailability": {
             "kind": "fixed",
-            "value": 0.25
+            "value": 0.26
           }
         }
       },
@@ -5331,7 +5249,7 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "family": "one-compartment-first-order",
           "kaPerHour": {
             "kind": "fixed",
-            "value": 1.1852124093167167
+            "value": 5.41
           },
           "eliminationHalfLifeHours": {
             "kind": "fixed",
@@ -5476,7 +5394,27 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           ],
           "defaultedParameters": [
             "bioavailability"
-          ]
+          ],
+          "inputSources": {
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2242
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2242
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                2242
+              ]
+            }
+          }
         }
       ]
     },
@@ -5499,30 +5437,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
-        }
-      ]
-    },
-    {
-      "analyte": "34-methylenedioxymethamphetamine-mdma",
-      "routes": [
-        {
-          "route": "oral",
-          "structure": {
-            "disposition": "one-compartment",
-            "elimination": "first-order",
-            "absorption": "first-order"
-          },
-          "axisProvenance": {
-            "disposition": "defaulted",
-            "elimination": "defaulted",
-            "absorption": "defaulted"
-          },
-          "family": "one-compartment-first-order",
-          "routeProvenance": "attributed",
-          "inferredParameters": [
-            "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -5537,15 +5470,42 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "absorption": "first-order"
           },
           "axisProvenance": {
-            "disposition": "defaulted",
-            "elimination": "defaulted",
-            "absorption": "defaulted"
+            "disposition": "asserted",
+            "elimination": "asserted",
+            "absorption": "asserted"
           },
           "family": "one-compartment-first-order",
-          "routeProvenance": "attributed",
-          "inferredParameters": [
-            "ka"
-          ]
+          "simplifiedFrom": {
+            "disposition": "two-compartment"
+          },
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1244,
+                1245
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                578,
+                1243
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                3479
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                578
+              ]
+            }
+          }
         }
       ]
     },
@@ -5568,7 +5528,36 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2320
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2316
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2319
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2319
+              ]
+            }
+          }
         }
       ]
     },
@@ -5591,7 +5580,29 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                3337
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                3343
+              ]
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -5614,7 +5625,37 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                1613
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                1613
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                1613
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                1817
+              ]
+            }
+          }
         }
       ]
     },
@@ -5639,6 +5680,37 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           ],
           "simplifiedFrom": {
             "disposition": "two-compartment"
+          },
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                98
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                98,
+                993,
+                994,
+                995,
+                1014
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                995
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                98,
+                993
+              ]
+            }
           }
         }
       ]
@@ -5662,7 +5734,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -5685,7 +5775,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -5708,7 +5816,37 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                1744
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                1744
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                1744
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                1744
+              ]
+            }
+          }
         }
       ]
     },
@@ -5731,7 +5869,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -5754,7 +5910,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -5777,7 +5951,33 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1985
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1984
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1990
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1984
+              ]
+            }
+          }
         }
       ]
     },
@@ -5800,7 +6000,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -5823,7 +6041,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -5838,15 +6074,38 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "absorption": "first-order"
           },
           "axisProvenance": {
-            "disposition": "defaulted",
-            "elimination": "defaulted",
-            "absorption": "defaulted"
+            "disposition": "asserted",
+            "elimination": "asserted",
+            "absorption": "asserted"
           },
           "family": "one-compartment-first-order",
-          "routeProvenance": "attributed",
-          "inferredParameters": [
-            "ka"
-          ]
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                1695
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1695
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                3473
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1608
+              ]
+            }
+          }
         }
       ]
     },
@@ -5863,9 +6122,39 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "axisProvenance": {
             "disposition": "asserted",
             "elimination": "defaulted",
-            "absorption": "defaulted"
+            "absorption": "asserted"
           },
-          "family": "one-compartment-first-order"
+          "family": "one-compartment-first-order",
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                200,
+                206
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                200,
+                206
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                202
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                200,
+                892,
+                1662
+              ]
+            }
+          }
         }
       ]
     },
@@ -5888,7 +6177,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -5911,7 +6218,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -5934,7 +6259,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -5957,7 +6300,46 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                326,
+                1164,
+                1165,
+                1608
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                326,
+                847,
+                1164,
+                1165,
+                1166
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                316,
+                326,
+                847,
+                1164,
+                1165
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                326,
+                847,
+                1165
+              ]
+            }
+          }
         }
       ]
     },
@@ -5980,7 +6362,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -5996,14 +6396,42 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           },
           "axisProvenance": {
             "disposition": "defaulted",
-            "elimination": "defaulted",
+            "elimination": "asserted",
             "absorption": "defaulted"
           },
           "family": "one-compartment-first-order",
-          "routeProvenance": "attributed",
-          "inferredParameters": [
-            "ka"
-          ]
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                815,
+                1181,
+                1182
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                175,
+                1180,
+                1185,
+                1186
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1183
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1183,
+                1184
+              ]
+            }
+          }
         }
       ]
     },
@@ -6029,7 +6457,21 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           ],
           "defaultedParameters": [
             "bioavailability"
-          ]
+          ],
+          "inputSources": {
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -6052,7 +6494,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -6067,15 +6527,43 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "absorption": "first-order"
           },
           "axisProvenance": {
-            "disposition": "defaulted",
-            "elimination": "defaulted",
+            "disposition": "asserted",
+            "elimination": "asserted",
             "absorption": "defaulted"
           },
           "family": "one-compartment-first-order",
-          "routeProvenance": "attributed",
-          "inferredParameters": [
-            "ka"
-          ]
+          "simplifiedFrom": {
+            "disposition": "two-compartment"
+          },
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                2070,
+                2074
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                133,
+                2070
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                3509
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                133,
+                2070
+              ]
+            }
+          }
         }
       ]
     },
@@ -6098,7 +6586,33 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                2266
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2266
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2266
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                2266
+              ]
+            }
+          }
         }
       ]
     },
@@ -6121,7 +6635,33 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                2177
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2177
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2177
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1608
+              ]
+            }
+          }
         }
       ]
     },
@@ -6144,7 +6684,35 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2001
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2001
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2001
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2001
+              ]
+            }
+          }
         }
       ]
     },
@@ -6161,13 +6729,45 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "axisProvenance": {
             "disposition": "defaulted",
             "elimination": "defaulted",
-            "absorption": "defaulted"
+            "absorption": "asserted"
           },
           "family": "one-compartment-first-order",
-          "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1505,
+                2779
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1502,
+                1503,
+                1504,
+                1505
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1503,
+                1504,
+                1505,
+                2779
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1502
+              ]
+            }
+          }
         }
       ]
     },
@@ -6182,7 +6782,7 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "absorption": "first-order"
           },
           "axisProvenance": {
-            "disposition": "defaulted",
+            "disposition": "asserted",
             "elimination": "defaulted",
             "absorption": "defaulted"
           },
@@ -6190,7 +6790,36 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "simplifiedFrom": {
+            "disposition": "two-compartment"
+          },
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1407
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1407,
+                1408,
+                1409
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                616
+              ]
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -6213,7 +6842,37 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2436,
+                2447
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2436
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2436,
+                2447
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2436
+              ]
+            }
+          }
         }
       ]
     },
@@ -6228,15 +6887,56 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "absorption": "first-order"
           },
           "axisProvenance": {
-            "disposition": "defaulted",
-            "elimination": "defaulted",
-            "absorption": "defaulted"
+            "disposition": "asserted",
+            "elimination": "asserted",
+            "absorption": "asserted"
           },
           "family": "one-compartment-first-order",
-          "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "simplifiedFrom": {
+            "disposition": "two-compartment"
+          },
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                900,
+                1539,
+                1540,
+                1545
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1540,
+                1541,
+                1543,
+                1544
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1540,
+                1541,
+                1542,
+                1543,
+                1544,
+                1545
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                900,
+                1541,
+                1545
+              ]
+            }
+          }
         }
       ]
     },
@@ -6251,15 +6951,43 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "absorption": "first-order"
           },
           "axisProvenance": {
-            "disposition": "defaulted",
-            "elimination": "defaulted",
-            "absorption": "defaulted"
+            "disposition": "asserted",
+            "elimination": "asserted",
+            "absorption": "asserted"
           },
           "family": "one-compartment-first-order",
-          "routeProvenance": "attributed",
-          "inferredParameters": [
-            "ka"
-          ]
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1343,
+                1344
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1338,
+                1340,
+                1341,
+                1345,
+                1356
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                3488
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1343,
+                1348
+              ]
+            }
+          }
         }
       ]
     },
@@ -6282,7 +7010,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -6305,7 +7051,41 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2626
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1441,
+                1442,
+                2626
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1441,
+                1442,
+                1608,
+                2626
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1441,
+                1608,
+                2626
+              ]
+            }
+          }
         }
       ]
     },
@@ -6328,7 +7108,34 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2025
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2025
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2025
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1608
+              ]
+            }
+          }
         }
       ]
     },
@@ -6353,6 +7160,41 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           ],
           "simplifiedFrom": {
             "disposition": "two-compartment"
+          },
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                548,
+                963
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                291,
+                956,
+                961,
+                962
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                548,
+                956,
+                963
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                282,
+                956,
+                961,
+                962
+              ]
+            }
           }
         }
       ]
@@ -6376,7 +7218,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -6399,7 +7259,60 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "analyte": "dimetyltryptamin",
+      "routes": [
+        {
+          "route": "iv",
+          "structure": {
+            "disposition": "one-compartment",
+            "elimination": "first-order",
+            "absorption": "bolus"
+          },
+          "axisProvenance": {
+            "disposition": "asserted",
+            "elimination": "asserted",
+            "absorption": "asserted"
+          },
+          "family": "iv-one-compartment",
+          "simplifiedFrom": {
+            "disposition": "two-compartment"
+          },
+          "inputSources": {
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1448,
+                1449
+              ]
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -6422,7 +7335,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -6445,7 +7376,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -6468,7 +7417,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -6491,7 +7458,38 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1608
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                787,
+                1472,
+                1473
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                787,
+                1472,
+                1473
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1471,
+                1608
+              ]
+            }
+          }
         }
       ]
     },
@@ -6514,7 +7512,38 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                2376,
+                2384
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2201,
+                2376,
+                2377
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2376,
+                2377
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                2376,
+                2384
+              ]
+            }
+          }
         }
       ]
     },
@@ -6537,7 +7566,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -6560,7 +7607,33 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                2967
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2967
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2967
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                2967
+              ]
+            }
+          }
         }
       ]
     },
@@ -6583,7 +7656,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -6606,7 +7697,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -6629,7 +7738,37 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                1817
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                773,
+                1608
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                773,
+                1608
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                1817
+              ]
+            }
+          }
         }
       ]
     },
@@ -6652,7 +7791,37 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                1628
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1617,
+                1618
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1617,
+                1618
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                1617
+              ]
+            }
+          }
         }
       ]
     },
@@ -6675,7 +7844,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -6698,7 +7885,37 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1608
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                3124,
+                3125,
+                3127
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1608
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                3124,
+                3125
+              ]
+            }
+          }
         }
       ]
     },
@@ -6721,7 +7938,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -6744,7 +7979,37 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                2811,
+                2822
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2803,
+                2804
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2811,
+                2822
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                2803,
+                2804
+              ]
+            }
+          }
         }
       ]
     },
@@ -6767,7 +8032,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -6790,7 +8073,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                2691,
+                2692
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1911,
+                1912,
+                2691,
+                2692
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1911,
+                1912,
+                2691,
+                2692
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                2691
+              ]
+            }
+          }
         }
       ]
     },
@@ -6813,7 +8129,33 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1623
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1623
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1623
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1623
+              ]
+            }
+          }
         }
       ]
     },
@@ -6836,7 +8178,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -6859,7 +8219,36 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                2654,
+                2655
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2654,
+                2655
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2654,
+                2655
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                2655
+              ]
+            }
+          }
         }
       ]
     },
@@ -6879,10 +8268,32 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "absorption": "defaulted"
           },
           "family": "one-compartment-first-order",
-          "routeProvenance": "attributed",
-          "inferredParameters": [
-            "ka"
-          ]
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1679
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1680
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                3475
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1680
+              ]
+            }
+          }
         }
       ]
     },
@@ -6905,7 +8316,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -6928,7 +8357,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -6943,15 +8390,48 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "absorption": "first-order"
           },
           "axisProvenance": {
-            "disposition": "defaulted",
-            "elimination": "defaulted",
-            "absorption": "defaulted"
+            "disposition": "asserted",
+            "elimination": "asserted",
+            "absorption": "asserted"
           },
           "family": "one-compartment-first-order",
-          "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1292,
+                1295,
+                1296,
+                1310
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                532,
+                1293,
+                1295,
+                1297
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1294,
+                1295,
+                1297
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1295
+              ]
+            }
+          }
         }
       ]
     },
@@ -6974,7 +8454,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -6997,7 +8495,34 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                2417
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2417
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2418
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                2417,
+                2418
+              ]
+            }
+          }
         }
       ]
     },
@@ -7012,7 +8537,7 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "absorption": "first-order"
           },
           "axisProvenance": {
-            "disposition": "defaulted",
+            "disposition": "asserted",
             "elimination": "defaulted",
             "absorption": "defaulted"
           },
@@ -7020,7 +8545,43 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "simplifiedFrom": {
+            "disposition": "two-compartment"
+          },
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                2623,
+                2643
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1316,
+                1317,
+                1608,
+                2643
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1317,
+                1318,
+                2623,
+                2643
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                2643
+              ]
+            }
+          }
         }
       ]
     },
@@ -7043,7 +8604,35 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                3220
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                3213
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                3213
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                3213
+              ]
+            }
+          }
         }
       ]
     },
@@ -7066,7 +8655,37 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                3221,
+                3222
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                3221,
+                3222
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                3221,
+                3222
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                3221,
+                3222
+              ]
+            }
+          }
         }
       ]
     },
@@ -7092,7 +8711,28 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           ],
           "defaultedParameters": [
             "bioavailability"
-          ]
+          ],
+          "inputSources": {
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2058
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2052,
+                2058
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                2058
+              ]
+            }
+          }
         }
       ]
     },
@@ -7115,7 +8755,38 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2064
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2063,
+                2064
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2063,
+                2064
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2063,
+                2064
+              ]
+            }
+          }
         }
       ]
     },
@@ -7138,7 +8809,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -7161,7 +8850,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -7184,7 +8891,38 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2351
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2348,
+                2351
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2351
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2351
+              ]
+            }
+          }
         }
       ]
     },
@@ -7207,7 +8945,38 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1761,
+                1762
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                81,
+                1128,
+                1762
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                81,
+                1761,
+                1762
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1762
+              ]
+            }
+          }
         }
       ]
     },
@@ -7230,7 +8999,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -7253,7 +9040,33 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                3059
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                3059
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                3059
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                3059
+              ]
+            }
+          }
         }
       ]
     },
@@ -7276,7 +9089,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -7302,7 +9133,21 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           ],
           "defaultedParameters": [
             "bioavailability"
-          ]
+          ],
+          "inputSources": {
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -7325,7 +9170,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -7348,7 +9211,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -7371,7 +9252,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -7394,7 +9293,33 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                3168
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                3169
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                3168
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                3169
+              ]
+            }
+          }
         }
       ]
     },
@@ -7417,7 +9342,33 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                2092
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2092
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2092
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                2092
+              ]
+            }
+          }
         }
       ]
     },
@@ -7440,7 +9391,33 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                3176
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                3176
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                3176
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                3176
+              ]
+            }
+          }
         }
       ]
     },
@@ -7463,7 +9440,36 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2195
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2195
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2195
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1608
+              ]
+            }
+          }
         }
       ]
     },
@@ -7486,7 +9492,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -7509,7 +9533,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -7524,15 +9566,46 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "absorption": "first-order"
           },
           "axisProvenance": {
-            "disposition": "defaulted",
+            "disposition": "asserted",
             "elimination": "defaulted",
-            "absorption": "defaulted"
+            "absorption": "asserted"
           },
           "family": "one-compartment-first-order",
-          "routeProvenance": "attributed",
-          "inferredParameters": [
-            "ka"
-          ]
+          "simplifiedFrom": {
+            "disposition": "two-compartment"
+          },
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1566,
+                1567,
+                2758
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1566,
+                1567,
+                2758
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                3512
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1566,
+                1567,
+                2758
+              ]
+            }
+          }
         }
       ]
     },
@@ -7547,15 +9620,45 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "absorption": "first-order"
           },
           "axisProvenance": {
-            "disposition": "defaulted",
-            "elimination": "defaulted",
-            "absorption": "defaulted"
+            "disposition": "asserted",
+            "elimination": "asserted",
+            "absorption": "asserted"
           },
           "family": "one-compartment-first-order",
-          "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                764,
+                1273
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                743,
+                744,
+                764,
+                1262
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                743,
+                744,
+                764,
+                1262
+              ]
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -7578,7 +9681,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -7595,15 +9716,48 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "axisProvenance": {
             "disposition": "asserted",
             "elimination": "asserted",
-            "absorption": "defaulted"
+            "absorption": "asserted"
           },
           "family": "one-compartment-first-order",
-          "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
           ],
           "simplifiedFrom": {
             "disposition": "two-compartment"
+          },
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                145,
+                1020
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                145,
+                530,
+                1020,
+                1021,
+                1022
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                145,
+                1023
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1020,
+                1021,
+                1024
+              ]
+            }
           }
         }
       ]
@@ -7627,7 +9781,36 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1793,
+                1794
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1793,
+                1794
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1795
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1793,
+                1794
+              ]
+            }
+          }
         }
       ]
     },
@@ -7650,7 +9833,35 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2335
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2333
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1608
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1608
+              ]
+            }
+          }
         }
       ]
     },
@@ -7676,7 +9887,27 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           ],
           "defaultedParameters": [
             "bioavailability"
-          ]
+          ],
+          "inputSources": {
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2467
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2470
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1608
+              ]
+            }
+          }
         }
       ]
     },
@@ -7699,7 +9930,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -7725,30 +9974,27 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           ],
           "defaultedParameters": [
             "bioavailability"
-          ]
-        }
-      ]
-    },
-    {
-      "analyte": "midazolam",
-      "routes": [
-        {
-          "route": "oral",
-          "structure": {
-            "disposition": "one-compartment",
-            "elimination": "first-order",
-            "absorption": "first-order"
-          },
-          "axisProvenance": {
-            "disposition": "defaulted",
-            "elimination": "defaulted",
-            "absorption": "defaulted"
-          },
-          "family": "one-compartment-first-order",
-          "routeProvenance": "attributed",
-          "inferredParameters": [
-            "ka"
-          ]
+          ],
+          "inputSources": {
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                130
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                130
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                132
+              ]
+            }
+          }
         }
       ]
     },
@@ -7771,7 +10017,37 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                2128,
+                2129
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2128,
+                2129
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2128,
+                2129
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                2128,
+                2129
+              ]
+            }
+          }
         }
       ]
     },
@@ -7779,48 +10055,46 @@ export const GENERATED_REGISTRY_ARTIFACT = {
       "analyte": "nalokson",
       "routes": [
         {
-          "route": "oral",
+          "route": "intranasal",
           "structure": {
             "disposition": "one-compartment",
             "elimination": "first-order",
             "absorption": "first-order"
           },
           "axisProvenance": {
-            "disposition": "defaulted",
-            "elimination": "defaulted",
+            "disposition": "asserted",
+            "elimination": "asserted",
             "absorption": "defaulted"
           },
           "family": "one-compartment-first-order",
-          "routeProvenance": "attributed",
-          "inferredParameters": [
-            "ka"
-          ]
-        }
-      ]
-    },
-    {
-      "analyte": "nn-dimethyltryptamine-dmt",
-      "routes": [
-        {
-          "route": "oral",
-          "structure": {
-            "disposition": "one-compartment",
-            "elimination": "first-order",
-            "absorption": "first-order"
+          "simplifiedFrom": {
+            "disposition": "two-compartment"
           },
-          "axisProvenance": {
-            "disposition": "defaulted",
-            "elimination": "defaulted",
-            "absorption": "defaulted"
-          },
-          "family": "one-compartment-first-order",
-          "routeProvenance": "attributed",
-          "inferredParameters": [
-            "ka"
-          ],
           "defaultedParameters": [
             "bioavailability"
-          ]
+          ],
+          "inputSources": {
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2713
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                3498
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                3202
+              ]
+            }
+          }
         }
       ]
     },
@@ -7843,7 +10117,45 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                293,
+                643
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                293,
+                643,
+                1143,
+                1144,
+                1145,
+                1146,
+                1150
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                293,
+                1146
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                293,
+                789,
+                1144,
+                1145,
+                1146
+              ]
+            }
+          }
         }
       ]
     },
@@ -7866,7 +10178,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -7889,7 +10219,34 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                3059
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                3059
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                3059
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                3059
+              ]
+            }
+          }
         }
       ]
     },
@@ -7912,7 +10269,35 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                2556
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2556,
+                2557
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2556,
+                2557
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                321
+              ]
+            }
+          }
         }
       ]
     },
@@ -7935,7 +10320,41 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                2207,
+                2208
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2133,
+                2201,
+                2208
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2133,
+                2201,
+                2208
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                2201,
+                2208
+              ]
+            }
+          }
         }
       ]
     },
@@ -7958,7 +10377,34 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                3305
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                3305
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                3350,
+                3367
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                3327
+              ]
+            }
+          }
         }
       ]
     },
@@ -7981,7 +10427,33 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1608
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2485
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2480
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                2485
+              ]
+            }
+          }
         }
       ]
     },
@@ -7996,7 +10468,7 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "absorption": "first-order"
           },
           "axisProvenance": {
-            "disposition": "defaulted",
+            "disposition": "asserted",
             "elimination": "defaulted",
             "absorption": "defaulted"
           },
@@ -8004,7 +10476,39 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1358,
+                1362
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1358,
+                1360,
+                1363
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1358,
+                1359,
+                1363
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1359,
+                1361
+              ]
+            }
+          }
         }
       ]
     },
@@ -8027,7 +10531,35 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                2846,
+                2851
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2846
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2846,
+                2851
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                2846
+              ]
+            }
+          }
         }
       ]
     },
@@ -8050,7 +10582,36 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                1839
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                1839
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1839
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                1839
+              ]
+            }
+          }
         }
       ]
     },
@@ -8065,14 +10626,46 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "absorption": "first-order"
           },
           "axisProvenance": {
-            "disposition": "defaulted",
+            "disposition": "asserted",
             "elimination": "asserted",
             "absorption": "asserted"
           },
           "family": "one-compartment-first-order",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "simplifiedFrom": {
+            "disposition": "two-compartment"
+          },
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                566,
+                1665
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                566,
+                1665
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                566
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                107,
+                566
+              ]
+            }
+          }
         }
       ]
     },
@@ -8098,7 +10691,21 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           ],
           "defaultedParameters": [
             "bioavailability"
-          ]
+          ],
+          "inputSources": {
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -8121,7 +10728,37 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                2297,
+                2304
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1681,
+                2297
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2297,
+                2304
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1681,
+                2297
+              ]
+            }
+          }
         }
       ]
     },
@@ -8129,22 +10766,35 @@ export const GENERATED_REGISTRY_ARTIFACT = {
       "analyte": "pentobarbital",
       "routes": [
         {
-          "route": "oral",
+          "route": "iv",
           "structure": {
             "disposition": "one-compartment",
             "elimination": "first-order",
-            "absorption": "first-order"
+            "absorption": "bolus"
           },
           "axisProvenance": {
-            "disposition": "defaulted",
+            "disposition": "asserted",
             "elimination": "defaulted",
-            "absorption": "defaulted"
+            "absorption": "asserted"
           },
-          "family": "one-compartment-first-order",
-          "routeProvenance": "attributed",
-          "inferredParameters": [
-            "ka"
-          ]
+          "family": "iv-one-compartment",
+          "simplifiedFrom": {
+            "disposition": "two-compartment"
+          },
+          "inputSources": {
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2583
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                3444
+              ]
+            }
+          }
         }
       ]
     },
@@ -8167,7 +10817,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -8190,7 +10858,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -8213,7 +10899,36 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                2511,
+                3348
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2511,
+                3348
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2511
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                3348
+              ]
+            }
+          }
         }
       ]
     },
@@ -8236,7 +10951,35 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1490,
+                1608
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1608
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1491,
+                1608
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1608
+              ]
+            }
+          }
         }
       ]
     },
@@ -8259,7 +11002,36 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                2030,
+                2033
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2030,
+                2031
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2030,
+                2032
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                2030
+              ]
+            }
+          }
         }
       ]
     },
@@ -8285,7 +11057,21 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           ],
           "defaultedParameters": [
             "bioavailability"
-          ]
+          ],
+          "inputSources": {
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -8302,13 +11088,38 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "axisProvenance": {
             "disposition": "defaulted",
             "elimination": "defaulted",
-            "absorption": "defaulted"
+            "absorption": "asserted"
           },
           "family": "one-compartment-first-order",
-          "routeProvenance": "attributed",
-          "inferredParameters": [
-            "ka"
-          ]
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                2574,
+                2575
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2574,
+                2575
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                3482
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                2574,
+                2575
+              ]
+            }
+          }
         }
       ]
     },
@@ -8331,7 +11142,34 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1608
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1608
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1608
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                3051
+              ]
+            }
+          }
         }
       ]
     },
@@ -8354,7 +11192,37 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2064
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2064
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2064
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2064
+              ]
+            }
+          }
         }
       ]
     },
@@ -8377,7 +11245,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -8400,7 +11286,33 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                2832
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2825
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2832
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                2825
+              ]
+            }
+          }
         }
       ]
     },
@@ -8423,7 +11335,33 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1608
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1608
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1608
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1608
+              ]
+            }
+          }
         }
       ]
     },
@@ -8446,7 +11384,37 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2134
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2134
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2134
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2134
+              ]
+            }
+          }
         }
       ]
     },
@@ -8468,7 +11436,34 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "family": "one-compartment-first-order",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                3454,
+                3455
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1608
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2533
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1608
+              ]
+            }
+          }
         }
       ]
     },
@@ -8491,7 +11486,33 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                3054
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1608
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1608
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                3055
+              ]
+            }
+          }
         }
       ]
     },
@@ -8517,7 +11538,27 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           ],
           "defaultedParameters": [
             "bioavailability"
-          ]
+          ],
+          "inputSources": {
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2139
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2139
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                2139
+              ]
+            }
+          }
         }
       ]
     },
@@ -8540,7 +11581,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -8563,7 +11622,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -8586,7 +11663,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -8609,7 +11704,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -8632,7 +11745,38 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                2268,
+                2269
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2268,
+                2269
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2268,
+                2269
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2269
+              ]
+            }
+          }
         }
       ]
     },
@@ -8655,7 +11799,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                2723,
+                2725
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2723,
+                2724,
+                2725
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2723,
+                2724,
+                2725
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                2723,
+                2725
+              ]
+            }
+          }
         }
       ]
     },
@@ -8678,7 +11855,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -8701,7 +11896,35 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                3135
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                3135,
+                3140
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                3135,
+                3149
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                3135
+              ]
+            }
+          }
         }
       ]
     },
@@ -8724,7 +11947,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -8750,7 +11991,21 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           ],
           "defaultedParameters": [
             "bioavailability"
-          ]
+          ],
+          "inputSources": {
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -8773,7 +12028,35 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                3157,
+                3158
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                3152
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                3152
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                3152,
+                3158
+              ]
+            }
+          }
         }
       ]
     },
@@ -8796,7 +12079,38 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1378,
+                1379,
+                2746
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                820,
+                2746
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1378,
+                1379,
+                2746
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                2746
+              ]
+            }
+          }
         }
       ]
     },
@@ -8819,7 +12133,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -8842,7 +12174,36 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                2252
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2251,
+                2252
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2251,
+                2252
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                2251,
+                2252
+              ]
+            }
+          }
         }
       ]
     },
@@ -8865,7 +12226,37 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                2518,
+                2519
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2280,
+                2518
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2518,
+                2519
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                2280,
+                2518
+              ]
+            }
+          }
         }
       ]
     },
@@ -8888,7 +12279,35 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                2280
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2278,
+                2279
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2280
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                2278,
+                2279
+              ]
+            }
+          }
         }
       ]
     },
@@ -8911,7 +12330,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -8934,7 +12371,37 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                3183,
+                3184
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                3183,
+                3184
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                3183,
+                3184
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                3183,
+                3184
+              ]
+            }
+          }
         }
       ]
     },
@@ -8957,7 +12424,33 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                2201
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2201
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2201
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                2201
+              ]
+            }
+          }
         }
       ]
     },
@@ -8980,7 +12473,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -9003,7 +12514,33 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                2152
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2152
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2152
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                2152
+              ]
+            }
+          }
         }
       ]
     },
@@ -9026,7 +12563,35 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1704
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1704,
+                1707
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1704
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1704,
+                1707
+              ]
+            }
+          }
         }
       ]
     },
@@ -9049,7 +12614,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -9072,7 +12655,37 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1608,
+                3131
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                2825,
+                3131
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                2825,
+                3131
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                2825,
+                3131
+              ]
+            }
+          }
         }
       ]
     },
@@ -9095,7 +12708,33 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1608
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1608
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1608
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1608
+              ]
+            }
+          }
         }
       ]
     },
@@ -9118,7 +12757,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -9141,7 +12798,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -9164,7 +12839,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -9187,7 +12880,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -9202,15 +12913,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "absorption": "first-order"
           },
           "axisProvenance": {
-            "disposition": "defaulted",
-            "elimination": "defaulted",
+            "disposition": "asserted",
+            "elimination": "asserted",
             "absorption": "defaulted"
           },
           "family": "one-compartment-first-order",
-          "routeProvenance": "attributed",
-          "inferredParameters": [
-            "ka"
-          ]
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                873
+              ]
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -9233,7 +12960,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     },
@@ -9256,7 +13001,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "cited",
+              "citationIds": [
+                1819,
+                1820,
+                1827
+              ]
+            },
+            "eliminationHalfLife": {
+              "basis": "cited",
+              "citationIds": [
+                1819,
+                1820,
+                1827
+              ]
+            },
+            "ka": {
+              "basis": "cited",
+              "citationIds": [
+                1819,
+                1820,
+                1827
+              ]
+            },
+            "vd": {
+              "basis": "cited",
+              "citationIds": [
+                1819,
+                1820
+              ]
+            }
+          }
         }
       ]
     },
@@ -9279,7 +13057,25 @@ export const GENERATED_REGISTRY_ARTIFACT = {
           "routeProvenance": "attributed",
           "inferredParameters": [
             "ka"
-          ]
+          ],
+          "inputSources": {
+            "bioavailability": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "eliminationHalfLife": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "ka": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            },
+            "vd": {
+              "basis": "uncited",
+              "reason": "authored-value"
+            }
+          }
         }
       ]
     }
@@ -9287,9 +13083,7 @@ export const GENERATED_REGISTRY_ARTIFACT = {
   "supersededByOverride": [
     "amphetamine",
     "cocaine",
-    "ethanol",
-    "ketamine",
-    "methylphenidate"
+    "ketamine"
   ],
   "notModelable": [
     {
@@ -10491,6 +14285,20 @@ export const GENERATED_REGISTRY_ARTIFACT = {
       "routes": []
     },
     {
+      "slug": "ethanol",
+      "reason": "no administration route could be assembled into a runnable model",
+      "routes": [
+        {
+          "route": "oral",
+          "outcome": "unsupported",
+          "reason": "assembly for the michaelis-menten family is not implemented yet",
+          "inferred": [
+            "ka"
+          ]
+        }
+      ]
+    },
+    {
       "slug": "ethyl-glucuronide",
       "reason": "no administration route could be assembled into a runnable model",
       "routes": [
@@ -10656,11 +14464,7 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         {
           "route": "oral",
           "outcome": "unsupported",
-          "reason": "assembly for the michaelis-menten family is not implemented yet",
-          "inferred": [
-            "ka"
-          ],
-          "routeProvenance": "attributed"
+          "reason": "saturable (Michaelis–Menten) elimination is modelled only for one-compartment disposition with first-order absorption, not two-compartment + first-order absorption"
         }
       ]
     },
@@ -11102,6 +14906,23 @@ export const GENERATED_REGISTRY_ARTIFACT = {
       "routes": []
     },
     {
+      "slug": "mdma",
+      "reason": "no administration route could be assembled into a runnable model",
+      "routes": [
+        {
+          "route": "oral",
+          "outcome": "incomplete",
+          "missing": [
+            "firstOrderFraction",
+            "zeroOrderDuration"
+          ],
+          "inferred": [
+            "ka"
+          ]
+        }
+      ]
+    },
+    {
       "slug": "mdmb-butinaca",
       "reason": "no administration route was supplied",
       "routes": []
@@ -11242,6 +15063,17 @@ export const GENERATED_REGISTRY_ARTIFACT = {
       "routes": []
     },
     {
+      "slug": "methylphenidate",
+      "reason": "no administration route could be assembled into a runnable model",
+      "routes": [
+        {
+          "route": "oral",
+          "outcome": "unsupported",
+          "reason": "route oral declares an absorption rate (ka) but its input shape \"transit\" has no first-order absorption phase"
+        }
+      ]
+    },
+    {
       "slug": "metiopropamin",
       "reason": "no administration route was supplied",
       "routes": []
@@ -11345,6 +15177,17 @@ export const GENERATED_REGISTRY_ARTIFACT = {
       "slug": "miboleron",
       "reason": "no administration route was supplied",
       "routes": []
+    },
+    {
+      "slug": "midazolam",
+      "reason": "no administration route could be assembled into a runnable model",
+      "routes": [
+        {
+          "route": "oral",
+          "outcome": "unsupported",
+          "reason": "route oral declares an absorption rate (ka) but its input shape \"transit\" has no first-order absorption phase"
+        }
+      ]
     },
     {
       "slug": "mifepriston",
