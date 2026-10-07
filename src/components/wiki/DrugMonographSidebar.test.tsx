@@ -570,6 +570,24 @@ describe('DrugMonographSidebar', () => {
     expect(mechanismButton).toHaveClass('focus-visible:opacity-100');
   });
 
+  it('reveals the section actions on hover of the tab itself, and outright on touch', () => {
+    mockDrugState.metabolism = null;
+    setUser([]);
+    renderSidebar(undefined, 'metabolism');
+
+    // A tab has no section box around it, so the tab's root has to be the
+    // hover group the section actions listen to — or they never show.
+    expect(screen.getByTestId('drug-monograph-section-metabolism')).toHaveClass(
+      'group/section',
+    );
+    const metabolismButton = screen.getByRole('button', {
+      name: /add metabolism data/i,
+    });
+    expect(metabolismButton).toHaveClass('group-hover/section:opacity-100');
+    // `hover-actions` shows the button outright where the device can't hover.
+    expect(metabolismButton).toHaveClass('hover-actions');
+  });
+
   it('hides the mechanism editor entry point from anonymous viewers', () => {
     mockDrugState.receptorTargets = [];
     setUser(null);

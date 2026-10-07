@@ -2615,6 +2615,7 @@
     "postmortem": "Postmortalt"
   },
   "monographTabs": {
+    "overview": "Oversikt",
     "navLabel": "Monografi for {{drug}}",
     "parametersLabel": "Parametre",
     "noParameters": "Ingen parameterverdier registrert for dette temaet ennå.",
