@@ -31,9 +31,7 @@ export function ParameterDiscussionPanel({
   const spec = DRUG_PARAMETERS[parameter];
   const { longLabel } = useParameterLabels(spec);
   // One string for the visible heading and the dialog's accessible name, so
-  // the two can never drift apart. Interpolated rather than glued together
-  // from `discussion.monographTitle`, which stays the standalone label it is
-  // in `MonographDiscussion`.
+  // the two can never drift apart.
   const heading = t('discussion.parameterHeading', { parameter: longLabel });
 
   return (
