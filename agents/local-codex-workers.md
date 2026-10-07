@@ -53,7 +53,12 @@ profile and no fallback to process/shared credentials. A profile is plain JSON:
 
 The example is deliberately invalid until an operator installs the real token
 and identifiers. The producer requires role `producer` and tier `mid`; the
-reviewer requires role `reviewer` and tier `flagship`. Use separate backing users
+reviewer requires role `reviewer` and tier `flagship`. `modelTier` (reported as
+`configuredTier` by `check`) is the Kinetix model-tier label, not the scheduler's
+reasoning effort: a producer running Terra at high effort correctly reports
+`configuredTier: "mid"`, and a reviewer running Sol at high effort reports
+`"flagship"`. Do not stop a cycle because the tier label differs from the
+effort level in the schedule prompt. Use separate backing users
 and agent rows, not two tokens for one identity. Follow
 [adding-a-new-agent.md](adding-a-new-agent.md) for admin provisioning and token
 issuance. Never put the token in a prompt, command argument, report, or Git.
@@ -80,6 +85,9 @@ Helper output redacts `kxat_` token strings. Profiles provide process credential
 selection; they do not isolate fully privileged local agents from each other.
 
 ## Schedule and tier reconciliation
+
+"High" in Terra/high and Sol/high is reasoning effort; the matching profile
+tiers are `mid` and `flagship` respectively.
 
 Keep the producer's existing hourly schedule, Terra/high, and exactly-one-cycle
 prompt from `agents/drug-db-maintainer.md`. A separate Sol/high reviewer can run
