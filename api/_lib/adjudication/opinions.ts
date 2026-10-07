@@ -17,13 +17,14 @@
  * produces the T4 handoff and tells the reviewers.
  */
 
-import { and, desc, eq, isNotNull, inArray } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull, inArray, or } from 'drizzle-orm';
 import { getDb, inTransaction } from '../db.js';
 import {
   adjudicationCaseSeats,
   adjudicationCases,
   adjudicationOpinions,
   agents,
+  disputes,
   users,
   type AdjudicationCaseState,
   type AdjudicationHandoff,
@@ -49,7 +50,8 @@ import {
   VALUE_ENDORSING_RESOLUTIONS,
   type ConvergenceResult,
 } from './convergence.js';
-import { adjudicationTargetParameter } from './target.js';
+import { adjudicationTargetParameter, readTargetRow } from './target.js';
+import { disputeOriginOf } from './detector.js';
 import type { InvalidatedReason } from './cases.js';
 
 export interface OpinionInput {
@@ -411,6 +413,11 @@ function handoffSummary(
   for (const o of asked) {
     parts.push(`Seat ${o.seat.toUpperCase()} asked for a person: ${o.humanReason}`);
   }
+  if (reasons.includes('panel_abstained')) {
+    parts.push(
+      'Both panelists abstained: the decisive evidence is missing or out of reach, so nothing was resolved.',
+    );
+  }
   if (reasons.includes('human_dispute')) {
     parts.push(
       result.recommendation
@@ -446,10 +453,54 @@ async function sealIfComplete(
   }, now);
   const converged = result.convergence.converged && !result.convergence.humanRequested;
   const state: AdjudicationCaseState = converged ? 'converged' : 'diverged';
+
+  // Who raised the disputes the case rests on, read again now, under the
+  // source-row lock this write holds: a person's dispute on this version that
+  // landed after the detector last refreshed the case still makes the closing
+  // act theirs. Merged into the case's record, never narrowed.
+  const openNow = await tx
+    .select({
+      id: disputes.id,
+      source: disputes.source,
+      createdBy: disputes.createdBy,
+      reasonMd: disputes.reasonMd,
+      evidenceRefs: disputes.evidenceRefs,
+      createdAt: disputes.createdAt,
+    })
+    .from(disputes)
+    .where(
+      and(
+        eq(disputes.targetType, kase.targetType),
+        eq(disputes.targetId, kase.targetId),
+        eq(disputes.status, 'open'),
+        or(eq(disputes.targetVersion, kase.targetVersion), isNull(disputes.targetVersion)),
+      ),
+    );
+  const known = new Set(kase.t1Snapshot.openDisputes.map((d) => d.disputeId));
+  const openDisputes = [
+    ...kase.t1Snapshot.openDisputes,
+    ...openNow
+      .filter((d) => !known.has(d.id))
+      .map((d) => ({
+        disputeId: d.id,
+        source: d.source,
+        createdBy: d.createdBy,
+        reasonMd: d.reasonMd,
+        evidenceRefs: d.evidenceRefs,
+        createdAt: d.createdAt.toISOString(),
+      })),
+  ];
+  const t1Snapshot = { ...kase.t1Snapshot, openDisputes };
+  const disputeOrigin = disputeOriginOf(openDisputes);
+
   const reasons: AdjudicationHandoff['reasons'] = [];
   if (!result.convergence.converged) reasons.push('panel_diverged');
   if (result.convergence.humanRequested) reasons.push('human_requested');
-  if (kase.disputeOrigin !== 'agent') reasons.push('human_dispute');
+  // Both panelists abstained: they agree only that the decisive evidence is
+  // missing. Nothing was resolved, and this version cannot open another case,
+  // so a person takes it.
+  if (converged && a.resolution === 'abstain') reasons.push('panel_abstained');
+  if (disputeOrigin !== 'agent') reasons.push('human_dispute');
   const t4Required = reasons.length > 0;
 
   const families = [a.modelFamily, b.modelFamily];
@@ -473,13 +524,16 @@ async function sealIfComplete(
         targetType: kase.targetType,
         targetId: kase.targetId,
         targetVersion: kase.targetVersion,
-        disputeOrigin: kase.disputeOrigin,
+        disputeOrigin,
         triggers: kase.triggers,
         reasons,
         summary: handoffSummary(reasons, opinions, result),
+        // The version-pinned payload: the final write that sealed the case
+        // checked the target is still at this version, under the same lock.
+        target: await readTargetRow(kase.targetType, kase.targetId),
         opinions: opinions.map(handoffOpinion),
         t2Snapshot: kase.t2Snapshot,
-        t1Snapshot: kase.t1Snapshot,
+        t1Snapshot,
         decisiveSources,
         convergence: result.convergence,
         recommendation: result.recommendation,
@@ -498,11 +552,13 @@ async function sealIfComplete(
       t4Required,
       handoff,
       panelFamilyDiversity,
+      disputeOrigin,
+      t1Snapshot,
     })
     .where(eq(adjudicationCases.id, caseId));
 
   if (handoff) {
-    const humanDispute = kase.t1Snapshot.openDisputes.find((d) => d.source !== 'agent');
+    const humanDispute = openDisputes.find((d) => d.source !== 'agent');
     await fanOutDisputeNotification({
       type: 'adjudication_handoff',
       disputeId: humanDispute?.disputeId ?? null,

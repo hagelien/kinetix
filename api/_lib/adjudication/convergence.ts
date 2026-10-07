@@ -126,7 +126,8 @@ export function compareOpinions(
         comparedAt: now.toISOString(),
       },
       recommendation:
-        converged && !humanRequested
+        // An agreed abstention resolves nothing, so it recommends nothing.
+        converged && !humanRequested && a.resolution !== 'abstain'
           ? {
               resolution: a.resolution,
               scopeKey: a.scopeKey,

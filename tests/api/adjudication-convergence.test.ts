@@ -121,7 +121,14 @@ describe('T3 convergence', () => {
       clearance,
     );
     expect(r.convergence.converged).toBe(true);
-    expect(r.recommendation?.value).toBeNull();
+    // An agreed abstention resolves nothing, so it recommends nothing.
+    expect(r.recommendation).toBeNull();
+    const returned = compareOpinions(
+      opinion({ resolution: 'return' }),
+      opinion({ resolution: 'return' }),
+      clearance,
+    );
+    expect(returned.recommendation?.value).toBeNull();
   });
 
   it('never recommends when a panelist asks for a human, even on agreement', () => {

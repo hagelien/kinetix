@@ -233,6 +233,27 @@ describe('T3 case feed', () => {
     // Sealed now: both opinions are part of the record.
     expect((await caseFile(s.b.userId, s.caseId)).raw).toContain(secret);
   });
+
+  it('keeps a case abandoned before sealing blind, whatever its state', async () => {
+    const s = await seedCase();
+    await claim(s.a.userId, s.caseId);
+    await claim(s.b.userId, s.caseId);
+    const secret = 'Seat A’s draft reading of the table.';
+    await opinion(s.a.userId, {
+      caseId: s.caseId,
+      targetVersion: s.version,
+      proposition: secret,
+      resolvedValue: 60,
+      resolvedUnit: 'L/h',
+    });
+    // The target moves; seat B's next write closes the case unsealed.
+    await db.update(pendingEdits).set({ status: 'returned' }).where(eq(pendingEdits.id, s.editId));
+    await opinion(s.b.userId, { caseId: s.caseId, targetVersion: s.version, resolvedValue: 60, resolvedUnit: 'L/h' });
+    const forB = await caseFile(s.b.userId, s.caseId);
+    expect(forB.body.case.state).toBe('invalidated');
+    expect(forB.raw).not.toContain(secret);
+    expect(forB.body.seats.find((x: { seat: string }) => x.seat === 'a')).not.toHaveProperty('agentId');
+  });
 });
 
 describe('T3 opinions', () => {
@@ -373,6 +394,55 @@ describe('T3 sealing, convergence and the T4 handoff', () => {
     expect(kase.handoff!.recommendation).not.toBeNull();
     const [human] = await db.select().from(disputes);
     expect(human!.status).toBe('open');
+  });
+
+  it('hands an agreed abstention to a person: nothing was resolved', async () => {
+    const s = await seedCase();
+    const reviewer = await seedUser(db, { email: 'ed@example.com', username: 'ed', role: 'editor' });
+    const { kase } = await panel(s, { resolution: 'abstain' }, { resolution: 'abstain' });
+    expect(kase).toMatchObject({ state: 'converged', t4Required: true, recommendation: null });
+    expect(kase.handoff!.reasons).toEqual(['panel_abstained']);
+    const notes = await db.select().from(notifications).where(eq(notifications.userId, reviewer));
+    expect(notes.map((n) => n.type)).toEqual(['adjudication_handoff']);
+  });
+
+  it('makes the case a person’s when their dispute lands after the case was last refreshed', async () => {
+    const s = await seedCase();
+    // No detector pass after this: only the seal can see it.
+    const human = await seedUser(db, { email: 'late@example.com', username: 'late', role: 'contributor' });
+    await db.insert(disputes).values({
+      targetType: 'pending_edit',
+      targetId: s.editId,
+      createdBy: human,
+      source: 'human',
+      reasonMd: 'Feil populasjon.',
+      targetVersion: s.version,
+    });
+    const { kase } = await panel(
+      s,
+      { resolvedValue: 60, resolvedUnit: 'L/h' },
+      { resolvedValue: 60, resolvedUnit: 'L/h' },
+    );
+    expect(kase).toMatchObject({ state: 'converged', t4Required: true, disputeOrigin: 'human' });
+    expect(kase.handoff!.reasons).toEqual(['human_dispute']);
+    expect(kase.t1Snapshot.openDisputes.map((d) => d.source)).toEqual(['human']);
+  });
+
+  it('serves a person the target as the panel adjudicated it, after the live row moved', async () => {
+    const s = await seedCase();
+    const reviewer = await seedUser(db, { email: 'ed@example.com', username: 'ed', role: 'editor' });
+    await panel(
+      s,
+      { resolvedValue: 60, resolvedUnit: 'L/h' },
+      { resolvedValue: 75, resolvedUnit: 'L/h' },
+    );
+    await db
+      .update(pendingEdits)
+      .set({ proposedValue: { op: 'create', input: { value: 99, unit: 'L/h', quote: 'Revised.' } } })
+      .where(eq(pendingEdits.id, s.editId));
+    const asPerson = await caseFile(reviewer, s.caseId, 'editor');
+    expect(asPerson.body.target.asAdjudicated).toBe(true);
+    expect(asPerson.body.target.row.proposedValue.input.value).toBe(60);
   });
 
   it('sends a case to a person when a panelist asks for one, even on agreement', async () => {
