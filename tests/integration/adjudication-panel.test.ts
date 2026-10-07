@@ -970,6 +970,37 @@ describe('T3 automatic closure of converged agent-only cases', () => {
     expect(notes.map((n) => n.type)).toEqual(['adjudication_handoff']);
   });
 
+  it('approves a stated range only as that range, never by its centre alone', async () => {
+    const s = await seedCase({
+      agentDispute: true,
+      edit: {
+        proposedValue: {
+          op: 'create',
+          input: { low: 40, high: 80, median: 60, unit: 'L/h', quote: 'CL 40–80 L/h, median 60.' },
+        },
+      },
+    });
+    const centre = { resolvedValue: 60, resolvedUnit: 'L/h' };
+    const { kase, disputeRows } = await decide(s, centre, centre);
+    expect(kase.closure).toMatchObject({ action: 'declined', declined: 'value_differs' });
+    expect(disputeRows).toMatchObject([{ status: 'open' }]);
+  });
+
+  it('overrules on an approval of the stated range itself', async () => {
+    const s = await seedCase({
+      agentDispute: true,
+      edit: {
+        proposedValue: {
+          op: 'create',
+          input: { low: 40, high: 80, median: 60, unit: 'L/h', quote: 'CL 40–80 L/h, median 60.' },
+        },
+      },
+    });
+    const range = { resolvedLow: 40, resolvedHigh: 80, resolvedUnit: 'L/h' };
+    const { kase } = await decide(s, range, range);
+    expect(kase.closure).toMatchObject({ action: 'overruled' });
+  });
+
   it('hands a split-scope outcome to a person', async () => {
     const s = await seedCase({ agentDispute: true });
     const split = { resolution: 'split_scope', resolvedValue: 60, resolvedUnit: 'L/h' };
