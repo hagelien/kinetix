@@ -66,7 +66,12 @@ function renderBlock(token: Token): ReactNode {
     case 'list': {
       const list = token as Tokens.List;
       const items = list.items.map((item, i) => (
-        <li key={i} className="space-y-1">
+        <li
+          key={i}
+          className={
+            item.task ? 'flex list-none items-start gap-1.5' : 'space-y-1'
+          }
+        >
           {renderListItem(item)}
         </li>
       ));
@@ -134,6 +139,24 @@ function renderBlock(token: Token): ReactNode {
 }
 
 function renderListItem(item: Tokens.ListItem): ReactNode {
+  const body = renderListItemBody(item);
+  if (!item.task) return body;
+  // Marked strips the `[x]` / `[ ]` marker from the text; keep it visible.
+  return (
+    <>
+      <input
+        type="checkbox"
+        checked={!!item.checked}
+        disabled
+        readOnly
+        className="mt-[0.2em] shrink-0"
+      />
+      <div className="min-w-0 space-y-1">{body}</div>
+    </>
+  );
+}
+
+function renderListItemBody(item: Tokens.ListItem): ReactNode {
   // Tight list items wrap their text in a bare `text` block token; render it
   // inline so bullets don't get paragraph spacing.
   if (item.tokens.length === 1 && item.tokens[0]?.type === 'text') {
