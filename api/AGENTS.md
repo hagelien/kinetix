@@ -74,7 +74,7 @@ Multi-action routes such as `auth.ts` dispatch via `?action=` rather than separa
 | --------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | `GET /api/admin?resource=agents`                          | List all agents (every status) plus linked user + last 5 history rows                      |
 | `POST /api/admin?resource=agents`                         | Create agent. Seeds `agent_status_history` with the `null → active` entry                  |
-| `PATCH /api/admin?resource=agents&id=N`                   | Edit display fields (name, slug, description, maintainer). Does **not** touch status       |
+| `PATCH /api/admin?resource=agents&id=N`                   | Edit display fields (name, slug, description, maintainer) and the server-owned grants (`hooksEnabled`, `selfReviewEnabled`, `modelTier`, `adjudicator`, `modelFamily`). Does **not** touch status |
 | `PATCH /api/admin?resource=agents&id=N&action=transition` | Audited status change. Body: `{ status, reason? }`. Writes a history row + syncs user role |
 | `DELETE /api/admin?resource=agents&id=N`                  | Transition to `deactivated` (terminal). Row retained; backing user demoted                 |
 | `GET /api/admin?resource=agent-hook-runs`                 | Recent `agent_hook_runs` rows; `?outcome=` and `?event=` filters, `?limit=` (default 50)   |
