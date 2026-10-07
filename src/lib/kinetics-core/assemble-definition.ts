@@ -20,7 +20,7 @@
  * `CORE_VERSION` bump. The DB→canonical unit conversion, `vdScaling` inference, and the catalog
  * metadata are the read adapter's concern; this consumes them.
  */
-import { assembleRouteParams, type AssemblyValues } from './assemble-model.js';
+import { assembleRouteParams, type AssemblyRanges, type AssemblyValues } from './assemble-model.js';
 import { requiredCovariatesForVdScaling } from './scaling.js';
 import type { DerivedModel, RouteProvenance } from './derive-model.js';
 import type { InputSource } from './derived-grade.js';
@@ -86,6 +86,12 @@ export interface RouteAssemblyInput {
    * with the rest of the route's grade facts.
    */
   inputSources?: Partial<Record<RequiredParam, InputSource>>;
+  /**
+   * The reported spread for each role in `values`, when the catalog holds one (the lowest and
+   * highest value its sources report, canonical units). A usable spread makes that role a
+   * triangular spec instead of `fixed(median)` — see `assembleRouteParams`.
+   */
+  ranges?: AssemblyRanges;
   /** Basis-dependent CL/V rules, when the caller can supply them. */
   opts?: StructureRequirementOptions;
 }
@@ -163,6 +169,7 @@ export function assembleDrugDefinition(
     const result = assembleRouteParams(input.derived, input.values, {
       ...input.opts,
       vdScaling: input.vdScaling,
+      ...(input.ranges ? { ranges: input.ranges } : {}),
     });
     // An inference only ever ADDS a value, so it cannot change whether a route assembles — but it
     // must ride along with whichever outcome results, so the grade sees it.

@@ -83,7 +83,9 @@ import {
   MODEL_STRUCTURE_AXIS_PARAMETERS,
   parameterRoleFor,
   resolveDrugModelsByRoute,
+  inferredKaRange,
   tmaxHoursFrom,
+  toAssemblyRanges,
   toAssemblyValues,
   type CatalogParameterValue,
   type CautiousDefaultRole,
@@ -451,6 +453,16 @@ function roleSources(values: readonly SourcedValue[]): Partial<Record<RequiredPa
   return out;
 }
 
+/** A cached range's reported extremes, when it states both. */
+function reportedBounds(range: NumericRange): { low: number; high: number } | Record<string, never> {
+  return typeof range.min === 'number' &&
+    typeof range.max === 'number' &&
+    Number.isFinite(range.min) &&
+    Number.isFinite(range.max)
+    ? { low: range.min, high: range.max }
+    : {};
+}
+
 /** Push `value` onto the array stored under `key`, creating it on first use. */
 function pushInto<K, V>(map: Map<K, V[]>, key: K, value: V): void {
   const list = map.get(key);
@@ -575,6 +587,7 @@ export async function readDrugRouteAssemblyInputs(
           parameter: p,
           value: tmaxRep,
           unit: tmaxRange.unit ?? '',
+          ...reportedBounds(tmaxRange),
           source: drugLevelSource(p),
         });
       }
@@ -590,6 +603,7 @@ export async function readDrugRouteAssemblyInputs(
             parameter: p,
             value: fRep,
             unit: fRange.unit ?? '',
+            ...reportedBounds(fRange),
             source: drugLevelSource(p),
           });
         }
@@ -606,7 +620,13 @@ export async function readDrugRouteAssemblyInputs(
     // from entries — is not dropped and reported missing on an otherwise complete model.
     const rep = meanRange(range);
     if (rep === null) continue;
-    drugLevelValues.push({ parameter: p, value: rep, unit, source: drugLevelSource(p) });
+    drugLevelValues.push({
+      parameter: p,
+      value: rep,
+      unit,
+      ...reportedBounds(range),
+      source: drugLevelSource(p),
+    });
   }
 
   // Route-scoped values: pool each (route, parameter) group to a canonical median with the shared
@@ -662,6 +682,7 @@ export async function readDrugRouteAssemblyInputs(
       parameter,
       value: summary.representative,
       unit: targetUnit,
+      ...(summary.min !== null && summary.max !== null ? { low: summary.min, high: summary.max } : {}),
       source: sourceOfEntries(entries),
     });
   }
@@ -719,7 +740,8 @@ export async function readDrugRouteAssemblyInputs(
     // A route-scoped Tmax always wins over the drug-level figure: it is the one actually measured
     // for this route.
     const tmaxHours = tmaxHoursFrom(routeCatalogValues) ?? soleRouteTmax;
-    const tmaxSource = (firstTmax(routeCatalogValues) ?? soleRouteTmaxValue)?.source;
+    const tmaxValue = firstTmax(routeCatalogValues) ?? soleRouteTmaxValue;
+    const tmaxSource = tmaxValue?.source;
     const {
       values: withKa,
       inferredParameters,
@@ -754,10 +776,20 @@ export async function readDrugRouteAssemblyInputs(
         }
       }
     }
+    // The reported spread behind each value, for the roles that carry one. An inferred ka takes the
+    // spread its Tmax accounts for; a defaulted role took no catalog value and so has no spread.
+    const ranges = toAssemblyRanges(catalogValues);
+    for (const role of inferredParameters) {
+      const kaRange = inferredKaRange(tmaxValue, withKa.eliminationHalfLife);
+      if (kaRange) ranges[role] = kaRange;
+      else delete ranges[role];
+    }
+    for (const role of defaultedParameters) delete ranges[role];
     return {
       route: derived.route,
       derived,
       values: withDefaults,
+      ...(Object.keys(ranges).length > 0 ? { ranges } : {}),
       inputSources,
       ...(defaultedParameters.length > 0 ? { defaultedParameters } : {}),
       ...(derived.routeProvenance !== 'asserted'

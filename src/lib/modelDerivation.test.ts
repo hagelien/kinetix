@@ -18,6 +18,8 @@ import {
   resolveDrugModelsByRoute,
   canonicalUnitFor,
   toAssemblyValues,
+  toAssemblyRanges,
+  inferredKaRange,
   inferVdScaling,
   derivedDefinitionMetadata,
   MODEL_STRUCTURE_AXIS_PARAMETERS,
@@ -796,5 +798,59 @@ describe('tmaxHoursFrom', () => {
 
   it('is undefined when no Tmax is present', () => {
     expect(tmaxHoursFrom([])).toBeUndefined();
+  });
+});
+
+describe('toAssemblyRanges', () => {
+  it('converts a reported spread to the canonical unit alongside its value', () => {
+    expect(
+      toAssemblyRanges([
+        { parameter: 'clearance', value: 2, unit: 'L/min', low: 1, high: 4 },
+      ]),
+    ).toEqual({ clearance: { low: 60, high: 240 } });
+  });
+
+  it('lets a later value replace, or clear, an earlier value’s spread for the same role', () => {
+    expect(
+      toAssemblyRanges([
+        { parameter: 'bioavailability', value: 0.5, unit: 'fraction', low: 0.2, high: 0.9 },
+        { parameter: 'bioavailability', value: 0.7, unit: 'fraction' },
+      ]),
+    ).toEqual({});
+    expect(
+      toAssemblyRanges([
+        { parameter: 'bioavailability', value: 0.5, unit: 'fraction', low: 0.2, high: 0.9 },
+        { parameter: 'bioavailability', value: 0.7, unit: 'fraction', low: 0.6, high: 0.8 },
+      ]),
+    ).toEqual({ bioavailability: { low: 0.6, high: 0.8 } });
+  });
+});
+
+describe('inferredKaRange', () => {
+  const tmax = (low: number, high: number) => ({
+    parameter: 'tmax' as const,
+    value: (low + high) / 2,
+    unit: 'h',
+    low,
+    high,
+  });
+
+  it('maps the shortest Tmax to the highest ka and the longest to the lowest', () => {
+    const range = inferredKaRange(tmax(0.5, 2), 10);
+    expect(range).toBeDefined();
+    expect(range!.low).toBeLessThan(range!.high);
+    const fast = inferredKaRange(tmax(0.5, 0.6), 10)!;
+    const slow = inferredKaRange(tmax(1.9, 2), 10)!;
+    expect(fast.high).toBeCloseTo(range!.high, 10);
+    expect(slow.low).toBeCloseTo(range!.low, 10);
+  });
+
+  it('gives no range when the longest Tmax falls in the flip-flop regime', () => {
+    // t½ = 1 h → ke ≈ 0.69/h, so any Tmax at or above 1/ke ≈ 1.44 h cannot be solved.
+    expect(inferredKaRange(tmax(0.5, 3), 1)).toBeUndefined();
+  });
+
+  it('gives no range for a Tmax with no reported spread', () => {
+    expect(inferredKaRange({ parameter: 'tmax', value: 1, unit: 'h' }, 10)).toBeUndefined();
   });
 });

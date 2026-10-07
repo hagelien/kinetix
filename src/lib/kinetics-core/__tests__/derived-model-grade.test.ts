@@ -4,7 +4,7 @@
  * a policy change would move and the part a mistake would silently widen.
  */
 import { describe, expect, it } from 'vitest';
-import { fixed } from '../param.js';
+import { fixed, triangular } from '../param.js';
 import { assessDerivedModel } from '../derived-model-grade.js';
 import {
   evaluateGradePolicy,
@@ -424,5 +424,55 @@ describe('statedDimensions — every reason, each named once', () => {
         ],
       }),
     ).toHaveLength(1);
+  });
+});
+
+describe('uncertainty semantics from the reported spreads', () => {
+  const uncertaintyOf = (model: DrugModelDefinition, route = routeGrade()) =>
+    assessDerivedModel(model, route).find((a) => a.dimension === 'uncertainty-semantics');
+  const oralWith = (specs: Partial<Record<'ka' | 't' | 'vd' | 'f', ReturnType<typeof fixed>>>) =>
+    derivedDefinition({
+      routes: {
+        oral: {
+          family: 'one-compartment-first-order',
+          kaPerHour: specs.ka ?? fixed(1),
+          eliminationHalfLifeHours: specs.t ?? fixed(4),
+          vdLitersPerKg: specs.vd ?? fixed(1),
+          bioavailability: specs.f ?? fixed(0.8),
+        },
+      },
+    });
+
+  it('is C, labelled a plausible range, when every input carries its spread', () => {
+    const assessment = uncertaintyOf(
+      oralWith({
+        ka: triangular(0.5, 1, 2),
+        t: triangular(2, 4, 9),
+        vd: triangular(0.5, 1, 2),
+        f: triangular(0.6, 0.8, 0.9),
+      }),
+    );
+    expect(assessment?.grade).toBe('C');
+    expect(assessment?.reason).toContain('plausible range, not a confidence or prediction interval');
+  });
+
+  it('is D, naming the input, when one input has no spread', () => {
+    const assessment = uncertaintyOf(
+      oralWith({ ka: triangular(0.5, 1, 2), t: triangular(2, 4, 9), f: triangular(0.6, 0.8, 0.9) }),
+    );
+    expect(assessment?.grade).toBe('D');
+    expect(assessment?.reason).toContain('vd has no reported spread');
+  });
+
+  it('exempts a defaulted F, which is a disclosed bound rather than a measured value', () => {
+    const assessment = uncertaintyOf(
+      oralWith({ ka: triangular(0.5, 1, 2), t: triangular(2, 4, 9), vd: triangular(0.5, 1, 2), f: fixed(1) }),
+      routeGrade({ defaultedParameters: ['bioavailability'] }),
+    );
+    expect(assessment?.grade).toBe('C');
+  });
+
+  it('is D when every input is fixed', () => {
+    expect(uncertaintyOf(oralWith({}))?.grade).toBe('D');
   });
 });
