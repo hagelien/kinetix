@@ -9,11 +9,15 @@
  * fulfil. The PDF-request routes, the full-text gap list and the reference
  * page's upload prompt all use this classification to stay out of that loop.
  *
+ * Only numeric compound-record URLs (`/compound/<CID>`) qualify — exactly what
+ * the helper fetches. Substance, bioassay, patent and name-style URLs keep the
+ * ordinary full-text path, since the helper cannot read them as cited.
+ *
  * The pattern is shared verbatim with SQL (`~*`, case-insensitive), so keep it
  * to syntax both JavaScript and PostgreSQL regexes read the same way.
  */
 export const PUBCHEM_RECORD_URL_PATTERN =
-  '^https?://(www\\.)?pubchem\\.ncbi\\.nlm\\.nih\\.gov/';
+  '^https?://(www\\.)?pubchem\\.ncbi\\.nlm\\.nih\\.gov/compound/[1-9][0-9]*/?([?#]|$)';
 
 const pubChemRecordUrl = new RegExp(PUBCHEM_RECORD_URL_PATTERN, 'i');
 

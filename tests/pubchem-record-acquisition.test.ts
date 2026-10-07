@@ -128,14 +128,12 @@ describe("PubChem acquisition", () => {
     });
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValue(
-          new Response(null, {
-            status: 302,
-            headers: { location: "https://evil.example/" },
-          }),
-        ),
+      vi.fn().mockResolvedValue(
+        new Response(null, {
+          status: 302,
+          headers: { location: "https://evil.example/" },
+        }),
+      ),
     );
     expect(await acquirePubChem("115237")).toMatchObject({
       status: "unresolved",
@@ -158,21 +156,39 @@ describe("PubChem acquisition", () => {
 });
 
 describe("PubChem citation classification", () => {
-  it("matches PubChem record URLs only", () => {
+  it("matches numeric PubChem compound-record URLs only", () => {
     for (const identifier of [
       "https://pubchem.ncbi.nlm.nih.gov/compound/115237",
-      "http://pubchem.ncbi.nlm.nih.gov/compound/paliperidone",
-      " HTTPS://www.pubchem.ncbi.nlm.nih.gov/substance/1 ",
+      "http://pubchem.ncbi.nlm.nih.gov/compound/115237/",
+      "https://pubchem.ncbi.nlm.nih.gov/compound/115237#section=Half-Life",
+      " HTTPS://www.pubchem.ncbi.nlm.nih.gov/compound/1 ",
     ])
       expect(isPubChemRecordCitation({ type: "url", identifier })).toBe(true);
+    // Only what the helper can fetch: numeric compound records.
     for (const citation of [
       {
         type: "url",
-        identifier: "https://example.org/pubchem.ncbi.nlm.nih.gov/",
+        identifier: "https://pubchem.ncbi.nlm.nih.gov/compound/paliperidone",
       },
       {
         type: "url",
-        identifier: "https://pubchem.ncbi.nlm.nih.gov.evil.example/",
+        identifier: "https://pubchem.ncbi.nlm.nih.gov/substance/1",
+      },
+      {
+        type: "url",
+        identifier: "https://pubchem.ncbi.nlm.nih.gov/bioassay/1",
+      },
+      {
+        type: "url",
+        identifier: "https://pubchem.ncbi.nlm.nih.gov/compound/1/other",
+      },
+      {
+        type: "url",
+        identifier: "https://example.org/pubchem.ncbi.nlm.nih.gov/compound/1",
+      },
+      {
+        type: "url",
+        identifier: "https://pubchem.ncbi.nlm.nih.gov.evil.example/compound/1",
       },
       { type: "doi", identifier: "10.1093/nar/gkae1059" },
       {

@@ -4,7 +4,8 @@
  * A PubChem record is a public database entry the agents read through its open
  * data service, so an open request for one asks a contributor for a PDF that
  * does not exist. The tests pin the WHERE clause's edges: only open requests,
- * only PubChem URLs, and never a citation whose full text is already stored.
+ * only numeric compound-record URLs, and never a citation whose full text is
+ * already stored.
  * The harness truncates every table between tests, so the real statement is
  * re-run from the .sql file against seeded rows (as in the 0117 test).
  */
@@ -79,19 +80,26 @@ describe('migration 0137', () => {
     const compound = await seedRequest(
       'https://pubchem.ncbi.nlm.nih.gov/compound/115237',
     );
-    const named = await seedRequest(
-      ' HTTPS://pubchem.ncbi.nlm.nih.gov/compound/paliperidone ',
+    const anchored = await seedRequest(
+      ' HTTPS://pubchem.ncbi.nlm.nih.gov/compound/115237#section=Half-Life ',
     );
 
     await runMigration();
 
     expect(await statusOf(compound)).toBe('cancelled');
-    expect(await statusOf(named)).toBe('cancelled');
+    expect(await statusOf(anchored)).toBe('cancelled');
   });
 
   it('leaves other citations, settled requests and stored full text alone', async () => {
     const paper = await seedRequest('https://example.org/paper.pdf');
     const doi = await seedRequest('10.1111/bph.12295', 'doi');
+    // PubChem pages the helper cannot fetch keep the ordinary path.
+    const named = await seedRequest(
+      'https://pubchem.ncbi.nlm.nih.gov/compound/paliperidone',
+    );
+    const substance = await seedRequest(
+      'https://pubchem.ncbi.nlm.nih.gov/substance/12345',
+    );
     const fulfilled = await seedRequest(
       'https://pubchem.ncbi.nlm.nih.gov/compound/1',
       'url',
@@ -115,6 +123,8 @@ describe('migration 0137', () => {
 
     expect(await statusOf(paper)).toBe('open');
     expect(await statusOf(doi)).toBe('open');
+    expect(await statusOf(named)).toBe('open');
+    expect(await statusOf(substance)).toBe('open');
     expect(await statusOf(fulfilled)).toBe('fulfilled');
     expect(await statusOf(stored)).toBe('open');
   });
