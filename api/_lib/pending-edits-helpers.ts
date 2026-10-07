@@ -119,6 +119,7 @@ import { recordPaperReview } from './paper-review-store.js';
 import { recordImplicitAgentApproval } from './agent-verifications.js';
 import { fireAgentHookForActorAsync, isAgentUser } from './agentHooks.js';
 import { notifyEditDecision } from './editDecisionNotifications.js';
+import { isSiteLandingPageUrl } from '../../src/lib/publicDatabaseRecord.js';
 
 /**
  * Typed error for `wiki_fact` approval invariant failures (unknown
@@ -225,7 +226,11 @@ export async function assertReferencesJudged(
   //
   // Fetch citation types to identify which are resolvable (non-freetext).
   const citeRows = await db
-    .select({ id: citations.id, type: citations.type })
+    .select({
+      id: citations.id,
+      type: citations.type,
+      identifier: citations.identifier,
+    })
     .from(citations)
     .where(inArray(citations.id, ids));
   // Live, approved reviews with the read-in-full attestation.
@@ -267,6 +272,13 @@ export async function assertReferencesJudged(
     if (row.targetId != null && resolvableIds.has(row.targetId) && pv && pv.readInFull === true) {
       judged.add(row.targetId);
     }
+  }
+
+  // A site's front page names no specific source, so no review of it can back
+  // a claim: it stays unjudged until the claim is re-cited to the exact page or
+  // study (agents/fulltext-acquisition.md §0c).
+  for (const c of citeRows) {
+    if (c.type === 'url' && isSiteLandingPageUrl(c.identifier)) judged.delete(c.id);
   }
 
   const unjudged = [...resolvableIds].filter((id) => !judged.has(id));
