@@ -413,6 +413,25 @@ export function formatWithMaxDecimals(num: number, maxDecimals = 3): string {
   return String(rounded).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
 }
 
+/**
+ * Format a value Kinetix computed — a unit conversion, a simulator estimate, a
+ * back-calculated dose — at three significant figures, rounding integer places
+ * too: `43 263` becomes `43 300`, `3 277.154` becomes `3 280`
+ * (docs/concentration-dose-display-precision.md §2). Not for source-reported
+ * figures, which keep their digits; use {@link formatWithMaxDecimals} there.
+ */
+export function formatSignificant(num: number): string {
+  if (!isFinite(num)) return '';
+  if (num === 0) return '0';
+  const absNum = Math.abs(num);
+  if (absNum < 1) return formatWithMaxDecimals(num, DISPLAY_SIGNIFICANT_FIGURES);
+  const magnitude = Math.floor(Math.log10(absNum));
+  const decimals = DISPLAY_SIGNIFICANT_FIGURES - 1 - magnitude;
+  if (decimals >= 0) return formatWithMaxDecimals(num, decimals);
+  const quantum = Math.pow(10, -decimals);
+  return groupThousands(String(Math.round(num / quantum) * quantum));
+}
+
 export function formatCalcRange(range: NumericRange | null | undefined): string {
   if (!hasRangeData(range)) return '—';
   const parts: string[] = [];

@@ -5,7 +5,7 @@ import {
   normalizeUnit,
   type ConcentrationUnit,
 } from './unitConversion';
-import { formatWithMaxDecimals, groupThousands } from './rangeUtils';
+import { formatSignificant, formatWithMaxDecimals, groupThousands } from './rangeUtils';
 import { getParameterSpec } from './drugParameters';
 
 export type ConcentrationKind = 'molar' | 'mass';
@@ -61,12 +61,12 @@ export interface AlternativeUnit {
 /**
  * Format a converted value for *prose* display (the value shown inline, not in
  * the tooltip). Trims the false precision that plagues large magnitudes: a
- * salicylate reading of `300 mg/L` becomes `2 172 µmol/L`, not
+ * salicylate reading of `300 mg/L` becomes `2 170 µmol/L`, not
  * `2 172.024 µmol/L` — the same rounding the tooltip rows use.
  */
 function formatDisplayValue(value: number): string {
   if (!Number.isFinite(value)) return '';
-  return formatWithMaxDecimals(value, 3);
+  return formatSignificant(value);
 }
 
 /**
@@ -154,7 +154,7 @@ export function getAlternativeUnits(
     if (target === source) continue;
     const converted = safeConvert(value, source, target, molecularWeight);
     if (converted === null || !Number.isFinite(converted)) continue;
-    const formatted = formatWithMaxDecimals(converted, 3);
+    const formatted = formatSignificant(converted);
     if (!formatted || seen.has(formatted)) continue;
     seen.add(formatted);
     out.push({ unit: target, formatted, kind: kindOf(target) });
@@ -270,7 +270,7 @@ export function getConversionTooltipRows(
       if (target === source) return v;
       return safeConvert(v, source, target, molecularWeight);
     };
-    const fmt = target === source ? formatAuthoredValue : (v: number) => formatWithMaxDecimals(v, 3);
+    const fmt = target === source ? formatAuthoredValue : formatSignificant;
 
     const lowConv = convert(low);
     const highConv = convert(high);

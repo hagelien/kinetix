@@ -1,11 +1,11 @@
 import { admitsExport, type ResultGrade } from '@/lib/reviewedModelGrade';
 import { statedDimensions } from '@/lib/kinetics-core';
 import type { DrugSimResult } from '@/types/simulator';
-import { formatWithMaxDecimals } from '@/lib/rangeUtils';
+import { formatSignificant, formatWithMaxDecimals } from '@/lib/rangeUtils';
 import { hasUncertaintyBand } from '@/lib/modelingAnswer';
 
 function fmt(n: number): string {
-  return formatWithMaxDecimals(n, 3);
+  return formatSignificant(n);
 }
 
 function formatDist(dist: {
@@ -220,7 +220,7 @@ export function exportSummaryText(
       lines.push(`    Draws:   ${m.drawCount.toLocaleString()}`);
       if (m.effectiveSampleSize != null && m.sampleCount != null) {
         lines.push(
-          `    ESS:     ${fmt(m.effectiveSampleSize)} / ${m.sampleCount.toLocaleString()}`,
+          `    ESS:     ${formatWithMaxDecimals(m.effectiveSampleSize)} / ${m.sampleCount.toLocaleString()}`,
         );
       }
       if (m.matrix) lines.push(`    Matrix:  ${m.matrix}`);

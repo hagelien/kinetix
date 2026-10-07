@@ -140,8 +140,8 @@ describe('unitTooltip — getAlternativeUnitsForRange', () => {
 
 describe('unitTooltip — getPreferredUnitDisplay', () => {
   it('re-expresses a range in the first enabled (preferred) unit', () => {
-    // 300–500 mg/L at MW 150 → 2000–3333 µmol/L. Large magnitudes drop the
-    // false decimals (integers only at/above 100).
+    // 300–500 mg/L at MW 150 → 2000–3333 µmol/L, shown at three significant
+    // figures.
     const out = getPreferredUnitDisplay(
       { low: 300, high: 500 },
       'mg/L',
@@ -150,7 +150,7 @@ describe('unitTooltip — getPreferredUnitDisplay', () => {
     );
     expect(out).toEqual({
       unit: 'µmol/L',
-      formatted: `2${NBSP}000–3${NBSP}333`,
+      formatted: `2${NBSP}000–3${NBSP}330`,
     });
   });
 

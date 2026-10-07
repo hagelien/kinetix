@@ -14,6 +14,7 @@ import {
   rangeMin,
   formatCalcRange,
   formatWithMaxDecimals,
+  formatSignificant,
   groupThousands,
   round,
   normalizeFractionDisplay,
@@ -369,6 +370,19 @@ describe('rangeUtils', () => {
     it('does not group numbers below 1000', () => {
       expect(formatWithMaxDecimals(700)).toBe('700');
       expect(formatWithMaxDecimals(0.00123456)).toBe('0.00123');
+    });
+  });
+
+  describe('formatSignificant', () => {
+    it('rounds computed values to three significant figures, integer places included', () => {
+      expect(formatSignificant(43263)).toBe(`43${NBSP}300`);
+      expect(formatSignificant(3277.154)).toBe(`3${NBSP}280`);
+      expect(formatSignificant(-100947)).toBe(`-101${NBSP}000`);
+      expect(formatSignificant(156.055)).toBe('156');
+      expect(formatSignificant(43.263)).toBe('43.3');
+      expect(formatSignificant(6.242)).toBe('6.24');
+      expect(formatSignificant(0.0009352)).toBe('0.000935');
+      expect(formatSignificant(0)).toBe('0');
     });
   });
 
