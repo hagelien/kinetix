@@ -2758,7 +2758,15 @@ export type AdjudicationClosureDeclined =
   /** Both seats approved, but a value other than the proposal's own. */
   | 'value_differs'
   /** Both seats approved a value, but the proposal's could not be read. */
-  | 'value_unverifiable';
+  | 'value_unverifiable'
+  /** An agent dispute opened after the panel was bound: neither seat saw it. */
+  | 'unseen_dispute'
+  /**
+   * An agent dispute verdict with no `disputes` row to close (one recorded
+   * before the dispute table mirrored verdicts): closing would leave it
+   * holding the proposal.
+   */
+  | 'unmirrored_dispute';
 
 /**
  * What the automatic closure of a converged agent-only case did (0142):
