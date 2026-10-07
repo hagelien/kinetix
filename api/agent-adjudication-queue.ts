@@ -45,6 +45,15 @@ const CLAIM_REFUSALS: Record<string, { status: number; message: string }> = {
     message: 'You have a part in this case (a verdict, a dispute or the target itself), so you cannot sit on its panel',
   },
   panel_full: { status: 409, message: 'Both seats on this case are taken' },
+  target_unavailable: {
+    status: 409,
+    message: 'The target can no longer be served to the panel; this case has been closed',
+  },
+  target_drifted: {
+    status: 409,
+    message: 'What the target is compared against changed under the panel; this case has been closed',
+  },
+  target_version_moved: { status: 409, message: 'The target changed; this case has been closed' },
 };
 
 export default withErrorHandling(async function handler(

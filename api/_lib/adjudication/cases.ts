@@ -39,6 +39,7 @@ import { ACTIVE_AGENT_ROLES } from '../agent-verifications.js';
 import { contributionAuthorUserId } from '../notifications.js';
 import { FLAGSHIP_TIER } from '../../../src/lib/modelTiers.js';
 import { classifyAdjudicationCase, disputeOriginOf } from './detector.js';
+import { bindPanelTarget } from './snapshot.js';
 
 /**
  * The open disputes about one version of a target. A person's dispute
@@ -93,7 +94,11 @@ export type InvalidatedReason =
   // The version is unchanged but the target can no longer be served to a
   // panelist (a wiki page unpublished under it, say): nobody may adjudicate
   // a proposition they cannot read.
-  | 'target_unavailable';
+  | 'target_unavailable'
+  // The version is unchanged but what the target is compared against (a
+  // current value, entry or content served beside it) moved under the panel,
+  // so its seats may have read different packets (./snapshot.ts).
+  | 'target_drifted';
 
 export type DetectOutcome = {
   /** Live cases on this target closed because the target moved under them. */
@@ -496,6 +501,9 @@ export type ClaimSeatResult =
         | 'case_not_open'
         | 'not_eligible'
         | 'conflicted'
+        | 'target_unavailable'
+        | 'target_drifted'
+        | 'target_version_moved'
         | 'panel_full';
     };
 
@@ -545,7 +553,10 @@ export async function conflictedAgentIds(kase: {
  * disputed the target after the detector last refreshed the case cannot sit
  * on its own appeal. The unique indexes on (case, seat) and (case, agent) are
  * the backstop. The agent row is held FOR SHARE so an admin revoking the grant
- * serializes with it. Re-claiming returns the caller's existing seat.
+ * serializes with it. Re-claiming returns the caller's existing seat. The
+ * claim also binds the panel to one hydrated target (./snapshot.ts): the first
+ * copies it onto the case, and a target that cannot be served or has drifted
+ * since closes the case instead of seating anyone.
  */
 export async function claimAdjudicationSeat(args: {
   caseId: number;
@@ -569,6 +580,7 @@ export async function claimAdjudicationSeat(args: {
         state: adjudicationCases.state,
         t1Snapshot: adjudicationCases.t1Snapshot,
         t2Snapshot: adjudicationCases.t2Snapshot,
+        adjudicatedTarget: adjudicationCases.adjudicatedTarget,
       })
       .from(adjudicationCases)
       .where(eq(adjudicationCases.id, args.caseId))
@@ -576,7 +588,7 @@ export async function claimAdjudicationSeat(args: {
     if (!kase) return { ok: false, reason: 'case_not_found' };
 
     const [agent] = await tx
-      .select({ id: agents.id })
+      .select({ id: agents.id, userId: agents.userId })
       .from(agents)
       .innerJoin(users, eq(users.id, agents.userId))
       .where(
@@ -620,6 +632,12 @@ export async function claimAdjudicationSeat(args: {
     const takenSeats = new Set(taken.map((s) => s.seat));
     const free = (['a', 'b'] as const).find((s) => !takenSeats.has(s));
     if (!free) return { ok: false, reason: 'panel_full' };
+
+    // Bind the panel to one hydrated target before any content is served:
+    // the first claim copies it onto the case, a later one checks it still
+    // holds (./snapshot.ts).
+    const bound = await bindPanelTarget(kase, { agentId: agent.id, agentUserId: agent.userId });
+    if (!bound.ok) return { ok: false, reason: bound.reason };
 
     const [inserted] = await tx
       .insert(adjudicationCaseSeats)

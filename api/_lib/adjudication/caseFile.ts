@@ -22,9 +22,7 @@ import {
   adjudicationOpinions,
   disputes,
   type AdjudicationHandoff,
-  type AgentVerificationTargetType,
 } from '../../../db/schema.js';
-import { fetchSingleCandidate } from '../../agent-verifications-queue.js';
 import { LIVE_CASE_STATES, conflictedAgentIds } from './cases.js';
 import { readTargetRow } from './target.js';
 
@@ -101,21 +99,15 @@ export async function buildCaseFile(caseId: number, viewer: CaseFileViewer) {
     )
     .orderBy(asc(disputes.id));
 
-  // The target as the verification queue hydrates it, for a panelist. A
-  // person gets what the panel adjudicated, copied at sealing for every
-  // outcome — the hydrated target as served to the panel and its source row,
-  // however either has moved since — and the live source row only for a case
-  // never sealed.
+  // The target as the verification queue hydrates it. A panelist gets the
+  // packet the panel is bound to (./snapshot.ts), copied onto the case at the
+  // first claim, so both seats read the same one; every write re-checks the
+  // live target against it. A person gets that packet and its source row once
+  // the case is sealed, however either has moved since, and the live source
+  // row only for a case never sealed.
   const target =
     viewer.kind === 'panelist'
-      ? await fetchSingleCandidate({
-          type: kase.targetType as AgentVerificationTargetType,
-          targetId: kase.targetId,
-          agentId: viewer.agentId,
-          agentUserId: viewer.agentUserId,
-          selfReviewEnabled: false,
-          includeJudged: true,
-        })
+      ? (kase.adjudicatedTarget?.served ?? null)
       : kase.sealedAt !== null
         ? { asAdjudicated: true, ...kase.adjudicatedTarget }
         : {

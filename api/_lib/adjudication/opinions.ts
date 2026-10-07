@@ -25,7 +25,6 @@ import {
   adjudicationOpinions,
   agents,
   users,
-  type AdjudicatedTarget,
   type AdjudicationCaseState,
   type AdjudicationHandoff,
   type AdjudicationHandoffOpinion,
@@ -38,7 +37,7 @@ import {
   verificationTargetVersion,
 } from '../verification-targets.js';
 import { ACTIVE_AGENT_ROLES, disputeTargetUrl } from '../agent-verifications.js';
-import { fetchSingleCandidate, type QueueItem } from '../../agent-verifications-queue.js';
+import { bindPanelTarget } from './snapshot.js';
 import {
   contributionAuthorUserId,
   fanOutDisputeNotification,
@@ -51,7 +50,7 @@ import {
   VALUE_ENDORSING_RESOLUTIONS,
   type ConvergenceResult,
 } from './convergence.js';
-import { adjudicationTargetParameter, readTargetRow } from './target.js';
+import { adjudicationTargetParameter } from './target.js';
 import { disputeOriginOf } from './detector.js';
 import { openDisputesOnVersion, type InvalidatedReason } from './cases.js';
 
@@ -100,6 +99,7 @@ export type OpinionWriteResult =
         | 'target_version_stale'
         | 'target_version_moved'
         | 'target_unavailable'
+        | 'target_drifted'
         | 'seat_final'
         | 'value_required'
         | 'value_not_allowed'
@@ -107,6 +107,13 @@ export type OpinionWriteResult =
         | 'human_reason_required';
       message: string;
     };
+
+const PANEL_TARGET_REFUSALS = {
+  target_unavailable: 'The target can no longer be served to the panel; this case has been closed',
+  target_drifted:
+    'What the target is compared against changed under the panel; this case has been closed',
+  target_version_moved: 'The target changed; this case has been closed',
+} as const;
 
 function refuse(
   status: 400 | 403 | 404 | 409,
@@ -254,33 +261,12 @@ export async function submitAdjudicationOpinion(args: {
         .where(eq(adjudicationCases.id, kase.id));
       return refuse(409, 'target_version_moved', 'The target changed; this case has been closed');
     }
-    // The same target the case file serves the panelist. Where it cannot be
-    // served — the version unchanged but the target out of a panelist's reach
-    // (its wiki page unpublished, say) — no opinion about it may stand, so no
-    // recommendation can be recorded about a proposition the panel never saw.
-    const servable = await fetchSingleCandidate({
-      type: kase.targetType as AgentVerificationTargetType,
-      targetId: kase.targetId,
-      agentId: agent.id,
-      agentUserId: agent.userId,
-      selfReviewEnabled: false,
-      includeJudged: true,
-    });
-    if (!servable || servable.targetVersion !== kase.targetVersion) {
-      await tx
-        .update(adjudicationCases)
-        .set({
-          state: 'invalidated',
-          closedAt: new Date(),
-          invalidatedReason: 'target_unavailable' satisfies InvalidatedReason,
-        })
-        .where(eq(adjudicationCases.id, kase.id));
-      return refuse(
-        409,
-        'target_unavailable',
-        'The target can no longer be served to the panel; this case has been closed',
-      );
-    }
+    // The hydrated target both seats were served (./snapshot.ts). A target
+    // that can no longer be served, or whose baselines moved under the panel,
+    // closes the case: no opinion may stand on a packet the panel did not
+    // share.
+    const bound = await bindPanelTarget(kase, { agentId: agent.id, agentUserId: agent.userId });
+    if (!bound.ok) return refuse(409, bound.reason, PANEL_TARGET_REFUSALS[bound.reason]);
     if (seat.sealedAt) return refuse(409, 'seat_final', 'Your opinion on this case is final');
 
     const [previous] = await tx
@@ -331,7 +317,7 @@ export async function submitAdjudicationOpinion(args: {
             eq(adjudicationCaseSeats.seat, seat.seat),
           ),
         );
-      outcome = await sealIfComplete(kase.id, now, servable);
+      outcome = await sealIfComplete(kase.id, now);
     }
     return {
       ok: true,
@@ -466,8 +452,6 @@ function handoffSummary(
 async function sealIfComplete(
   caseId: number,
   now: Date,
-  /** The target as this sealing write served it, at the case's version. */
-  served: QueueItem,
 ): Promise<Extract<OpinionWriteResult, { ok: true }>['outcome']> {
   const tx = getDb();
   const opinions = await finalOpinions(caseId);
@@ -534,15 +518,6 @@ async function sealIfComplete(
       }
     }
   }
-  // What the panel adjudicated, kept for every outcome: the hydrated target
-  // the case file serves — with the current value, entry or content it is
-  // compared against, which can move without the target's version moving —
-  // as this sealing write fetched it at the case's version, under the same
-  // lock, and the source row beneath it.
-  const adjudicatedTarget: AdjudicatedTarget = {
-    served: served as unknown as Record<string, unknown>,
-    sourceRow: await readTargetRow(kase.targetType, kase.targetId),
-  };
   const handoff: AdjudicationHandoff | null = t4Required
     ? {
         caseId: kase.id,
@@ -573,7 +548,6 @@ async function sealIfComplete(
       recommendation: result.recommendation,
       t4Required,
       handoff,
-      adjudicatedTarget,
       panelFamilyDiversity,
       disputeOrigin,
       t1Snapshot,
