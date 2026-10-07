@@ -585,9 +585,21 @@ export function WikiPage() {
         <div className="mb-6">
           {breadcrumbs}
           <div className="flex flex-wrap items-start justify-between gap-4">
-            <h1 className="min-w-0 text-3xl font-bold">
-              {t(monographTabLabelKey(activeTab))}
-            </h1>
+            <div className="min-w-0">
+              {/* The page names its own drug. The header's drug comes from
+                  the global active drug, which still names the previous
+                  monograph until this one's row resolves (or forever, if
+                  that lookup fails), so it cannot be the only label. */}
+              <p
+                className="text-sm font-medium text-muted-foreground"
+                data-testid="monograph-drug-name"
+              >
+                {displayTitle}
+              </p>
+              <h1 className="text-3xl font-bold">
+                {t(monographTabLabelKey(activeTab))}
+              </h1>
+            </div>
             {isChemistryTab && (
               <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 text-sm">
                 {lastEdited}
