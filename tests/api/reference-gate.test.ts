@@ -63,6 +63,26 @@ describe('assertReferencesJudged (reference gate)', () => {
     await expect(assertReferencesJudged([1])).resolves.toBeUndefined();
   });
 
+  it("rejects a site's front page even when it carries a read-in-full review", async () => {
+    mockDb(
+      [{ id: 1, type: 'url', identifier: 'https://www.noklus.no' }],
+      [{ citationId: 1 }],
+      [{ targetId: 1, proposedValue: { readInFull: true } }],
+    );
+    await expect(assertReferencesJudged([1])).rejects.toBeInstanceOf(
+      ReferenceGateError,
+    );
+  });
+
+  it('still passes a reviewed URL that points to a specific page', async () => {
+    mockDb(
+      [{ id: 1, type: 'url', identifier: 'https://www.noklus.no/peth/' }],
+      [{ citationId: 1 }],
+      [],
+    );
+    await expect(assertReferencesJudged([1])).resolves.toBeUndefined();
+  });
+
   it('passes when a pending review claims read-in-full', async () => {
     mockDb(
       [{ id: 1, type: 'pmid' }],
@@ -84,7 +104,7 @@ describe('assertReferencesJudged (reference gate)', () => {
   });
 
   it('rejects a resolvable reference with no review at all, listing it', async () => {
-    mockDb([{ id: 7, type: 'url' }], [], []);
+    mockDb([{ id: 7, type: 'url', identifier: 'https://example.org/paper' }], [], []);
     await expect(assertReferencesJudged([7])).rejects.toMatchObject({
       unjudgedCitationIds: [7],
     });
@@ -113,7 +133,7 @@ describe('assertReferencesJudgedForActor (agent-only gate)', () => {
 
   it('skips the gate for a human actor and never touches the db', async () => {
     isAgentUserMock.mockResolvedValue(false);
-    const { select } = mockDb([{ id: 7, type: 'url' }], [], []);
+    const { select } = mockDb([{ id: 7, type: 'url', identifier: 'https://example.org/paper' }], [], []);
     // A human cites a resolvable reference with no review at all — the bare
     // gate would reject it, but the actor-aware gate lets it through.
     await expect(
@@ -125,7 +145,7 @@ describe('assertReferencesJudgedForActor (agent-only gate)', () => {
 
   it('enforces the gate for an agent actor', async () => {
     isAgentUserMock.mockResolvedValue(true);
-    mockDb([{ id: 7, type: 'url' }], [], []);
+    mockDb([{ id: 7, type: 'url', identifier: 'https://example.org/paper' }], [], []);
     await expect(
       assertReferencesJudgedForActor([7], 99),
     ).rejects.toBeInstanceOf(ReferenceGateError);
@@ -151,7 +171,7 @@ describe('reference gate admin switch', () => {
     // the gate has. With the switch off it must pass, and must ask neither
     // the citation tables nor the agent registry: nothing they could return
     // changes the answer.
-    const { select } = mockDb([{ id: 7, type: 'url' }], [], []);
+    const { select } = mockDb([{ id: 7, type: 'url', identifier: 'https://example.org/paper' }], [], []);
     await expect(
       assertReferencesJudgedForActor([7], 99),
     ).resolves.toBeUndefined();
@@ -166,7 +186,7 @@ describe('reference gate admin switch', () => {
     // reach it — turning the agent gate off must not newly let anyone publish
     // a learning unit anchored to an unread paper.
     gateEnabledMock.mockResolvedValue(false);
-    mockDb([{ id: 7, type: 'url' }], [], []);
+    mockDb([{ id: 7, type: 'url', identifier: 'https://example.org/paper' }], [], []);
     await expect(assertReferencesJudged([7])).rejects.toBeInstanceOf(
       ReferenceGateError,
     );

@@ -121,6 +121,40 @@ describe('CitationPdfSection self-service upload', () => {
     },
   );
 
+  it('keeps the front-page warning on a reference that already has a review', async () => {
+    await i18n.changeLanguage('en');
+    fetchPdfRequestMock.mockResolvedValue({ request: null, hasPdf: false });
+
+    render(
+      <CitationPdfSection
+        citationId={7}
+        resolvable
+        hasReview={true}
+        noPdfReason="site_landing_page"
+      />,
+    );
+
+    expect(
+      await screen.findByText(/website's front page, not a specific source/),
+    ).toBeInTheDocument();
+  });
+
+  it('stays quiet on a reviewed database record', async () => {
+    fetchPdfRequestMock.mockResolvedValue({ request: null, hasPdf: false });
+
+    const { container } = render(
+      <CitationPdfSection
+        citationId={7}
+        resolvable
+        hasReview={true}
+        noPdfReason="public_database_record"
+      />,
+    );
+
+    await waitFor(() => expect(fetchPdfRequestMock).toHaveBeenCalled());
+    expect(container.querySelector('section')).toBeNull();
+  });
+
   it('accepts a PDF dropped on the upload panel', async () => {
     await i18n.changeLanguage('en');
     fetchPdfRequestMock.mockResolvedValue({ request: null, hasPdf: false });

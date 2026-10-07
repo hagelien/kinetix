@@ -162,17 +162,22 @@ export function CitationPdfSection({
 
   if (!resolvable || !state) return null;
 
-  // In place of the upload prompt, never alongside it: a reviewed record stays
-  // as quiet as any other reviewed reference.
-  if (noPdfReason && !state.hasPdf) {
-    if (hasReview !== false) return null;
+  // In place of the upload prompt, never alongside it. A reviewed database
+  // record stays as quiet as any other reviewed reference, but a front page
+  // always warns: a review of one does not make it a source, and the claim
+  // resting on it still needs re-citing.
+  const showNoPdfNote =
+    noPdfReason === 'site_landing_page' ||
+    (noPdfReason === 'public_database_record' && !state.hasPdf);
+  if (showNoPdfNote) {
+    if (noPdfReason !== 'site_landing_page' && hasReview !== false) return null;
     return (
       <section className="border-t border-border py-6">
         <h2 className="text-lg font-semibold">
           {t('referenceModule.fullText')}
         </h2>
         <p className="mt-3 rounded-md bg-muted px-3 py-2 text-sm">
-          {t(NO_PDF_REASON_KEYS[noPdfReason])}
+          {t(NO_PDF_REASON_KEYS[noPdfReason!])}
         </p>
       </section>
     );

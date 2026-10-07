@@ -71,6 +71,7 @@ import { getDb, getNeonClient } from "./_lib/db.js";
 import { getUserFromRequest } from "./_lib/auth.js";
 import { CAP } from "../src/lib/permissions.js";
 import { callerCan } from "./_lib/permissions-store.js";
+import { SITE_LANDING_PAGE_URL_PATTERN } from "../src/lib/publicDatabaseRecord.js";
 import {
   error,
   json,
@@ -674,8 +675,9 @@ function countSuppressedParameterGaps(focus: FocusNarrowing) {
  * Exported so the integration test can execute THIS text against the migrated
  * schema rather than a copy that silently drifts from it — the same reason
  * `CITATION_HAYSTACK` is exported for its EXPLAIN test. `PENDING_FACTS_LIMIT`
- * is a module constant, not caller input, so inlining it keeps the whole query
- * a static string with nothing to parameterize.
+ * and `SITE_LANDING_PAGE_URL_PATTERN` are module constants, not caller input
+ * (the pattern holds no quote), so inlining them keeps the whole query a static
+ * string with nothing to parameterize.
  */
 export const UNREVIEWED_REFERENCES_SQL = `
     WITH used AS (
@@ -731,7 +733,13 @@ export const UNREVIEWED_REFERENCES_SQL = `
     JOIN citations c ON c.id = u.citation_id
     LEFT JOIN paper_reviews pr
       ON pr.citation_id = c.id AND pr.read_in_full = true
-    WHERE c.type <> 'freetext' AND pr.id IS NULL
+    WHERE c.type <> 'freetext'
+      AND (
+        pr.id IS NULL
+        -- A front-page citation stays in the lane even when reviewed: it names
+        -- no specific source, so the claim resting on it needs re-citing.
+        OR (c.type = 'url' AND btrim(c.identifier) ~* '${SITE_LANDING_PAGE_URL_PATTERN}')
+      )
     ORDER BY c.id ASC
     LIMIT ${PENDING_FACTS_LIMIT}
   `;
