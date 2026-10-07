@@ -31,3 +31,34 @@ describe('T3 closure: what it will not act on', () => {
     expect(closureDeclineReason(recommend('split_scope'), null, 'pending_edit')).toBe('split_scope');
   });
 });
+
+describe('T3 closure: reading the proposal’s own value', () => {
+  it('reads a stored entry’s numeric columns, which come back as strings (#108)', () => {
+    const bound = {
+      served: {
+        targetType: 'pending_edit',
+        payload: {
+          editType: 'param_entry',
+          parameter: 'clearance',
+          proposedValue: { op: 'update', patch: { quote: 'Restated.' } },
+          currentEntry: { low: '40', high: '80', median: '60', unit: 'L/h' },
+        },
+      },
+      sourceRow: null,
+      comparison: { canonicalUnit: 'L/h', molecularWeight: null },
+      decidedDisputes: [],
+      lowerTier: { t2Verdicts: [], t1Verdicts: [], openDisputes: [] },
+      context: { triggers: [], triggerDetail: {}, disputeOrigin: 'agent' as const },
+    };
+    const approve = (value: NonNullable<AdjudicationRecommendation['value']>) => ({
+      ...recommend('approve'),
+      value,
+    });
+    expect(
+      closureDeclineReason(approve({ kind: 'range', low: 40, high: 80, unit: 'L/h' }), bound, 'pending_edit'),
+    ).toBeNull();
+    expect(
+      closureDeclineReason(approve({ kind: 'range', low: 40, high: 90, unit: 'L/h' }), bound, 'pending_edit'),
+    ).toBe('value_differs');
+  });
+});
