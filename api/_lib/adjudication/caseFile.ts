@@ -224,7 +224,15 @@ export async function listAdjudicatorCases(agentId: number, limit = 20) {
   // of the queue.
   const pageSize = limit * 3;
   const available = [];
-  for (let offset = 0; available.length < limit; offset += pageSize) {
+  // Keyset, not offset: cases claimed or closed mid-read must not shift the
+  // next page past unvisited rows.
+  type QueueCursor = { openedAt: Date; id: number };
+  let after = null as QueueCursor | null;
+  // The cursor's timestamp is a millisecond Date over a microsecond column, so
+  // the boundary row can come back once more; never offer a case twice.
+  const seen = new Set<number>();
+  while (available.length < limit) {
+    const cursor: QueueCursor | null = after;
     const openRows = await db
       .select({
         caseId: adjudicationCases.id,
@@ -241,13 +249,17 @@ export async function listAdjudicatorCases(agentId: number, limit = 20) {
           eq(adjudicationCases.state, 'open'),
           notExists(mine),
           sql`(select count(*) from (${seatCount}) as s) < 2`,
+          cursor
+            ? sql`(${adjudicationCases.openedAt}, ${adjudicationCases.id}) > (${cursor.openedAt.toISOString()}::timestamptz, ${cursor.id})`
+            : sql`true`,
         ),
       )
       .orderBy(asc(adjudicationCases.openedAt), asc(adjudicationCases.id))
-      .limit(pageSize)
-      .offset(offset);
+      .limit(pageSize);
     for (const row of openRows) {
       if (available.length >= limit) break;
+      if (seen.has(row.caseId)) continue;
+      seen.add(row.caseId);
       if ((await conflictedAgentIds(row)).has(agentId)) continue;
       available.push({
         caseId: row.caseId,
@@ -257,7 +269,9 @@ export async function listAdjudicatorCases(agentId: number, limit = 20) {
         openedAt: row.openedAt,
       });
     }
-    if (openRows.length < pageSize) break;
+    const last = openRows[openRows.length - 1];
+    if (!last || openRows.length < pageSize) break;
+    after = { openedAt: last.openedAt, id: last.caseId };
   }
   return { seated, available };
 }
