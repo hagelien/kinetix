@@ -82,6 +82,14 @@ person). The work lands in three pull requests:
      `diverged` (it needs a person) with the comparison kept, and a converged
      case resting on a person's dispute stays `converged` with its
      recommendation but `t4_required`;
+   - two agreed abstentions resolve nothing, so they recommend nothing and go
+     to T4 (`panel_abstained`): the version cannot open another case;
+   - the seal re-reads the version's open disputes under the source-row lock,
+     so a person's dispute that landed after the detector last refreshed the
+     case still makes the closing act theirs; the handoff carries the target's
+     source row as adjudicated, so a person sees the version-pinned payload;
+   - blindness is keyed on the seal itself, not the state, so a case closed
+     mid-panel never unblinds;
    - the handoff notification reuses the dispute fan-out with no dispute id
      (`notifications.type = 'adjudication_handoff'`), linking to the target;
      the full package is served to reviewers by the case feed.

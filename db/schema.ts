@@ -2704,9 +2704,15 @@ export type AdjudicationHandoff = {
   disputeOrigin: AdjudicationDisputeOrigin;
   triggers: AdjudicationTrigger[];
   /** Why a person is needed, in order of weight. */
-  reasons: Array<'panel_diverged' | 'human_requested' | 'human_dispute'>;
+  reasons: Array<'panel_diverged' | 'human_requested' | 'panel_abstained' | 'human_dispute'>;
   /** One paragraph: what remains disputed. */
   summary: string;
+  /**
+   * The target's source row as the panel adjudicated it, copied at sealing
+   * under the source-row lock: the version-pinned payload, which later
+   * revisions of the live row cannot change.
+   */
+  target: Record<string, unknown> | null;
   opinions: AdjudicationHandoffOpinion[];
   t2Snapshot: AdjudicationVerdictSnapshot[];
   t1Snapshot: {

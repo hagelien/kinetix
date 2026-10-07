@@ -11,6 +11,8 @@
 
 import { eq } from 'drizzle-orm';
 import { getDb } from '../db.js';
+import { VERIFICATION_SOURCE_TABLES } from '../verification-targets.js';
+import type { AgentVerificationTargetType } from '../../../db/schema.js';
 import {
   drugParameterRevisions,
   parameterEntries,
@@ -66,6 +68,17 @@ async function parameterAndDrug(
     .from(parameterEntries)
     .where(eq(parameterEntries.id, edit.targetId));
   return { parameter: edit.parameter, drugId: entry?.drugId ?? null };
+}
+
+/** The target's source row as it stands now, or null when it is gone. */
+export async function readTargetRow(
+  targetType: string,
+  targetId: number,
+): Promise<Record<string, unknown> | null> {
+  const table = VERIFICATION_SOURCE_TABLES[targetType as AgentVerificationTargetType];
+  if (!table) return null;
+  const [row] = await getDb().select().from(table).where(eq(table.id, targetId));
+  return (row as Record<string, unknown> | undefined) ?? null;
 }
 
 /** Null when the target carries no value an opinion could endorse. */
