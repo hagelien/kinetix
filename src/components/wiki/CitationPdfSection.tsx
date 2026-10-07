@@ -29,6 +29,12 @@ interface Props {
    * upload prompt on papers that turn out to already be reviewed.
    */
   hasReview: boolean | null;
+  /**
+   * A public database entry (a PubChem record) that agents read directly
+   * through its open data service. It has no PDF to supply, so the section
+   * says so instead of offering an upload.
+   */
+  publicDatabaseRecord?: boolean;
 }
 
 const ERROR_CODE_KEYS: Record<string, string> = {
@@ -68,6 +74,7 @@ export function CitationPdfSection({
   citationId,
   resolvable,
   hasReview,
+  publicDatabaseRecord = false,
 }: Props): JSX.Element | null {
   const { t } = useTranslation();
   const mayFulfill = useCan('citation.pdf.access');
@@ -147,6 +154,22 @@ export function CitationPdfSection({
   );
 
   if (!resolvable || !state) return null;
+
+  // In place of the upload prompt, never alongside it: a reviewed record stays
+  // as quiet as any other reviewed reference.
+  if (publicDatabaseRecord && !state.hasPdf) {
+    if (hasReview !== false) return null;
+    return (
+      <section className="border-t border-border py-6">
+        <h2 className="text-lg font-semibold">
+          {t('referenceModule.fullText')}
+        </h2>
+        <p className="mt-3 rounded-md bg-muted px-3 py-2 text-sm">
+          {t('referenceModule.publicDatabaseRecord')}
+        </p>
+      </section>
+    );
+  }
 
   const hasOpenRequest = state.request?.status === 'open';
   // A paper with no review yet and no full text on file is the "paper is

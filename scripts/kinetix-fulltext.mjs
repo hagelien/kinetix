@@ -15,6 +15,8 @@ const sources = [
   "scripts/discover-full-text.ts",
   "scripts/fulltext/pmc.ts",
   "scripts/fulltext/discovery.ts",
+  "scripts/fetch-pubchem-record.ts",
+  "scripts/fulltext/pubchem.ts",
 ];
 
 export function publicEnvironment(inherited = process.env) {
@@ -36,6 +38,12 @@ export function acquisitionCommand(args) {
   if (args[0] === "discover" && args.length === 2 && /^[1-9]\d*$/.test(args[1]))
     return ["scripts/discover-full-text.ts", args[1]];
   if (
+    args[0] === "pubchem" &&
+    args.length === 2 &&
+    /^[1-9]\d{0,11}$/.test(args[1])
+  )
+    return ["scripts/fetch-pubchem-record.ts", args[1]];
+  if (
     args[0] === "pmc" &&
     /^PMC[1-9]\d*$/i.test(args[1] ?? "") &&
     (args.length === 2 ||
@@ -43,7 +51,7 @@ export function acquisitionCommand(args) {
   )
     return ["scripts/fetch-pmc-full-text.ts", ...args.slice(1)];
   throw new Error(
-    "Usage: kinetix-fulltext.mjs check | discover PMID | pmc PMCID [--pmid PMID]",
+    "Usage: kinetix-fulltext.mjs check | discover PMID | pmc PMCID [--pmid PMID] | pubchem CID",
   );
 }
 

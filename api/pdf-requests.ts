@@ -46,6 +46,7 @@ import { createPdfRequestSchema } from './_lib/schemas.js';
 import { listFullTextGaps } from './_lib/full-text-gaps.js';
 import { citationsWithPendingInboxItems } from './_lib/pdf-inbox-store.js';
 import { CAP } from '../src/lib/permissions.js';
+import { isPubChemRecordCitation } from '../src/lib/publicDatabaseRecord.js';
 import { callerCan } from './_lib/permissions-store.js';
 import {
   citationPdfs,
@@ -297,7 +298,11 @@ async function handleCreate(
   }
 
   const [citation] = await db
-    .select({ id: citations.id, type: citations.type })
+    .select({
+      id: citations.id,
+      type: citations.type,
+      identifier: citations.identifier,
+    })
     .from(citations)
     .where(eq(citations.id, citationId))
     .limit(1);
@@ -311,6 +316,19 @@ async function handleCreate(
       400,
       'PDF requests require a resolvable citation',
       'pdf_request_unresolvable_citation',
+    );
+    return;
+  }
+  // A PubChem record is public structured data, not a paywalled paper: its
+  // HTML page only CAPTCHAs automated readers, and the same record is read
+  // through `node scripts/kinetix-fulltext.mjs pubchem <CID>`. A PDF request
+  // here would ask a contributor for something that does not exist.
+  if (isPubChemRecordCitation(citation)) {
+    error(
+      res,
+      400,
+      'PubChem records are public database entries; read them with the PubChem helper instead of requesting a PDF',
+      'pdf_request_public_database_record',
     );
     return;
   }
