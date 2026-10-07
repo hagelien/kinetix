@@ -109,8 +109,19 @@ function approvesProposalValue(
   if (value.kind === 'range') {
     return low !== null && high !== null && sameNumber(low, value.low) && sameNumber(high, value.high);
   }
-  if (point !== null) return sameNumber(point, value.value);
-  return low !== null && high !== null && sameNumber(low, value.value) && sameNumber(high, value.value);
+  // A proposal that states bounds is approved only as a range: a scalar
+  // endorsement of its centre says nothing about the endpoints that would
+  // publish with it. A degenerate range (low = high) is the scalar itself.
+  if (low !== null || high !== null) {
+    return (
+      low !== null &&
+      high !== null &&
+      sameNumber(low, high) &&
+      sameNumber(low, value.value) &&
+      (point === null || sameNumber(point, value.value))
+    );
+  }
+  return point !== null && sameNumber(point, value.value);
 }
 
 function declineReason(
