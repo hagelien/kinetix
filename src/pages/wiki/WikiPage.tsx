@@ -33,6 +33,8 @@ import {
 import { capitalizeGenericDrugName, resolveDrugName } from '@/lib/drugNames';
 import { useDrugStore } from '@/stores/drugStore';
 import type { UserBadgeData } from '@/components/ui/UserBadge';
+import { DrugUnitScope } from '@/components/ui/DrugUnitScope';
+import { isEthanolDrug } from '@/lib/ethanolUnits';
 
 interface WikiPageData {
   id: number;
@@ -369,215 +371,217 @@ export function WikiPage() {
   const seedPromptDrugName = matchedDrug ? resolveDrugName(matchedDrug.names, 'en') : '';
 
   return (
-    <div
-      ref={layoutRef}
-      className={`flex gap-8 ${railFits ? 'flex-row' : 'flex-col'}`}
-    >
-      <article className="flex-1 min-w-0">
-        <div className="mb-6">
-          {ancestors.length > 0 && (
-            <nav
-              aria-label={t('wiki.breadcrumbs')}
-              className="mb-2 text-sm text-muted-foreground"
-            >
-              <ol className="flex flex-wrap items-center gap-1">
-                <li>
-                  <Link
-                    to="/wiki"
-                    className="hover:text-foreground hover:underline"
-                  >
-                    {t('wiki.title')}
-                  </Link>
-                </li>
-                {ancestors.map((a) => (
-                  <li key={a.id} className="flex items-center gap-1">
-                    <span aria-hidden="true">/</span>
+    <DrugUnitScope isEthanol={isEthanolDrug(matchedDrug)}>
+      <div
+        ref={layoutRef}
+        className={`flex gap-8 ${railFits ? 'flex-row' : 'flex-col'}`}
+      >
+        <article className="flex-1 min-w-0">
+          <div className="mb-6">
+            {ancestors.length > 0 && (
+              <nav
+                aria-label={t('wiki.breadcrumbs')}
+                className="mb-2 text-sm text-muted-foreground"
+              >
+                <ol className="flex flex-wrap items-center gap-1">
+                  <li>
                     <Link
-                      to={`/wiki/${a.slug}`}
+                      to="/wiki"
                       className="hover:text-foreground hover:underline"
                     >
-                      {a.title}
+                      {t('wiki.title')}
                     </Link>
                   </li>
-                ))}
-                <li className="flex items-center gap-1">
-                  <span aria-hidden="true">/</span>
-                  <span className="text-foreground" aria-current="page">
-                    {displayTitle}
-                  </span>
-                </li>
-              </ol>
-            </nav>
-          )}
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <h1 className="flex min-w-0 flex-wrap items-center gap-2 text-3xl font-bold">
-              <span>{displayTitle}</span>
-              {page.pageType === 'drug_monograph' && (
-                <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                  {t('wiki.drugMonograph')}
-                </span>
-              )}
-            </h1>
-            <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 text-sm">
-              <span className="text-muted-foreground">
-                {t('wiki.lastEdited')}{' '}
-                <Link
-                  to={`/wiki/${page.slug}/history`}
-                  className="text-foreground hover:text-primary hover:underline"
-                  aria-label={t('wiki.historyLinkLabel', {
-                    title: page.title,
-                    date: updatedDate,
-                  })}
-                >
-                  {updatedDate}
-                </Link>
-              </span>
-              {page.pageType === 'drug_monograph' && (
-                <DrugSeedPromptButton drugName={seedPromptDrugName} />
-              )}
-              {canEdit && (
-                <Link
-                  to={`/wiki/${page.slug}/edit`}
-                  className="bg-muted hover:bg-muted/80 px-3 py-1.5 rounded-md"
-                >
-                  {t('wiki.edit')}
-                </Link>
-              )}
-            </div>
-          </div>
-          {page.pageType === 'drug_monograph' && page.drugCid && (
-            <DrugMetadataHeader drugCid={page.drugCid} />
-          )}
-          {page.pageType === 'drug_monograph' && (
-            <DrugAnalyticalMethods drug={drugComponent} />
-          )}
-          {page.pageType === 'drug_monograph' && (
-            // `matchedDrug`, not `drugComponent`: on navigation between
-            // monographs the new page renders once before the effect clears the
-            // previous `resolvedDrug`, and `drugComponent` still describes that
-            // one. `matchedDrug` is null until the resolved row belongs to THIS
-            // page's drugCid, which is exactly the guarantee this section needs
-            // — a postmortem distribution under the wrong analyte's heading is
-            // the one thing it must never show.
-            <DrugPmConcentrations
-              drugDbId={matchedDrug?.id ?? null}
-              molecularWeight={matchedDrug?.molecularWeight ?? null}
-            />
-          )}
-          {page.pageType !== 'drug_monograph' && (
-            <div className="flex items-center gap-3 mt-2 text-sm text-muted-foreground">
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-muted text-xs">
-                {t('wiki.topic')}
-              </span>
-            </div>
-          )}
-          {pendingEdit && (
-            <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-accent">
-              <Link
-                to={`/review?mine=1&id=${pendingEdit.id}`}
-                className="hover:underline"
-              >
-                {t('wiki.viewPending')}
-              </Link>
-              {(pendingEdit.status === 'pending' ||
-                pendingEdit.status === 'draft') && (
-                <Link
-                  to={`/wiki/${page.slug}/edit?pendingEditId=${pendingEdit.id}`}
-                  className="hover:underline"
-                >
-                  {t('wiki.updateDraft')}
-                </Link>
-              )}
-              {pendingEdit.status !== 'pending' &&
-                pendingEdit.status !== 'draft' && (
-                  <span className="text-muted-foreground">
-                    {t('wiki.status', { status: pendingEdit.status })}
+                  {ancestors.map((a) => (
+                    <li key={a.id} className="flex items-center gap-1">
+                      <span aria-hidden="true">/</span>
+                      <Link
+                        to={`/wiki/${a.slug}`}
+                        className="hover:text-foreground hover:underline"
+                      >
+                        {a.title}
+                      </Link>
+                    </li>
+                  ))}
+                  <li className="flex items-center gap-1">
+                    <span aria-hidden="true">/</span>
+                    <span className="text-foreground" aria-current="page">
+                      {displayTitle}
+                    </span>
+                  </li>
+                </ol>
+              </nav>
+            )}
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <h1 className="flex min-w-0 flex-wrap items-center gap-2 text-3xl font-bold">
+                <span>{displayTitle}</span>
+                {page.pageType === 'drug_monograph' && (
+                  <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                    {t('wiki.drugMonograph')}
                   </span>
                 )}
-            </div>
-          )}
-        </div>
-
-        <div className="prose prose-sm max-w-none">
-          <WikiRenderer
-            contentHtml={page.contentHtml}
-            bibliographyMap={bibliographyMap}
-            citations={citationsById}
-            parameterValues={parameterValues}
-            molecularWeight={drug?.molecularWeight ?? null}
-            factCommentCounts={discussionCounts}
-            onFactDiscussionClick={
-              // Monographs need the resolved drug row to host the thread;
-              // topic pages host fact threads on the page itself, so the
-              // affordance is available as soon as the page loads.
-              page.pageType === 'drug_monograph'
-                ? drug
-                  ? (factId) => setFactDiscussion({ factId })
-                  : undefined
-                : (factId) => setFactDiscussion({ factId })
-            }
-          />
-        </div>
-
-        <DrugReferencesList orderedRefs={orderedRefs} />
-
-        {children.length > 0 && (
-          <section className="mt-8 border-t border-border pt-6">
-            <h2 className="text-lg font-semibold mb-3">
-              {t('wiki.childrenHeading')}
-            </h2>
-            <ul className="space-y-1">
-              {children.map((c) => (
-                <li key={c.id}>
+              </h1>
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 text-sm">
+                <span className="text-muted-foreground">
+                  {t('wiki.lastEdited')}{' '}
                   <Link
-                    to={`/wiki/${c.slug}`}
-                    className="text-sm text-primary hover:underline"
+                    to={`/wiki/${page.slug}/history`}
+                    className="text-foreground hover:text-primary hover:underline"
+                    aria-label={t('wiki.historyLinkLabel', {
+                      title: page.title,
+                      date: updatedDate,
+                    })}
                   >
-                    {c.title}
+                    {updatedDate}
                   </Link>
-                  <span className="ml-2 text-xs text-muted-foreground">
-                    {c.pageType === 'drug_monograph'
-                      ? t('wiki.drugMonograph')
-                      : t('wiki.topic')}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
+                </span>
+                {page.pageType === 'drug_monograph' && (
+                  <DrugSeedPromptButton drugName={seedPromptDrugName} />
+                )}
+                {canEdit && (
+                  <Link
+                    to={`/wiki/${page.slug}/edit`}
+                    className="bg-muted hover:bg-muted/80 px-3 py-1.5 rounded-md"
+                  >
+                    {t('wiki.edit')}
+                  </Link>
+                )}
+              </div>
+            </div>
+            {page.pageType === 'drug_monograph' && page.drugCid && (
+              <DrugMetadataHeader drugCid={page.drugCid} />
+            )}
+            {page.pageType === 'drug_monograph' && (
+              <DrugAnalyticalMethods drug={drugComponent} />
+            )}
+            {page.pageType === 'drug_monograph' && (
+              // `matchedDrug`, not `drugComponent`: on navigation between
+              // monographs the new page renders once before the effect clears the
+              // previous `resolvedDrug`, and `drugComponent` still describes that
+              // one. `matchedDrug` is null until the resolved row belongs to THIS
+              // page's drugCid, which is exactly the guarantee this section needs
+              // — a postmortem distribution under the wrong analyte's heading is
+              // the one thing it must never show.
+              <DrugPmConcentrations
+                drugDbId={matchedDrug?.id ?? null}
+                molecularWeight={matchedDrug?.molecularWeight ?? null}
+              />
+            )}
+            {page.pageType !== 'drug_monograph' && (
+              <div className="flex items-center gap-3 mt-2 text-sm text-muted-foreground">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-muted text-xs">
+                  {t('wiki.topic')}
+                </span>
+              </div>
+            )}
+            {pendingEdit && (
+              <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-accent">
+                <Link
+                  to={`/review?mine=1&id=${pendingEdit.id}`}
+                  className="hover:underline"
+                >
+                  {t('wiki.viewPending')}
+                </Link>
+                {(pendingEdit.status === 'pending' ||
+                  pendingEdit.status === 'draft') && (
+                  <Link
+                    to={`/wiki/${page.slug}/edit?pendingEditId=${pendingEdit.id}`}
+                    className="hover:underline"
+                  >
+                    {t('wiki.updateDraft')}
+                  </Link>
+                )}
+                {pendingEdit.status !== 'pending' &&
+                  pendingEdit.status !== 'draft' && (
+                    <span className="text-muted-foreground">
+                      {t('wiki.status', { status: pendingEdit.status })}
+                    </span>
+                  )}
+              </div>
+            )}
+          </div>
 
-        {page.pageType === 'entity_monograph' && page.entityId && (
-          <EntityMetabolismDrugs entityId={page.entityId} />
-        )}
+          <div className="prose prose-sm max-w-none">
+            <WikiRenderer
+              contentHtml={page.contentHtml}
+              bibliographyMap={bibliographyMap}
+              citations={citationsById}
+              parameterValues={parameterValues}
+              molecularWeight={drug?.molecularWeight ?? null}
+              factCommentCounts={discussionCounts}
+              onFactDiscussionClick={
+                // Monographs need the resolved drug row to host the thread;
+                // topic pages host fact threads on the page itself, so the
+                // affordance is available as soon as the page loads.
+                page.pageType === 'drug_monograph'
+                  ? drug
+                    ? (factId) => setFactDiscussion({ factId })
+                    : undefined
+                  : (factId) => setFactDiscussion({ factId })
+              }
+            />
+          </div>
+
+          <DrugReferencesList orderedRefs={orderedRefs} />
+
+          {children.length > 0 && (
+            <section className="mt-8 border-t border-border pt-6">
+              <h2 className="text-lg font-semibold mb-3">
+                {t('wiki.childrenHeading')}
+              </h2>
+              <ul className="space-y-1">
+                {children.map((c) => (
+                  <li key={c.id}>
+                    <Link
+                      to={`/wiki/${c.slug}`}
+                      className="text-sm text-primary hover:underline"
+                    >
+                      {c.title}
+                    </Link>
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      {c.pageType === 'drug_monograph'
+                        ? t('wiki.drugMonograph')
+                        : t('wiki.topic')}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {page.pageType === 'entity_monograph' && page.entityId && (
+            <EntityMetabolismDrugs entityId={page.entityId} />
+          )}
+
+          {page.pageType === 'drug_monograph' && page.drugCid && (
+            <MonographDiscussion drugCid={page.drugCid} />
+          )}
+        </article>
 
         {page.pageType === 'drug_monograph' && page.drugCid && (
-          <MonographDiscussion drugCid={page.drugCid} />
+          // When it fits, the parameter box is an in-flow sticky rail to the
+          // right of the article (`sticky top-6` keeps it visible as the article
+          // scrolls past — #298). When the measured column is too narrow it
+          // becomes a pop-in/out floating panel so the monograph prose leads the
+          // page instead of the parameters. `railFits` is content-measured, so
+          // the switch adapts to any width, zoom, or drug-table state.
+          <MonographParameterPanel
+            drugCid={page.drugCid}
+            sharedReferences={orderedRefs}
+            floating={!railFits}
+          />
         )}
-      </article>
 
-      {page.pageType === 'drug_monograph' && page.drugCid && (
-        // When it fits, the parameter box is an in-flow sticky rail to the
-        // right of the article (`sticky top-6` keeps it visible as the article
-        // scrolls past — #298). When the measured column is too narrow it
-        // becomes a pop-in/out floating panel so the monograph prose leads the
-        // page instead of the parameters. `railFits` is content-measured, so
-        // the switch adapts to any width, zoom, or drug-table state.
-        <MonographParameterPanel
-          drugCid={page.drugCid}
-          sharedReferences={orderedRefs}
-          floating={!railFits}
-        />
-      )}
-
-      {factDiscussion &&
-      (drug || page.pageType !== 'drug_monograph') ? (
-        <FactDiscussionPanel
-          host={drug ? { drugId: drug.id } : { wikiPageId: page.id }}
-          factId={factDiscussion.factId}
-          verification={factLevels[factDiscussion.factId]}
-          onClose={() => setFactDiscussion(null)}
-        />
-      ) : null}
-    </div>
+        {factDiscussion &&
+        (drug || page.pageType !== 'drug_monograph') ? (
+          <FactDiscussionPanel
+            host={drug ? { drugId: drug.id } : { wikiPageId: page.id }}
+            factId={factDiscussion.factId}
+            verification={factLevels[factDiscussion.factId]}
+            onClose={() => setFactDiscussion(null)}
+          />
+        ) : null}
+      </div>
+    </DrugUnitScope>
   );
 }

@@ -17,6 +17,7 @@ import { MemoryRouter } from 'react-router-dom';
 import i18nApp from '@/i18n';
 import { DrugMonographSidebar } from './DrugMonographSidebar';
 import { useAuthStore } from '@/stores/authStore';
+import { useAppStore } from '@/stores/appStore';
 import {
   cancelPriorityFlag,
   createPriorityFlag,
@@ -30,6 +31,7 @@ const SIDEBAR_SECTION_STORAGE_KEY = 'kinetix.monographSidebar.expandedSection';
 const mockDrugState = vi.hoisted(() => ({
   id: 1,
   pubchemCid: 100,
+  molecularWeight: 151.16,
   receptorTargets: [] as Array<Record<string, unknown>>,
   metabolism: null as Record<string, unknown> | null,
   indicatorRefs: {} as Record<string, number[]>,
@@ -45,7 +47,7 @@ vi.mock('./useDrugSidebarData', () => ({
       pubchemCid: mockDrugState.pubchemCid,
       slug: 'paracetamol',
       names: { en: 'Paracetamol' },
-      molecularWeight: 151.16,
+      molecularWeight: mockDrugState.molecularWeight,
       // halfLife etc. are populated by the merge in api/drugs.ts; the
       // sidebar reads them off the drug row via readDrugMetadataValue.
       halfLife: { min: 1.5, max: 3, unit: 'h' },
@@ -53,6 +55,7 @@ vi.mock('./useDrugSidebarData', () => ({
       bioavailability: { min: 0.6, max: 0.9, unit: 'fraction' },
       proteinBinding: { min: 0.05, max: 0.2, unit: 'fraction' },
       pKa: { median: 9.5 },
+      therapeuticConcentration: { min: 10000, max: 20000, unit: 'µmol/L' },
       receptorTargets: mockDrugState.receptorTargets,
       metabolism: mockDrugState.metabolism,
       parameterSummaries: mockDrugState.parameterSummaries,
@@ -174,6 +177,8 @@ describe('DrugMonographSidebar favorites (#321)', () => {
     vi.mocked(fetchMethodLimitsForDrug).mockResolvedValue({ methods: [] });
     mockDrugState.id = 1;
     mockDrugState.pubchemCid = 100;
+    mockDrugState.molecularWeight = 151.16;
+    useAppStore.setState({ enabledUnits: ['µmol/L', 'mg/L'], ethanolUnit: '‰' });
     mockDrugState.receptorTargets = [];
     mockDrugState.metabolism = null;
     mockDrugState.indicatorRefs = {};
@@ -217,6 +222,31 @@ describe('DrugMonographSidebar favorites (#321)', () => {
       </MemoryRouter>,
     );
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('shows ethanol concentrations in the ethanol unit (‰ by default)', () => {
+    mockDrugState.pubchemCid = 702;
+    mockDrugState.molecularWeight = 46.07;
+    setUser(['therapeuticConcentration']);
+    const { container } = renderSidebar();
+    // 10 000–20 000 µmol/L × 46.07 g/mol = 0.461–0.921 g/L = ‰. The unit sits
+    // in its own tooltip trigger, so match on the text content.
+    expect(container.textContent).toMatch(/0\.461–0\.921 ‰/);
+  });
+
+  it('follows a changed ethanol unit, and leaves other drugs alone', () => {
+    mockDrugState.pubchemCid = 702;
+    mockDrugState.molecularWeight = 46.07;
+    useAppStore.setState({ ethanolUnit: '%' });
+    setUser(['therapeuticConcentration']);
+    const first = renderSidebar();
+    expect(first.container.textContent).toMatch(/0\.0461–0\.0921 %/);
+    first.unmount();
+
+    mockDrugState.pubchemCid = 100;
+    const second = renderSidebar();
+    expect(second.container.textContent).not.toContain('‰');
+    expect(second.container.textContent).toMatch(/10\D000–20\D000 µmol\/L/);
   });
 
   it('prefixes the favorite value with the parameter symbol', () => {

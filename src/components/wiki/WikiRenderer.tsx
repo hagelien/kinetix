@@ -37,7 +37,7 @@ import {
 import { activeLangCode } from "@/lib/useDrugName";
 import { renderTexToHtml } from "@/lib/katexRender";
 import { referenceModulePath, type CitationRow } from "@/lib/referencesApi";
-import { useAppStore } from "@/stores/appStore";
+import { useDisplayUnits } from "@/components/ui/DrugUnitScope";
 import "@/styles/wiki-prose.css";
 
 /**
@@ -526,7 +526,7 @@ export function WikiRenderer({
   onFactDiscussionClick,
 }: WikiRendererProps) {
   const { i18n, t } = useTranslation();
-  const enabledUnits = useAppStore((s) => s.enabledUnits);
+  const enabledUnits = useDisplayUnits();
   const lang = activeLangCode(i18n.language);
   const html = useMemo(() => {
     if (!contentHtml) return null;

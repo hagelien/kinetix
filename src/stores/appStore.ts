@@ -18,6 +18,11 @@ import {
   normalizeFractionDisplay,
   type FractionDisplay,
 } from '@/lib/rangeUtils';
+import {
+  DEFAULT_ETHANOL_UNIT,
+  normalizeEthanolUnit,
+} from '@/lib/ethanolUnits';
+import type { DisplayConcentrationUnit } from '@/lib/unitConversion';
 
 export type ConcentrationUnit =
   | 'mg/L'
@@ -47,6 +52,13 @@ interface AppState {
    * tooltips, converters, and pickers. Always non-empty.
    */
   enabledUnits: ConcentrationUnit[];
+  /**
+   * The unit ethanol concentrations are shown in, separate from
+   * `enabledUnits` because blood alcohol is read in ‰ (or %), not µmol/L.
+   * Defaults to ‰. Applied wherever a view is scoped to ethanol (see
+   * `DrugUnitScope`); every other drug keeps following `enabledUnits`.
+   */
+  ethanolUnit: DisplayConcentrationUnit;
   themeMode: ThemeMode;
   /**
    * How dimensionless fractions — bioavailability (F) and plasma protein
@@ -94,6 +106,7 @@ interface AppState {
   increaseTextScale: () => void;
   decreaseTextScale: () => void;
   setEnabledUnits: (units: ConcentrationUnit[]) => void;
+  setEthanolUnit: (unit: DisplayConcentrationUnit) => void;
   setThemeMode: (mode: ThemeMode) => void;
   setFractionDisplay: (mode: FractionDisplay) => void;
   setTipsEnabled: (enabled: boolean) => void;
@@ -133,6 +146,7 @@ export const useAppStore = create<AppState>()(
     (set) => ({
       textScale: 0.95,
       enabledUnits: [...DEFAULT_ENABLED_UNITS],
+      ethanolUnit: DEFAULT_ETHANOL_UNIT,
       themeMode: 'system' as ThemeMode,
       fractionDisplay: DEFAULT_FRACTION_DISPLAY,
       tipsEnabled: true,
@@ -153,6 +167,7 @@ export const useAppStore = create<AppState>()(
         set({
           enabledUnits: units.length > 0 ? units : [...DEFAULT_ENABLED_UNITS],
         }),
+      setEthanolUnit: (unit) => set({ ethanolUnit: normalizeEthanolUnit(unit) }),
       setThemeMode: (mode) => set({ themeMode: mode }),
       setFractionDisplay: (mode) => set({ fractionDisplay: mode }),
       setTipsEnabled: (enabled) => set({ tipsEnabled: enabled }),
@@ -199,7 +214,7 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: APP_SETTINGS_KEY,
-      version: 5,
+      version: 6,
       storage: createJSONStorage(() => ({
         getItem: (name) => getStoredValue(name, [LEGACY_APP_SETTINGS_KEY]),
         setItem: (name, value) => setStoredValue(name, value, [LEGACY_APP_SETTINGS_KEY]),
@@ -211,8 +226,8 @@ export const useAppStore = create<AppState>()(
       // keep showing both kinds.
       migrate: (persistedState, version) => {
         // v2 → v3 adds `pmLines`; v3 → v4 adds `forensicLines`; v4 → v5 adds
-        // `fractionDisplay`. All are applied to every older state on the way out
-        // rather than as branches of their own. Normalizing (instead of
+        // `fractionDisplay`; v5 → v6 adds `ethanolUnit`. All are applied to
+        // every older state on the way out rather than as branches of their own. Normalizing (instead of
         // defaulting) also repairs a blob written by a build that knew a
         // different set of statistics/categories.
         const withOverlayLines = (state: unknown): AppState => {
@@ -222,6 +237,7 @@ export const useAppStore = create<AppState>()(
             pmLines: normalizePmLineSettings(record.pmLines),
             forensicLines: normalizeForensicLineSettings(record.forensicLines),
             fractionDisplay: normalizeFractionDisplay(record.fractionDisplay),
+            ethanolUnit: normalizeEthanolUnit(record.ethanolUnit),
           } as unknown as AppState;
         };
         if (version >= 2) return withOverlayLines(persistedState);
