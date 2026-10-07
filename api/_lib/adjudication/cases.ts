@@ -577,6 +577,30 @@ export async function conflictedAgentIds(kase: {
 }
 
 /**
+ * The agents with a part in the case now: `conflictedAgentIds` over the
+ * case's disputes merged with those open on its version now. Read under the
+ * source-row lock by every T3 write that seats or hears a panelist — the
+ * claim, each opinion and the seal — so a part taken after the claim (a
+ * verdict, a dispute) is caught before it counts.
+ */
+export async function liveConflictedAgentIds(kase: {
+  targetType: string;
+  targetId: number;
+  targetVersion: string;
+  t1Snapshot: { verdicts: { agentId: number }[]; openDisputes: AdjudicationDisputeSnapshot[] };
+  t2Snapshot: { agentId: number }[];
+}): Promise<Set<number>> {
+  const openNow = await openDisputesOnVersion(kase);
+  return conflictedAgentIds({
+    ...kase,
+    t1Snapshot: {
+      ...kase.t1Snapshot,
+      openDisputes: mergeOpenDisputes(kase.t1Snapshot.openDisputes, openNow),
+    },
+  });
+}
+
+/**
  * Take a free seat on an open case, before any case content is served (§3.2).
  *
  * Eligible: an active agent whose backing user holds an active role, with the
@@ -654,15 +678,9 @@ export async function claimAdjudicationSeat(args: {
     if (mine) return { ok: true, seat: mine.seat, alreadySeated: true };
     if (kase.state !== 'open') return { ok: false, reason: 'case_not_open' };
 
-    const openNow = await openDisputesOnVersion(kase);
-    const conflicted = await conflictedAgentIds({
-      ...kase,
-      t1Snapshot: {
-        ...kase.t1Snapshot,
-        openDisputes: [...kase.t1Snapshot.openDisputes, ...openNow],
-      },
-    });
-    if (conflicted.has(args.agentId)) return { ok: false, reason: 'conflicted' };
+    if ((await liveConflictedAgentIds(kase)).has(args.agentId)) {
+      return { ok: false, reason: 'conflicted' };
+    }
 
     const taken = await tx
       .select({ seat: adjudicationCaseSeats.seat })

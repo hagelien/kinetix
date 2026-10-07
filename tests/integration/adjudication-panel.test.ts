@@ -777,6 +777,59 @@ describe('T3 sealing, convergence and the T4 handoff', () => {
     }
   });
 
+  it('refuses the opinion of a panelist that judged the target after claiming its seat', async () => {
+    const s = await seedCase();
+    await claim(s.a.userId, s.caseId);
+    await verdictOn(s.a.agentId, s.editId, 'approve', 'flagship', 'Stemmer.');
+    const refused = await opinion(s.a.userId, { caseId: s.caseId, targetVersion: s.version, resolvedValue: 60, resolvedUnit: 'L/h' });
+    expect(refused.status).toBe(403);
+    expect(refused.raw).toContain('conflicted');
+  });
+
+  it('hands a case to a person, recommending nothing, when a seat took a part after finalizing', async () => {
+    const s = await seedCase();
+    await claim(s.a.userId, s.caseId);
+    await claim(s.b.userId, s.caseId);
+    const value = { resolvedValue: 60, resolvedUnit: 'L/h' };
+    await opinion(s.a.userId, { caseId: s.caseId, targetVersion: s.version, ...value });
+    // Seat A, already final, now judges the target at the lower tier.
+    await verdictOn(s.a.agentId, s.editId, 'approve', 'flagship', 'Stemmer.');
+    expect((await opinion(s.b.userId, { caseId: s.caseId, targetVersion: s.version, ...value })).status).toBe(201);
+    const [kase] = await db.select().from(adjudicationCases).where(eq(adjudicationCases.id, s.caseId));
+    expect(kase).toMatchObject({ t4Required: true, recommendation: null });
+    expect(kase!.handoff!.reasons).toContain('panel_conflicted');
+  });
+
+  it('keeps a case about deleted wiki content closed to a person who may not read drafts', async () => {
+    const owner = await seedUser(db, { email: 'w@example.com', username: 'w', role: 'editor' });
+    const [page] = await db
+      .insert(wikiPages)
+      .values({ slug: 'kokain', title: 'Kokain', createdBy: owner, updatedBy: owner })
+      .returning({ id: wikiPages.id });
+    const s = await seedCase({
+      edit: {
+        editType: 'wiki_page',
+        targetId: page!.id,
+        parameter: null,
+        proposedValue: { title: 'Kokain', content: {} },
+      },
+    });
+    await panel(s, { resolution: 'approve' }, { resolution: 'return' });
+    const contributor = await seedUser(db, { email: 'c@example.com', username: 'c', role: 'contributor' });
+    await db.insert(permissionOverrides).values({ capability: 'dispute.queue.read', minTier: 'contributor' });
+    resetPermissionOverridesForTests();
+    try {
+      // A drug deletion removes the wiki-scoped edit and its page.
+      await db.delete(pendingEdits).where(eq(pendingEdits.id, s.editId));
+      await db.delete(wikiPages).where(eq(wikiPages.id, page!.id));
+      const hidden = await caseFile(contributor, s.caseId, 'contributor');
+      expect(hidden.status).toBe(404);
+      expect(hidden.raw).not.toContain('Kokain');
+    } finally {
+      resetPermissionOverridesForTests();
+    }
+  });
+
   it('sends a case to a person when a panelist asks for one, even on agreement', async () => {
     const s = await seedCase();
     const why = { resolution: 'human', humanReason: 'Needs a clinical policy call.' };

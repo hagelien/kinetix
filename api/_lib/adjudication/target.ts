@@ -81,10 +81,15 @@ const WIKI_PAGE_EDIT_TYPES = ['wiki_page', 'wiki_fact', 'wiki_section'];
  * `null` when the target is not wiki content at all; `undefined` when the
  * page is gone, which reads as unreadable. A proposed new page (`wiki_new`)
  * is unpublished by definition.
+ *
+ * A pending edit that is gone (a drug deletion removes its wiki-scoped edits
+ * and pages) is placed from the copy the panel was bound to; with no copy to
+ * place it by, it fails closed.
  */
 export async function targetWikiPageStatus(
   targetType: string,
   targetId: number,
+  bound?: { served: Record<string, unknown> } | null,
 ): Promise<string | null | undefined> {
   const db = getDb();
   let pageId: number | null | undefined = null;
@@ -95,12 +100,24 @@ export async function targetWikiPageStatus(
       .where(eq(wikiRevisions.id, targetId));
     pageId = rev?.pageId;
   } else if (targetType === 'pending_edit') {
-    const [edit] = await db
+    const [row] = await db
       .select({ editType: pendingEdits.editType, targetId: pendingEdits.targetId })
       .from(pendingEdits)
       .where(eq(pendingEdits.id, targetId));
-    if (edit?.editType === 'wiki_new') return 'draft';
-    if (!edit || !WIKI_PAGE_EDIT_TYPES.includes(edit.editType)) return null;
+    const servedPayload = bound?.served?.payload as
+      | { editType?: unknown; targetId?: unknown }
+      | undefined;
+    const edit =
+      row ??
+      (typeof servedPayload?.editType === 'string'
+        ? {
+            editType: servedPayload.editType,
+            targetId: typeof servedPayload.targetId === 'number' ? servedPayload.targetId : null,
+          }
+        : null);
+    if (!edit) return undefined;
+    if (edit.editType === 'wiki_new') return 'draft';
+    if (!WIKI_PAGE_EDIT_TYPES.includes(edit.editType)) return null;
     pageId = edit.targetId;
   } else {
     return null;

@@ -50,7 +50,11 @@ export async function buildCaseFile(caseId: number, viewer: CaseFileViewer) {
     .from(adjudicationCases)
     .where(eq(adjudicationCases.id, caseId));
   if (!kase) return null;
-  const pageStatus = await targetWikiPageStatus(kase.targetType, kase.targetId);
+  const pageStatus = await targetWikiPageStatus(
+    kase.targetType,
+    kase.targetId,
+    kase.adjudicatedTarget,
+  );
   if (pageStatus !== null && !(await callerCanReadWikiPage(pageStatus, { role: viewer.role }))) {
     return null;
   }

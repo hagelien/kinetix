@@ -56,6 +56,7 @@ import {
 import { adjudicationTargetParameter } from './target.js';
 import { disputeOriginOf } from './detector.js';
 import {
+  liveConflictedAgentIds,
   mergeOpenDisputes,
   openDisputesOnVersion,
   type InvalidatedReason,
@@ -108,6 +109,7 @@ export type OpinionWriteResult =
         | 'target_unavailable'
         | 'target_drifted'
         | 'seat_final'
+        | 'conflicted'
         | 'value_required'
         | 'value_not_allowed'
         | 'unit_not_allowed'
@@ -301,6 +303,15 @@ export async function submitAdjudicationOpinion(args: {
     const bound = await bindPanelTarget(kase, { agentId: agent.id, agentUserId: agent.userId });
     if (!bound.ok) return refuse(409, bound.reason, PANEL_TARGET_REFUSALS[bound.reason]);
     if (seat.sealedAt) return refuse(409, 'seat_final', 'Your opinion on this case is final');
+    // A part taken since the claim — a verdict on the target, a dispute on
+    // this version — disqualifies the panelist before its opinion counts.
+    if ((await liveConflictedAgentIds(kase)).has(agent.id)) {
+      return refuse(
+        403,
+        'conflicted',
+        'You have taken a part in this case since claiming your seat (a verdict or a dispute), so your opinion cannot count',
+      );
+    }
     // Checked under the locks against the basis the panel is bound to, so the
     // bounds convert with the same molecular weight the seal compares with.
     const shapeError = await checkValueShape(
@@ -471,6 +482,11 @@ function handoffSummary(
   for (const o of asked) {
     parts.push(`Seat ${o.seat.toUpperCase()} asked for a person: ${o.humanReason}`);
   }
+  if (reasons.includes('panel_conflicted')) {
+    parts.push(
+      'A panelist took a part in this case after finalizing (a verdict or a dispute on the target), so the panel was not independent and nothing is recommended.',
+    );
+  }
   if (reasons.includes('panel_abstained')) {
     parts.push(
       'Both panelists abstained: the decisive evidence is missing or out of reach, so nothing was resolved.',
@@ -535,7 +551,14 @@ async function sealIfComplete(
   // so a person takes it.
   if (converged && a.resolution === 'abstain') reasons.push('panel_abstained');
   if (disputeOrigin !== 'agent') reasons.push('human_dispute');
+  // A seat that finalized and then took a part in the case (a verdict, a
+  // dispute): its opinion cannot stand for an independent panel, so nothing
+  // is recommended and a person takes the case.
+  const conflicted = await liveConflictedAgentIds({ ...kase, t1Snapshot });
+  const panelConflicted = conflicted.has(a.agentId) || conflicted.has(b.agentId);
+  if (panelConflicted) reasons.push('panel_conflicted');
   const t4Required = reasons.length > 0;
+  if (panelConflicted) result.recommendation = null;
 
   const families = [a.modelFamily, b.modelFamily];
   const panelFamilyDiversity =

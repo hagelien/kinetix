@@ -2755,7 +2755,9 @@ export type AdjudicationHandoff = {
   disputeOrigin: AdjudicationDisputeOrigin;
   triggers: AdjudicationTrigger[];
   /** Why a person is needed, in order of weight. */
-  reasons: Array<'panel_diverged' | 'human_requested' | 'panel_abstained' | 'human_dispute'>;
+  reasons: Array<
+    'panel_diverged' | 'human_requested' | 'panel_abstained' | 'human_dispute' | 'panel_conflicted'
+  >;
   /**
    * One paragraph, in English, of what remains disputed: the record's prose
    * for agents and the API. A screen or email renders from `reasons` and
