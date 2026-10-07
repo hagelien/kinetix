@@ -22,7 +22,7 @@ allowlisted helper with a scrubbed environment, without reading worker profiles 
 passing Kinetix/database credentials, shell hooks or `NODE_OPTIONS` to the child.
 Kinetix API calls still use the selected authenticated worker profile where configured.
 
-## 0b. PubChem records are public data, never a PDF request
+## 0b. Public database records are never a PDF request
 
 A citation whose URL is a PubChem record (`https://pubchem.ncbi.nlm.nih.gov/compound/<CID>`)
 is a public database entry, not a paper. Its HTML page answers automated readers with a
@@ -51,6 +51,39 @@ computes or curates (identity, structure, molecular weight and other computed pr
 or when the attributed source is not retrievable — and then say in the sentence or review
 that the value is database-reported. A PubChem line and the primary study it quotes are one
 source, never two (`drug-db-maintainer.md`, "How many references a fact needs").
+
+**Other public databases follow the same rule.** A record page of DrugBank
+(`go.drugbank.com/drugs/DB…`), ChEMBL (`ebi.ac.uk/chembl/compound_report_card/CHEMBL…`),
+ChemSpider (`chemspider.com/Chemical-Structure.<id>.html`), Guide to Pharmacology
+(`guidetopharmacology.org/GRAC/LigandDisplayForward?ligandId=…`) or LIPID MAPS
+(`lipidmaps.org/…LM_ID=LM…`) is a database entry, not a paper, and the server refuses a PDF
+request for it (`pdf_request_public_database_record`). Read the record page, or the database's
+own open API where one exists (ChEMBL: `ebi.ac.uk/chembl/api/data/molecule/<CHEMBL id>.json`).
+DrugBank and ChemSpider pages commonly answer automated readers with a 403; that is a
+retrieval outcome to record, never grounds for a PDF request. For the claim
+itself, apply the same primary-source rule as for PubChem: these databases list the
+references behind each statement, so read and cite that study or label. Keep the database
+citation only for identity and computed properties, or as a scoped, database-reported fallback.
+
+## 0c. A site's front page is not a source
+
+A URL citation that is only a site's front page (`https://www.noklus.no`,
+`https://www.guidetopharmacology.org`) or a database's home page
+(`https://www.ebi.ac.uk/chembl/`) names nothing specific to read, review or upload. The
+server refuses to create one and refuses a PDF request for one
+(`pdf_request_unspecific_url`). When you meet an existing one (typically in the
+read-in-full audit lane):
+
+1. Work out from the citing claim which page, document or study it was meant to support.
+   Find that exact source and read it through the steps below.
+2. Create the specific citation (`POST /api/references`), give it its read-in-full review,
+   and move the citing claim onto it: a references-refresh `PUT /api/drug-parameter` (same
+   value) for a parameter, or a `replace` for a wiki fact, with the front-page reference
+   removed.
+3. If no specific source supports the claim, treat the claim as unsupported and handle it
+   under The Method (narrow it, or dispute/withdraw it); never keep it resting on a front page.
+
+Never file a PDF request for a front page, and never cite one in new work.
 
 ## 1. Stored source, for this exact citation
 

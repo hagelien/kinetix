@@ -151,6 +151,21 @@ describe('POST /api/pdf-requests', () => {
     expect(db.insert).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['https://go.drugbank.com/drugs/DB00820', 'pdf_request_public_database_record'],
+    ['https://www.noklus.no', 'pdf_request_unspecific_url'],
+    ['https://www.ebi.ac.uk/chembl/', 'pdf_request_unspecific_url'],
+  ])('rejects %s, which no PDF can satisfy', async (identifier, code) => {
+    const { db } = mockDb([[{ id: 12, type: 'url', identifier }]]);
+    const { res, state } = createResponse();
+
+    await handler(createJsonRequest({ reason: 'blocked' }), res);
+
+    expect(state.statusCode).toBe(400);
+    expect(JSON.parse(state.body)).toMatchObject({ code });
+    expect(db.insert).not.toHaveBeenCalled();
+  });
+
   it('still accepts requests for other URL citations', async () => {
     const { values } = mockDb([
       [{ id: 12, type: 'url', identifier: 'https://example.org/paper' }],
