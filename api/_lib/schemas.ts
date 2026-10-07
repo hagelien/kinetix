@@ -3,6 +3,7 @@ import type { ReferenceMetadata } from './reference-metadata.js';
 import { REJECTION_REASONS } from '../../src/lib/rejectionReasons.js';
 import { sourceQuoteSchema } from '../../src/lib/parameterEntries.js';
 import { MODEL_TIERS } from '../../src/lib/modelTiers.js';
+import { isSiteLandingPageUrl } from '../../src/lib/publicDatabaseRecord.js';
 import {
   DISPUTED_CLAIM_MAX_CHARS,
   DISPUTED_CLAIM_MIN_CHARS,
@@ -420,6 +421,18 @@ function validateReferenceIdentifier(
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'URL identifier must use http or https',
+        path: ['identifier'],
+      });
+      return;
+    }
+    // A site's front page names no specific source: nothing there can be read
+    // in full, reviewed or supplied as a PDF, so a claim citing it can never
+    // be verified. Cite the exact page, document or study instead.
+    if (isSiteLandingPageUrl(data.identifier)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "URL identifier must point to a specific page or document, not a site's front page",
         path: ['identifier'],
       });
     }

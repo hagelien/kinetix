@@ -95,7 +95,33 @@ describe('CitationPdfSection self-service upload', () => {
     expect(screen.getByRole('button', { name: /upload a pdf/i })).toBeTruthy();
   });
 
-  it('explains a PubChem record needs no PDF instead of offering an upload', async () => {
+  it.each([
+    ['public_database_record', /public database entry, not a paper/],
+    ['site_landing_page', /website's front page, not a specific source/],
+  ] as const)(
+    'explains why a %s needs no PDF instead of offering an upload',
+    async (reason, text) => {
+      await i18n.changeLanguage('en');
+      fetchPdfRequestMock.mockResolvedValue({ request: null, hasPdf: false });
+
+      render(
+        <CitationPdfSection
+          citationId={7}
+          resolvable
+          hasReview={false}
+          noPdfReason={reason}
+        />,
+      );
+
+      expect(await screen.findByText(text)).toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: /Upload a PDF/i }),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByTestId('pdf-dropzone')).not.toBeInTheDocument();
+    },
+  );
+
+  it('keeps the front-page warning on a reference that already has a review', async () => {
     await i18n.changeLanguage('en');
     fetchPdfRequestMock.mockResolvedValue({ request: null, hasPdf: false });
 
@@ -103,18 +129,30 @@ describe('CitationPdfSection self-service upload', () => {
       <CitationPdfSection
         citationId={7}
         resolvable
-        hasReview={false}
-        publicDatabaseRecord
+        hasReview={true}
+        noPdfReason="site_landing_page"
       />,
     );
 
     expect(
-      await screen.findByText(/public database entry \(PubChem\)/),
+      await screen.findByText(/website's front page, not a specific source/),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: /Upload a PDF/i }),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByTestId('pdf-dropzone')).not.toBeInTheDocument();
+  });
+
+  it('stays quiet on a reviewed database record', async () => {
+    fetchPdfRequestMock.mockResolvedValue({ request: null, hasPdf: false });
+
+    const { container } = render(
+      <CitationPdfSection
+        citationId={7}
+        resolvable
+        hasReview={true}
+        noPdfReason="public_database_record"
+      />,
+    );
+
+    await waitFor(() => expect(fetchPdfRequestMock).toHaveBeenCalled());
+    expect(container.querySelector('section')).toBeNull();
   });
 
   it('accepts a PDF dropped on the upload panel', async () => {

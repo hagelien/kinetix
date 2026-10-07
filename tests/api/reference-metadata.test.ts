@@ -3,6 +3,29 @@ import { createReferenceSchema, resolveReferenceSchema } from '../../api/_lib/sc
 import { normalizeReferenceMetadata } from '../../api/_lib/reference-metadata.ts';
 
 describe('createReferenceSchema metadata contract', () => {
+  it('rejects a URL that is only a site front page', () => {
+    for (const identifier of [
+      'https://www.noklus.no',
+      'https://www.guidetopharmacology.org/',
+      'https://www.ebi.ac.uk/chembl/',
+    ]) {
+      const parsed = createReferenceSchema.safeParse({ type: 'url', identifier });
+      expect(parsed.success, identifier).toBe(false);
+      expect(parsed.error?.issues[0]?.message).toMatch(/front page/);
+    }
+  });
+
+  it('accepts a URL that points to a specific page', () => {
+    for (const identifier of [
+      'https://www.noklus.no/peth-veileder/',
+      'https://example.org/?id=3',
+      'https://www.ebi.ac.uk/chembl/compound_report_card/CHEMBL160/',
+    ]) {
+      const parsed = createReferenceSchema.safeParse({ type: 'url', identifier });
+      expect(parsed.success, identifier).toBe(true);
+    }
+  });
+
   it('rejects malformed metadata authors as a comma-separated string', () => {
     const parsed = createReferenceSchema.safeParse({
       type: 'doi',
