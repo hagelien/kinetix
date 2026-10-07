@@ -71,6 +71,7 @@ import {
   pendingEditUpheldRulingStands,
   withdrawOpenDispute,
 } from './_lib/disputes.js';
+import { detectAdjudicationCase } from './_lib/adjudication/cases.js';
 import {
   contributionAuthorUserId,
   fanOutDisputeNotification,
@@ -596,6 +597,20 @@ async function handlePost(
       targetId: parsed.data.targetId,
       createdBy: auth.userId,
     });
+  }
+
+  // T3 detection (docs/plans/2026-09-18-t3-adjudication-backend.md §3.3): the
+  // moment a verdict lands is when a disagreement surviving blind T2 becomes
+  // knowable, so check now rather than wait for the sweep. After the dispute
+  // bridge above, so an open dispute this verdict raised is part of the cut.
+  // Never allowed to reject the verdict, which is already recorded: a failure
+  // here is logged and the consensus sweep's backstop picks the target up.
+  try {
+    await detectAdjudicationCase({ targetType, targetId: parsed.data.targetId });
+  } catch (err) {
+    console.error(
+      `[adjudication] detection failed for ${targetType}:${parsed.data.targetId}: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 
   // Agent consensus stands in for a human moderator's approval: once a pending
