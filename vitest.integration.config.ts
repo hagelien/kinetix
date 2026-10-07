@@ -58,6 +58,7 @@ const MOCKED = [
   'tests/integration/methods-components-atomicity.test.ts',
   'tests/integration/notification-email-delivery.test.ts',
   'tests/integration/pdf-inbox.test.ts',
+  'tests/integration/pdf-requests-pubchem-queue.test.ts',
   'tests/integration/pending-edits-consensus-status-batch.test.ts',
   'tests/integration/pending-edits-drug-lock.test.ts',
   'tests/integration/simulator-cases-drug-lock.test.ts',
