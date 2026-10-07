@@ -143,7 +143,7 @@ describe('CmaxSection', () => {
     expect(formatCmaxValueIn(cmaxRow({ unit: 'mmol/L' }), '‰', null)).toBeNull();
     expect(formatCmaxValueIn(cmaxRow({ unit: 'µmol/L/mg' }), '‰', 46.07)).toBeNull();
     expect(formatCmaxValueIn(cmaxRow({ unit: 'mmol/L' }), '‰', 46.07)).toBe(
-      '3.87 ‰ (3.225–4.515)',
+      '3.87 ‰ (3.22–4.51)',
     );
   });
 
