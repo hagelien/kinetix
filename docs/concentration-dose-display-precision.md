@@ -46,7 +46,7 @@ A rule such as “always show three decimal places” would therefore either era
 
 Formatting currently varies between surfaces:
 
-- `src/lib/rangeUtils.ts` provides `formatWithMaxDecimals(value, 3)`. For values greater than or equal to 1, this rounds to three decimal places rather than three significant figures. It can therefore display values such as `43.263` or `100.947`.
+- `src/lib/rangeUtils.ts` provides `formatWithMaxDecimals(value, 3)`. For values greater than or equal to 1, it keeps decimals only up to three significant figures (`43.263` → `43.3`, `100.947` → `101`), but never rounds the integer part (`43 263` stays `43 263`). The authored-unit row of a unit-conversion tooltip keeps the source's own digits.
 - `src/components/drug-table/DrugInlineConverter.tsx` uses four significant figures for its range hint.
 - `src/lib/compute/report.ts` uses a separate magnitude-dependent formatter: exponential notation below 0.01, three decimals below 1, two decimals below 100, and integers above 100.
 - `src/components/admin/ReferenceConcentrationsAdminSection.tsx` displays raw JavaScript numbers and cannot retain source formatting such as `1.0`.

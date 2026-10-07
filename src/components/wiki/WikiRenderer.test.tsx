@@ -557,8 +557,9 @@ describe("WikiRenderer inline concentration unit tooltips", () => {
     );
     const panels = container.querySelectorAll(".unit-conversion-tooltip-panel");
     expect(panels[0]?.textContent).toContain("1 mg/L");
-    // Integer part is grouped with a non-breaking space thousands separator.
-    expect(panels[1]?.textContent).toContain("1 234.567 mg/L");
+    // Integer part is grouped with a non-breaking space thousands separator,
+    // and decimals that add no precision at this magnitude are dropped.
+    expect(panels[1]?.textContent).toContain("1 235 mg/L");
   });
 
   it("keeps sub-unit three-decimal concentration values as decimals", () => {
@@ -583,8 +584,8 @@ describe("WikiRenderer inline concentration unit tooltips", () => {
         molecularWeight={150}
       />,
     );
-    expect(container.textContent).toContain("8.227 µmol/L");
-    expect(container.textContent).toContain("15.633 µmol/L");
+    expect(container.textContent).toContain("8.23 µmol/L");
+    expect(container.textContent).toContain("15.6 µmol/L");
     const panels = container.querySelectorAll(".unit-conversion-tooltip-panel");
     expect(panels[0]?.textContent).toContain("1.234 mg/L");
     expect(panels[1]?.textContent).toContain("2.345 mg/L");
@@ -613,9 +614,9 @@ describe("WikiRenderer inline concentration unit tooltips", () => {
     );
     // Converted bounds keep their strict/inclusive operators in the inline text.
     expect(container.textContent).toContain("< 40 µmol/L");
-    expect(container.textContent).toContain("≤ 33.333 µmol/L");
+    expect(container.textContent).toContain("≤ 33.3 µmol/L");
     expect(container.textContent).toContain("> 20 µmol/L");
-    expect(container.textContent).toContain("≥ 13.333 µmol/L");
+    expect(container.textContent).toContain("≥ 13.3 µmol/L");
   });
 
   it("links injected tooltip panels to their keyboard focus target", () => {

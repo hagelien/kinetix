@@ -154,7 +154,7 @@ describe('unitTooltip — getPreferredUnitDisplay', () => {
     });
   });
 
-  it('keeps up to three decimals below 100', () => {
+  it('keeps three significant figures below 100', () => {
     // 1.234 mg/L at MW 150 → 8.227 µmol/L.
     const out = getPreferredUnitDisplay(
       { value: 1.234 },
@@ -162,7 +162,7 @@ describe('unitTooltip — getPreferredUnitDisplay', () => {
       150,
       ['µmol/L', 'mg/L'],
     );
-    expect(out).toEqual({ unit: 'µmol/L', formatted: '8.227' });
+    expect(out).toEqual({ unit: 'µmol/L', formatted: '8.23' });
   });
 
   it('preserves single-bound ≥ / ≤ qualifiers', () => {

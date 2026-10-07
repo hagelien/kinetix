@@ -372,9 +372,22 @@ export function groupThousands(formatted: string): string {
 }
 
 /**
- * Format a number with at most 3 significant decimal places (excluding leading zeros).
- * Integer parts are grouped with a space thousands separator.
- * E.g., 0.00123456 → "0.00123", 1.23456 → "1.235", 300000 → "300 000"
+ * Significant figures a displayed number ≥ 1 keeps before its decimals are
+ * dropped (docs/concentration-dose-display-precision.md).
+ */
+const DISPLAY_SIGNIFICANT_FIGURES = 3;
+
+/**
+ * Format a number for display. Integer parts are grouped with a space
+ * thousands separator.
+ *
+ * Below 1, `maxDecimals` significant digits are kept after the leading zeros.
+ * From 1 upwards, decimals are shown only while they add precision: at most
+ * `maxDecimals` of them, fewer as the integer part grows, and none once it
+ * already carries three significant figures — `3 277.154` in a unit where the
+ * decimals are noise is shown as `3 277`. The integer part is never rounded.
+ * E.g., 0.00123456 → "0.00123", 1.23456 → "1.23", 78.027 → "78",
+ * 156.055 → "156", 3277.154 → "3 277", 300000 → "300 000"
  */
 export function formatWithMaxDecimals(num: number, maxDecimals = 3): string {
   if (!isFinite(num)) return '';
@@ -382,9 +395,10 @@ export function formatWithMaxDecimals(num: number, maxDecimals = 3): string {
 
   const absNum = Math.abs(num);
 
-  // For numbers >= 1, just use fixed decimal places
   if (absNum >= 1) {
-    const rounded = Math.round(num * Math.pow(10, maxDecimals)) / Math.pow(10, maxDecimals);
+    const integerDigits = Math.floor(Math.log10(absNum)) + 1;
+    const decimals = Math.min(maxDecimals, Math.max(0, DISPLAY_SIGNIFICANT_FIGURES - integerDigits));
+    const rounded = Math.round(num * Math.pow(10, decimals)) / Math.pow(10, decimals);
     // Remove trailing zeros
     return groupThousands(String(rounded).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, ''));
   }
