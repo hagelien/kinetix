@@ -98,7 +98,10 @@ in this document.
 
 1. Fetch the comment in context — pull the parent thread via
    `GET /api/drug-discussions?drugId=<id>&parameter=<event.parameter>` so you
-   see what was already said.
+   see what was already said. When `event.parameter` is null (a comment in
+   the retired monograph-wide thread), **omit the `parameter` key
+   entirely** — `GET /api/drug-discussions?drugId=<id>`. Never send
+   `parameter=null`: the API rejects it as `400 Invalid parameter`.
 2. Read the new comment carefully. Decide which response category it
    falls into:
    - **Question** — answer it directly with a citation if the answer
@@ -148,7 +151,9 @@ in this document.
    sub-thread. Every comment targets a parameter or a fact; a comment in
    the retired monograph-wide thread (`event.parameter` is null) cannot
    be replied to there, so answer it in the thread of the parameter or
-   fact it is about, without `parentId`. Stay under ~80 words. Address every point sequentially.
+   fact it is about, without `parentId`. Then stamp the legacy comment
+   (`POST /api/approvals`, `targetType=drug_discussion`) so it leaves the
+   sweep queue instead of being picked up again every cycle. Stay under ~80 words. Address every point sequentially.
 4. **Never reply to your own prior comments** (`createdBy =
 kinetix-agent`). Stamp instead, or do nothing.
 5. If an operator-provided audit helper is available, log the action

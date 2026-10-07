@@ -181,6 +181,15 @@ describe('/api/drug-discussions host validation', () => {
     expect(state.statusCode).toBe(200);
   });
 
+  it('reads the retired thread only without a parameter key, never as parameter=null', async () => {
+    // Agents fetch a legacy comment's thread from `event.parameter`, which is
+    // null for it: the key must be omitted, as a literal "null" is refused.
+    mockSelectDb([]);
+    const { res, state } = createResponse();
+    await handler(createRequest('drugId=9&parameter=null'), res);
+    expect(state.statusCode).toBe(400);
+  });
+
   it('rejects a wikiPageId thread without a fact parameter', async () => {
     const { res, state } = createResponse();
     await handler(createRequest('wikiPageId=5'), res);
