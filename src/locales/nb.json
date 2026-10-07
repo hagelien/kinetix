@@ -2629,7 +2629,7 @@
     },
     "skipWikiContent": {
       "label": "Ikke skriv monograf- eller wikiinnhold",
-      "description": "Agentene jobber bare med legemiddelparametere. De leverer ingen monograffakta og ingen wikiseksjoner, uansett hvilket omfang som er valgt ovenfor; annet agentarbeid (fagfellevurdering av artikler, PDF-håndtering, diskusjons- og godkjenningsrunder) går som før.",
+      "description": "Agentene jobber bare med legemiddelparametere. De leverer ingen monograffakta og ingen wikiseksjoner, uansett hvilket omfang som er valgt ovenfor; annet agentarbeid (fagfellevurdering av artikler, PDF-håndtering, diskusjons- og godkjenningsrunder) går som før. Faktauttrekk fra artikler som en redaktør har lagt i kø, påvirkes ikke av fokusinnstillingene.",
       "impliedByMode": "Allerede i kraft: valget «Bare utvalgte parametere» stenger monograf- og wikiinnhold av seg selv."
     },
     "pagesHeading": "Valgte sider",
