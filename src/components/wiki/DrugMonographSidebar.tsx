@@ -51,8 +51,11 @@ import { summaryToNumericRange } from '@/lib/parameterEntryAggregation';
 import {
   convertConcentrationRange,
   isConcentrationUnit,
+  isEthanolDisplayUnit,
   normalizeUnit,
 } from '@/lib/unitConversion';
+import { isEthanolDrug } from '@/lib/ethanolUnits';
+import { DrugUnitScope } from '@/components/ui/DrugUnitScope';
 import {
   primaryUnit,
   useAppStore,
@@ -243,6 +246,7 @@ export function DrugMonographSidebar({
   const [reviewingReceptor, setReviewingReceptor] = useState(false);
   const currentDrugIdRef = useRef<number | null>(null);
   const userPrimaryUnit = useAppStore(primaryUnit);
+  const ethanolUnit = useAppStore((s) => s.ethanolUnit);
   const fractionDisplay = useFractionDisplay();
   const addToBasket = useBasketStore((s) => s.addItem);
   const addComparisonParameter = useBasketStore(
@@ -479,6 +483,11 @@ export function DrugMonographSidebar({
   // to re-narrow the union (TypeScript can't track the early-return
   // through `renderParameterRow`).
   const drugRow = drug;
+  // Ethanol is shown in the reader's ethanol unit (‰ by default), every other
+  // drug in their primary unit. The scope below hands the same choice to the
+  // tooltips and source dialogs rendered inside the sidebar.
+  const isEthanol = isEthanolDrug(drugRow);
+  const displayPrimaryUnit = isEthanol ? ethanolUnit : userPrimaryUnit;
   const drugDisplayName =
     formatGenericDrugName(resolveDrugName(drugRow.names, i18n.language)) ||
     drugRow.slug;
@@ -574,11 +583,18 @@ export function DrugMonographSidebar({
     if (isConcentrationParam && displayRange) {
       const converted = convertConcentrationRange(
         displayRange,
-        userPrimaryUnit,
+        displayPrimaryUnit,
         drugRow.molecularWeight ?? null,
       );
       if (converted) displayRange = converted;
     }
+    // The tooltip converts FROM a catalog unit, which ‰ and % are not: when the
+    // figure on screen is in one of those, the tooltip works from the stored
+    // range instead (and lists its authored unit first).
+    const tooltipRange: NumericRange | null | undefined =
+      displayRange?.unit && isEthanolDisplayUnit(displayRange.unit)
+        ? (rawValue as NumericRange)
+        : displayRange;
     // A fraction parameter (F, plasma protein binding) follows the user's
     // decimal-vs-percent preference; every other kind formats as before.
     const asPercent = showFractionAsPercent(spec.kind, fractionDisplay);
@@ -758,16 +774,18 @@ export function DrugMonographSidebar({
             </span>
           ) : null}
           {!hasValue && routeSummaryEntries.length > 0 ? null : isConcentrationParam &&
-            displayRange ? (
+            displayRange &&
+            tooltipRange ? (
             <UnitTooltip
-              value={representativeValue(displayRange)}
+              value={representativeValue(tooltipRange)}
               low={
-                typeof displayRange.min === 'number' ? displayRange.min : null
+                typeof tooltipRange.min === 'number' ? tooltipRange.min : null
               }
               high={
-                typeof displayRange.max === 'number' ? displayRange.max : null
+                typeof tooltipRange.max === 'number' ? tooltipRange.max : null
               }
               unit={displayRange.unit}
+              sourceUnit={tooltipRange.unit}
               molecularWeight={drugRow.molecularWeight ?? null}
             >
               {formatted}
@@ -1444,6 +1462,7 @@ export function DrugMonographSidebar({
             canEdit={canSubmitParameterEntry}
             isAdmin={canDirectWrite}
             onMutated={loadDrug}
+            molecularWeight={drugRow.molecularWeight ?? null}
           />
         ) : null}
         {groupId === 'analytics_detection' ? renderMethodLimitsRows() : null}
@@ -1550,6 +1569,7 @@ export function DrugMonographSidebar({
   }
 
   return (
+    <DrugUnitScope isEthanol={isEthanol}>
     <div
       className="space-y-2"
       data-testid={
@@ -1666,5 +1686,6 @@ export function DrugMonographSidebar({
         />
       )}
     </div>
+    </DrugUnitScope>
   );
 }

@@ -48,6 +48,8 @@ import {
   tabForParameter,
   type MonographTabId,
 } from '@/lib/monographTabs';
+import { DrugUnitScope } from '@/components/ui/DrugUnitScope';
+import { isEthanolDrug } from '@/lib/ethanolUnits';
 
 interface WikiPageData {
   id: number;
@@ -580,6 +582,7 @@ export function WikiPage() {
   const isChemistryTab = activeTab === 'chemistry';
 
   return (
+    <DrugUnitScope isEthanol={isEthanolDrug(matchedDrug)}>
     <div>
       <article className="min-w-0">
         <div className="mb-6">
@@ -664,5 +667,6 @@ export function WikiPage() {
       </article>
       {factDiscussionPanel}
     </div>
+    </DrugUnitScope>
   );
 }

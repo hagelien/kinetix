@@ -1,6 +1,7 @@
 /**
  * Per-user preferences endpoint.
- *   GET   — current user's prefs (display name, preferred unit, notifications)
+ *   GET   — current user's prefs (display name, preferred units, ethanol unit,
+ *           notifications)
  *   PATCH — update any subset; null clears, omitted leaves unchanged
  *
  * Auth-required (any role). The same preferences are surfaced as part of
@@ -66,6 +67,12 @@ const PRIMARY_ELIGIBLE_UNITS = new Set<string>([
   'nmol/L',
 ]);
 
+// Ethanol's own display unit: every concentration unit above plus per mille
+// (‰ = g/L) and percent (% = g/dL), the conventions blood alcohol is read in.
+// Mirrors ETHANOL_UNIT_OPTIONS in src/lib/ethanolUnits.ts.
+const ETHANOL_UNIT_SET = new Set<string>([...ALL_CONCENTRATION_UNITS, '‰', '%']);
+const DEFAULT_ETHANOL_UNIT = '‰';
+
 const notificationSettingsSchema = z
   .object({
     emailOnFeedback: z.boolean().optional(),
@@ -127,6 +134,12 @@ const preferencesUpdateSchema = z
         { message: 'errors.primaryUnitNotSupported' },
       )
       .optional(),
+    ethanolConcentrationUnit: z
+      .string()
+      .refine((unit) => ETHANOL_UNIT_SET.has(unit), {
+        message: 'errors.unknownConcentrationUnit',
+      })
+      .optional(),
     notificationSettings: notificationSettingsSchema.nullable().optional(),
     // #321 favorites. The list is validated as plain strings here
     // (canonical parameter ids live in src/lib/drugParameters.ts and
@@ -140,6 +153,7 @@ const preferencesUpdateSchema = z
 export interface SerializedPreferences {
   displayName: string | null;
   enabledConcentrationUnits: ConcentrationUnitName[];
+  ethanolConcentrationUnit: string;
   notificationSettings: NotificationSettings | null;
   favoriteParameters: string[];
 }
@@ -167,6 +181,7 @@ async function loadPreferences(
     .select({
       displayName: users.displayName,
       enabledConcentrationUnits: users.enabledConcentrationUnits,
+      ethanolConcentrationUnit: users.ethanolConcentrationUnit,
       notificationSettings: users.notificationSettings,
       favoriteParameters: users.favoriteParameters,
     })
@@ -179,6 +194,11 @@ async function loadPreferences(
     enabledConcentrationUnits: (row.enabledConcentrationUnits as
       | ConcentrationUnitName[]
       | null) ?? ['µmol/L', 'mg/L'],
+    ethanolConcentrationUnit:
+      row.ethanolConcentrationUnit &&
+      ETHANOL_UNIT_SET.has(row.ethanolConcentrationUnit)
+        ? row.ethanolConcentrationUnit
+        : DEFAULT_ETHANOL_UNIT,
     notificationSettings:
       (row.notificationSettings as NotificationSettings | null) ?? null,
     favoriteParameters: (row.favoriteParameters as string[] | null) ?? [],
@@ -236,6 +256,9 @@ async function handleUpdate(
       }
     }
     updates.enabledConcentrationUnits = cleaned;
+  }
+  if (parsed.data.ethanolConcentrationUnit) {
+    updates.ethanolConcentrationUnit = parsed.data.ethanolConcentrationUnit;
   }
   if ('notificationSettings' in parsed.data) {
     updates.notificationSettings = parsed.data.notificationSettings ?? null;

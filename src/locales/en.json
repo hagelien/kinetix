@@ -996,6 +996,8 @@
     "unitsMassGroup": "Mass",
     "unitsPrimaryLabel": "Primary display unit",
     "unitsPrimaryHelp": "Used as the default display kind across drug tables and the simulator. Only enabled units appear in this list.",
+    "ethanolUnitLabel": "Ethanol display unit",
+    "ethanolUnitHelp": "Ethanol concentrations are shown in this unit instead of the primary unit above. ‰ is grams per litre and % is grams per decilitre.",
     "notificationsTitle": "Notifications",
     "notificationsHelp": "Email is off unless you turn it on here. Everything below also appears in the bell menu.",
     "tipsTitle": "Helpful tips",

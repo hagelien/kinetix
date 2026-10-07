@@ -107,3 +107,74 @@ describe('/api/preferences private response caching', () => {
     expect(state.headers['Cache-Control']).toBe('no-store');
   });
 });
+
+describe('/api/preferences ethanol display unit', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getUserFromRequestMock.mockResolvedValue({
+      userId: 42,
+      role: 'authenticated',
+    });
+  });
+
+  it('defaults to per mille when the column holds nothing usable', async () => {
+    mockDbPreferences({
+      displayName: null,
+      enabledConcentrationUnits: ['µmol/L', 'mg/L'],
+      ethanolConcentrationUnit: null,
+      notificationSettings: null,
+      favoriteParameters: [],
+    });
+    const { res, state } = createResponse();
+
+    await handler(createRequest(), res);
+
+    expect(JSON.parse(state.body).preferences.ethanolConcentrationUnit).toBe('‰');
+  });
+
+  it('accepts ‰, % and any concentration unit', async () => {
+    for (const unit of ['‰', '%', 'mg/L', 'µmol/L']) {
+      mockDbPreferences({
+        displayName: null,
+        enabledConcentrationUnits: ['µmol/L', 'mg/L'],
+        ethanolConcentrationUnit: unit,
+        notificationSettings: null,
+        favoriteParameters: [],
+      });
+      const { res, state } = createResponse();
+
+      await handler(
+        createRequest('PATCH', { ethanolConcentrationUnit: unit }),
+        res,
+      );
+
+      expect(state.statusCode).toBe(200);
+      const db = getDbMock.mock.results.at(-1)!.value;
+      expect(db.update().set).toHaveBeenCalledWith(
+        expect.objectContaining({ ethanolConcentrationUnit: unit }),
+      );
+      expect(JSON.parse(state.body).preferences.ethanolConcentrationUnit).toBe(
+        unit,
+      );
+    }
+  });
+
+  it('rejects an unknown unit', async () => {
+    mockDbPreferences({
+      displayName: null,
+      enabledConcentrationUnits: ['µmol/L', 'mg/L'],
+      ethanolConcentrationUnit: '‰',
+      notificationSettings: null,
+      favoriteParameters: [],
+    });
+    const { res, state } = createResponse();
+
+    await handler(
+      createRequest('PATCH', { ethanolConcentrationUnit: 'mg/kg' }),
+      res,
+    );
+
+    expect(state.statusCode).toBe(400);
+    expect(state.body).toContain('errors.unknownConcentrationUnit');
+  });
+});

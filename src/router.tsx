@@ -5,6 +5,7 @@ import { AuthGuard } from './components/AuthGuard';
 import { ModeRedirect } from './components/modeling/ModeRedirect';
 import { useAuthStore } from './stores/authStore';
 import { useAppStore } from './stores/appStore';
+import { normalizeEthanolUnit } from './lib/ethanolUnits';
 
 const App = lazy(() => import('./App'));
 const PatternCasePage = lazy(() =>
@@ -196,6 +197,14 @@ export function AppRouter() {
       setEnabledUnits(enabledUnits as Parameters<typeof setEnabledUnits>[0]);
     }
   }, [enabledUnits, setEnabledUnits]);
+  // Ethanol's own display unit, mirrored the same way.
+  const ethanolUnit = useAuthStore(
+    (s) => s.user?.ethanolConcentrationUnit ?? null,
+  );
+  const setEthanolUnit = useAppStore((s) => s.setEthanolUnit);
+  useEffect(() => {
+    if (ethanolUnit) setEthanolUnit(normalizeEthanolUnit(ethanolUnit));
+  }, [ethanolUnit, setEthanolUnit]);
 
   // Reset of user-specific singleton stores on auth identity change is
   // wired in `src/stores/authStore.ts` via a module-level subscribe.

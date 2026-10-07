@@ -11,7 +11,7 @@ import {
   getConversionTooltipRows,
   type AlternativeRange,
 } from '@/lib/unitTooltip';
-import { useAppStore } from '@/stores/appStore';
+import { useDisplayUnits } from './DrugUnitScope';
 import { useHoverGrace } from '@/lib/useHoverGrace';
 
 interface UnitTooltipProps {
@@ -165,7 +165,7 @@ export function UnitTooltip({
   const triggerRef = useRef<HTMLSpanElement | null>(null);
   const tooltipRef = useRef<HTMLSpanElement | null>(null);
   const tooltipId = useId();
-  const enabledUnits = useAppStore((s) => s.enabledUnits);
+  const enabledUnits = useDisplayUnits();
 
   const alternatives: AlternativeRange[] = getConversionTooltipRows(
     {

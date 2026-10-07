@@ -38,7 +38,15 @@ vi.mock('@/components/DrugSearchDropdown', () => ({
   ),
 }));
 
-import { CmaxSection, formatCmaxValue, formatNormalized, stratumLabel } from '@/components/wiki/CmaxSection';
+import {
+  CmaxSection,
+  formatCmaxValue,
+  formatCmaxValueIn,
+  formatNormalized,
+  stratumLabel,
+} from '@/components/wiki/CmaxSection';
+import { DrugUnitScope } from '@/components/ui/DrugUnitScope';
+import { useAppStore } from '@/stores/appStore';
 import type { TFunction } from 'i18next';
 import { deleteParameterEntry, fetchParameterEntries } from '@/lib/parameterEntriesApi';
 
@@ -98,6 +106,45 @@ describe('CmaxSection', () => {
     // environment loads no translations).
     expect(screen.getByTestId('cmax-entry').textContent).toContain('doseContext.fields.dose');
     expect(screen.getByTestId('cmax-entry').textContent).toContain('doseContext.fields.valueBasis');
+  });
+
+  it('shows an ethanol reading in the reader\'s ethanol unit', async () => {
+    useAppStore.setState({ ethanolUnit: '‰' });
+    store.push(
+      cmaxRow({
+        unit: 'mg/dL',
+        low: 70,
+        high: 90,
+        doseContext: { centralValue: 80, valueBasis: 'concentration' },
+      }),
+    );
+    const { container } = render(
+      <DrugUnitScope isEthanol>
+        <CmaxSection drugId={702} drugName="Etanol" molecularWeight={46.07} />
+      </DrugUnitScope>,
+    );
+    // 80 mg/dL = 0.8 g/L = 0.8 ‰; the unit sits in its own tooltip trigger.
+    await waitFor(() =>
+      expect(screen.getByTestId('cmax-entry').textContent).toContain('0.8 ‰ (0.7–0.9)'),
+    );
+    expect(container.textContent).not.toContain('80 mg/dL (70–90)');
+  });
+
+  it('keeps readings as authored outside an ethanol scope', async () => {
+    useAppStore.setState({ ethanolUnit: '‰' });
+    store.push(cmaxRow({ unit: 'mg/dL', low: 70, high: 90, doseContext: { centralValue: 80 } }));
+    render(<CmaxSection drugId={42} drugName="Kokain" molecularWeight={303.35} />);
+    expect(await screen.findByText('80 mg/dL (70–90)')).toBeTruthy();
+  });
+
+  it('leaves a reading as authored when it cannot convert', () => {
+    // A molar reading without a molecular weight, and a per-dose unit, stay
+    // as authored; with one, 84 mmol/L × 46.07 g/mol = 3.87 g/L = 3.87 ‰.
+    expect(formatCmaxValueIn(cmaxRow({ unit: 'mmol/L' }), '‰', null)).toBeNull();
+    expect(formatCmaxValueIn(cmaxRow({ unit: 'µmol/L/mg' }), '‰', 46.07)).toBeNull();
+    expect(formatCmaxValueIn(cmaxRow({ unit: 'mmol/L' }), '‰', 46.07)).toBe(
+      '3.87 ‰ (3.22–4.51)',
+    );
   });
 
   it('formats a censored threshold with its operator', () => {
