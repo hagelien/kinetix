@@ -58,6 +58,16 @@ describe('isSameWork', () => {
     ).toBe(false);
   });
 
+  it('treats the same words in a different order as a different work', () => {
+    const rec = (title: string) => ({ authors: ['Smith J'], year: 2001, title });
+    expect(
+      isSameWork(
+        fp(rec('Effect of ethanol on diazepam metabolism in rats')),
+        fp(rec('Effect of diazepam on ethanol metabolism in rats')),
+      ),
+    ).toBe(false);
+  });
+
   it('requires the same first author and year', () => {
     expect(isSameWork(fp(schulz), fp({ ...schulz, year: 2012 }))).toBe(false);
     expect(
@@ -100,6 +110,32 @@ describe('freetextMatchesRecord', () => {
         fp({ authors: ['Baselt RC'], year: 2020, title: 'Disposition of Toxic Drugs and Chemicals in Man, 12th ed.' }),
       ),
     ).toBe(false);
+  });
+});
+
+describe('freetextMatchesRecord — pasted references', () => {
+  it('rejects a second reference pasted after the one the record describes', () => {
+    expect(
+      freetextMatchesRecord(
+        'Schulz M, Schmoldt A. Therapeutic and toxic blood concentrations of more than 800 drugs and other xenobiotics. Pharmazie 2003. Baselt RC. Disposition of Toxic Drugs and Chemicals in Man.',
+        fp(schulz),
+      ),
+    ).toBe(false);
+  });
+
+  it('accepts every author the record lists, hyphenated or not', () => {
+    expect(
+      freetextMatchesRecord(
+        'Jostell K-G, Agurell S, Allgén L-G, et al. Pharmacokinetics of clomethiazole in healthy adults. Acta Pharmacol Toxicol (Copenh). 1978;43:180-189.',
+        fp({ authors: ['Jostell KG', 'Agurell S', 'Allgén LG'], year: 1978, title: 'Pharmacokinetics of clomethiazole in healthy adults' }),
+      ),
+    ).toBe(true);
+    expect(
+      freetextMatchesRecord(
+        'Schulz M, Iwersen-Bergmann S, Andresen H, Schmoldt A. Therapeutic and toxic blood concentrations of nearly 1,000 drugs and other xenobiotics. Crit Care. 2012;16:R136.',
+        fp({ authors: ['Schulz M', 'Iwersen-Bergmann S', 'Andresen H', 'Schmoldt A'], year: 2012, title: 'Therapeutic and toxic blood concentrations of nearly 1,000 drugs and other xenobiotics' }),
+      ),
+    ).toBe(true);
   });
 });
 
