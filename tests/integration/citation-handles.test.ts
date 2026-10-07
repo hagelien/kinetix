@@ -209,6 +209,118 @@ describe('resolveCitation — one paper, one row (#1018)', () => {
       .where(eq(citations.id, resolved.id));
     expect(row?.type).toBe('freetext');
   });
+
+  const schulz = {
+    authors: ['Schulz M', 'Schmoldt A'],
+    year: 2003,
+    title:
+      'Therapeutic and toxic blood concentrations of more than 800 drugs and other xenobiotics.',
+  };
+
+  it('reuses the PMID row for a reworded free-text reference to the same paper', async () => {
+    const existing = await seedCitation({
+      type: 'pmid',
+      identifier: '12889529',
+      metadata: schulz,
+    });
+
+    const resolved = await resolveCitation(
+      db,
+      {
+        type: 'freetext',
+        identifier:
+          'Schulz M, Schmoldt A. Therapeutic and toxic concentrations of more than 800 drugs and other xenobiotics. Beyreuth: GIT Verlag; 2003.',
+        metadata: {
+          ...schulz,
+          title:
+            'Therapeutic and toxic concentrations of more than 800 drugs and other xenobiotics',
+        },
+      },
+      userId,
+    );
+
+    expect(resolved.id).toBe(existing);
+    expect(resolved.created).toBe(false);
+    const all = await db.select({ id: citations.id }).from(citations);
+    expect(all).toHaveLength(1);
+  });
+
+  it('reuses an earlier free-text row for the same work', async () => {
+    const existing = await seedCitation({
+      type: 'freetext',
+      identifier: 'Schulz M, Schmoldt A. ' + schulz.title,
+      metadata: schulz,
+    });
+
+    const resolved = await resolveCitation(
+      db,
+      {
+        type: 'freetext',
+        identifier: schulz.title + ' Pharmazie 2003;58:447-74.',
+        metadata: schulz,
+      },
+      userId,
+    );
+
+    expect(resolved.id).toBe(existing);
+  });
+
+  it('creates a new row for a different edition', async () => {
+    const martindale = {
+      authors: ['Sweetman SC'],
+      year: 2014,
+      title: 'Martindale: The Complete Drug Reference, 38th ed.',
+    };
+    const existing = await seedCitation({
+      type: 'freetext',
+      identifier: 'Sweetman SC. Martindale: The Complete Drug Reference. 38th ed.',
+      metadata: martindale,
+    });
+
+    const resolved = await resolveCitation(
+      db,
+      {
+        type: 'freetext',
+        identifier: 'Sweetman SC. Martindale: The Complete Drug Reference. 39th ed.',
+        metadata: { ...martindale, title: 'Martindale: The Complete Drug Reference, 39th ed.' },
+      },
+      userId,
+    );
+
+    expect(resolved.id).not.toBe(existing);
+    expect(resolved.created).toBe(true);
+  });
+
+  it('reuses nothing when the free text sits between two different papers', async () => {
+    // Each long wording is close enough to the short one, but not to each other.
+    const base = 'Pharmacokinetics of diazepam in healthy volunteers after administration';
+    const rec = (title: string) => ({ authors: ['Klotz U'], year: 1975, title });
+    const oral = base.replace('after', 'after oral');
+    const iv = base.replace('after', 'after intravenous');
+    await seedCitation({ type: 'freetext', identifier: 'Klotz U. ' + oral, metadata: rec(oral) });
+    await seedCitation({ type: 'freetext', identifier: 'Klotz U. ' + iv, metadata: rec(iv) });
+
+    const resolved = await resolveCitation(
+      db,
+      { type: 'freetext', identifier: 'Klotz U. ' + base, metadata: rec(base) },
+      userId,
+    );
+
+    expect(resolved.created).toBe(true);
+  });
+
+  it('reuses nothing when the free text matches two different papers', async () => {
+    await seedCitation({ type: 'pmid', identifier: '1', metadata: schulz });
+    await seedCitation({ type: 'doi', identifier: '10.1000/x', metadata: schulz });
+
+    const resolved = await resolveCitation(
+      db,
+      { type: 'freetext', identifier: schulz.title, metadata: schulz },
+      userId,
+    );
+
+    expect(resolved.created).toBe(true);
+  });
 });
 
 describe('mergeCitations — folding a split pair (#1018)', () => {

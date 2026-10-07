@@ -140,6 +140,20 @@ describe('listFullTextGaps over real SQL', () => {
     expect(await gapIds()).toEqual([]);
   });
 
+  it('ignores PubChem record URLs but keeps other URL citations', async () => {
+    // A public database entry agents read directly; POST /api/pdf-requests
+    // refuses one, so listing it would ask for a PDF that cannot exist.
+    const pubchem = await seedCitation(
+      'https://pubchem.ncbi.nlm.nih.gov/compound/115237',
+      'url',
+    );
+    const other = await seedCitation('https://example.org/paper', 'url');
+    await citeOnParameter(pubchem);
+    await citeOnParameter(other);
+
+    expect(await gapIds()).toEqual([other]);
+  });
+
   it('ignores a paper whose full text is already stored', async () => {
     const citationId = await seedCitation('8513649');
     await citeOnParameter(citationId);

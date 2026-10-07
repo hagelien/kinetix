@@ -3411,6 +3411,7 @@
     "fullTextOnFile": "Full-text PDF is on file.",
     "pdfRequested": "Full text unavailable — a reviewer needs this PDF to complete the review.",
     "pdfMissingForReview": "This paper hasn't been reviewed yet because the full text isn't on file. Upload it here to enable a review.",
+    "publicDatabaseRecord": "This is a public database entry (PubChem), not a paper. Agents read it directly from PubChem, so no PDF is needed.",
     "pdfRequestReason": "Agent note",
     "uploadPdf": "Upload a PDF",
     "dropPdf": "Drop to upload",

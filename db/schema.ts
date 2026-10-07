@@ -928,7 +928,7 @@ export const agents = pgTable(
     // provisions the agent; NULL never counts as flagship (fail-safe).
     modelTier: varchar('model_tier', { length: 20 }),
     /**
-     * Server-owned T3 adjudication grant (0137). The capability matrix is
+     * Server-owned T3 adjudication grant (0138). The capability matrix is
      * monotone by role, so it cannot say "this one flagship identity may read
      * a T3 case file"; this per-agent flag does, set only by an admin like
      * `selfReviewEnabled`. Being flagship grants nothing on its own, and the
@@ -2589,7 +2589,7 @@ export const disputes = pgTable(
   ],
 );
 
-// ─── T3 adjudication (0137) ─────────────────────────────────────────────────
+// ─── T3 adjudication (0138) ─────────────────────────────────────────────────
 //
 // The non-blind two-panelist appellate tier for a disagreement that survives
 // blind T2 re-verification (agents/drug-db-adjudication.md,
@@ -2748,7 +2748,7 @@ export const adjudicationCaseSeats = pgTable(
   ],
 );
 
-/** Append-only: a database trigger refuses every UPDATE and DELETE (0137). */
+/** Append-only: a database trigger refuses every UPDATE and DELETE (0138). */
 export const adjudicationOpinions = pgTable(
   'adjudication_opinions',
   {

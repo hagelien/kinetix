@@ -61,6 +61,10 @@ Use this hierarchy:
 2. **Legitimately free complete full text:** journal, PubMed Central, preprint server, institutional repository, or author-hosted manuscript.
 3. **No complete full text:** do not write a paper review. File `POST /api/pdf-requests?citationId=<id>` with a short reason and skip the review this cycle.
 
+A PubChem record URL is a public database entry, not a paper: read it with
+`node scripts/kinetix-fulltext.mjs pubchem <CID>` and never file a PDF request for it
+(see `agents/fulltext-acquisition.md` §0b).
+
 Do not use unauthorized access routes.
 
 Before an access-based skip or PDF request, complete the operational checklist in

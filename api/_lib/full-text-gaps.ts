@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { getDb } from './db.js';
+import { PUBCHEM_RECORD_URL_PATTERN } from '../../src/lib/publicDatabaseRecord.js';
 
 type Db = ReturnType<typeof getDb>;
 
@@ -59,6 +60,8 @@ export const FULL_TEXT_GAP_LIMIT = 200;
  *   - it is **cited from live content** (the anchors below),
  *   - it is resolvable (`type <> 'freetext'` — a freetext row has no paper,
  *     and `POST /api/pdf-requests` rejects one),
+ *   - it is not a PubChem record URL — a public database entry agents read
+ *     directly, which `POST /api/pdf-requests` likewise rejects,
  *   - no `citation_pdfs` row (full text is not stored),
  *   - no approved read-in-full `paper_reviews` row — the same test
  *     `findCitationsNeedingFullReview` applies for the reader-facing
@@ -160,6 +163,7 @@ export async function listFullTextGaps(
       FROM used u
       JOIN citations c ON c.id = u.citation_id
       WHERE c.type <> 'freetext'
+        AND NOT (c.type = 'url' AND btrim(c.identifier) ~* ${PUBCHEM_RECORD_URL_PATTERN})
         AND NOT EXISTS (
           SELECT 1 FROM citation_pdfs p WHERE p.citation_id = c.id
         )

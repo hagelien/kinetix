@@ -34,7 +34,7 @@ automatic closure of a converged **agent-originated** dispute that the
 non-goals below defer (human-originated disputes still close only by a
 person). The work lands in three pull requests:
 
-1. **Steps 1–3** (done): migration `0137_t3_adjudication.sql` (the plan's
+1. **Steps 1–3** (done): migration `0138_t3_adjudication.sql` (the plan's
    `0120` was taken), `agents.adjudicator` / `agents.model_family` with the
    admin provisioning path, `api/_lib/adjudication/detector.ts` and
    `cases.ts`, and the seat claim. Where it differs from the text below:
