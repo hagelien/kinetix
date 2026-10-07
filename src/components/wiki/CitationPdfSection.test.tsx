@@ -95,6 +95,28 @@ describe('CitationPdfSection self-service upload', () => {
     expect(screen.getByRole('button', { name: /upload a pdf/i })).toBeTruthy();
   });
 
+  it('explains a PubChem record needs no PDF instead of offering an upload', async () => {
+    await i18n.changeLanguage('en');
+    fetchPdfRequestMock.mockResolvedValue({ request: null, hasPdf: false });
+
+    render(
+      <CitationPdfSection
+        citationId={7}
+        resolvable
+        hasReview={false}
+        publicDatabaseRecord
+      />,
+    );
+
+    expect(
+      await screen.findByText(/public database entry \(PubChem\)/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Upload a PDF/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId('pdf-dropzone')).not.toBeInTheDocument();
+  });
+
   it('accepts a PDF dropped on the upload panel', async () => {
     await i18n.changeLanguage('en');
     fetchPdfRequestMock.mockResolvedValue({ request: null, hasPdf: false });

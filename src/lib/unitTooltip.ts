@@ -5,7 +5,7 @@ import {
   normalizeUnit,
   type ConcentrationUnit,
 } from './unitConversion';
-import { formatWithMaxDecimals } from './rangeUtils';
+import { formatSignificant, formatWithMaxDecimals, groupThousands } from './rangeUtils';
 import { getParameterSpec } from './drugParameters';
 
 export type ConcentrationKind = 'molar' | 'mass';
@@ -61,13 +61,23 @@ export interface AlternativeUnit {
 /**
  * Format a converted value for *prose* display (the value shown inline, not in
  * the tooltip). Trims the false precision that plagues large magnitudes: a
- * salicylate reading of `300 mg/L` becomes `2 172 µmol/L`, not
- * `2 172.024 µmol/L`. Values below 100 keep up to three decimals, matching the
- * tooltip's own formatting.
+ * salicylate reading of `300 mg/L` becomes `2 170 µmol/L`, not
+ * `2 172.024 µmol/L` — the same rounding the tooltip rows use.
  */
 function formatDisplayValue(value: number): string {
   if (!Number.isFinite(value)) return '';
-  return formatWithMaxDecimals(value, Math.abs(value) >= 100 ? 0 : 3);
+  return formatSignificant(value);
+}
+
+/**
+ * Format a figure in the unit it was authored in, digits as the source wrote
+ * them. A converted figure is rounded to the house precision, but the authored
+ * one is what the reader checks against the source — rounding `1.234 mg/L` to
+ * `1.23` would misquote it.
+ */
+function formatAuthoredValue(value: number): string {
+  const plain = String(value);
+  return /e/i.test(plain) ? formatWithMaxDecimals(value, 3) : groupThousands(plain);
 }
 
 function safeConvert(
@@ -144,7 +154,7 @@ export function getAlternativeUnits(
     if (target === source) continue;
     const converted = safeConvert(value, source, target, molecularWeight);
     if (converted === null || !Number.isFinite(converted)) continue;
-    const formatted = formatWithMaxDecimals(converted, 3);
+    const formatted = formatSignificant(converted);
     if (!formatted || seen.has(formatted)) continue;
     seen.add(formatted);
     out.push({ unit: target, formatted, kind: kindOf(target) });
@@ -257,8 +267,10 @@ export function getConversionTooltipRows(
   for (const target of targets) {
     const convert = (v: number | null | undefined) => {
       if (v === null || v === undefined || !Number.isFinite(v)) return null;
+      if (target === source) return v;
       return safeConvert(v, source, target, molecularWeight);
     };
+    const fmt = target === source ? formatAuthoredValue : formatSignificant;
 
     const lowConv = convert(low);
     const highConv = convert(high);
@@ -266,13 +278,13 @@ export function getConversionTooltipRows(
 
     let formatted: string | null = null;
     if (lowConv != null && highConv != null) {
-      formatted = `${formatWithMaxDecimals(lowConv, 3)}–${formatWithMaxDecimals(highConv, 3)}`;
+      formatted = `${fmt(lowConv)}–${fmt(highConv)}`;
     } else if (lowConv != null) {
-      formatted = `≥ ${formatWithMaxDecimals(lowConv, 3)}`;
+      formatted = `≥ ${fmt(lowConv)}`;
     } else if (highConv != null) {
-      formatted = `≤ ${formatWithMaxDecimals(highConv, 3)}`;
+      formatted = `≤ ${fmt(highConv)}`;
     } else if (valConv != null) {
-      formatted = formatWithMaxDecimals(valConv, 3);
+      formatted = fmt(valConv);
     }
 
     if (!formatted || seen.has(formatted)) continue;
