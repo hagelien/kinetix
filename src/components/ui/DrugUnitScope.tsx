@@ -1,6 +1,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import { useAppStore } from '@/stores/appStore';
 import { ethanolDisplayUnits } from '@/lib/ethanolUnits';
+import type { DisplayConcentrationUnit } from '@/lib/unitConversion';
 
 /**
  * Marks a subtree as showing one drug's concentrations, so the unit-aware
@@ -26,6 +27,17 @@ export function DrugUnitScope({
       {children}
     </DrugUnitScopeContext.Provider>
   );
+}
+
+/**
+ * The reader's ethanol unit when the current scope is ethanol, else null. For
+ * surfaces that otherwise show authored figures (Cmax readings) and convert
+ * only for ethanol, whose readers do not think in the authored mg/dL or mmol/L.
+ */
+export function useEthanolScopeUnit(): DisplayConcentrationUnit | null {
+  const { isEthanol } = useContext(DrugUnitScopeContext);
+  const ethanolUnit = useAppStore((s) => s.ethanolUnit);
+  return isEthanol ? ethanolUnit : null;
 }
 
 /**

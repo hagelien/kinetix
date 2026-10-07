@@ -1551,6 +1551,7 @@ export function DrugMonographSidebar({
                     canEdit={canSubmitParameterEntry}
                     isAdmin={canDirectWrite}
                     onMutated={loadDrug}
+                    molecularWeight={drugRow.molecularWeight ?? null}
                   />
                 ) : null}
                 {groupId === 'analytics_detection'
