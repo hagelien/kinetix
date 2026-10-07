@@ -261,13 +261,10 @@ export async function closeConvergedAgentCase(args: {
     // no row behind it (recorded before the dispute table mirrored
     // verdicts). Closing nothing would leave it holding the proposal, and
     // this version can open no other case: a person takes it.
-    const unanswered =
-      args.targetType === 'pending_edit'
-        ? await unresolvedDisputeVerdictCount({
-            targetType: args.targetType as DisputeTargetType,
-            targetId: args.targetId,
-          })
-        : 0;
+    const unanswered = await unresolvedDisputeVerdictCount({
+      targetType: args.targetType as DisputeTargetType,
+      targetId: args.targetId,
+    });
     if (unanswered > 0) return declineWith('unmirrored_dispute');
     return {
       closure: {

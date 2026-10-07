@@ -23,6 +23,7 @@ import {
   agentVerifications,
   agents,
   disputes,
+  drugParameterRevisions,
   drugParameters,
   drugs,
   notifications,
@@ -1052,6 +1053,45 @@ describe('T3 automatic closure of converged agent-only cases', () => {
     const { kase } = await decide(s, value, value);
     expect(kase.closure).toMatchObject({ action: 'declined', declined: 'unmirrored_dispute' });
     expect(kase.t4Required).toBe(true);
+  });
+
+  it('hands off an unmirrored dispute verdict on a published revision too', async () => {
+    const author = await seedAgent('rev-author', { tier: 'mid' });
+    const t1 = await seedAgent('rev-t1', { tier: 'mid' });
+    const t2 = await seedAgent('rev-t2', { tier: 'flagship' });
+    const drugId = await seedDrug(db);
+    const [rev] = await db
+      .insert(drugParameterRevisions)
+      .values({ drugId, parameter: 'nameShort', newValue: 'Testmid', createdBy: author.userId })
+      .returning({ id: drugParameterRevisions.id });
+    for (const [agent, verdict, tier] of [
+      [t1, 'dispute', 'mid'],
+      [t2, 'approve', 'flagship'],
+    ] as const) {
+      await db.insert(agentVerifications).values({
+        agentId: agent.agentId,
+        targetType: 'drug_parameter_revision',
+        targetId: rev!.id,
+        verdict,
+        rationaleMd: 'Vurdert mot kilden.',
+        evidenceRefs: [],
+        isImplicit: false,
+        verifierTier: tier,
+        recordedVerifierTier: tier,
+      });
+    }
+    const { caseId } = await detectAdjudicationCase({ targetType: 'drug_parameter_revision', targetId: rev!.id });
+    const [opened] = await db.select().from(adjudicationCases).where(eq(adjudicationCases.id, caseId!));
+    const a = await seedAgent('rev-a', { tier: 'flagship', adjudicator: true, family: 'claude' });
+    const b = await seedAgent('rev-b', { tier: 'flagship', adjudicator: true, family: 'gpt' });
+    expect((await claim(a.userId, caseId!)).status).toBe(200);
+    expect((await claim(b.userId, caseId!)).status).toBe(200);
+    const body = { caseId, targetVersion: opened!.targetVersion };
+    await opinion(a.userId, body);
+    expect((await opinion(b.userId, body)).status).toBe(201);
+    const [kase] = await db.select().from(adjudicationCases).where(eq(adjudicationCases.id, caseId!));
+    expect(kase!.closure).toMatchObject({ action: 'declined', declined: 'unmirrored_dispute' });
+    expect(kase!.t4Required).toBe(true);
   });
 
   it('never closes anything on a case that rests on a person’s dispute', async () => {
