@@ -102,9 +102,10 @@ export async function buildCaseFile(caseId: number, viewer: CaseFileViewer) {
     .orderBy(asc(disputes.id));
 
   // The target as the verification queue hydrates it, for a panelist. A
-  // person gets the source row the panel adjudicated, copied at sealing for
-  // every outcome — the version-pinned payload, however the live row has
-  // moved since — and the live row only for a case never sealed.
+  // person gets what the panel adjudicated, copied at sealing for every
+  // outcome — the hydrated target as served to the panel and its source row,
+  // however either has moved since — and the live source row only for a case
+  // never sealed.
   const target =
     viewer.kind === 'panelist'
       ? await fetchSingleCandidate({
@@ -116,8 +117,12 @@ export async function buildCaseFile(caseId: number, viewer: CaseFileViewer) {
           includeJudged: true,
         })
       : kase.sealedAt !== null
-        ? { asAdjudicated: true, row: kase.adjudicatedTarget }
-        : { asAdjudicated: false, row: await readTargetRow(kase.targetType, kase.targetId) };
+        ? { asAdjudicated: true, ...kase.adjudicatedTarget }
+        : {
+            asAdjudicated: false,
+            served: null,
+            sourceRow: await readTargetRow(kase.targetType, kase.targetId),
+          };
 
   return {
     untrustedContent: UNTRUSTED_CONTENT_NOTICE,

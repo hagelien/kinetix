@@ -23,6 +23,7 @@ import {
   agentVerifications,
   agents,
   disputes,
+  drugs,
   notifications,
   wikiPages,
   pendingEdits,
@@ -36,7 +37,7 @@ import {
   teardownIntegrationDb,
   type IntegrationDb,
 } from './setup/harness.js';
-import { seedUser } from './setup/seed.js';
+import { seedDrug, seedUser } from './setup/seed.js';
 
 let db: IntegrationDb;
 
@@ -508,7 +509,8 @@ describe('T3 sealing, convergence and the T4 handoff', () => {
     ['diverged', 75],
     ['converged', 60],
   ])('serves a person the target as the panel adjudicated it, after the live row moved (%s)', async (state, other) => {
-    const s = await seedCase();
+    const drugId = await seedDrug(db, { names: { nb: 'Før', en: 'Before' } });
+    const s = await seedCase({ edit: { targetId: drugId } });
     const reviewer = await seedUser(db, { email: 'ed@example.com', username: 'ed', role: 'editor' });
     const { kase } = await panel(
       s,
@@ -516,13 +518,26 @@ describe('T3 sealing, convergence and the T4 handoff', () => {
       { resolvedValue: other, resolvedUnit: 'L/h' },
     );
     expect(kase.state).toBe(state);
+    // The hydrated target as the panel was served it — baselines included —
+    // not only the raw row.
+    const asPanelist = await caseFile(s.b.userId, s.caseId);
     await db
       .update(pendingEdits)
       .set({ proposedValue: { op: 'create', input: { value: 99, unit: 'L/h', quote: 'Revised.' } } })
       .where(eq(pendingEdits.id, s.editId));
+    // A baseline served beside the target moves without its version moving.
+    await db.update(drugs).set({ names: { nb: 'Etter', en: 'After' } }).where(eq(drugs.id, drugId));
+    expect((await caseFile(s.b.userId, s.caseId)).body.target.payload.drugName).toBe('Etter');
     const asPerson = await caseFile(reviewer, s.caseId, 'editor');
     expect(asPerson.body.target.asAdjudicated).toBe(true);
-    expect(asPerson.body.target.row.proposedValue.input.value).toBe(60);
+    expect(asPerson.body.target.sourceRow.proposedValue.input.value).toBe(60);
+    expect(asPerson.body.target.served.payload.drugName).toBe('Før');
+    expect(asPerson.body.target.served).toMatchObject({
+      targetType: 'pending_edit',
+      targetId: s.editId,
+      targetVersion: s.version,
+    });
+    expect(asPerson.body.target.served.payload).toEqual(asPanelist.body.target.payload);
   });
 
   it('compares dimensionless parameters (pKa) on their values, in the unit ""', async () => {

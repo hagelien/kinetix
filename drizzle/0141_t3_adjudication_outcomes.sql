@@ -15,9 +15,10 @@
 --                   opinions in full, the lower-tier record, the decisive
 --                   sources and a statement of what remains disputed, so
 --                   nobody reconstructs the appeal from logs.
---   adjudicated_target  the target's source row as the panel adjudicated it,
---                   copied at sealing for every outcome, so the record of what
---                   was decided survives later revisions of the live row.
+--   adjudicated_target  the target as the panel adjudicated it — hydrated as
+--                   served, with its baselines, and its source row — copied at
+--                   sealing for every outcome, so the record of what was
+--                   decided survives later revisions of either.
 ALTER TABLE "adjudication_cases"
   ADD COLUMN IF NOT EXISTS "convergence" jsonb;--> statement-breakpoint
 ALTER TABLE "adjudication_cases"

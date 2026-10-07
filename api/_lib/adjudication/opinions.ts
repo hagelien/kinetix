@@ -25,6 +25,7 @@ import {
   adjudicationOpinions,
   agents,
   users,
+  type AdjudicatedTarget,
   type AdjudicationCaseState,
   type AdjudicationHandoff,
   type AdjudicationHandoffOpinion,
@@ -37,7 +38,7 @@ import {
   verificationTargetVersion,
 } from '../verification-targets.js';
 import { ACTIVE_AGENT_ROLES, disputeTargetUrl } from '../agent-verifications.js';
-import { fetchSingleCandidate } from '../../agent-verifications-queue.js';
+import { fetchSingleCandidate, type QueueItem } from '../../agent-verifications-queue.js';
 import {
   contributionAuthorUserId,
   fanOutDisputeNotification,
@@ -265,7 +266,7 @@ export async function submitAdjudicationOpinion(args: {
       selfReviewEnabled: false,
       includeJudged: true,
     });
-    if (!servable) {
+    if (!servable || servable.targetVersion !== kase.targetVersion) {
       await tx
         .update(adjudicationCases)
         .set({
@@ -330,7 +331,7 @@ export async function submitAdjudicationOpinion(args: {
             eq(adjudicationCaseSeats.seat, seat.seat),
           ),
         );
-      outcome = await sealIfComplete(kase.id, now);
+      outcome = await sealIfComplete(kase.id, now, servable);
     }
     return {
       ok: true,
@@ -465,6 +466,8 @@ function handoffSummary(
 async function sealIfComplete(
   caseId: number,
   now: Date,
+  /** The target as this sealing write served it, at the case's version. */
+  served: QueueItem,
 ): Promise<Extract<OpinionWriteResult, { ok: true }>['outcome']> {
   const tx = getDb();
   const opinions = await finalOpinions(caseId);
@@ -531,10 +534,15 @@ async function sealIfComplete(
       }
     }
   }
-  // The version-pinned payload, kept for every outcome: the final write that
-  // seals the case checked the target is still at this version, under the
-  // same lock.
-  const adjudicatedTarget = await readTargetRow(kase.targetType, kase.targetId);
+  // What the panel adjudicated, kept for every outcome: the hydrated target
+  // the case file serves — with the current value, entry or content it is
+  // compared against, which can move without the target's version moving —
+  // as this sealing write fetched it at the case's version, under the same
+  // lock, and the source row beneath it.
+  const adjudicatedTarget: AdjudicatedTarget = {
+    served: served as unknown as Record<string, unknown>,
+    sourceRow: await readTargetRow(kase.targetType, kase.targetId),
+  };
   const handoff: AdjudicationHandoff | null = t4Required
     ? {
         caseId: kase.id,

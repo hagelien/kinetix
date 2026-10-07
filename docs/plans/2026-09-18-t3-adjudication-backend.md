@@ -88,9 +88,10 @@ person). The work lands in three pull requests:
      so a person's dispute that landed after the detector last refreshed the
      case still makes the closing act theirs; a seat claim re-reads them the
      same way, so an agent that disputed the target since cannot take a seat;
-   - every sealed case keeps the target's source row as adjudicated
-     (`adjudicated_target`), converged or handed off, so a person sees the
-     version-pinned payload;
+   - every sealed case keeps the target as adjudicated (`adjudicated_target`),
+     converged or handed off: the hydrated target the sealing write served the
+     panel, with the baselines served beside it, and its source row — so a
+     person sees what the panel saw;
    - a dimensionless range parameter (pKa, logP, logD; canonical unit `''`)
      carries a value like any other;
    - the open-case feed serves identifiers only: triggers and dispute origin
