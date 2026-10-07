@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // What agent consensus must never publish on its own, however clean the tally:
 // a clinical_case (safety-critical, spec §12 Stage 12 — a human expert
 // moderator always signs it off) and a proposal with no recorded author. A
-// person's proposal publishes like an agent's since kinetix-consensus@v2. A
+// person's proposal publishes like an agent's since kinetix-consensus v2. A
 // learning_unit from an agent in the same state still auto-applies. We drive
 // applyOnAgentConsensus directly with its DB/consensus dependencies mocked.
 

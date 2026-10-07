@@ -15,6 +15,7 @@ const {
   parseAndValidateMock,
   resolveActiveAgentMock,
   resolveDisputeByIdMock,
+  retryAgentConsensusMock,
   returnPendingEditForUpheldDisputeMock,
   runInPoolTransactionMock,
   targetAuthorUserIdMock,
@@ -31,6 +32,7 @@ const {
   parseAndValidateMock: vi.fn(),
   resolveActiveAgentMock: vi.fn(),
   resolveDisputeByIdMock: vi.fn(),
+  retryAgentConsensusMock: vi.fn(),
   returnPendingEditForUpheldDisputeMock: vi.fn(),
   runInPoolTransactionMock: vi.fn(),
   targetAuthorUserIdMock: vi.fn(),
@@ -59,6 +61,14 @@ vi.mock('../../api/_lib/agent-verifications.js', async (importOriginal) => {
     targetAuthorUserId: targetAuthorUserIdMock,
     visibleVerificationTargetIds: visibleVerificationTargetIdsMock,
   };
+});
+
+// An overruled or withdrawn objection retries consensus (kinetix-consensus@v3);
+// the consensus engine reads the database, which no route test has.
+vi.mock('../../api/agent-verifications.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../api/agent-verifications.js')>();
+  return { ...actual, retryAgentConsensus: retryAgentConsensusMock };
 });
 
 vi.mock('../../api/_lib/disputes.js', async (importOriginal) => {
@@ -596,13 +606,17 @@ describe('/api/disputes upheld ruling returns the proposal', () => {
       data: { resolution: 'rejected' },
     });
     resolveDisputeByIdMock.mockResolvedValue(resolvedRow());
+    retryAgentConsensusMock.mockResolvedValue({ outcome: 'applied' });
 
     const { res, state } = createResponse();
     await handler(createRequest('PATCH', '/api/disputes?id=12'), res);
 
     expect(state.statusCode).toBe(200);
     expect(returnPendingEditForUpheldDisputeMock).not.toHaveBeenCalled();
-    expect(JSON.parse(state.body)).toEqual({ id: 12, resolution: 'rejected' });
+    // The objection no longer holds the proposal, so consensus is retried at
+    // once (kinetix-consensus@v3).
+    expect(retryAgentConsensusMock).toHaveBeenCalledWith(10);
+    expect(JSON.parse(state.body)).toEqual({ id: 12, resolution: 'rejected', autoApplied: true });
   });
 
   // Only a pending edit has a return to give. A disputed live revision or

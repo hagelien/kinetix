@@ -1350,7 +1350,7 @@ export async function countActiveVerifierAgents(): Promise<number> {
  * Used by the consensus path to size the quorum: an active agent author holds
  * a seat in the pool (counted only under self-review), while a person holds
  * none, so every active agent is an eligible verifier on their proposal. Both
- * publish on agent consensus under the same bar (kinetix-consensus@v2).
+ * publish on agent consensus under the same bar (kinetix-consensus@v3).
  */
 export async function isActiveAgentUser(userId: number): Promise<boolean> {
   const db = getDb();

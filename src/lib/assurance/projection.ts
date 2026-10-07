@@ -111,7 +111,7 @@ export function assuranceFromLegacySummary(
  *
  * `authorKind` is `'agent'` unconditionally. The tally this stands in for
  * (`consensusApprovalHoldReason`) never considered authorship, and since
- * `kinetix-consensus@v2` no rule but `unattributed` does either — and an
+ * `kinetix-consensus v2` no rule but `unattributed` does either — and an
  * unattributed proposal is refused before any tally is computed.
  */
 export function projectLegacyConsensusContext(args: {

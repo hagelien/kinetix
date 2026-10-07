@@ -72,7 +72,7 @@ beforeEach(async () => {
 function frozenLegacyOutcome(facts: ConsensusFacts): 'apply' | 'hold' {
   if (facts.editType === 'clinical_case') return 'hold';
   // Re-transcribed when a person's proposal began publishing on agent
-  // consensus (kinetix-consensus@v2): only a proposal with no recorded author
+  // consensus (kinetix-consensus@v3): only a proposal with no recorded author
   // is refused before the tally now, not every non-agent author.
   if (facts.submittedBy === null) return 'hold';
   // The payload precondition: a calculation-driving value with no verbatim
