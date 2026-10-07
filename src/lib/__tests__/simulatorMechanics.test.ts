@@ -25,6 +25,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  assembleRouteParams,
   ENGINE_LIMITS,
   MODEL_FAMILIES,
   MODEL_FAMILY_EVALUATION,
@@ -419,5 +420,27 @@ describe('mechanics document — catalogue-derived structure (§5)', () => {
     expect(sparse.values.ka).toBeUndefined();
     expect(sparse.values.vd).toBeUndefined();
     expect(sparse.values.eliminationHalfLife).toBeUndefined();
+  });
+
+  it('draws an input across its published spread, peaked at the median, as §5 states', () => {
+    expect(doc).toContain('**Each input is drawn across its published spread.**');
+    expect(doc).toContain('An input with only one reported value stays fixed at it.');
+    const assembled = assembleRouteParams(
+      derive([]),
+      { ka: 1, eliminationHalfLife: 4, vd: 1, bioavailability: 0.8 },
+      { ranges: { eliminationHalfLife: { low: 2, high: 9 } } },
+    );
+    expect(assembled.outcome).toBe('assembled');
+    if (assembled.outcome !== 'assembled' || assembled.params.family !== 'one-compartment-first-order') {
+      return;
+    }
+    expect(assembled.params.eliminationHalfLifeHours).toMatchObject({
+      kind: 'triangular',
+      min: 2,
+      mode: 4,
+      max: 9,
+      bounds: { kind: 'extrema' },
+    });
+    expect(assembled.params.vdLitersPerKg).toEqual({ kind: 'fixed', value: 1 });
   });
 });
