@@ -90,6 +90,7 @@ describe('CmaxSection', () => {
     fetchCmaxSummary.mockClear();
     summary = { outcomes: [], strata: [], headline: { kind: 'none' } };
     summaryItems = null;
+    useAppStore.setState({ enabledUnits: ['µmol/L', 'mg/L'] });
   });
 
   it('renders nothing for a reader when there are no values', async () => {
@@ -130,11 +131,29 @@ describe('CmaxSection', () => {
     expect(container.textContent).not.toContain('80 mg/dL (70–90)');
   });
 
-  it('keeps readings as authored outside an ethanol scope', async () => {
-    useAppStore.setState({ ethanolUnit: '‰' });
-    store.push(cmaxRow({ unit: 'mg/dL', low: 70, high: 90, doseContext: { centralValue: 80 } }));
-    render(<CmaxSection drugId={42} drugName="Kokain" molecularWeight={303.35} />);
-    expect(await screen.findByText('80 mg/dL (70–90)')).toBeTruthy();
+  it("shows a reading in the reader's primary unit outside an ethanol scope", async () => {
+    useAppStore.setState({ ethanolUnit: '‰', enabledUnits: ['mg/L', 'µmol/L'] });
+    store.push(cmaxRow({ unit: 'ng/mL', low: 347.5, high: 517.7, doseContext: { centralValue: 379.7 } }));
+    const { container } = render(
+      <CmaxSection drugId={42} drugName="Kokain" molecularWeight={303.35} />,
+    );
+    // 379.7 ng/mL = 0.3797 mg/L; the unit sits in its own tooltip trigger.
+    await waitFor(() =>
+      expect(screen.getByTestId('cmax-entry').textContent).toContain('mg/L'),
+    );
+    expect(container.textContent).not.toContain('379.7 ng/mL');
+    // The tooltip keeps the authored centre, not just the interval.
+    expect(container.querySelector('[role="tooltip"]')?.textContent).toContain(
+      '379.7 (347.5–517.7) ng/mL',
+    );
+  });
+
+  it('keeps a reading as authored when the primary unit cannot be reached', async () => {
+    useAppStore.setState({ enabledUnits: ['µmol/L', 'mg/L'] });
+    store.push(cmaxRow({ unit: 'ng/mL', low: 70, high: 98, doseContext: { centralValue: 84 } }));
+    // No molecular weight: ng/mL cannot become µmol/L.
+    render(<CmaxSection drugId={42} drugName="Kokain" />);
+    expect(await screen.findByText('84 ng/mL (70–98)')).toBeTruthy();
   });
 
   it('leaves a reading as authored when it cannot convert', () => {
