@@ -12,6 +12,47 @@ describe('UnitTooltip', () => {
     vi.useRealTimers();
   });
 
+  it('is a tab stop by default and not when focusable is false', () => {
+    const { container, rerender } = render(
+      <UnitTooltip value={1} unit="mg/L" molecularWeight={100}>
+        1 mg/L
+      </UnitTooltip>,
+    );
+    expect(container.querySelector('[tabindex]')).not.toBeNull();
+
+    rerender(
+      <UnitTooltip value={1} unit="mg/L" molecularWeight={100} focusable={false}>
+        1 mg/L
+      </UnitTooltip>,
+    );
+    expect(container.querySelector('[tabindex]')).toBeNull();
+  });
+
+  it('lets a wrapping button open and describe the panel when not focusable', () => {
+    const { container } = render(
+      <button type="button">
+        <UnitTooltip value={1} unit="mg/L" molecularWeight={100} focusable={false}>
+          1 mg/L
+        </UnitTooltip>
+      </button>,
+    );
+    const button = container.querySelector('button') as HTMLElement;
+    const tooltip = container.querySelector('[role="tooltip"]') as HTMLElement;
+    expect(button.getAttribute('aria-describedby')).toBe(tooltip.id);
+    expect(tooltip.className).toContain('sr-only');
+
+    act(() => {
+      button.focus();
+    });
+    expect(tooltip.className).not.toContain('sr-only');
+
+    act(() => {
+      button.blur();
+      vi.advanceTimersByTime(500);
+    });
+    expect(tooltip.className).toContain('sr-only');
+  });
+
   it('keeps the panel visible while the pointer travels into it', () => {
     const { container } = render(
       <UnitTooltip value={1} unit="mg/L" molecularWeight={100}>
