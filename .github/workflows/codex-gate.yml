@@ -429,7 +429,7 @@ jobs:
           #
           # Emits OK|<reason> when every inline finding Codex left on the
           # current head carries a P2 or P3 badge and has a reply, from someone
-          # with write access, linking an issue labelled review-debt. Emits
+          # with write access, linking an open issue labelled review-debt. Emits
           # nothing otherwise. A P0, P1 or unrecognised badge can never pass
           # here, whatever the replies say.
           deferred_verdict() {
@@ -478,7 +478,7 @@ jobs:
               ok=""
               for n in $issues; do
                 labels="$(gh api "repos/$REPO/issues/$n" --jq \
-                  'select(.pull_request == null) | .labels[].name' 2>/dev/null)" || continue
+                  'select(.pull_request == null and .state == "open") | .labels[].name' 2>/dev/null)" || continue
                 if grep -qx review-debt <<<"$labels"; then
                   ok="#$n"; break
                 fi
