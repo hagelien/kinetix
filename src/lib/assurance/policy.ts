@@ -82,7 +82,7 @@ export const KINETIX_UNQUOTED_TAG = 'unquoted_calculation_driving';
 /** Stable rule ids. These reach persisted decision records — do not renumber. */
 export const KINETIX_RULE_IDS = {
   base: 'base',
-  /** Retired in `kinetix-consensus v2` / `kinetix-consensus-apply@v3`; kept because persisted v1/v2 records name it. */
+  /** Retired in `kinetix-consensus v2` / `kinetix-consensus-apply v3`; kept because persisted v1/v2 records name it. */
   humanAuthored: 'human-authored',
   unattributed: 'unattributed',
   highRisk: 'high-risk',
@@ -162,8 +162,14 @@ export const KINETIX_APPLY_POLICY_ID = 'kinetix-consensus-apply';
  * v3 retires `human-authored` (a person's proposal publishes on agent
  * consensus like an agent's) and adds `unattributed` for a proposal with no
  * recorded author, which still needs a person.
+ *
+ * v4, with `kinetix-consensus@v3`: an agent's dispute that a later ruling has
+ * answered (overruled, withdrawn or upheld) no longer counts as disputing in
+ * the facts this policy is evaluated on, so an overruled objection stops
+ * holding a proposal. The rules are unchanged; their outcomes on the same
+ * proposal can differ, so decisions name the new version.
  */
-export const KINETIX_APPLY_POLICY_VERSION = 'v3';
+export const KINETIX_APPLY_POLICY_VERSION = 'v4';
 
 /**
  * The whole agent-consensus auto-apply gate (Phase 6).
