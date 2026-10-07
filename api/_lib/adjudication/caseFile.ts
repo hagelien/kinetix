@@ -167,7 +167,9 @@ export async function buildCaseFile(caseId: number, viewer: CaseFileViewer) {
 /**
  * An adjudicator's view of the queue: the cases it sits on, and open cases
  * with a free seat it may take. Identifiers only — the content is served
- * after a seat is claimed.
+ * after a seat is claimed. That includes why a case opened (its triggers) and
+ * whose objection it rests on (its dispute origin): served before the claim,
+ * they would let an adjudicator pick its cases by provenance.
  */
 export async function listAdjudicatorCases(agentId: number, limit = 20) {
   const db = getDb();
@@ -210,8 +212,6 @@ export async function listAdjudicatorCases(agentId: number, limit = 20) {
       targetType: adjudicationCases.targetType,
       targetId: adjudicationCases.targetId,
       targetVersion: adjudicationCases.targetVersion,
-      triggers: adjudicationCases.triggers,
-      disputeOrigin: adjudicationCases.disputeOrigin,
       openedAt: adjudicationCases.openedAt,
       t1Snapshot: adjudicationCases.t1Snapshot,
       t2Snapshot: adjudicationCases.t2Snapshot,
@@ -236,8 +236,6 @@ export async function listAdjudicatorCases(agentId: number, limit = 20) {
       targetType: row.targetType,
       targetId: row.targetId,
       targetVersion: row.targetVersion,
-      triggers: row.triggers,
-      disputeOrigin: row.disputeOrigin,
       openedAt: row.openedAt,
     });
   }

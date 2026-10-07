@@ -37,6 +37,7 @@ import {
   verificationTargetVersion,
 } from '../verification-targets.js';
 import { ACTIVE_AGENT_ROLES, disputeTargetUrl } from '../agent-verifications.js';
+import { fetchSingleCandidate } from '../../agent-verifications-queue.js';
 import {
   contributionAuthorUserId,
   fanOutDisputeNotification,
@@ -97,6 +98,7 @@ export type OpinionWriteResult =
         | 'case_not_open'
         | 'target_version_stale'
         | 'target_version_moved'
+        | 'target_unavailable'
         | 'seat_final'
         | 'value_required'
         | 'value_not_allowed'
@@ -212,7 +214,7 @@ export async function submitAdjudicationOpinion(args: {
     // Authority at write time, not at claim time: a grant or tier revoked
     // since the claim stops the write.
     const [agent] = await tx
-      .select({ id: agents.id, modelTier: agents.modelTier })
+      .select({ id: agents.id, userId: agents.userId, modelTier: agents.modelTier })
       .from(agents)
       .innerJoin(users, eq(users.id, agents.userId))
       .where(
@@ -250,6 +252,33 @@ export async function submitAdjudicationOpinion(args: {
         })
         .where(eq(adjudicationCases.id, kase.id));
       return refuse(409, 'target_version_moved', 'The target changed; this case has been closed');
+    }
+    // The same target the case file serves the panelist. Where it cannot be
+    // served — the version unchanged but the target out of a panelist's reach
+    // (its wiki page unpublished, say) — no opinion about it may stand, so no
+    // recommendation can be recorded about a proposition the panel never saw.
+    const servable = await fetchSingleCandidate({
+      type: kase.targetType as AgentVerificationTargetType,
+      targetId: kase.targetId,
+      agentId: agent.id,
+      agentUserId: agent.userId,
+      selfReviewEnabled: false,
+      includeJudged: true,
+    });
+    if (!servable) {
+      await tx
+        .update(adjudicationCases)
+        .set({
+          state: 'invalidated',
+          closedAt: new Date(),
+          invalidatedReason: 'target_unavailable' satisfies InvalidatedReason,
+        })
+        .where(eq(adjudicationCases.id, kase.id));
+      return refuse(
+        409,
+        'target_unavailable',
+        'The target can no longer be served to the panel; this case has been closed',
+      );
     }
     if (seat.sealedAt) return refuse(409, 'seat_final', 'Your opinion on this case is final');
 
