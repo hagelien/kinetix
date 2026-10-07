@@ -95,27 +95,31 @@ describe('CitationPdfSection self-service upload', () => {
     expect(screen.getByRole('button', { name: /upload a pdf/i })).toBeTruthy();
   });
 
-  it('explains a PubChem record needs no PDF instead of offering an upload', async () => {
-    await i18n.changeLanguage('en');
-    fetchPdfRequestMock.mockResolvedValue({ request: null, hasPdf: false });
+  it.each([
+    ['public_database_record', /public database entry, not a paper/],
+    ['site_landing_page', /website's front page, not a specific source/],
+  ] as const)(
+    'explains why a %s needs no PDF instead of offering an upload',
+    async (reason, text) => {
+      await i18n.changeLanguage('en');
+      fetchPdfRequestMock.mockResolvedValue({ request: null, hasPdf: false });
 
-    render(
-      <CitationPdfSection
-        citationId={7}
-        resolvable
-        hasReview={false}
-        publicDatabaseRecord
-      />,
-    );
+      render(
+        <CitationPdfSection
+          citationId={7}
+          resolvable
+          hasReview={false}
+          noPdfReason={reason}
+        />,
+      );
 
-    expect(
-      await screen.findByText(/public database entry \(PubChem\)/),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: /Upload a PDF/i }),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByTestId('pdf-dropzone')).not.toBeInTheDocument();
-  });
+      expect(await screen.findByText(text)).toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: /Upload a PDF/i }),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByTestId('pdf-dropzone')).not.toBeInTheDocument();
+    },
+  );
 
   it('accepts a PDF dropped on the upload panel', async () => {
     await i18n.changeLanguage('en');
