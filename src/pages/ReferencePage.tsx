@@ -20,6 +20,7 @@ import {
 import { formatGenericDrugName, resolveDrugName } from '@/lib/drugNames';
 import { renderMarkdown } from '@/lib/renderMarkdown';
 import { CitationPdfSection } from '@/components/wiki/CitationPdfSection';
+import { isPubChemRecordCitation } from '@/lib/publicDatabaseRecord';
 import { ReviewHistory } from '@/components/reference/ReviewHistory';
 
 function usageLocationLabel(
@@ -339,6 +340,7 @@ export function ReferencePage(): JSX.Element {
         citationId={reference.id}
         resolvable={reference.type !== 'freetext'}
         hasReview={reviewLoaded ? Boolean(review) : null}
+        publicDatabaseRecord={isPubChemRecordCitation(reference)}
       />
 
       <CitedInSection citationId={reference.id} />

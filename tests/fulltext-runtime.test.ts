@@ -82,7 +82,7 @@ it("checks the installed runtime from a foreign cwd with no profiles or API cred
     readInFull: false,
     root: resolve("."),
   });
-  expect(Object.keys(receipt.hashes)).toHaveLength(5);
+  expect(Object.keys(receipt.hashes)).toHaveLength(7);
   for (const hash of Object.values(receipt.hashes))
     expect(hash).toMatch(/^[a-f0-9]{64}$/);
 });
