@@ -143,8 +143,8 @@ comment raises no event the gate listens for. So after handling a finding, ask
 for a new verdict explicitly:
 
 - After a **fix**, the push is enough — `synchronize` wakes the gate and starts
-  a fresh review of the new head. On a **draft** it is not: the reviewer
-  ignores pushes to a draft, so comment `@codex review` there too.
+  a fresh review of the new head. (Only on a draft, which workers never open,
+  would you need to comment `@codex review` as well.)
 - After a **deferral**, nothing changed on the branch. Do **not** comment
   `@codex review`: the reviewer has no memory of the deferral and re-raises the
   same findings on the same head. Instead, once every P2/P3 finding on the
@@ -156,43 +156,30 @@ for a new verdict explicitly:
   not. The gate removes the label each time it evaluates, so add it again after
   a later round of deferrals.
 
-## A draft pull request needs its first review asked for
+## Pull requests open ready for review
 
-**Every pull request here opens as a draft** — see *Opening a pull request* in
-[AGENTS.md](../../../AGENTS.md). So this is the normal path, not an edge case.
+**Every pull request here opens ready for review, never as a draft** — see
+*Opening a pull request* in [AGENTS.md](../../../AGENTS.md). That one choice
+starts the Codex review, runs the full CI suite (`unit-tests`, and `migrations`
+where its `paths:` apply) on every push, and arms `codex-gate`, which merges on
+its own once Codex signs off on the current head and checks are green. No
+`@codex review` comment is needed, and you never merge yourself.
 
-The reviewer starts a review on three things only: a pull request opened *for
-review*, a draft *marked ready*, and an `@codex review` comment. A draft raises
-none of them, so it sits unreviewed however much is pushed to it.
+**A pull request is finished when CI is green on the current head**, the Codex
+review on that head is clean (or its only findings are P2/P3, each filed as
+above), and there is no merge conflict. Red or pending CI is work: diagnose and
+push a fix, per the drive-to-green rules.
 
-So comment `@codex review` on the pull request as the step right after opening
-it, and again after any push you want re-reviewed. Costs nothing, and without it
-the first review arrives only when the draft is marked ready — which is the point
-you wanted it merged, not the point the feedback was cheap to act on.
+Because every push runs the expensive suites, run the local checklist in
+*Opening a pull request* ([AGENTS.md](../../../AGENTS.md)) **before** pushing. A
+branch touching any path in `.github/workflows/migrations.yml`'s `paths:` list —
+a wider set than the name suggests — owes **three extra commands** beyond
+typecheck/lint/vitest. None of them is reachable from the base three:
+`npm run typecheck` excludes `scripts/` and `tests/`, and `npx vitest run`
+excludes `tests/integration/**` and `tests/governance/**`.
 
-## A draft is never CI-green, and that is not a blocker
-
-`unit-tests` and `migrations` are gated on `draft == false`, so on a draft they
-never run and the pull request can never reach a green rollup. **Do not read that
-as red, do not wait it out, and do not mark the pull request ready to force the
-runs.** A draft is finished when the cheap path-filtered workflows pass, the
-Codex review on the current head is clean (or its only findings are P2/P3,
-each filed as above), and the local checklist in *Opening a
-pull request* ([AGENTS.md](../../../AGENTS.md)) has been run and reported in the
-PR body. Then stop and say so.
-
-Note that a branch touching any path in `.github/workflows/migrations.yml`'s
-`paths:` list — a wider set than the name suggests — owes **three extra
-commands** beyond typecheck/lint/vitest, listed in AGENTS.md. None of them is
-reachable from the base three: `npm run typecheck` excludes `scripts/` and
-`tests/`, and `npx vitest run` excludes `tests/integration/**` and
-`tests/governance/**`. Those are precisely the checks draft status defers, so
-skipping them locally means the deferral was never compensated for.
-
-**Marking a draft ready is the maintainer's call.** It is what starts the
-expensive suites and arms `codex-gate`, so it is their decision to spend and
-their decision to merge. Never `gh pr ready` a pull request yourself, and never
-push an empty commit or relabel one to get the same effect.
+Never convert a pull request to draft, and never push an empty commit or
+relabel one to re-trigger CI or review.
 
 ## Findings with no severity badge
 

@@ -83,11 +83,10 @@ Process until no open PRs remain. Each pass, pick the next eligible PR (respecti
 ### 3a. Make it ready for review
 If `isDraft`, mark it ready: `gh pr ready <n>` (web: `mcp__github__update_pull_request` with draft=false).
 
-Drafts are the default state in this repository — workers open every pull request
-as one and never mark it ready (see *Opening a pull request* in
-[AGENTS.md](../../../AGENTS.md)). Marking them ready here is not an exception to
-that: `/pr` is maintainer-invoked, so running it **is** the maintainer making the
-call, in bulk.
+Workers in this repository open every pull request ready for review (see
+*Opening a pull request* in [AGENTS.md](../../../AGENTS.md)), so a draft here is
+one a human chose to open as such, or one left from before that convention.
+`/pr` is maintainer-invoked, so marking it ready is the maintainer's call, in bulk.
 
 **Then defer this PR to a later pass — do not carry on to 3b with it now.**
 Some repositories skip expensive suites while a pull request is a draft, so the
@@ -123,7 +122,7 @@ Re-fetch `mergeStateStatus` and act on it:
 - **CLEAN** → merge it (3d) — *after* the owed-check gate below, which `CLEAN` does not imply.
 - **UNSTABLE** → non-required checks are failing or pending but branch protection does not block the merge. **Never merge through a *failing* one**, whatever its name — inspect every failed check and route it through 3e.2 (fix the PR, push, let it re-run). Non-required is not advisory: `gh pr merge` will happily merge known-failing code, and unlike the gate path nothing else is watching. Pending checks outside the owed set do not block: merge (3d).
 
-  **A failed check from the draft period does not clear itself when you mark the PR ready.** The cheap path-filtered workflows (`kinetics-core`, `parity`, `scripts-typecheck`, `server-shared-esm`, `catalog-sync`, `prompt-registry-sync`) run on drafts but list no `types:`, so they default to `[opened, synchronize, reopened]` — `ready_for_review` is *not* among them and does not re-run them. Under draft-by-default a PR accumulates those results across its whole draft life, so a red `kinetics-core` (provenance and scientific-validation gates among them) is still red at the moment you mark it ready, and the readiness suites going green does not redeem it. Only a push re-runs them.
+  **A failed check from the draft period does not clear itself when you mark the PR ready.** The cheap path-filtered workflows (`kinetics-core`, `parity`, `scripts-typecheck`, `server-shared-esm`, `catalog-sync`, `prompt-registry-sync`) run on drafts but list no `types:`, so they default to `[opened, synchronize, reopened]` — `ready_for_review` is *not* among them and does not re-run them. A PR that sat as a draft accumulates those results across its whole draft life, so a red `kinetics-core` (provenance and scientific-validation gates among them) is still red at the moment you mark it ready, and the readiness suites going green does not redeem it. Only a push re-runs them.
 - **BEHIND** → base moved ahead; the branch just needs updating. `gh pr update-branch <n>` (web: `mcp__github__update_pull_request_branch`, or update locally and push), then re-check. If updating introduces conflicts, it becomes DIRTY → 3c.
 - **DIRTY** → real merge conflicts → resolve them (3c).
 - **BLOCKED** → required reviews or required checks aren't satisfied. See 3e.
