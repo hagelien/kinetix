@@ -8,6 +8,7 @@ import {
 const clearance = { canonicalUnit: 'L/h', molecularWeight: null };
 const concentration = { canonicalUnit: 'mg/L', molecularWeight: 303.4 };
 const nonNumeric = { canonicalUnit: null, molecularWeight: null };
+const dimensionless = { canonicalUnit: '', molecularWeight: null };
 
 function opinion(extra: Partial<ComparableOpinion> = {}): ComparableOpinion {
   return {
@@ -90,6 +91,22 @@ describe('T3 convergence', () => {
         clearance,
       ).convergence.reason,
     ).toBe('value_shape_differs');
+  });
+
+  it('compares dimensionless values (pKa, logP) — the unit "" is a unit, not an absence', () => {
+    expect(
+      compareOpinions(
+        opinion({ resolvedValue: 9.5, resolvedUnit: '' }),
+        opinion({ resolvedValue: 8.1, resolvedUnit: '' }),
+        dimensionless,
+      ).convergence.reason,
+    ).toBe('value_differs');
+    const agreed = compareOpinions(
+      opinion({ id: 1, resolvedValue: 9.5, resolvedUnit: '' }),
+      opinion({ id: 2, resolvedValue: 9.5, resolvedUnit: '' }),
+      dimensionless,
+    );
+    expect(agreed.recommendation?.value).toEqual({ kind: 'scalar', value: 9.5, unit: '' });
   });
 
   it('diverges on the same label about different scopes', () => {

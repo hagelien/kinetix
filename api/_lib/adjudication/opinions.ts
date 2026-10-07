@@ -17,14 +17,13 @@
  * produces the T4 handoff and tells the reviewers.
  */
 
-import { and, desc, eq, isNotNull, isNull, inArray, or } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, inArray } from 'drizzle-orm';
 import { getDb, inTransaction } from '../db.js';
 import {
   adjudicationCaseSeats,
   adjudicationCases,
   adjudicationOpinions,
   agents,
-  disputes,
   users,
   type AdjudicationCaseState,
   type AdjudicationHandoff,
@@ -52,7 +51,7 @@ import {
 } from './convergence.js';
 import { adjudicationTargetParameter, readTargetRow } from './target.js';
 import { disputeOriginOf } from './detector.js';
-import type { InvalidatedReason } from './cases.js';
+import { openDisputesOnVersion, type InvalidatedReason } from './cases.js';
 
 export interface OpinionInput {
   caseId: number;
@@ -146,7 +145,9 @@ async function checkValueShape(
     input.resolvedLow != null &&
     input.resolvedHigh != null &&
     input.resolvedLow <= input.resolvedHigh;
-  if ((!scalarOk && !rangeOk) || !input.resolvedUnit) {
+  // `''` is the dimensionless unit (pKa, logP, logD), so only an absent unit
+  // is missing.
+  if ((!scalarOk && !rangeOk) || input.resolvedUnit == null) {
     return refuse(
       400,
       'value_required',
@@ -158,7 +159,7 @@ async function checkValueShape(
     return refuse(
       400,
       'unit_not_allowed',
-      `${input.resolvedUnit} is not a unit of ${parameter.parameter}; use one of ${units.join(', ')}`,
+      `"${input.resolvedUnit}" is not a unit of ${parameter.parameter}; use one of ${units.map((u) => `"${u}"`).join(', ')}`,
     );
   }
   return null;
@@ -458,24 +459,7 @@ async function sealIfComplete(
   // source-row lock this write holds: a person's dispute on this version that
   // landed after the detector last refreshed the case still makes the closing
   // act theirs. Merged into the case's record, never narrowed.
-  const openNow = await tx
-    .select({
-      id: disputes.id,
-      source: disputes.source,
-      createdBy: disputes.createdBy,
-      reasonMd: disputes.reasonMd,
-      evidenceRefs: disputes.evidenceRefs,
-      createdAt: disputes.createdAt,
-    })
-    .from(disputes)
-    .where(
-      and(
-        eq(disputes.targetType, kase.targetType),
-        eq(disputes.targetId, kase.targetId),
-        eq(disputes.status, 'open'),
-        or(eq(disputes.targetVersion, kase.targetVersion), isNull(disputes.targetVersion)),
-      ),
-    );
+  const openNow = await openDisputesOnVersion(kase);
   const known = new Set(kase.t1Snapshot.openDisputes.map((d) => d.disputeId));
   const openDisputes = [
     ...kase.t1Snapshot.openDisputes,
@@ -518,6 +502,10 @@ async function sealIfComplete(
       }
     }
   }
+  // The version-pinned payload, kept for every outcome: the final write that
+  // seals the case checked the target is still at this version, under the
+  // same lock.
+  const adjudicatedTarget = await readTargetRow(kase.targetType, kase.targetId);
   const handoff: AdjudicationHandoff | null = t4Required
     ? {
         caseId: kase.id,
@@ -528,9 +516,6 @@ async function sealIfComplete(
         triggers: kase.triggers,
         reasons,
         summary: handoffSummary(reasons, opinions, result),
-        // The version-pinned payload: the final write that sealed the case
-        // checked the target is still at this version, under the same lock.
-        target: await readTargetRow(kase.targetType, kase.targetId),
         opinions: opinions.map(handoffOpinion),
         t2Snapshot: kase.t2Snapshot,
         t1Snapshot,
@@ -551,6 +536,7 @@ async function sealIfComplete(
       recommendation: result.recommendation,
       t4Required,
       handoff,
+      adjudicatedTarget,
       panelFamilyDiversity,
       disputeOrigin,
       t1Snapshot,
@@ -571,7 +557,10 @@ async function sealIfComplete(
         targetId: kase.targetId,
       }),
       title: 'A T3 panel left a case for a person',
-      bodyMd: handoff.summary,
+      // No body: the bell and the email show user-written text as is, and the
+      // summary is generated English. The localised title says what happened;
+      // the case file carries the reasons, typed.
+      bodyMd: null,
       // The target, where the person decides; the full package is served by
       // GET /api/agent-adjudication-queue?caseId=N.
       url: await disputeTargetUrl({

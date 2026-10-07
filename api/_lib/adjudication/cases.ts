@@ -40,6 +40,43 @@ import { contributionAuthorUserId } from '../notifications.js';
 import { FLAGSHIP_TIER } from '../../../src/lib/modelTiers.js';
 import { classifyAdjudicationCase, disputeOriginOf } from './detector.js';
 
+/**
+ * The open disputes about one version of a target. A person's dispute
+ * survives an in-place revision bound to the version it was raised against; it
+ * says nothing about the revised payload a case on the new version
+ * adjudicates. A legacy dispute with no recorded version cannot be placed, so
+ * it is kept: the safe reading where a person's authority is at stake.
+ *
+ * Read under the target's source-row lock by every T3 writer that acts on
+ * them — the detector, a seat claim and the seal — so a dispute filed a
+ * moment earlier is never missed.
+ */
+export async function openDisputesOnVersion(args: {
+  targetType: string;
+  targetId: number;
+  targetVersion: string;
+}) {
+  return getDb()
+    .select({
+      id: disputes.id,
+      source: disputes.source,
+      createdBy: disputes.createdBy,
+      reasonMd: disputes.reasonMd,
+      evidenceRefs: disputes.evidenceRefs,
+      createdAt: disputes.createdAt,
+    })
+    .from(disputes)
+    .where(
+      and(
+        eq(disputes.targetType, args.targetType),
+        eq(disputes.targetId, args.targetId),
+        eq(disputes.status, 'open'),
+        or(eq(disputes.targetVersion, args.targetVersion), isNull(disputes.targetVersion)),
+      ),
+    )
+    .orderBy(asc(disputes.id));
+}
+
 /** States a case can still act in; the rest are terminal. */
 export const LIVE_CASE_STATES = ['open', 'sealed'] as const;
 
@@ -159,30 +196,11 @@ export async function detectAdjudicationCase(args: {
         ),
       )
       .orderBy(asc(agentVerifications.id));
-    // Only disputes about THIS version. A person's dispute survives an
-    // in-place revision bound to the version it was raised against; it says
-    // nothing about the revised payload this case adjudicates. A legacy
-    // dispute with no recorded version cannot be placed, so it is kept: the
-    // safe reading where a person's authority is at stake.
-    const openDisputes = await tx
-      .select({
-        id: disputes.id,
-        source: disputes.source,
-        createdBy: disputes.createdBy,
-        reasonMd: disputes.reasonMd,
-        evidenceRefs: disputes.evidenceRefs,
-        createdAt: disputes.createdAt,
-      })
-      .from(disputes)
-      .where(
-        and(
-          eq(disputes.targetType, args.targetType),
-          eq(disputes.targetId, args.targetId),
-          eq(disputes.status, 'open'),
-          or(eq(disputes.targetVersion, version), isNull(disputes.targetVersion)),
-        ),
-      )
-      .orderBy(asc(disputes.id));
+    const openDisputes = await openDisputesOnVersion({
+      targetType: args.targetType,
+      targetId: args.targetId,
+      targetVersion: version,
+    });
     // Decided disputes across every version: the correction loop is exactly
     // the cycles a proposition went through on its way to this version.
     const [decided] = await tx
@@ -514,22 +532,34 @@ export async function conflictedAgentIds(kase: {
  * server-owned `adjudicator` grant AND the flagship tier — being flagship
  * alone grants nothing — and no part in the case (`conflictedAgentIds`).
  *
- * The case row is locked for the claim, so two adjudicators racing take turns;
- * the unique indexes on (case, seat) and (case, agent) are the backstop. The
- * agent row is held FOR SHARE so an admin revoking the grant serializes with
- * it. Re-claiming returns the caller's existing seat.
+ * The claim takes the tier's lock order — the target's source row, then the
+ * case row — so two adjudicators racing take turns, and a dispute filed on the
+ * target serializes with it: the conflict check re-reads the version's open
+ * disputes under that lock, not only the case's snapshot, so an agent that
+ * disputed the target after the detector last refreshed the case cannot sit
+ * on its own appeal. The unique indexes on (case, seat) and (case, agent) are
+ * the backstop. The agent row is held FOR SHARE so an admin revoking the grant
+ * serializes with it. Re-claiming returns the caller's existing seat.
  */
 export async function claimAdjudicationSeat(args: {
   caseId: number;
   agentId: number;
 }): Promise<ClaimSeatResult> {
+  const [peek] = await getDb()
+    .select({ targetType: adjudicationCases.targetType, targetId: adjudicationCases.targetId })
+    .from(adjudicationCases)
+    .where(eq(adjudicationCases.id, args.caseId));
+  if (!peek) return { ok: false, reason: 'case_not_found' };
+
   return inTransaction(async () => {
     const tx = getDb();
+    await lockVerificationSourceRow(tx, peek.targetType, peek.targetId);
     const [kase] = await tx
       .select({
         id: adjudicationCases.id,
         targetType: adjudicationCases.targetType,
         targetId: adjudicationCases.targetId,
+        targetVersion: adjudicationCases.targetVersion,
         state: adjudicationCases.state,
         t1Snapshot: adjudicationCases.t1Snapshot,
         t2Snapshot: adjudicationCases.t2Snapshot,
@@ -567,9 +597,15 @@ export async function claimAdjudicationSeat(args: {
     if (mine) return { ok: true, seat: mine.seat, alreadySeated: true };
     if (kase.state !== 'open') return { ok: false, reason: 'case_not_open' };
 
-    if ((await conflictedAgentIds(kase)).has(args.agentId)) {
-      return { ok: false, reason: 'conflicted' };
-    }
+    const openNow = await openDisputesOnVersion(kase);
+    const conflicted = await conflictedAgentIds({
+      ...kase,
+      t1Snapshot: {
+        ...kase.t1Snapshot,
+        openDisputes: [...kase.t1Snapshot.openDisputes, ...openNow],
+      },
+    });
+    if (conflicted.has(args.agentId)) return { ok: false, reason: 'conflicted' };
 
     const taken = await tx
       .select({ seat: adjudicationCaseSeats.seat })

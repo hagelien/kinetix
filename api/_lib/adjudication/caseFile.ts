@@ -21,6 +21,7 @@ import {
   adjudicationCases,
   adjudicationOpinions,
   disputes,
+  type AdjudicationHandoff,
   type AgentVerificationTargetType,
 } from '../../../db/schema.js';
 import { fetchSingleCandidate } from '../../agent-verifications-queue.js';
@@ -101,9 +102,9 @@ export async function buildCaseFile(caseId: number, viewer: CaseFileViewer) {
     .orderBy(asc(disputes.id));
 
   // The target as the verification queue hydrates it, for a panelist. A
-  // person gets the source row the panel adjudicated, copied into the handoff
-  // at sealing — the version-pinned payload, however the live row has moved
-  // since — and the live row only for a case not handed off.
+  // person gets the source row the panel adjudicated, copied at sealing for
+  // every outcome — the version-pinned payload, however the live row has
+  // moved since — and the live row only for a case never sealed.
   const target =
     viewer.kind === 'panelist'
       ? await fetchSingleCandidate({
@@ -114,8 +115,8 @@ export async function buildCaseFile(caseId: number, viewer: CaseFileViewer) {
           selfReviewEnabled: false,
           includeJudged: true,
         })
-      : kase.handoff?.target
-        ? { asAdjudicated: true, row: kase.handoff.target }
+      : kase.sealedAt !== null
+        ? { asAdjudicated: true, row: kase.adjudicatedTarget }
         : { asAdjudicated: false, row: await readTargetRow(kase.targetType, kase.targetId) };
 
   return {
@@ -254,7 +255,9 @@ export async function listHandoffs(limit = 50) {
       state: adjudicationCases.state,
       disputeOrigin: adjudicationCases.disputeOrigin,
       closedAt: adjudicationCases.closedAt,
-      summary: sql<string | null>`${adjudicationCases.handoff} ->> 'summary'`,
+      // Typed, so the screen words them in the reader's language.
+      reasons: sql<AdjudicationHandoff['reasons'] | null>`${adjudicationCases.handoff} -> 'reasons'`,
+      divergenceReason: sql<string | null>`${adjudicationCases.convergence} ->> 'reason'`,
     })
     .from(adjudicationCases)
     .where(eq(adjudicationCases.t4Required, true))
