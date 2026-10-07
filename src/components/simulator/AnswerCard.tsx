@@ -6,7 +6,7 @@ import {
   hasUncertaintyBand,
   kinelabRobustness,
 } from '@/lib/modelingAnswer';
-import { formatWithMaxDecimals } from '@/lib/rangeUtils';
+import { formatSignificant } from '@/lib/rangeUtils';
 import { UnitTooltip } from '@/components/ui/UnitTooltip';
 import { useAppStore } from '@/stores/appStore';
 import {
@@ -25,7 +25,7 @@ interface AnswerCardProps {
 }
 
 function fmt(n: number): string {
-  return formatWithMaxDecimals(n, 3);
+  return formatSignificant(n);
 }
 
 interface AnswerDisplay {

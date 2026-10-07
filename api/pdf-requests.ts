@@ -85,7 +85,7 @@ const citationHasNoStoredPdf = sql`not exists (
 
 // A public database record or a site's landing page can never be satisfied by
 // a PDF either (src/lib/publicDatabaseRecord.ts), so it never surfaces as an
-// open request. POST refuses new ones and migrations 0137/0138 cancelled the
+// open request. POST refuses new ones and migrations 0137/0139 cancelled the
 // old ones, but the previous deployment keeps serving POST until this one is
 // live and can still file one in that window; filtering on read keeps such a
 // row out of the queue and the header badge instead of stranding it there.

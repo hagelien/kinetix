@@ -107,14 +107,12 @@ Per issue (or bundle):
 3. **Minimum change that closes the issue.** Resist scope creep — if you find adjacent problems, file a new issue with `gh issue create`, don't fix here.
 4. **Tests** — run the existing suite, add coverage for new behavior, don't ship red.
 5. **Commit** — conventional commits, reference the issue: `fix(auth): handle null user in middleware (issue 42)`.
-6. **PR** — `gh pr create --draft` with body ending in `Closes #N` (or
-   `Closes #N, closes #M` for bundles) so merge auto-closes them. **Every pull
-   request opens as a draft** — see *Opening a pull request* in
-   [AGENTS.md](../../../AGENTS.md). Then, as the immediate next step, post
-   `@codex review` on it: a draft raises no review event, so without that
-   comment nobody reviews it. Do not mark it ready yourself — that is the
-   maintainer's call, and it is what starts the expensive suites and arms the
-   merge gate.
+6. **PR** — `gh pr create` (ready for review, **never** `--draft`) with body
+   ending in `Closes #N` (or `Closes #N, closes #M` for bundles) so merge
+   auto-closes them. See *Opening a pull request* in
+   [AGENTS.md](../../../AGENTS.md): opening for review starts the Codex review
+   and the full CI suite, and `codex-gate` merges once both are clean. Drive it
+   to green; do not merge it yourself.
 7. **Re-rank** — if this PR unblocks dependents or invalidates earlier scoring, recompute the queue before picking the next item.
 
 ## Step 6 — Report
@@ -129,10 +127,9 @@ End-of-session summary:
 ## Guardrails
 
 - Never force-push to a shared branch.
-- Never mark a pull request ready for review, and never merge one. Workers open
-  drafts; the maintainer decides when a branch goes live. A draft that cannot go
-  green in CI is expected, not a failure — see *Opening a pull request* in
-  [AGENTS.md](../../../AGENTS.md).
+- Never open a pull request as a draft, and never merge one yourself — open it
+  ready for review and let `codex-gate` merge it once Codex signs off and CI is
+  green. See *Opening a pull request* in [AGENTS.md](../../../AGENTS.md).
 - Never close an issue manually — let GitHub close via `Closes #N` on a merged PR.
 - If a spec is genuinely ambiguous after reading the code + related issues + recent PRs, comment on the issue asking for clarification rather than guessing.
 - Stop and surface to the user before: DB migrations, API breaking changes, dependency major bumps, architectural decisions, or any change that would touch CI/build in a way that could affect other contributors.

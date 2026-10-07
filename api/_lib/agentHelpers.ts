@@ -161,7 +161,7 @@ export async function transitionAgentStatus(args: {
         RETURNING id, user_id, name, name_en, slug, description, description_en,
                   maintainer_user_id, status, status_changed_by, status_changed_at,
                   status_change_reason, pre_suspension_role, hooks_enabled,
-                  self_review_enabled, model_tier,
+                  self_review_enabled, model_tier, adjudicator, model_family,
                   created_at, updated_at
       ),
       user_sync AS (
@@ -199,7 +199,7 @@ export async function transitionAgentStatus(args: {
       a.id, a.user_id, a.name, a.name_en, a.slug, a.description, a.description_en,
       a.maintainer_user_id, a.status, a.status_changed_by, a.status_changed_at,
       a.status_change_reason, a.pre_suspension_role, a.hooks_enabled,
-      a.self_review_enabled, a.model_tier,
+      a.self_review_enabled, a.model_tier, a.adjudicator, a.model_family,
       a.created_at, a.updated_at,
       h.id AS history_id, h.from_status AS history_from_status,
       h.to_status AS history_to_status, h.changed_by AS history_changed_by,
@@ -242,6 +242,8 @@ export async function transitionAgentStatus(args: {
     hooksEnabled: Boolean(row.hooks_enabled),
     selfReviewEnabled: Boolean(row.self_review_enabled),
     modelTier: (row.model_tier as string | null) ?? null,
+    adjudicator: Boolean(row.adjudicator),
+    modelFamily: (row.model_family as string | null) ?? null,
     createdAt: new Date(row.created_at as string),
     updatedAt: new Date(row.updated_at as string),
   };
@@ -441,7 +443,7 @@ export async function setAgentRole(args: {
       RETURNING id, user_id, name, name_en, slug, description, description_en,
                 maintainer_user_id, status, status_changed_by, status_changed_at,
                 status_change_reason, pre_suspension_role, hooks_enabled,
-                self_review_enabled, model_tier,
+                self_review_enabled, model_tier, adjudicator, model_family,
                 created_at, updated_at
     ),
     locked_user AS (
@@ -464,7 +466,7 @@ export async function setAgentRole(args: {
     SELECT id, user_id, name, name_en, slug, description, description_en,
            maintainer_user_id, status, status_changed_by, status_changed_at,
            status_change_reason, pre_suspension_role, hooks_enabled,
-           self_review_enabled, model_tier,
+           self_review_enabled, model_tier, adjudicator, model_family,
            created_at, updated_at
     FROM agent_update
   `);
@@ -499,6 +501,8 @@ export async function setAgentRole(args: {
     hooksEnabled: Boolean(row.hooks_enabled),
     selfReviewEnabled: Boolean(row.self_review_enabled),
     modelTier: (row.model_tier as string | null) ?? null,
+    adjudicator: Boolean(row.adjudicator),
+    modelFamily: (row.model_family as string | null) ?? null,
     createdAt: new Date(row.created_at as string),
     updatedAt: new Date(row.updated_at as string),
   };

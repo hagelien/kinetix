@@ -45,6 +45,10 @@ export interface AgentAdminRow {
    * tier this build's registry no longer knows about.
    */
   modelTier: string | null;
+  /** Admin grant: may sit on a T3 adjudication panel (flagship tier required too). */
+  adjudicator: boolean;
+  /** Model family for the T3 panel-diversity audit; null = unknown. */
+  modelFamily: string | null;
   createdAt: string;
   username: string | null;
   email: string | null;
@@ -93,6 +97,9 @@ export interface PatchAgentInput {
   selfReviewEnabled?: boolean;
   /** Capability tier; `null` clears it back to unclassified. */
   modelTier?: AssignableModelTier | null;
+  adjudicator?: boolean;
+  /** `null` clears it back to unknown. */
+  modelFamily?: string | null;
 }
 
 export interface TransitionAgentInput {

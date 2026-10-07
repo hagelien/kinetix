@@ -54,9 +54,9 @@ describe('noPdfReason', () => {
     ).toBeNull();
   });
 
-  it('is the exact pattern migration 0138 applies in SQL', () => {
+  it('is the exact pattern migration 0139 applies in SQL', () => {
     const migration = readFileSync(
-      'drizzle/0138_cancel_no_pdf_url_requests.sql',
+      'drizzle/0139_cancel_no_pdf_url_requests.sql',
       'utf8',
     );
     expect(migration).toContain(`~* '${NO_PDF_URL_PATTERN}'`);
