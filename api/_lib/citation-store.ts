@@ -19,6 +19,10 @@ import {
   type ReferenceMetadata,
 } from './reference-metadata.js';
 import { getDb, inTransaction } from './db.js';
+import {
+  isSameWork,
+  matchableFingerprint,
+} from '../../src/lib/citationWorkMatch.js';
 
 type Db = ReturnType<typeof getDb>;
 
@@ -154,6 +158,23 @@ export async function resolveCitation(
     })
     .from(citations)
     .where(handleMatch(handles));
+
+  if (existing.length === 0 && canonical.type === 'freetext') {
+    const sameWork = await findSameWorkForFreetext(
+      db,
+      canonical.identifier,
+      incomingMetadata,
+    );
+    if (sameWork) {
+      return {
+        id: sameWork.id,
+        type: sameWork.type as CitationHandleType,
+        identifier: sameWork.identifier,
+        created: false,
+        mergedIds: [],
+      };
+    }
+  }
 
   if (existing.length === 0) {
     const [row] = await db
@@ -320,6 +341,75 @@ export async function resolveCitation(
     mergedIds,
     ...(deferredIds.length > 0 ? { deferredIds } : {}),
   };
+}
+
+/**
+ * The row a free-text citation already has under different wording, if any.
+ *
+ * Free text has no handle to look up, so the exact-text lookup above only
+ * catches a writer repeating itself character for character — and research
+ * agents never do. Without this, every rewording of one reference became a row
+ * of its own, beside the PMID row the paper already had: six rows for one
+ * Schulz & Schmoldt review, each a separate candidate in the PDF inbox.
+ *
+ * Matched on the bibliographic record (first author, year, title) by
+ * `citationWorkMatch.ts`, which errs towards a duplicate over a wrong merge.
+ * The strongest handle among the matches wins, so a reworded reference to a
+ * paper filed under its PMID lands on the PMID row. When the matches reach two
+ * different resolvable handles the reference is ambiguous and nothing is
+ * reused.
+ *
+ * Narrowed in SQL to rows of the same year; the rest is compared in memory.
+ * Only a free-text write that found no exact match gets here.
+ */
+async function findSameWorkForFreetext(
+  db: Db,
+  identifier: string,
+  metadata: ReferenceMetadata | null,
+): Promise<{ id: number; type: string; identifier: string } | null> {
+  const incoming = matchableFingerprint({
+    type: 'freetext',
+    identifier,
+    metadata,
+  });
+  if (!incoming) return null;
+
+  const candidates = await db
+    .select({
+      id: citations.id,
+      type: citations.type,
+      identifier: citations.identifier,
+      metadata: citations.metadata,
+    })
+    .from(citations)
+    .where(sql`${citations.metadata} ->> 'year' = ${String(incoming.year)}`);
+
+  const matches = candidates.filter((row) => {
+    const fingerprint = matchableFingerprint({
+      type: row.type,
+      identifier: row.identifier,
+      metadata: normalizeReferenceMetadata(row.metadata),
+    });
+    return fingerprint !== null && isSameWork(incoming, fingerprint);
+  });
+  if (matches.length === 0) return null;
+
+  const resolvable = new Set(
+    matches
+      .filter((row) => row.type !== 'freetext')
+      .map((row) => {
+        const canonical = canonicalCitationHandle(
+          { type: row.type as CitationHandleType, identifier: row.identifier },
+          normalizeReferenceMetadata(row.metadata)?.altIds,
+        );
+        return `${canonical.type}:${canonical.identifier}`;
+      }),
+  );
+  if (resolvable.size > 1) return null;
+
+  return [...matches].sort(
+    (a, b) => citationHandleRank(a.type) - citationHandleRank(b.type) || a.id - b.id,
+  )[0]!;
 }
 
 function mergeMetadata(
