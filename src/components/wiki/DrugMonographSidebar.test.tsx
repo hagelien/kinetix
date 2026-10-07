@@ -486,8 +486,10 @@ describe('DrugMonographSidebar', () => {
     // the sidebar must render [3] here too — not a divergent parameter-first
     // number — so a marker means the same bibliography entry everywhere on the
     // page. It must also skip its own reference fetch.
+    // A reader who can't add source values, on a value with none yet: no
+    // sources dialog to open, so the [n] marker is still how it cites.
     mockDrugState.indicatorRefs = { proteinBinding: [42] };
-    setUser(['proteinBinding']);
+    setUser(['proteinBinding'], 'authenticated');
     renderSidebar(
       [
       {
@@ -524,7 +526,7 @@ describe('DrugMonographSidebar', () => {
         createdAt: new Date().toISOString(),
       } as unknown as Awaited<ReturnType<typeof fetchDrugReferences>>[number],
     ]);
-    setUser(['proteinBinding']);
+    setUser(['proteinBinding'], 'authenticated');
     openSection('pharmacokinetics');
     renderSidebar();
 
@@ -1138,6 +1140,46 @@ describe('DrugMonographSidebar', () => {
     ).toBeInTheDocument();
     // The dialog leads with the graph of the pooled sources.
     expect(screen.getByTestId('parameter-forest-plot')).toBeInTheDocument();
+  });
+
+  // A source-value parameter cites through its source values: the figure
+  // itself opens the sources dialog, and no `[n]` markers trail it.
+  it('opens the sources dialog from the value instead of showing [n] markers', async () => {
+    mockDrugState.indicatorRefs = { halfLife: [42] };
+    vi.mocked(fetchDrugReferences).mockResolvedValue([
+      {
+        id: 42,
+        drugId: 1,
+        type: 'freetext',
+        identifier: 'Paracetamol 1973',
+        metadata: null,
+        createdAt: new Date().toISOString(),
+      } as unknown as Awaited<ReturnType<typeof fetchDrugReferences>>[number],
+    ]);
+    mockDrugState.parameterSummaries = {
+      halfLife: {
+        parameter: 'halfLife',
+        unit: 'h',
+        representative: 2.2,
+        iqrLow: 1.8,
+        iqrHigh: 2.8,
+        entryCount: 3,
+        pooledCount: 3,
+        points: [],
+      },
+    };
+    setUser(['halfLife']);
+    openSection('pharmacokinetics');
+    renderSidebar();
+
+    const value = await screen.findByTestId('parameter-value-sources-halfLife');
+    await waitFor(() => expect(fetchDrugReferences).toHaveBeenCalled());
+    expect(screen.queryByRole('link', { name: /reference 1/i })).toBeNull();
+
+    fireEvent.click(value);
+    expect(
+      await screen.findByRole('heading', { name: /source values/i }),
+    ).toBeInTheDocument();
   });
 
   it('offers the sources action to contributors before any entry exists', () => {
