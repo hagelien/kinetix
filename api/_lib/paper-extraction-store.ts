@@ -583,3 +583,41 @@ export async function listJobsClaimedBy(
     .limit(20);
   return rows as ClaimedPaperExtractionJobRow[];
 }
+
+/**
+ * The paper a live claim covers, or `null` when the caller does not hold
+ * that claim right now.
+ *
+ * `POST /api/pending-edits` uses this to recognise a `wiki_fact` filed on
+ * behalf of a queued extraction job. Such a fact is exempt from the admin
+ * agent-focus gate — an editor deliberately handed the agent this paper, which
+ * is a narrower and more recent instruction than the standing focus — so the
+ * exemption has to rest on proof, not on the agent's say-so: the same
+ * identity, the same token, a claim that has not gone stale. The citation is
+ * returned so the caller can also require the fact to cite the job's paper;
+ * holding a claim on one paper must not unlock unscoped writes from another.
+ */
+export async function liveClaimCitationId(input: {
+  jobId: number;
+  claimToken: string;
+  userId: number;
+  now?: Date;
+}): Promise<number | null> {
+  const db = getDb();
+  const now = input.now ?? new Date();
+  const staleBefore = new Date(now.getTime() - STALE_CLAIM_MS);
+  const [row] = await db
+    .select({ citationId: paperExtractionJobs.citationId })
+    .from(paperExtractionJobs)
+    .where(
+      and(
+        eq(paperExtractionJobs.id, input.jobId),
+        eq(paperExtractionJobs.claimedBy, input.userId),
+        eq(paperExtractionJobs.claimToken, input.claimToken),
+        eq(paperExtractionJobs.status, 'claimed'),
+        gte(paperExtractionJobs.claimedAt, staleBefore),
+      ),
+    )
+    .limit(1);
+  return row?.citationId ?? null;
+}

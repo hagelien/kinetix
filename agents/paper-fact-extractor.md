@@ -47,19 +47,11 @@ Bash calls do not share shell state; chain with `&&` or rely on the helpers, whi
 
 ## 2. The run — in this order
 
-### Step 0 — Check the admin focus config before claiming anything
+### Step 0 — The admin focus config does not apply to this routine
 
-Everything this routine produces is monograph and wiki-page content, so the admin focus config (`agents/drug-db-maintainer.md` §3) governs whether the run has anywhere to put it:
+The admin focus config (`agents/drug-db-maintainer.md` §3) narrows the agents' *own* choice of work. This queue is not the agents' choice: an editor picked this paper and asked for its facts, which is a narrower and more recent instruction than the standing focus. So **do not read `/api/agent-focus` and do not skip, narrow or release a job because of it** — not under `mode = "parameters"`, not with `skipWikiContent` on, not under `pages` or `methods`. Place every fact where it belongs (§4).
 
-```bash
-scripts/kinetix-api.sh GET '/api/agent-focus'
-```
-
-If `config.mode` is `"parameters"`, **or `config.skipWikiContent` is true under any mode** (a separate admin switch meaning "agents work parameters only, write no wiki content"), the admin has put monograph content out of scope entirely — `POST /api/pending-edits` refuses agent `wiki_fact` / `wiki_section` submissions with `403 agent_focus_out_of_scope` while it is set. **Do not claim a job.** Claiming one you cannot finish burns an attempt against the paper and strands the editor's request behind a stale claim for 45 minutes; leaving the queue untouched keeps every job waiting intact for whenever an admin reopens the focus. Log a `paper_extraction` `no_change` row (§6) naming the focus mode (or the `skipWikiContent` switch), emit the §7 paragraph, and end the run.
-
-Under `"pages"` or `"methods"` with `skipWikiContent` false the queue is still workable, but only the pages in the focus set (or the monographs of drugs in the selected methods' component union) will accept a fact — take that into account in §4 when you place each one, and file nothing out of scope. Place what you can and report `complete` as usual.
-
-**If the focus blocked *every* destination, `release` the job — never `complete` it.** A completed job leaves the open queue for good, so completing one with zero facts because the focus happened to be narrow discards the editor's request and the paper's facts along with it; the focus will widen later and nothing will bring the job back. `release` returns it to the queue for a future run. Say in the §5 report and the §7 paragraph that the focus, not the paper, is why. This costs one of the paper's `attempts` (the count increments on claim and a release does not reset it), so a job that keeps meeting a narrow focus eventually parks as `failed` for an editor to `requeue` — visible, which a silent zero-fact completion is not.
+The server enforces the same rule, on proof rather than on trust: a `wiki_fact` that carries the `paperExtraction` block (§4 step 5) — your job id and claim token — is exempt from the focus gate on `POST /api/pending-edits`, provided the claim is live, held by you, and the fact's `referenceIds` include the job's paper. Without that block the fact is judged like any other agent fact and a narrowed focus will refuse it with `403 agent_focus_out_of_scope`. The exemption covers only facts from the paper you hold; any other wiki writing stays under the focus.
 
 ### Step 1 — Claim one job
 
@@ -195,7 +187,7 @@ Run all five steps for **each** fact you intend to file. Skipping a step invalid
 
    Find the entry whose `id` is your job's and compare its `claimToken` with the one you hold. If your job is absent, or the token differs, **stop the run at once**: do not submit this fact and do not submit any further ones. An editor cancelled the job, or your claim expired and another run took it. Report nothing (the server would refuse anyway) and log the run per §6 with a note naming the reason — `job_cancelled_mid_run` or `claim_superseded`.
 
-   This check costs one call per fact and it is the only thing that makes an editor's cancel meaningful while a run is in flight: `POST /api/pending-edits` is the generic review-queue endpoint and knows nothing about extraction jobs, so a cancelled job cannot block a fact you have already sent. Facts already filed before the cancellation stay in the queue for a human to reject — which is why the window matters and why you close it per-fact rather than once per run.
+   Every fact carries a `paperExtraction` block naming your job and claim token. The server checks it on each submission: a fact whose claim is no longer live is refused with `409 paper_extraction_not_claim_holder` — treat that exactly like a failed pre-check above and stop the run — and one whose `referenceIds` omit the job's paper is refused with `400 paper_extraction_reference_mismatch`. The block is also what exempts the fact from the admin focus gate (§2 step 0). Keep the pre-check anyway: it is cheaper than a refused submission and catches a cancel before you spend effort composing the next fact.
 
    ```json
    {
@@ -205,6 +197,7 @@ Run all five steps for **each** fact you intend to file. Skipping a step invalid
      "factOperation": "add",
      "factStatement": "…",
      "referenceIds": [<citationId>],
+     "paperExtraction": { "jobId": <jobId>, "claimToken": "<the token from your claim>" },
      "proposedMeta": {
        "editSummary": "hentet fra <kort kildebeskrivelse>; <hva funnet tilfører>"
      }

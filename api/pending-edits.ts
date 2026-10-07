@@ -80,6 +80,7 @@ import {
   callerCanReadWikiPage,
 } from './_lib/permissions-store.js';
 import { createFactNode } from '../src/lib/monographContent.js';
+import { liveClaimCitationId } from './_lib/paper-extraction-store.js';
 import {
   findFactInContent,
   isMonographContentV2,
@@ -2259,7 +2260,44 @@ async function handleCreate(
   // may delegate it down and an editor-role agent identity then reaches this
   // branch. Gating only the two atomic-fact types would leave the guard's
   // promise resting on a permission nobody has to keep where it is.
-  if (
+  //
+  // One exemption: a `wiki_fact` filed under a live paper-extraction claim.
+  // An editor queued that paper for extraction on purpose, which is a
+  // narrower and more recent instruction than the standing focus, so the
+  // focus must not leave the queue stranded. The claim is verified here —
+  // same identity, same token, not stale, and the fact cites the job's paper —
+  // so the exemption cannot be borrowed for unrelated content.
+  if (parsed.data.paperExtraction) {
+    const claimCitationId = await liveClaimCitationId({
+      jobId: parsed.data.paperExtraction.jobId,
+      claimToken: parsed.data.paperExtraction.claimToken,
+      userId: auth.userId,
+    });
+    if (claimCitationId === null) {
+      error(
+        res,
+        409,
+        'You no longer hold this paper-extraction claim: the job was ' +
+          'cancelled or the claim expired. Stop the run and submit nothing ' +
+          'further for it.',
+        'paper_extraction_not_claim_holder',
+      );
+      return;
+    }
+    const cited =
+      parsed.data.referenceIds ??
+      (parsed.data.referenceId ? [parsed.data.referenceId] : []);
+    if (!cited.includes(claimCitationId)) {
+      error(
+        res,
+        400,
+        `A fact filed under a paper-extraction job must cite that job's ` +
+          `paper (citation ${claimCitationId}) in referenceIds.`,
+        'paper_extraction_reference_mismatch',
+      );
+      return;
+    }
+  } else if (
     isWikiContentEditType(parsed.data.editType) &&
     (await isActiveAgentUser(auth.userId))
   ) {
