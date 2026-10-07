@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { ApprovalStamp } from "@/components/ui/ApprovalStamp";
 import type { ApprovalSummary } from "@/lib/approvalsApi";
 import type { TextDiffChunk } from "@/lib/textDiff";
 import { useCan } from "@/lib/usePermissions";
@@ -219,18 +218,6 @@ export function WikiHistory() {
                     {rev.editSummary}
                   </span>
                 )}
-                <ApprovalStamp
-                  targetType="wiki_revision"
-                  targetId={rev.id}
-                  initial={
-                    rev.approvals ?? {
-                      count: 0,
-                      approvers: [],
-                      approvedByMe: false,
-                    }
-                  }
-                  onChange={load}
-                />
                 {canViewDiff && (
                   <button
                     type="button"

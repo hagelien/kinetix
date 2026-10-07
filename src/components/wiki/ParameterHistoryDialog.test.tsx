@@ -16,9 +16,6 @@ vi.mock('@/lib/drugApi', async (importOriginal) => ({
   fetchDrugParameterHistory: vi.fn(),
 }));
 
-vi.mock('@/components/ui/ApprovalStamp', () => ({
-  ApprovalStamp: () => <div data-testid="approval-stamp" />,
-}));
 
 const fetchDrugParameterHistoryMock = vi.mocked(fetchDrugParameterHistory);
 

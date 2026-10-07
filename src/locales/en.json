@@ -3157,16 +3157,6 @@
     "invalidEnabledUnits": "Pick at least one concentration unit.",
     "primaryUnitNotSupported": "The primary unit must be a per-litre unit. Per-decilitre units are still allowed as alternatives in tooltips and converters."
   },
-  "approvals": {
-    "noApprovalsYet": "No approvals yet",
-    "clickToApprove": "Click to approve",
-    "clickToWithdraw": "Click to withdraw your approval",
-    "stampAriaLabel_one": "{{count}} approval. Click to add or withdraw your stamp.",
-    "stampAriaLabel_other": "{{count}} approvals. Click to add or withdraw your stamp.",
-    "errorReviewerRequired": "Contributor or higher role required to add approval stamps.",
-    "errorSelfNotAllowed": "You cannot approve your own content.",
-    "errorTargetNotFound": "This item is no longer available."
-  },
   "topicSections": {
     "empty": "This topic page has no sectioned headings yet. An admin can add headings via the whole-page editor; once published, atomic facts can attach to each section.",
     "editorHint": "Add or edit atomic facts within each section. Whole-page edits remain admin-only.",
