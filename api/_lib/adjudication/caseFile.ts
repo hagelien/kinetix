@@ -223,13 +223,17 @@ export async function listAdjudicatorCases(agentId: number, limit = 20) {
   // before the filter would starve an adjudicator who conflicts with the head
   // of the queue.
   const pageSize = limit * 3;
+  // Each case's conflict check is a few queries, so the scan is bounded: an
+  // adjudicator conflicting with more than MAX_PAGES pages of the queue sees
+  // a short list rather than a request that outlives the function timeout.
+  const MAX_PAGES = 5;
   const available = [];
   // Keyset, not offset: cases claimed or closed mid-read must not shift the
   // next page past unvisited rows.
   // openedAt travels as database text: a JS Date would truncate microseconds.
   type QueueCursor = { openedAt: string; id: number };
   let after = null as QueueCursor | null;
-  while (available.length < limit) {
+  for (let page = 0; page < MAX_PAGES && available.length < limit; page++) {
     const cursor: QueueCursor | null = after;
     const openRows = await db
       .select({
@@ -255,9 +259,13 @@ export async function listAdjudicatorCases(agentId: number, limit = 20) {
       )
       .orderBy(asc(adjudicationCases.openedAt), asc(adjudicationCases.id))
       .limit(pageSize);
-    for (const row of openRows) {
+    // A page's checks are independent, so run them together.
+    const conflicted = await Promise.all(
+      openRows.map(async (row) => (await conflictedAgentIds(row)).has(agentId)),
+    );
+    for (const [i, row] of openRows.entries()) {
       if (available.length >= limit) break;
-      if ((await conflictedAgentIds(row)).has(agentId)) continue;
+      if (conflicted[i]) continue;
       available.push({
         caseId: row.caseId,
         targetType: row.targetType,
