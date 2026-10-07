@@ -1750,6 +1750,49 @@ const evidenceRefSchema = z
     },
   );
 
+/**
+ * T3 adjudication: claim a seat on a case (POST
+ * /api/agent-adjudication-queue?action=claim). The seat is chosen server-side.
+ */
+export const adjudicationClaimSchema = z
+  .object({ caseId: z.number().int().positive() })
+  .strict();
+
+/**
+ * T3 adjudication: one opinion for the caller's seat (POST
+ * /api/agent-adjudication-opinions; agents/drug-db-adjudication.md §6).
+ *
+ * Strict, so every server-owned fact — the seat, the revision, the tier, the
+ * adjudicator grant, the model family, the agent — is refused outright if a
+ * caller tries to assert it. The value fields are validated against the
+ * target's parameter by the write path, which knows it.
+ */
+export const adjudicationOpinionSchema = z
+  .object({
+    caseId: z.number().int().positive(),
+    targetVersion: z.string().min(1).max(80),
+    resolution: z.enum(['approve', 'dispute', 'return', 'split_scope', 'abstain', 'human']),
+    proposition: z.string().trim().min(1).max(1000),
+    /** The structured scope (population, route, matrix, analyte, time window). */
+    scopeKey: z
+      .record(z.string().trim().min(1).max(40), z.string().trim().min(1).max(200))
+      .refine((v) => Object.keys(v).length <= 12, { message: 'At most 12 scope keys' })
+      .default({}),
+    resolvedValue: z.number().finite().nullable().optional(),
+    resolvedLow: z.number().finite().nullable().optional(),
+    resolvedHigh: z.number().finite().nullable().optional(),
+    resolvedUnit: z.string().trim().min(1).max(40).nullable().optional(),
+    reasoningMd: z.string().trim().min(20).max(20000),
+    evidenceRefs: z.array(evidenceRefSchema).max(40).default([]),
+    confidence: z.enum(['high', 'medium', 'low']),
+    humanRequired: z.boolean().default(false),
+    humanReason: z.string().trim().min(1).max(2000).nullable().optional(),
+    model: z.string().trim().min(1).max(80).nullable().optional(),
+    /** Make this the seat's final, immutable opinion. */
+    final: z.boolean().default(false),
+  })
+  .strict();
+
 export const createAgentVerificationSchema = z
   .object({
     targetType: agentVerificationTargetTypeSchema,

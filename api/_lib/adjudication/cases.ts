@@ -481,7 +481,7 @@ export type ClaimSeatResult =
  * opened without a verdict), and the agent that authored the target — the
  * panel reviews their work, so it cannot include them.
  */
-async function conflictedAgentIds(kase: {
+export async function conflictedAgentIds(kase: {
   targetType: string;
   targetId: number;
   t1Snapshot: { verdicts: { agentId: number }[]; openDisputes: { createdBy: number }[] };
@@ -587,4 +587,33 @@ export async function claimAdjudicationSeat(args: {
     if (!inserted) return { ok: false, reason: 'panel_full' };
     return { ok: true, seat: inserted.seat, alreadySeated: false };
   });
+}
+
+/**
+ * The calling agent, when it may act as an adjudicator now: active, its
+ * backing user in an active role, the `adjudicator` grant AND the flagship
+ * tier. `null` for a user who backs no agent at all (a person), and
+ * `not_eligible` for an agent that lacks any of it.
+ */
+export async function resolveAdjudicator(
+  userId: number,
+): Promise<{ agentId: number; userId: number } | 'not_eligible' | null> {
+  const [row] = await getDb()
+    .select({
+      agentId: agents.id,
+      status: agents.status,
+      adjudicator: agents.adjudicator,
+      modelTier: agents.modelTier,
+      role: users.role,
+    })
+    .from(agents)
+    .innerJoin(users, eq(users.id, agents.userId))
+    .where(eq(agents.userId, userId));
+  if (!row) return null;
+  const eligible =
+    row.status === 'active' &&
+    row.adjudicator &&
+    row.modelTier === FLAGSHIP_TIER &&
+    ACTIVE_AGENT_ROLES.includes(row.role);
+  return eligible ? { agentId: row.agentId, userId } : 'not_eligible';
 }

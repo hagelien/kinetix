@@ -2641,6 +2641,85 @@ export type AdjudicationResolution =
   | 'abstain'
   | 'human';
 
+/** Why two sealed opinions did not converge (null when they did). */
+export type AdjudicationDivergenceReason =
+  | 'resolution_differs'
+  | 'scope_differs'
+  | 'value_shape_differs'
+  | 'value_differs'
+  | 'unit_family_differs'
+  | 'unit_not_convertible';
+
+/** The typed comparison of the two sealed opinions (0139). */
+export type AdjudicationConvergence = {
+  converged: boolean;
+  reason: AdjudicationDivergenceReason | null;
+  /** A panelist resolved `human` or set humanRequired. */
+  humanRequested: boolean;
+  /** The canonical unit both values were compared in, when a value was. */
+  canonicalUnit: string | null;
+  comparedAt: string;
+};
+
+/** What a converged panel recommends. A recommendation only (0139). */
+export type AdjudicationRecommendation = {
+  resolution: AdjudicationResolution;
+  scopeKey: Record<string, string>;
+  /** Canonical-unit value both panelists endorsed, when they endorsed one. */
+  value:
+    | { kind: 'scalar'; value: number; unit: string }
+    | { kind: 'range'; low: number; high: number; unit: string }
+    | null;
+  opinionIds: number[];
+};
+
+/** One opinion as the T4 handoff carries it. */
+export type AdjudicationHandoffOpinion = {
+  opinionId: number;
+  seat: AdjudicationSeat;
+  agentId: number;
+  adjudicatorTier: string | null;
+  model: string | null;
+  resolution: AdjudicationResolution;
+  proposition: string;
+  scopeKey: Record<string, string>;
+  resolvedValue: number | null;
+  resolvedLow: number | null;
+  resolvedHigh: number | null;
+  resolvedUnit: string | null;
+  reasoningMd: string;
+  evidenceRefs: unknown;
+  confidence: string;
+  humanRequired: boolean;
+  humanReason: string | null;
+  finalizedAt: string;
+};
+
+/** The T4 package a person gets, so nobody reconstructs the appeal from logs (0139). */
+export type AdjudicationHandoff = {
+  caseId: number;
+  targetType: string;
+  targetId: number;
+  targetVersion: string;
+  disputeOrigin: AdjudicationDisputeOrigin;
+  triggers: AdjudicationTrigger[];
+  /** Why a person is needed, in order of weight. */
+  reasons: Array<'panel_diverged' | 'human_requested' | 'human_dispute'>;
+  /** One paragraph: what remains disputed. */
+  summary: string;
+  opinions: AdjudicationHandoffOpinion[];
+  t2Snapshot: AdjudicationVerdictSnapshot[];
+  t1Snapshot: {
+    verdicts: AdjudicationVerdictSnapshot[];
+    openDisputes: AdjudicationDisputeSnapshot[];
+  };
+  /** The sources both panelists cited, de-duplicated. */
+  decisiveSources: unknown[];
+  convergence: AdjudicationConvergence;
+  recommendation: AdjudicationRecommendation | null;
+  createdAt: string;
+};
+
 export const adjudicationCases = pgTable(
   'adjudication_cases',
   {
@@ -2682,6 +2761,14 @@ export const adjudicationCases = pgTable(
     invalidatedReason: text('invalidated_reason'),
     /** When the detector last re-checked this case; the sweep rotates on it. */
     lastCheckedAt: timestamp('last_checked_at'),
+    /** The typed comparison of the two sealed opinions (0139). */
+    convergence: jsonb('convergence').$type<AdjudicationConvergence>(),
+    /** What a converged panel recommends; a recommendation only (0139). */
+    recommendation: jsonb('recommendation').$type<AdjudicationRecommendation>(),
+    /** A person must take the case (0139). */
+    t4Required: boolean('t4_required').notNull().default(false),
+    /** The T4 package for that person (0139). */
+    handoff: jsonb('handoff').$type<AdjudicationHandoff>(),
   },
   (t) => [
     // Permanent, not "while live": a target version is adjudicated at most once.
@@ -3187,7 +3274,10 @@ export type NotificationType =
   | 'comment_reply'
   | 'comment_on_contribution'
   | 'comment_in_thread'
-  | 'contribution_endorsed';
+  | 'contribution_endorsed'
+  // A T3 panel left a case for a person: it diverged, a panelist asked for a
+  // human, or a person's dispute is part of it (0139).
+  | 'adjudication_handoff';
 
 export type NotificationAudience = 'author' | 'reviewer';
 
