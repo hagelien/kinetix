@@ -264,15 +264,16 @@ jobs:
       # load_checks runs, so a check GitHub has not created yet is neither. It is
       # invisible, and a commit with no checks registered at all reads as green.
       #
-      # That is a live hole now that every pull request is opened as a draft
-      # (AGENTS.md, "Opening a pull request"). `unit-tests` and `migrations` are
+      # That is a live hole for any pull request that spends time as a draft
+      # (workers open theirs ready for review — AGENTS.md, "Opening a pull
+      # request" — but a human may still open one). `unit-tests` and `migrations` are
       # gated on `draft == false`, so the `ready_for_review` click is the first
       # time either runs — and it queues them and wakes this gate in the same
       # event. The Codex wait below used to cover that window by accident, but
-      # only ever runs when there is *no* verdict yet; under draft-by-default the
-      # review is obtained while the PR is still a draft, so the sign-off is
-      # already in hand at the ready transition, the wait is skipped, and the
-      # snapshot races the two suites it exists to enforce.
+      # only ever runs when there is *no* verdict yet; when the review was
+      # obtained while the PR was still a draft, the sign-off is already in
+      # hand at the ready transition, the wait is skipped, and the snapshot
+      # races the two suites it exists to enforce.
       #
       # `unit-tests` is the right sentinel because it is the one expensive
       # workflow with no `paths:` filter: it runs on every non-draft pull
