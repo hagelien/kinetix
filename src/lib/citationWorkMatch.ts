@@ -38,6 +38,8 @@ export interface WorkFingerprint {
   titleTokens: string[];
   /** Every number in the title, which must match exactly. */
   titleNumbers: string[];
+  /** Every recorded author's surname, folded like `surname`. */
+  authorSurnames: string[];
 }
 
 /**
@@ -108,7 +110,10 @@ export function workFingerprint(
   const titleTokens = titleTokensOf(title);
   if (titleTokens.length < MIN_TITLE_TOKENS) return null;
   const titleNumbers = titleTokens.filter((token) => /\d/.test(token)).sort();
-  return { surname, year, titleTokens, titleNumbers };
+  const authorSurnames = (metadata.authors ?? [])
+    .map(surnameOf)
+    .filter((name): name is string => name !== null);
+  return { surname, year, titleTokens, titleNumbers, authorSurnames };
 }
 
 function jaccard(a: ReadonlyArray<string>, b: ReadonlyArray<string>): number {
@@ -120,11 +125,69 @@ function jaccard(a: ReadonlyArray<string>, b: ReadonlyArray<string>): number {
   return union === 0 ? 0 : shared / union;
 }
 
+/** Length of the longest common subsequence of two token lists. */
+function commonSubsequenceLength(
+  a: ReadonlyArray<string>,
+  b: ReadonlyArray<string>,
+): number {
+  let previous = new Array<number>(b.length + 1).fill(0);
+  for (const token of a) {
+    const current = new Array<number>(b.length + 1).fill(0);
+    for (let j = 0; j < b.length; j += 1) {
+      current[j + 1] =
+        token === b[j]
+          ? previous[j]! + 1
+          : Math.max(previous[j + 1]!, current[j]!);
+    }
+    previous = current;
+  }
+  return previous[b.length]!;
+}
+
+/** How many tokens the two lists share, counting repeats. */
+function sharedTokenCount(
+  a: ReadonlyArray<string>,
+  b: ReadonlyArray<string>,
+): number {
+  const counts = new Map<string, number>();
+  for (const token of a) counts.set(token, (counts.get(token) ?? 0) + 1);
+  let shared = 0;
+  for (const token of b) {
+    const left = counts.get(token) ?? 0;
+    if (left > 0) {
+      shared += 1;
+      counts.set(token, left - 1);
+    }
+  }
+  return shared;
+}
+
+/**
+ * Same first author, same year, same title numbers, nearly the same title
+ * words — and the words they share in the same order. Word overlap alone is a
+ * bag of words: "Effect of ethanol on diazepam metabolism" and "Effect of
+ * diazepam on ethanol metabolism" share every word and describe opposite
+ * experiments. A rewording adds or drops words; it does not reorder them.
+ */
 export function isSameWork(a: WorkFingerprint, b: WorkFingerprint): boolean {
   if (a.surname !== b.surname || a.year !== b.year) return false;
   if (a.titleNumbers.join(' ') !== b.titleNumbers.join(' ')) return false;
-  return jaccard(a.titleTokens, b.titleTokens) >= TITLE_SIMILARITY_THRESHOLD;
+  if (jaccard(a.titleTokens, b.titleTokens) < TITLE_SIMILARITY_THRESHOLD) {
+    return false;
+  }
+  return (
+    commonSubsequenceLength(a.titleTokens, b.titleTokens) ===
+    sharedTokenCount(a.titleTokens, b.titleTokens)
+  );
 }
+
+/**
+ * "Surname AB." / "Surname A-B," — the way a reference names an author. Used
+ * to spot a second reference pasted after the first. Journal abbreviations
+ * ("Forensic Sci Int.", "Br J Clin Pharmacol.") and places ("Washington, DC")
+ * do not take this shape.
+ */
+const AUTHOR_NAME = /(\p{Lu}[\p{L}'’-]+) \p{Lu}(?:-?\p{Lu}){0,2}[.,]/gu;
 
 /**
  * Does a free-text row's own wording describe the record filed beside it?
@@ -136,8 +199,12 @@ export function isSameWork(a: WorkFingerprint, b: WorkFingerprint): boolean {
  * RC. Disposition of Toxic Drugs …" filed as Baselt). Such a row is left for a
  * person rather than merged either way.
  *
- * The text has to open with the first author or with the title, and contain
- * nearly every title word.
+ * The other way round is just as wrong: a record describing the *first* of two
+ * pasted references would carry the second paper's claims into it. So any
+ * author named in the text has to be one the record lists.
+ *
+ * The text has to open with the first author or with the title, contain
+ * nearly every title word, and name no author the record does not.
  */
 export function freetextMatchesRecord(
   identifier: string,
@@ -152,7 +219,13 @@ export function freetextMatchesRecord(
   const covered = fingerprint.titleTokens.filter((token) =>
     present.has(token),
   ).length;
-  return covered / fingerprint.titleTokens.length >= 0.9;
+  if (covered / fingerprint.titleTokens.length < 0.9) return false;
+  const recorded = new Set(fingerprint.authorSurnames);
+  for (const match of identifier.matchAll(AUTHOR_NAME)) {
+    const named = surnameOf(match[1]!);
+    if (named && !recorded.has(named)) return false;
+  }
+  return true;
 }
 
 export interface WorkMatchRow {
