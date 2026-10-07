@@ -31,7 +31,7 @@ import {
 } from '@/lib/referenceConcentrations';
 import { ROUTE_LABEL_KEYS } from '@/lib/routeLabels';
 import { UnitTooltip } from '@/components/ui/UnitTooltip';
-import { useEthanolScopeUnit } from '@/components/ui/DrugUnitScope';
+import { useDisplayUnits } from '@/components/ui/DrugUnitScope';
 import { getPreferredUnitDisplay } from '@/lib/unitTooltip';
 import type { RouteId } from '@/lib/kinetics-core';
 
@@ -41,7 +41,7 @@ interface Props {
   canEdit?: boolean;
   isAdmin?: boolean;
   onMutated?: () => void;
-  /** Lets a molar reading convert into the ethanol unit (‰, %). */
+  /** Lets a reading convert between mass and molar units. */
   molecularWeight?: number | null;
 }
 
@@ -56,8 +56,22 @@ export function formatCmaxValue(e: ParameterEntryRow): string {
 }
 
 /**
- * The same reading re-expressed in `targetUnit` — the reader's ethanol unit on
- * an ethanol monograph — keeping the "centre (low–high)" shape. Null when it
+ * The authored figures without their unit — "84 (70–98)", "< 5" — so a
+ * converted reading's tooltip keeps the source's own centre, not just its
+ * interval.
+ */
+export function formatCmaxFigures(e: ParameterEntryRow): string | null {
+  const centre = e.doseContext?.centralValue ?? e.median ?? null;
+  if (e.qualifier && centre != null) return `${e.qualifier} ${centre}`;
+  const bounds = e.low != null && e.high != null ? `${e.low}–${e.high}` : null;
+  if (centre != null) return bounds ? `${centre} (${bounds})` : `${centre}`;
+  return bounds;
+}
+
+/**
+ * The same reading re-expressed in `targetUnit` — the reader's primary display
+ * unit (their ethanol unit on an ethanol monograph) — keeping the
+ * "centre (low–high)" shape. Null when it
  * stays as authored: no target, a per-dose unit, or a molar reading with no
  * molecular weight to convert through.
  */
@@ -180,9 +194,10 @@ export function CmaxSection({
   molecularWeight = null,
 }: Props) {
   const { t } = useTranslation();
-  // Readings are listed as authored, except on ethanol, which follows the
-  // reader's ethanol unit like every other ethanol concentration on the page.
-  const ethanolUnit = useEthanolScopeUnit();
+  // Readings follow the reader's primary display unit like every other
+  // concentration on the page (their ethanol unit on ethanol); the authored
+  // figures stay in the hover tooltip.
+  const displayUnit = useDisplayUnits()[0] ?? null;
   const [entries, setEntries] = useState<ParameterEntryRow[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -432,7 +447,7 @@ export function CmaxSection({
                 <div className="flex items-start justify-between gap-2">
                   <span>
                     <span className="font-medium">
-                      <CmaxReading entry={e} targetUnit={ethanolUnit} molecularWeight={molecularWeight} />
+                      <CmaxReading entry={e} targetUnit={displayUnit} molecularWeight={molecularWeight} />
                     </span>
                     {mode === 'normalized' && outcomes.has(e.id) && (
                       <NormalizedValue outcome={outcomes.get(e.id)!} />
@@ -522,6 +537,7 @@ function CmaxReading({
       high={entry.high}
       unit={targetUnit}
       sourceUnit={entry.unit}
+      sourceFormatted={formatCmaxFigures(entry)}
       molecularWeight={molecularWeight}
     >
       {converted}
