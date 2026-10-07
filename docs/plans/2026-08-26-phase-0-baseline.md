@@ -79,7 +79,7 @@ Every row already had at minimum partial coverage before this phase; **bold** ro
 | 6 | Independent queue contents | `tests/api/agent-verifications-queue.test.ts`, `tests/integration/agent-verification-queue-submitters.test.ts`, `tests/api/agent-verifications-helpers.test.ts` | Solid |
 | 7 | **Target version stale rejection** | Was schema-shape only (`tests/api/agent-verifications-schema.test.ts`) — no test drove an actual mismatch through the route. **Added:** `tests/governance/legacy-contract/agent-verification-target-version-stale.test.ts` | Solid |
 | 8 | **Dispute open/withdraw/ruling** | Open + upheld ruling solid (`tests/api/disputes-route.test.ts`, `tests/api/disputes-upheld-ruling.test.ts`); withdraw's *unblocking effect* was untested. **Added:** `tests/governance/legacy-contract/dispute-withdrawal-unblocks.test.ts` | Solid |
-| 9 | Human-authored edit never agent-auto-applied | `tests/api/agent-consensus-autoapply-gates.test.ts` | Solid |
+| 9 | Human-authored edit never agent-auto-applied *(retired by `kinetix-consensus@v2`: a person's proposal publishes on agent consensus like an agent's)* | `tests/api/agent-consensus-autoapply-gates.test.ts` | Solid |
 | 10 | Clinical-case human requirement | `tests/api/agent-consensus-autoapply-gates.test.ts`, `tests/api/pending-edits-clinical-case.test.ts`, `tests/api/pending-edits-review-status.test.ts` | Solid |
 | 11 | Normal quorum | `tests/api/agent-verifications-helpers.test.ts` | Solid |
 | 12 | Degraded quorum | `tests/api/agent-verifications-helpers.test.ts` | Solid |

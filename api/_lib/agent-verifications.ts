@@ -1308,11 +1308,10 @@ export async function countActiveVerifierAgents(): Promise<number> {
  * `active`, contributor+ backing-user role — the same gate
  * `resolveActiveAgent` and `countActiveVerifierAgents` apply).
  *
- * Used by the consensus auto-apply path to keep the read/apply asymmetry the
- * peer-verification protocol specifies: agents peer-verify *every* pending
- * edit, human-submitted ones included, but only an agent-submitted edit can be
- * published by agent consensus. A human's proposal always waits for a human
- * moderator, however many agents approved it.
+ * Used by the consensus path to size the quorum: an active agent author holds
+ * a seat in the pool (counted only under self-review), while a person holds
+ * none, so every active agent is an eligible verifier on their proposal. Both
+ * publish on agent consensus under the same bar (kinetix-consensus@v2).
  */
 export async function isActiveAgentUser(userId: number): Promise<boolean> {
   const db = getDb();
@@ -1740,6 +1739,126 @@ export async function pendingEditTargetOpenToAgents(pending: {
     .where(eq(wikiPages.id, pending.targetId))
     .limit(1);
   return page?.status === 'published';
+}
+
+export interface SourceCheckedPendingEdit {
+  proposedMeta: unknown;
+  proposedValue: unknown;
+  referenceIds: number[] | null;
+  referenceId: number | null;
+}
+
+/**
+ * What an ingested fact's unread-sources hold has to examine. Null for any
+ * edit conversation ingestion did not stage for a full-text check — the
+ * `proposedMeta.unverifiedReferenceIds` marker is what says it did. For one
+ * that carries it, every reference the edit cites NOW: its reference columns
+ * and the fact node's own `referenceIds`. Not the frozen marker alone — a
+ * source reviewed at ingestion can lose its read-in-full attestation since,
+ * and a revision can add one nobody has read — and not a marked paper a
+ * revision has since dropped, which no longer backs the claim (the review
+ * card names the same set: `WikiFactDiff` intersects the marker with the
+ * references still on the proposal).
+ */
+function sourceCheckSetOf(pending: SourceCheckedPendingEdit): number[] | null {
+  const listed = (pending.proposedMeta as { unverifiedReferenceIds?: unknown } | null)
+    ?.unverifiedReferenceIds;
+  if (!Array.isArray(listed)) return null;
+  const nodeIds = (pending.proposedValue as { attrs?: { referenceIds?: unknown } } | null)
+    ?.attrs?.referenceIds;
+  const candidates: unknown[] = [
+    ...(pending.referenceIds ?? []),
+    pending.referenceId,
+    ...(Array.isArray(nodeIds) ? nodeIds : []),
+  ];
+  return [
+    ...new Set(
+      candidates.filter((n): n is number => Number.isInteger(n) && (n as number) > 0),
+    ),
+  ].sort((a, b) => a - b);
+}
+
+/**
+ * Lock the review evidence {@link pendingEditCitesUnreadSources} reads, for
+ * the rest of the apply transaction, so its re-check serializes with that
+ * evidence going away: a pending `paper_review` being withdrawn or rejected,
+ * or a live review losing its read-in-full attestation (the PDF-replacement
+ * path flips it off). A plain read could see the old qualifying state while
+ * that change is in flight, and the fact would then publish on a paper nobody
+ * has read by the time it commits.
+ *
+ * FOR SHARE: the apply never writes these rows, and the changes that matter
+ * are updates, which this mode blocks. Pending review rows before
+ * `paper_reviews`, the order a review approval writes them, so the two cannot
+ * deadlock. A review that appears meanwhile only adds evidence. No-op for an
+ * edit ingestion did not mark.
+ */
+export async function lockPendingEditSourceReviews(
+  pending: SourceCheckedPendingEdit,
+): Promise<void> {
+  const ids = sourceCheckSetOf(pending);
+  if (!ids || ids.length === 0) return;
+  const db = getDb();
+  await db
+    .select({ id: pendingEdits.id })
+    .from(pendingEdits)
+    .where(
+      and(
+        eq(pendingEdits.editType, 'paper_review'),
+        eq(pendingEdits.status, 'pending'),
+        inArray(pendingEdits.targetId, ids),
+      ),
+    )
+    .orderBy(asc(pendingEdits.id))
+    .for('share');
+  await db
+    .select({ id: paperReviews.id })
+    .from(paperReviews)
+    .where(inArray(paperReviews.citationId, ids))
+    .orderBy(asc(paperReviews.id))
+    .for('share');
+}
+
+/**
+ * True when a conversation-ingestion proposal cites a paper nobody has read
+ * in full. Ingestion stages such a fact as `pending` precisely so someone does
+ * the full-text check the assistant could not, marking it with
+ * `proposedMeta.unverifiedReferenceIds`. Agent verifiers judge the claim, not
+ * whether the paper was read, so their approvals alone must not publish it.
+ * The hold lifts once every paper the edit cites now (see
+ * `sourceCheckSetOf`) carries a read-in-full review — a live one, or a
+ * pending submission that attests it, the same evidence the agent reference
+ * gate accepts — or when a moderator approves the edit. A reference that
+ * cannot be reviewed at all (a missing or `freetext` citation) keeps the
+ * hold: only a person can clear it. Checked by both engines.
+ */
+export async function pendingEditCitesUnreadSources(
+  pending: SourceCheckedPendingEdit,
+): Promise<boolean> {
+  const ids = sourceCheckSetOf(pending);
+  if (!ids || ids.length === 0) return false;
+
+  const db = getDb();
+  const live = await db
+    .select({ citationId: paperReviews.citationId })
+    .from(paperReviews)
+    .where(and(inArray(paperReviews.citationId, ids), eq(paperReviews.readInFull, true)));
+  const pendingReviews = await db
+    .select({ targetId: pendingEdits.targetId, proposedValue: pendingEdits.proposedValue })
+    .from(pendingEdits)
+    .where(
+      and(
+        eq(pendingEdits.editType, 'paper_review'),
+        eq(pendingEdits.status, 'pending'),
+        inArray(pendingEdits.targetId, ids),
+      ),
+    );
+  const read = new Set<number>(live.map((r) => r.citationId));
+  for (const row of pendingReviews) {
+    const pv = row.proposedValue as { readInFull?: unknown } | null;
+    if (row.targetId != null && pv?.readInFull === true) read.add(row.targetId);
+  }
+  return ids.some((id) => !read.has(id));
 }
 
 /**

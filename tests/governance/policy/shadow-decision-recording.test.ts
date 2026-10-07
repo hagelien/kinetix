@@ -172,13 +172,16 @@ describe('collectConsensusFacts', () => {
     expect(evaluateShadowPolicy(facts!).reasons).toContain('disputes.none');
   });
 
-  it('marks a human submitter as not an agent', async () => {
+  it('marks a human submitter as not an agent, held on the tally alone', async () => {
+    // A person's proposal publishes on agent consensus under the same bar as
+    // an agent's (kinetix-consensus-apply@v3): it waits on approvals, not on
+    // a human approval.
     const world = await seedWorld({ humanAuthor: true });
     const facts = await collectConsensusFacts(world.editId);
     expect(facts!.submitterIsAgent).toBe(false);
-    expect(evaluateShadowPolicy(facts!).reasons).toContain(
-      'assurance.humanApproval',
-    );
+    const reasons = evaluateShadowPolicy(facts!).reasons;
+    expect(reasons).not.toContain('assurance.humanApproval');
+    expect(reasons).toContain('assurance.independentApprovals.pool');
   });
 
   it('returns null for an edit that does not exist', async () => {
@@ -234,8 +237,9 @@ describe('recordShadowDecision', () => {
     // Hardcoded rather than read from the constant on purpose: this test
     // exists to prove a decision names the version it was made under, and
     // comparing the constant against itself would prove nothing. It moves when
-    // the apply policy's rules move — v2 added `unquoted-calculation-driving`.
-    expect(decision!.policyVersion).toBe('v2');
+    // the apply policy's rules move — v2 added `unquoted-calculation-driving`,
+    // v3 retired `human-authored` and added `unattributed`.
+    expect(decision!.policyVersion).toBe('v3');
   });
 
   it('records the decision that would apply once the quorum is met', async () => {

@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// The two things agent consensus must never publish on its own, however clean
-// the tally: a clinical_case (safety-critical, spec §12 Stage 12 — a human
-// expert moderator always signs it off) and anything a human submitted (agents
-// verify human proposals, but approving one is a moderator's call). A
+// What agent consensus must never publish on its own, however clean the tally:
+// a clinical_case (safety-critical, spec §12 Stage 12 — a human expert
+// moderator always signs it off) and a proposal with no recorded author. A
+// person's proposal publishes like an agent's since kinetix-consensus@v2. A
 // learning_unit from an agent in the same state still auto-applies. We drive
 // applyOnAgentConsensus directly with its DB/consensus dependencies mocked.
 
@@ -71,7 +71,7 @@ vi.mock('../../api/_lib/agent-verifications.js', async (importActual) => {
   };
 });
 
-import { applyOnAgentConsensus } from '../../api/agent-verifications.ts';
+import { applyOnAgentConsensus, runAgentConsensus } from '../../api/agent-verifications.ts';
 import { PendingEditReviewTokenMismatchError } from '../../api/_lib/pending-edits-helpers.js';
 
 // A `param_entry` create payload carrying a verbatim source quote. Every
@@ -171,17 +171,63 @@ describe('applyOnAgentConsensus — human-only gates', () => {
     expect(applyApprovedEditMock).not.toHaveBeenCalled();
   });
 
-  // A human contributor's proposal is peer-verified like any other (it is in
-  // the agents' queue), but agent consensus must never publish it: that call
-  // belongs to a human moderator. Regression guard for the read/apply
-  // asymmetry introduced when the queue stopped filtering by submitter.
-  it('does NOT auto-apply a human-submitted edit at quorum with no dispute', async () => {
+  // A person's proposal publishes on agent consensus under the same bar as an
+  // agent's: people are needed where the agents cannot settle something, not
+  // to countersign what they all verified.
+  it('auto-applies a human-submitted edit at quorum with no dispute', async () => {
     getDbMock.mockReturnValue(dbReturningEdit('wiki_fact', HUMAN_USER_ID));
     const applied = await applyOnAgentConsensus({
       pendingEditId: 1,
       approverUserId: 7,
     });
-    expect(applied).toBe(false);
+    expect(applied).toBe(true);
+    expect(applyApprovedEditMock).toHaveBeenCalled();
+  });
+
+  it('holds a human-submitted edit that a person disputes', async () => {
+    getDbMock.mockReturnValue(dbReturningEdit('wiki_fact', HUMAN_USER_ID));
+    hasOpenDisputeMock.mockResolvedValue(true);
+    const outcome = await runAgentConsensus({ pendingEditId: 1, approverUserId: 7 });
+    expect(outcome).toMatchObject({ outcome: 'held', reason: 'open_dispute' });
+    expect(applyApprovedEditMock).not.toHaveBeenCalled();
+  });
+
+  // Every active agent may verify a person's proposal (the author holds no
+  // seat in the pool), so with three active agents the bar is the full two.
+  it('needs the full quorum for a human-submitted edit', async () => {
+    getDbMock.mockReturnValue(dbReturningEdit('wiki_fact', HUMAN_USER_ID));
+    summariseMock.mockReturnValue(new Map([[1, { approveCount: 1, disputeCount: 0 }]]));
+    const outcome = await runAgentConsensus({ pendingEditId: 1, approverUserId: 7 });
+    expect(outcome).toMatchObject({ outcome: 'held', reason: 'quorum_unmet' });
+  });
+
+  // The pool arithmetic treats a person like a self-reviewing author, but the
+  // degraded-quorum warning must not tell the operator the author's own
+  // verdict carried the edit: a person holds no seat.
+  it('names the agent approval, not the author, in a degraded human-edit warning', async () => {
+    getDbMock.mockReturnValue(dbReturningEdit('wiki_fact', HUMAN_USER_ID));
+    countActiveMock.mockResolvedValue(1);
+    summariseMock.mockReturnValue(new Map([[1, { approveCount: 1, disputeCount: 0 }]]));
+    // Past the warning throttle, whatever an earlier case logged.
+    const now = vi.spyOn(Date, 'now').mockReturnValue(Number.MAX_SAFE_INTEGER);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await runAgentConsensus({ pendingEditId: 1, approverUserId: 7 });
+      const logged = warn.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(logged).toContain("A person's proposal");
+      expect(logged).not.toContain('self_review_enabled');
+    } finally {
+      warn.mockRestore();
+      now.mockRestore();
+    }
+  });
+
+  // Nobody can be told about a decision on a proposal with no recorded
+  // author, so that one stays with a moderator.
+  it('does NOT auto-apply an edit with no recorded author', async () => {
+    getDbMock.mockReturnValue(dbReturningEdit('wiki_fact', null as unknown as number));
+    const outcome = await runAgentConsensus({ pendingEditId: 1, approverUserId: 7 });
+    expect(outcome).toMatchObject({ outcome: 'held', reason: 'human_submitted' });
     expect(applyApprovedEditMock).not.toHaveBeenCalled();
   });
 
@@ -304,16 +350,15 @@ describe('applyOnAgentConsensus — human-only gates', () => {
     expect(isSelfReviewAgentUserMock).toHaveBeenCalled();
   });
 
-  // The flag is about the agent's OWN work. A human's edit is never published
-  // by consensus, whatever the author flag or the tally says.
-  it('never auto-applies a human edit even with self-review on', async () => {
+  // The flag is about the agent's OWN work; a person holds no seat in the
+  // agent pool, so their edit needs the full quorum whatever the flag says.
+  it('a human edit is not eased by the self-review flag', async () => {
     isSelfReviewAgentUserMock.mockResolvedValue(true);
+    countActiveMock.mockResolvedValue(2);
+    summariseMock.mockReturnValue(new Map([[1, { approveCount: 1, disputeCount: 0 }]]));
     getDbMock.mockReturnValue(dbReturningEdit('wiki_fact', HUMAN_USER_ID));
-    const applied = await applyOnAgentConsensus({
-      pendingEditId: 1,
-      approverUserId: 7,
-    });
-    expect(applied).toBe(false);
+    const outcome = await runAgentConsensus({ pendingEditId: 1, approverUserId: 7 });
+    expect(outcome).toMatchObject({ outcome: 'held', reason: 'quorum_unmet' });
     expect(applyApprovedEditMock).not.toHaveBeenCalled();
   });
 });

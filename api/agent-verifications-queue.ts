@@ -1325,10 +1325,9 @@ export function abstainedByAgentBefore(
 // moderator queue untouched until a human moderator happened to look (#1006
 // follow-up — two wiki_fact proposals sat a week with zero agent activity).
 // Human-submitted edits are now queued for peer verification like any other.
-// The asymmetry that remains is on the *apply* side, not the read side:
-// `applyOnAgentConsensus` refuses to auto-apply an edit whose submitter is not
-// an active agent, so agent verdicts on human work inform the moderator (a
-// dispute floats it, approvals corroborate it) but never publish it.
+// Since kinetix-consensus@v2 there is no asymmetry left on the apply side
+// either: agent verdicts on a person's proposal publish it at quorum exactly
+// as they would an agent's, and a dispute holds it.
 /**
  * SQL filter that drops pending_edit rows whose proposedValue references
  * unpublished wiki content: wiki_new (always pre-publication) and

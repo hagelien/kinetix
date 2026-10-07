@@ -226,7 +226,7 @@ Current important behavior:
 - degraded quorum can be permitted when the active pool is too small for ordinary edits;
 - calculation-driving edits require the full design quorum and a flagship-tier verifier;
 - an unclassified verifier does not satisfy the flagship requirement;
-- human-authored proposals are peer-reviewed but never agent-consensus auto-published;
+- ~~human-authored proposals are peer-reviewed but never agent-consensus auto-published~~ (retired by `kinetix-consensus@v2` / `kinetix-consensus-apply@v3`: a person's proposal now publishes on agent consensus under the same bar as an agent's; only an unattributed proposal still needs a person);
 - clinical cases always require a human expert.
 
 These are excellent examples of host policy, but the pharmacology-specific predicates do not belong in the generic core.
@@ -1313,7 +1313,7 @@ Each phase below should normally be one or several focused PRs. Do not combine s
    - `isHighRiskPendingEdit`;
    - self-review;
    - dispute blocking;
-   - human edit non-auto-apply;
+   - ~~human edit non-auto-apply~~ → human edit held to an agent's bar; unattributed edit non-auto-apply (v2);
    - `applyApprovedEdit` invariants;
    - reference gates;
    - stale review/apply races.
@@ -1324,7 +1324,7 @@ Each phase below should normally be one or several focused PRs. Do not combine s
 
 - every safety-significant branch above has at least one test;
 - tests fail if high-risk degraded quorum is accidentally allowed;
-- tests fail if human proposals can auto-publish through agent consensus;
+- ~~tests fail if human proposals can auto-publish through agent consensus~~ → tests fail if an unattributed proposal can auto-publish through agent consensus, or if authorship changes the bar a person's proposal is held to (v2);
 - tests fail if peer-review responses expose peer verdicts;
 - tests fail if stale content can be approved.
 
@@ -1482,7 +1482,7 @@ open-dispute mismatch              critical
 
 - no unexplained critical divergence over a representative sample;
 - Kinetix high-risk cases reproduce current flagship and full-quorum rules;
-- human-authored edits always generic-hold for human decision;
+- ~~human-authored edits always generic-hold for human decision~~ → unattributed edits always generic-hold for human decision; a person's proposal is held to an agent's bar (v2);
 - clinical cases always generic-hold for human expert decision.
 
 ---
@@ -1883,7 +1883,8 @@ agent proposal -> two peer approvals -> auto apply
 agent high-risk proposal -> two mid approvals -> hold
 agent high-risk proposal -> mid + flagship -> apply
 high-risk degraded pool -> flagship single approval -> hold
-human proposal -> many agent approvals -> hold for human
+human proposal -> independent agent quorum -> auto apply (since kinetix-consensus@v2)
+unattributed proposal -> many agent approvals -> hold for human
 proposal -> dispute -> approvals -> hold
 proposal -> dispute overruled -> policy re-evaluate
 clinical case -> agent quorum -> hold for human expert
@@ -2252,7 +2253,7 @@ The project is complete when all of the following are true:
 5. Every dispute has durable event history.
 6. Every automatic application has a persisted policy decision explaining why it was allowed.
 7. Every authoritative revision created through governance links back to its proposal version and decision.
-8. Human-authored content cannot be auto-published by agent consensus unless Kinetix deliberately changes that policy in a separately reviewed change.
+8. Human-authored content cannot be auto-published by agent consensus unless Kinetix deliberately changes that policy in a separately reviewed change. **Kinetix made that change in `kinetix-consensus@v2` / `kinetix-consensus-apply@v3`:** a person's proposal publishes on agent consensus under the same bar as an agent's, and only an unattributed proposal still needs a person.
 9. Clinical cases cannot auto-publish without required human expert review.
 10. Calculation-driving parameter edits cannot auto-publish under degraded quorum and require the configured flagship/high-assurance verifier capability.
 11. Client-reported model names cannot influence authorization or high-risk capability gates.

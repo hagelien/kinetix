@@ -28,7 +28,9 @@ import { eq } from 'drizzle-orm';
 import {
   agentVerifications,
   agents,
+  citations,
   disputes,
+  paperReviews,
   pendingEdits,
   wikiPages,
 } from '../../db/schema.js';
@@ -348,8 +350,9 @@ describe('agent consensus hold, re-stamp and retry', () => {
       username: 'human',
       role: 'contributor',
     });
-    // Three permanently held edits, all older than the one that can publish.
-    const humanEdit = await seedHighRiskEdit(human);
+    // Permanently held edits, all older than the one that can publish: a
+    // clinical case, and one a person disputes. (A person's own proposal is no
+    // longer one of them; see the next test.)
     const clinical = await seedHighRiskEdit(author.userId);
     await db
       .update(pendingEdits)
@@ -363,7 +366,7 @@ describe('agent consensus hold, re-stamp and retry', () => {
       reasonMd: 'Verdien stemmer ikke med kilden.',
     });
     const eligible = await seedHighRiskEdit(author.userId);
-    for (const id of [humanEdit, clinical, humanDisputed, eligible]) {
+    for (const id of [clinical, humanDisputed, eligible]) {
       await approve(b.agentId, id);
       await approve(c.agentId, id);
     }
@@ -371,6 +374,91 @@ describe('agent consensus hold, re-stamp and retry', () => {
     // With a window of one, the eligible edit is still the one retried.
     const results = await sweepAgentConsensus(1);
     expect(results.map((r) => r.pendingEditId)).toEqual([eligible]);
+  });
+
+  it('keeps a proposal with no metadata and an unreviewed citation in the sweep window', async () => {
+    // Only an ingested fact is held for unread sources; an ordinary proposal
+    // with no `proposed_meta` at all must not fall out of the filter on a NULL.
+    const author = await seedAgent('author');
+    const b = await seedAgent('b');
+    const c = await seedAgent('c');
+    const [paper] = await db
+      .insert(citations)
+      .values({ type: 'pmid', identifier: '12345678' })
+      .returning({ id: citations.id });
+    const id = await seedHighRiskEdit(author.userId);
+    await db
+      .update(pendingEdits)
+      .set({ proposedMeta: null, referenceIds: [paper!.id], referenceId: paper!.id })
+      .where(eq(pendingEdits.id, id));
+    await approve(b.agentId, id);
+    await approve(c.agentId, id);
+
+    const results = await sweepAgentConsensus(1);
+    expect(results.map((r) => r.pendingEditId)).toEqual([id]);
+  });
+
+  it('keeps a returned, unrevised proposal out of the sweep window', async () => {
+    // A comment-only return keeps the approvals; resubmitted unchanged, the
+    // row sits at quorum and holds as `returned_unrevised` on every retry.
+    const author = await seedAgent('author');
+    const b = await seedAgent('b');
+    const c = await seedAgent('c');
+    const returned = await seedHighRiskEdit(author.userId);
+    await db
+      .update(pendingEdits)
+      .set({ proposedMeta: { returnedAt: '2026-10-06T10:00:00.000Z' } })
+      .where(eq(pendingEdits.id, returned));
+    // Revised before the return: the return still stands.
+    const revisedEarlier = await seedHighRiskEdit(author.userId);
+    await db
+      .update(pendingEdits)
+      .set({
+        proposedMeta: {
+          revisedAt: '2026-10-06T09:00:00.000Z',
+          returnedAt: '2026-10-06T10:00:00.000Z',
+        },
+      })
+      .where(eq(pendingEdits.id, revisedEarlier));
+    // Revised after it: eligible again.
+    const revisedSince = await seedHighRiskEdit(author.userId);
+    await db
+      .update(pendingEdits)
+      .set({
+        proposedMeta: {
+          returnedAt: '2026-10-06T10:00:00.000Z',
+          revisedAt: '2026-10-06T11:00:00.000Z',
+        },
+      })
+      .where(eq(pendingEdits.id, revisedSince));
+    for (const id of [returned, revisedEarlier, revisedSince]) {
+      await approve(b.agentId, id);
+      await approve(c.agentId, id);
+    }
+
+    const results = await sweepAgentConsensus(1);
+    expect(results.map((r) => r.pendingEditId)).toEqual([revisedSince]);
+  });
+
+  it("retries a person's proposal like an agent's", async () => {
+    await seedAgent('b');
+    const b = await seedAgent('b2');
+    const c = await seedAgent('c');
+    const human = await seedUser(db, {
+      email: 'person@example.com',
+      username: 'person',
+      role: 'contributor',
+    });
+    const edit = await seedHighRiskEdit(human);
+    await approve(b.agentId, edit, { tier: 'flagship' });
+    await approve(c.agentId, edit);
+
+    // Picked up by the sweep and through every consensus gate: it reaches the
+    // write. (The seed payload is the minimal shape the other cases use, which
+    // the entry write itself refuses — that refusal is the write's, not a hold.)
+    const results = await sweepAgentConsensus();
+    const mine = results.find((r) => r.pendingEditId === edit);
+    expect(mine).toMatchObject({ outcome: 'held', reason: 'apply_failed' });
   });
 
   it('keeps a permanently sub-quorum tally from occupying the sweep window (#1367)', async () => {
@@ -437,6 +525,124 @@ describe('agent consensus hold, re-stamp and retry', () => {
       .from(pendingEdits)
       .where(eq(pendingEdits.id, stuck));
     expect(stuckAfter!.status).toBe('pending');
+  });
+
+  it("keeps a person's unquoted calculation-driving proposal out of the sweep window", async () => {
+    // It can never publish on consensus (no quote), and unlike an agent's it is
+    // not returned; left in the window, older rows like it would hold every
+    // slot on source_quote_missing.
+    const author = await seedAgent('author');
+    const b = await seedAgent('b');
+    const c = await seedAgent('c');
+    const human = await seedUser(db, {
+      email: 'person@example.com',
+      username: 'person',
+      role: 'contributor',
+    });
+    const unquoted = await seedHighRiskEdit(human);
+    await db
+      .update(pendingEdits)
+      .set({ proposedValue: { op: 'create', input: { value: 0.35 } } as never })
+      .where(eq(pendingEdits.id, unquoted));
+    await approve(b.agentId, unquoted, { tier: 'flagship' });
+    await approve(c.agentId, unquoted);
+    await new Promise((r) => setTimeout(r, 5));
+    const eligible = await seedHighRiskEdit(author.userId);
+    await approve(b.agentId, eligible, { tier: 'flagship' });
+    await approve(c.agentId, eligible);
+
+    const results = await sweepAgentConsensus(1);
+    expect(results.map((r) => r.pendingEditId)).toEqual([eligible]);
+  });
+
+  it("keeps a person's calculation-driving entry update out of the sweep window, quote or not", async () => {
+    // Whether an update keeps a quote is decided by the write against the
+    // stored row (an echoed or inherited quote can be cleared when the reading
+    // moves); the window filter cannot evaluate that in bulk, and a person's
+    // held update is not returned, so it is left out.
+    const author = await seedAgent('author');
+    const b = await seedAgent('b');
+    const c = await seedAgent('c');
+    const human = await seedUser(db, {
+      email: 'person@example.com',
+      username: 'person',
+      role: 'contributor',
+    });
+    const update = await seedHighRiskEdit(human);
+    await db
+      .update(pendingEdits)
+      .set({
+        proposedValue: {
+          op: 'update',
+          patch: { value: 0.4, quote: 'An echoed sentence the write may clear.' },
+        } as never,
+      })
+      .where(eq(pendingEdits.id, update));
+    await approve(b.agentId, update, { tier: 'flagship' });
+    await approve(c.agentId, update);
+    await new Promise((r) => setTimeout(r, 5));
+    const eligible = await seedHighRiskEdit(author.userId);
+    await approve(b.agentId, eligible, { tier: 'flagship' });
+    await approve(c.agentId, eligible);
+
+    const results = await sweepAgentConsensus(1);
+    expect(results.map((r) => r.pendingEditId)).toEqual([eligible]);
+  });
+
+  it("holds a person's proposal to the pool's full quorum when filtering the sweep window", async () => {
+    // Two active agents: an agent author's floor is 1 (its one peer), but a
+    // person's proposal has both agents eligible, so its quorum is 2. A human
+    // row at one approval can never publish without a new verdict, and must
+    // not occupy the window.
+    const author = await seedAgent('author');
+    const b = await seedAgent('b');
+    const human = await seedUser(db, {
+      email: 'person@example.com',
+      username: 'person',
+      role: 'contributor',
+    });
+    const [page] = await db
+      .insert(wikiPages)
+      .values({
+        slug: 'diazepam',
+        title: 'Diazepam',
+        pageType: 'drug_monograph',
+        content: { version: 2, sections: { pk: { body: { type: 'doc', content: [] } } } },
+        status: 'published',
+        createdBy: author.userId,
+        updatedBy: author.userId,
+      })
+      .returning({ id: wikiPages.id });
+    async function seedWikiFactEdit(submittedBy: number, factId: string, statement: string) {
+      const [edit] = await db
+        .insert(pendingEdits)
+        .values({
+          editType: 'wiki_fact',
+          targetId: page!.id,
+          sectionId: 'pk',
+          factOperation: 'add',
+          factStatement: statement,
+          proposedValue: {
+            type: 'fact',
+            attrs: { factId, referenceIds: [] },
+            content: [{ type: 'text', text: statement }],
+          },
+          submittedBy,
+          status: 'pending',
+        })
+        .returning({ id: pendingEdits.id });
+      return edit!.id;
+    }
+
+    const stuck = await seedWikiFactEdit(human, 'f-1', 'Halveringstiden er 20–100 timer.');
+    await approve(b.agentId, stuck);
+    await new Promise((r) => setTimeout(r, 5));
+    // An agent's proposal at its (relaxed) quorum of one.
+    const ready = await seedWikiFactEdit(author.userId, 'f-2', 'Distribusjonsvolumet er ca. 1 L/kg.');
+    await approve(b.agentId, ready);
+
+    const results = await sweepAgentConsensus(1);
+    expect(results.map((r) => r.pendingEditId)).toEqual([ready]);
   });
 
   it("counts only approvals the gate counts when filtering the sweep window (issue 1398)", async () => {
@@ -1176,6 +1382,223 @@ describe('agent consensus hold, re-stamp and retry', () => {
       .from(pendingEdits)
       .where(eq(pendingEdits.id, edit!.id));
     expect(held!.status).toBe('pending');
+  });
+
+  it('holds an ingested fact citing an unread paper until that paper is read in full', async () => {
+    // Conversation ingestion stages a fact whose papers nobody read in full as
+    // a pending proposal, naming them in `unverifiedReferenceIds`, so the
+    // full-text check happens before it publishes. Agents verifying the claim
+    // do not perform that check, so their quorum alone must not publish it.
+    const admin = await seedUser(db, {
+      email: 'admin@example.com',
+      username: 'admin',
+      role: 'admin',
+    });
+    const peerA = await seedAgent('peer-a');
+    const peerB = await seedAgent('peer-b');
+    const [page] = await db
+      .insert(wikiPages)
+      .values({
+        slug: 'diazepam',
+        title: 'Diazepam',
+        pageType: 'drug_monograph',
+        content: {
+          version: 2,
+          sections: { pk: { body: { type: 'doc', content: [] } } },
+        },
+        status: 'published',
+        createdBy: admin,
+        updatedBy: admin,
+      })
+      .returning({ id: wikiPages.id });
+    const [paper] = await db
+      .insert(citations)
+      .values({ type: 'pmid', identifier: '12345678' })
+      .returning({ id: citations.id });
+    // A second source the fact cites, read in full at ingestion and so not
+    // marked.
+    const [readPaper] = await db
+      .insert(citations)
+      .values({ type: 'pmid', identifier: '87654321' })
+      .returning({ id: citations.id });
+    await db.insert(paperReviews).values({
+      citationId: readPaper!.id,
+      reviewMarkdown: 'Read in full at ingestion.',
+      readInFull: true,
+      createdBy: admin,
+    });
+    const [edit] = await db
+      .insert(pendingEdits)
+      .values({
+        editType: 'wiki_fact',
+        targetId: page!.id,
+        sectionId: 'pk',
+        factOperation: 'add',
+        factStatement: 'Halveringstiden er 20–100 timer.',
+        proposedValue: {
+          type: 'fact',
+          attrs: { factId: 'f-1', referenceIds: [paper!.id, readPaper!.id] },
+          content: [{ type: 'text', text: 'Halveringstiden er 20–100 timer.' }],
+        },
+        proposedMeta: {
+          source: 'conversation_ingestion',
+          unverifiedSourceKeys: ['S1'],
+          unverifiedReferenceIds: [paper!.id],
+        },
+        referenceIds: [paper!.id, readPaper!.id],
+        referenceId: paper!.id,
+        submittedBy: admin,
+        status: 'pending',
+      })
+      .returning({ id: pendingEdits.id });
+    await approve(peerA.agentId, edit!.id);
+    await approve(peerB.agentId, edit!.id);
+
+    // Out of the sweep window, and held however it is reached.
+    expect(await sweepAgentConsensus()).toEqual([]);
+    expect(
+      await runAgentConsensus({
+        pendingEditId: edit!.id,
+        approverUserId: peerA.userId,
+      }),
+    ).toEqual({ outcome: 'held', reason: 'unverified_sources' });
+    expect(await agentConsensusStatus(edit!.id)).toMatchObject({
+      ready: false,
+      reason: 'unverified_sources',
+    });
+    expect((await collectConsensusFacts(edit!.id))?.disputeHoldCause).toBe(
+      'unverified_sources',
+    );
+    // An abstract-only review does not lift it.
+    await db.insert(paperReviews).values({
+      citationId: paper!.id,
+      reviewMarkdown: 'Abstract only.',
+      readInFull: false,
+      createdBy: peerA.userId,
+    });
+    expect(await sweepAgentConsensus()).toEqual([]);
+
+    await db
+      .update(paperReviews)
+      .set({ readInFull: true, reviewMarkdown: 'Read in full.' })
+      .where(eq(paperReviews.citationId, paper!.id));
+
+    // Every source the fact cites now counts, not only the marked one: a
+    // source read at ingestion that has since lost its attestation (a PDF
+    // replacement flips it off) holds the fact too.
+    await db
+      .update(paperReviews)
+      .set({ readInFull: false })
+      .where(eq(paperReviews.citationId, readPaper!.id));
+    expect(await sweepAgentConsensus()).toEqual([]);
+    expect(await agentConsensusStatus(edit!.id)).toMatchObject({
+      ready: false,
+      reason: 'unverified_sources',
+    });
+    expect((await collectConsensusFacts(edit!.id))?.disputeHoldCause).toBe(
+      'unverified_sources',
+    );
+
+    // Once every cited paper is read in full, the next sweep publishes it with
+    // no further verdict and no person.
+    await db
+      .update(paperReviews)
+      .set({ readInFull: true })
+      .where(eq(paperReviews.citationId, readPaper!.id));
+    expect((await collectConsensusFacts(edit!.id))?.disputeHoldCause).toBeNull();
+    expect(await sweepAgentConsensus()).toEqual([
+      { pendingEditId: edit!.id, outcome: 'applied' },
+    ]);
+    const [published] = await db
+      .select({ status: pendingEdits.status })
+      .from(pendingEdits)
+      .where(eq(pendingEdits.id, edit!.id));
+    expect(published!.status).toBe('approved');
+  });
+
+  it('stops holding an ingested fact on an unread paper a revision dropped', async () => {
+    // The check covers what the fact cites now: a marked paper the author has
+    // since removed no longer backs the claim, so it must not hold it.
+    const admin = await seedUser(db, {
+      email: 'admin@example.com',
+      username: 'admin',
+      role: 'admin',
+    });
+    const peerA = await seedAgent('peer-a');
+    const peerB = await seedAgent('peer-b');
+    const [page] = await db
+      .insert(wikiPages)
+      .values({
+        slug: 'diazepam',
+        title: 'Diazepam',
+        pageType: 'drug_monograph',
+        content: {
+          version: 2,
+          sections: { pk: { body: { type: 'doc', content: [] } } },
+        },
+        status: 'published',
+        createdBy: admin,
+        updatedBy: admin,
+      })
+      .returning({ id: wikiPages.id });
+    const [unread] = await db
+      .insert(citations)
+      .values({ type: 'pmid', identifier: '12345678' })
+      .returning({ id: citations.id });
+    const [read] = await db
+      .insert(citations)
+      .values({ type: 'pmid', identifier: '87654321' })
+      .returning({ id: citations.id });
+    await db.insert(paperReviews).values({
+      citationId: read!.id,
+      reviewMarkdown: 'Read in full.',
+      readInFull: true,
+      createdBy: admin,
+    });
+    const fact = (referenceIds: number[]) => ({
+      type: 'fact',
+      attrs: { factId: 'f-1', referenceIds },
+      content: [{ type: 'text', text: 'Halveringstiden er 20–100 timer.' }],
+    });
+    const [edit] = await db
+      .insert(pendingEdits)
+      .values({
+        editType: 'wiki_fact',
+        targetId: page!.id,
+        sectionId: 'pk',
+        factOperation: 'add',
+        factStatement: 'Halveringstiden er 20–100 timer.',
+        proposedValue: fact([unread!.id, read!.id]),
+        proposedMeta: {
+          source: 'conversation_ingestion',
+          unverifiedReferenceIds: [unread!.id],
+        },
+        referenceIds: [unread!.id, read!.id],
+        referenceId: unread!.id,
+        submittedBy: admin,
+        status: 'pending',
+      })
+      .returning({ id: pendingEdits.id });
+    await approve(peerA.agentId, edit!.id);
+    await approve(peerB.agentId, edit!.id);
+    expect(await agentConsensusStatus(edit!.id)).toMatchObject({
+      ready: false,
+      reason: 'unverified_sources',
+    });
+
+    // The author drops the unread paper; the marker stays, server-owned.
+    await db
+      .update(pendingEdits)
+      .set({
+        proposedValue: fact([read!.id]),
+        referenceIds: [read!.id],
+        referenceId: read!.id,
+      })
+      .where(eq(pendingEdits.id, edit!.id));
+    expect((await collectConsensusFacts(edit!.id))?.disputeHoldCause).toBeNull();
+    expect(await sweepAgentConsensus()).toEqual([
+      { pendingEditId: edit!.id, outcome: 'applied' },
+    ]);
   });
 
   it('never attributes a publication to an implicit approval', async () => {

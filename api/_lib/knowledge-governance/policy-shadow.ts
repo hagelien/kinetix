@@ -13,9 +13,10 @@
  * comparing that helper against the engine would compare the engine to itself.
  * Phase 6 compares something wider and genuinely independent: the whole
  * `applyOnAgentConsensus` gate. That gate refuses a clinical case before any
- * counting happens, refuses a human's proposal whatever the count, and blocks
- * on human disputes that live in a table the tally never reads. Three of its
- * five checks are outside the delegated function entirely.
+ * counting happens, refuses a proposal with no recorded author whatever the
+ * count, holds a fact citing a paper nobody has read in full, and blocks on
+ * human disputes that live in a table the tally never reads. Most of its
+ * checks are outside the delegated function entirely.
  *
  * The legacy side of the comparison is a **frozen pure reference** of that gate
  * (in the parity test, deliberately not imported), for the same reason Phase 1
@@ -38,6 +39,8 @@ import {
   effectiveConsensusQuorum,
   isHighRiskPendingEdit,
   pendingEditTargetOpenToAgents,
+  pendingEditCitesUnreadSources,
+  type SourceCheckedPendingEdit,
   isSelfReviewAgentUser,
   summariseVerificationsForTargets,
   type VerificationSummary,
@@ -126,6 +129,8 @@ export async function collectConsensusFacts(
       targetId: pendingEdits.targetId,
       proposedValue: pendingEdits.proposedValue,
       proposedMeta: pendingEdits.proposedMeta,
+      referenceIds: pendingEdits.referenceIds,
+      referenceId: pendingEdits.referenceId,
     })
     .from(pendingEdits)
     .where(eq(pendingEdits.id, pendingEditId))
@@ -184,7 +189,11 @@ export async function collectConsensusFacts(
     },
     activeAgents,
     authorSelfReviews,
-    quorum: effectiveConsensusQuorum(activeAgents, { authorSelfReviews }),
+    // A person is not in the agent pool, so every active agent is eligible to
+    // verify their proposal: the arithmetic of an author whose seat counts.
+    quorum: effectiveConsensusQuorum(activeAgents, {
+      authorSelfReviews: authorSelfReviews || !submitterIsAgent,
+    }),
     highRisk: isHighRiskPendingEdit({
       editType: pending.editType,
       parameter: pending.parameter,
@@ -208,12 +217,10 @@ export async function collectConsensusFacts(
  * Two mappings carry the weight:
  *
  *  - **`authorKind`** is `agent` only when the submitter is an *active*
- *    registered agent, which is exactly the test the legacy gate applies before
- *    it will auto-apply anything. A human's proposal — or an agent whose status
- *    was revoked — becomes `human`, and the `human-authored` rule then requires
- *    a human approval the agent tally cannot supply. That is how "consensus
- *    never stands in for a moderator on a person's work" becomes a policy fact
- *    rather than an early `return false`.
+ *    registered agent; a person's proposal (or one by an agent whose status was
+ *    revoked) is `human`, and publishes on agent consensus under the same bar.
+ *    A proposal with no recorded author is `system`, and the `unattributed`
+ *    rule requires a human approval for it, as the legacy gate does.
  *  - **`clinical_case`** is a risk tag rather than a special case. Legacy
  *    refuses it in the first three lines of the function; here the risk profile
  *    carries the tag, the `clinical-case` rule matches on it, and the
@@ -239,7 +246,14 @@ export function projectConsensusContext(facts: ConsensusFacts): PolicyContext {
     author: snapshotActor({
       actorRef:
         facts.submittedBy === null ? 'unknown' : `user:${facts.submittedBy}`,
-      kind: facts.submitterIsAgent ? 'agent' : 'human',
+      // `system` for a proposal with no recorded author: the `unattributed`
+      // rule's subject, the one authorship that still needs a person.
+      kind:
+        facts.submittedBy === null
+          ? 'system'
+          : facts.submitterIsAgent
+            ? 'agent'
+            : 'human',
       capabilities: [],
     }),
     risk: riskProfile(facts.highRisk ? 'high' : 'medium', tags),
@@ -381,12 +395,12 @@ export async function recordShadowDecision(
 }
 
 async function collectDisputeHoldCause(
-  pending: Parameters<typeof pendingEditTargetOpenToAgents>[0] & {
-    proposedMeta: unknown;
-  },
+  pending: Parameters<typeof pendingEditTargetOpenToAgents>[0] &
+    SourceCheckedPendingEdit,
   pendingEditId: number,
 ): Promise<ConsensusDisputeHoldCause | null> {
   if (!(await pendingEditTargetOpenToAgents(pending))) return 'target_unpublished';
+  if (await pendingEditCitesUnreadSources(pending)) return 'unverified_sources';
   if (await hasOpenDispute({ targetType: 'pending_edit', targetId: pendingEditId })) {
     return 'open_dispute';
   }

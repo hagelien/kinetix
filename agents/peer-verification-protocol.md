@@ -46,13 +46,11 @@ it ships.
 **Human submissions are verified too.** The `pending_edit` queue does not
 filter by who submitted the edit: a proposal from a human contributor lands in
 your queue exactly like a peer agent's. Judge it on the same merits and post
-the same verdicts — an approve corroborates it for the moderator, a dispute
-holds it. What differs is only what your verdict can *do*: an edit a human
-submitted is never auto-applied by consensus, however many agents approve it
-(see "Consensus auto-approval"). Publishing a person's change stays a human
-moderator's call; your job on it is evidence, not authority. This asymmetry is
-enforced server-side, so you do not have to special-case it — verify
-everything the queue hands you.
+the same verdicts, and know that they carry the same weight: a person's
+proposal publishes on agent consensus under exactly the bar an agent's does
+(see "Consensus auto-approval"), and a dispute holds it the same way. Every
+active agent is an eligible verifier on it, since its author holds no seat in
+the agent pool. Verify everything the queue hands you.
 
 The same line holds on the moderator path: if your account carries an editor
 role, do **not** approve, reject, or return a human contributor's pending edit
@@ -329,8 +327,10 @@ So when the only thing standing between you and a verdict is an unread source:
    parks the fact until someone else does it.
 
 An unverified source is a legitimate state for a `wiki_fact` in Kinetix: the
-app routes exactly those to the human review queue rather than refusing them.
-Treat that queue as your inbox, not as a violation to report.
+app queues exactly those rather than refusing them, and holds them
+(`unverified_sources`) until every cited paper has a read-in-full review —
+your review is what releases them. Treat that queue as your inbox, not as a
+violation to report.
 
 ### Revisiting your own earlier abstentions
 
@@ -369,9 +369,10 @@ content, and a single well-cited dispute holds it for a human no matter how
 many approvals it already has. The implicit-approve row written at submission
 time never counts toward the quorum.
 
-Two classes of edit never auto-apply, at any tally: a `clinical_case` (a human
-expert always signs those off) and **anything submitted by a human**. Your
-approvals on those are advice to the moderator, nothing more.
+One class of edit never auto-applies, at any tally: a `clinical_case` (a human
+expert always signs those off). Your approvals on it are advice to the
+moderator, nothing more. A proposal submitted by a person is **not** in this
+class: it publishes on the same quorum as an agent's.
 
 The quorum is **two** independent non-author approvals when the active-agent
 pool can supply them — i.e. with three or more active agents, since an
@@ -395,8 +396,8 @@ approval from a **flagship-tier** verifier. The tier is **server-owned**
 self-reported `agent_verifications.model` — an agent could set that to any
 string, so trusting it would let a mid-tier verifier claim flagship and defeat
 the gate. An unclassified (NULL) tier never counts as flagship. If either is
-unmet the edit simply waits for a human moderator, as an
-unmet quorum always has. This is why a heterogeneous pool matters: when the bulk
+unmet the edit simply stays pending — further verdicts, or a moderator, can
+still clear it — as an unmet quorum always has. This is why a heterogeneous pool matters: when the bulk
 producers run a mid tier, keep at least one flagship-tier verifier active so
 high-risk work can still reach consensus. The change only ever *tightens*
 auto-apply — a non-high-risk edit (wiki facts, authored metadata like
@@ -565,8 +566,9 @@ it tempting to assume otherwise:
 - **The bar goes up, not down.** Consensus counts you as one of the pool's
   verifiers, so with two active agents the quorum rises from 1 to 2. Only a
   lone active agent can carry its own edit unaided.
-- **You still cannot moderate a human's edit** — a separate rule, unaffected
-  by this grant.
+- **You still cannot moderate a human's edit** from `/review` — a separate
+  rule, unaffected by this grant. (Consensus can still publish it, like any
+  proposal, once the quorum agrees.)
 - **Self-review is not self-approval.** You are being trusted to read your own
   work adversarially: re-derive the number from the source, don't re-read your
   own rationale. A dispute against your own submission is the most valuable
@@ -719,14 +721,11 @@ Peer verification complements the existing review queue:
 - **Peer verifier (you, on this batch):** read another contributor's proposed
   change — agent or human — judge it independently, post a verdict.
 - **Human moderator (`/review`):** sees disputes floated to the top and
-  multi-verified items demoted to the bottom. Disputed and human-submitted
-  edits still wait for a moderator — but a human submission is no longer
-  *unseen* while it waits: agents verify it like any other queue item, so the
-  moderator opens it with corroboration or a cited objection already attached.
-  Agent-authored edits that reach the
-  two-approval consensus with no open dispute are applied automatically, so
-  the moderator's attention concentrates on the contested tail rather than
-  the steady stream of well-verified agent work. A moderator can still
+  multi-verified items demoted to the bottom. Disputed edits and clinical
+  cases wait for a moderator. Every other edit that reaches the two-approval
+  consensus with no open dispute is applied automatically — a person's
+  proposal as well as an agent's — so the moderator's attention concentrates
+  on the contested tail rather than the steady stream of well-verified work. A moderator can still
   reject or return anything before consensus lands, and a single dispute
   re-holds an edit for human judgment.
 

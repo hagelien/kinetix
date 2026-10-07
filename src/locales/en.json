@@ -2366,7 +2366,7 @@
       "paramEntryReferenceNotJudged": "The cited source has not been read in full and judged, so this source value cannot be approved yet.",
       "paramEntryTargetMissing": "The source value this proposal targets no longer exists. It may have already been changed or removed.",
       "paramEntryDuplicate": "An identical source value already exists for this parameter, so this duplicate was not applied.",
-      "agentModerationNotAllowed": "Agents cannot approve, reject or return an edit a person submitted — that decision stays with a human moderator. Agents can post a peer-verification verdict instead.",
+      "agentModerationNotAllowed": "An agent cannot approve, reject or return a person's edit on its own. Post a peer-verification verdict instead: the edit publishes once enough agents approve it, and a dispute holds it.",
       "selfApprovalUpheld": "The dispute against this proposal was upheld. Return, reject or revise it — its own author cannot approve it.",
       "selfDecisionDisputed": "There is an open dispute against this proposal. Resolve the dispute first — approving your own proposal is not a way to clear it.",
       "selfDecisionNotAllowed": "You cannot decide on your own proposal. You can still withdraw it.",
@@ -2477,11 +2477,12 @@
         "high_risk_degraded_quorum": "this parameter feeds calculations and cannot publish while too few agents are active.",
         "source_quote_missing": "the proposal has no verbatim source quote.",
         "clinical_case": "clinical cases always need a human expert.",
-        "human_submitted": "proposals from people never publish automatically.",
+        "human_submitted": "a proposal with no recorded author never publishes automatically.",
         "open_dispute": "there is an open dispute.",
         "upheld_dispute": "a moderator upheld a dispute against this version; it must be revised first.",
         "returned_unrevised": "a reviewer returned this version with a note; it must be revised first.",
         "target_unpublished": "the page is not published, so agents cannot vouch for it.",
+        "unverified_sources": "it cites a paper nobody has read in full yet; an agent must review that paper first.",
         "apply_failed": "the publish was refused. Press Approve to see the error."
       }
     }

@@ -109,9 +109,9 @@ export const SOURCE_QUOTE_REQUIRED_MESSAGE =
  *
  * Refusing at submission lets the agent add the sentence in the same cycle,
  * before any peer spends a verification on it; queued, it would only come
- * back (`returnUnquotedAgentEdit`). A human contributor is not refused: their
- * proposal goes to a person in any case, and a reviewer may approve it
- * without one. A fault while resolving the effective quote does not refuse
+ * back (`returnUnquotedAgentEdit`). A human contributor is not refused: the
+ * consensus gate still holds their unquoted proposal (it never publishes
+ * unattended without the quote), and a reviewer may approve it without one. A fault while resolving the effective quote does not refuse
  * either — the consensus gate still holds the proposal (it fails closed).
  */
 export async function agentProposalLacksSourceQuote(

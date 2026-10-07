@@ -296,7 +296,78 @@ async function rewriteJsonDocuments(
     rewritten += 1;
   }
 
+  // A conversation-ingestion fact names the papers nobody has read in full in
+  // `proposedMeta.unverifiedReferenceIds`, and consensus holds it until each
+  // has a read-in-full review (`pendingEditCitesUnreadSources`). Left on the
+  // loser, that lookup would query a deleted citation forever, so a review of
+  // the surviving paper could never release the fact.
+  //
+  // One statement, touching only that key: the row's other metadata is not
+  // this merge's to write, and a whole-object copy read beforehand could
+  // overwrite a marker written meanwhile (a reviewer's `returnedAt`, a
+  // `conflict`). The UPDATE reads the row it writes.
+  const marked = await db
+    .update(pendingEdits)
+    .set({
+      proposedMeta: sql`jsonb_set(
+        ${pendingEdits.proposedMeta},
+        '{unverifiedReferenceIds}',
+        (
+          select coalesce(jsonb_agg(m.v order by m.first), '[]'::jsonb)
+          from (
+            select
+              case when e.v = to_jsonb(${winnerId}::int) or e.v = to_jsonb(${loserId}::int)
+                then to_jsonb(${winnerId}::int) else e.v end as v,
+              min(e.ord) as first
+            from jsonb_array_elements(${pendingEdits.proposedMeta} -> 'unverifiedReferenceIds')
+              with ordinality as e(v, ord)
+            group by 1
+          ) as m
+        )
+      )`,
+    })
+    .where(
+      sql`${pendingEdits.proposedMeta}->'unverifiedReferenceIds' @> ${JSON.stringify([loserId])}::jsonb`,
+    )
+    .returning({ id: pendingEdits.id });
+  rewritten += marked.length;
+
   return rewritten;
+}
+
+/**
+ * Lock the proposals that cite `citationId` (other than queued paper reviews),
+ * in id order, before the merge touches any review row. Whatever their status:
+ * a draft or returned proposal can be resubmitted as pending mid-merge, and
+ * consensus could then take it before the merge reaches it.
+ *
+ * Agent consensus publishing an ingested fact holds the fact's row and then
+ * takes its cited papers' review rows FOR SHARE (`lockPendingEditSourceReviews`):
+ * proposal first, review evidence second. Inside a transaction (the
+ * `resolveCitation` fold), the merge would otherwise update the loser's
+ * `paper_reviews` row first and only then reach the proposals citing it — the
+ * reverse order, which PostgreSQL resolves by aborting one of the two as a
+ * deadlock. Taking the proposals up front gives both paths one order. Without
+ * a transaction (the CLI over http) each statement commits on its own and this
+ * is a no-op. Returns the locked ids.
+ */
+export async function lockPendingEditsCitingCitation(
+  db: Db,
+  citationId: number,
+): Promise<number[]> {
+  const result = await db.execute<{ id: number }>(sql`
+    SELECT id FROM pending_edits
+    WHERE edit_type <> 'paper_review'
+      AND (
+        reference_id = ${citationId}
+        OR ${citationId} = ANY(reference_ids)
+        OR proposed_value -> 'attrs' -> 'referenceIds' @> ${JSON.stringify([citationId])}::jsonb
+        OR proposed_meta -> 'unverifiedReferenceIds' @> ${JSON.stringify([citationId])}::jsonb
+      )
+    ORDER BY id
+    FOR NO KEY UPDATE
+  `);
+  return (result.rows ?? []).map((row) => Number(row.id));
 }
 
 /**
@@ -1098,6 +1169,9 @@ export async function mergeCitations(
   // depend on anything below; the only ordering the merge really requires is
   // that everything precede the citation delete.
   stats.rowsRepointed += await repointReferenceCohorts(db, winnerId, loserId);
+
+  // Before any paper-review row: see the note on the function.
+  await lockPendingEditsCitingCitation(db, loserId);
 
   const reviewResult = await mergePaperReviews(db, winnerId, loserId);
   stats.reviewsDropped = reviewResult.dropped;

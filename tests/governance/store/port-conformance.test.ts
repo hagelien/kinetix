@@ -56,6 +56,8 @@ import {
   tierCapabilities,
 } from '../../../api/_lib/knowledge-governance/kinetix-compat.js';
 import { observedAssuranceStore } from '../../../api/_lib/knowledge-governance/assurance-service.js';
+import { KINETIX_APPLY_POLICY } from '../../../src/lib/assurance/policy.js';
+import { HUMAN_AUTHOR, makeContext } from '../support/policy-context.js';
 import {
   NON_CANONICAL_SNAPSHOT_METRIC,
   UNREADABLE_HISTORY_METRIC,
@@ -343,15 +345,21 @@ describe('reading a stored actor kind', () => {
     }
   });
 
-  it('reads an unreadable *author* kind as human, the other way', () => {
+  it('reads an unreadable *author* kind as system, the other way', () => {
     // The same column, the reverse conclusion, and the reason is that failing
     // closed means "toward the more demanding outcome" — which differs by
-    // role. `when: { authorKind: 'human' }` *requires* a human approval, so an
-    // unreadable author kind that fell through to `service` would skip that
-    // rule and let a human-authored proposal pass on agent approvals alone.
+    // role. Since kinetix-consensus@v2 the demanding author rule is
+    // `unattributed` (`when: { authorKind: 'system' }`, requires a human
+    // approval); an unreadable author kind read as `human` or `service` would
+    // match no author rule and publish on agent approvals alone.
     for (const bad of ['', 'Human', 'bot', 'unknown']) {
-      expect(authorKindOf(bad), bad).toBe('human');
+      expect(authorKindOf(bad), bad).toBe('system');
     }
+    const context = makeContext({
+      author: { ...HUMAN_AUTHOR, kind: authorKindOf('unknown') },
+      assurance: { explicitApprovals: 4, independentApprovers: 4, agentApprovals: 4 },
+    });
+    expect(KINETIX_APPLY_POLICY.evaluate(context).allowed).toBe(false);
     for (const good of ['human', 'agent', 'service', 'system'] as const) {
       expect(authorKindOf(good)).toBe(good);
     }
@@ -389,14 +397,14 @@ describe('reading a stored actor kind', () => {
     );
 
     expect((await store.getProposal(String(proposal.id)))!.author.kind).toBe(
-      'human',
+      'system',
     );
     expect(
       (await store.getVersion({
         proposalId: String(proposal.id),
         versionId: String(version.id),
       }))!.author.kind,
-    ).toBe('human');
+    ).toBe('system');
   }, 60_000);
 });
 
