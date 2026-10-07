@@ -386,7 +386,8 @@ In short:
   merge. A P0 takes priority over everything else on that pull request.
 - **P2 and P3 findings are not fixed in that pull request.** Each one becomes a
   GitHub issue labelled `P2` and `review-debt`, linked back to
-  the review comment. "The code is new in this PR" or "it is small" is not an
+  the review comment. The issue must stay open until the PR that fixes it
+  merges; `codex-gate` rejects a deferral linked to a closed issue. "The code is new in this PR" or "it is small" is not an
   exception. Once each is filed and its thread answered with the issue link,
   add the `findings-deferred` label; `codex-gate` then merges on that review
   instead of waiting for a clean one.
