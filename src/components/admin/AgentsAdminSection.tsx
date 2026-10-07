@@ -489,6 +489,8 @@ function agentDraft(agent: AgentAdminRow) {
     hooksEnabled: agent.hooksEnabled,
     selfReviewEnabled: agent.selfReviewEnabled,
     modelTier: (agent.modelTier ?? '') as TierChoice,
+    adjudicator: agent.adjudicator,
+    modelFamily: agent.modelFamily ?? '',
   };
 }
 
@@ -560,6 +562,10 @@ function AgentEditRow({
           maintainerUserId,
           hooksEnabled: form.hooksEnabled,
           selfReviewEnabled: form.selfReviewEnabled,
+          adjudicator: form.adjudicator,
+          ...(form.modelFamily.trim() !== (agent.modelFamily ?? '')
+            ? { modelFamily: form.modelFamily.trim() || null }
+            : {}),
           // Only when changed against the stored value. A changed value is
           // either '' (clear) or one of the offered tiers; the unrecognised
           // option equals the stored value, so selecting it is not a change.
@@ -685,6 +691,13 @@ function AgentEditRow({
               <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-amber-700 dark:text-amber-400">
                 {t('admin.agents.selfReviewBadge', {
                   defaultValue: 'Self-review',
+                })}
+              </span>
+            )}
+            {agent.adjudicator && (
+              <span className="rounded-full border border-violet-500/40 bg-violet-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-violet-700 dark:text-violet-400">
+                {t('admin.agents.adjudicatorBadge', {
+                  defaultValue: 'T3 adjudicator',
                 })}
               </span>
             )}
@@ -902,6 +915,45 @@ function AgentEditRow({
                   })}
                 </span>
               </span>
+            </label>
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={form.adjudicator}
+                onChange={(e) =>
+                  setForm({ ...form, adjudicator: e.target.checked })
+                }
+                className="mt-0.5 h-4 w-4 rounded border-input"
+              />
+              <span>
+                {t('admin.agents.adjudicator', {
+                  defaultValue: 'T3 adjudicator',
+                })}
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  {t('admin.agents.adjudicatorHelp', {
+                    defaultValue:
+                      'May sit on the two-agent panel that settles a disagreement surviving the expert review. Needs the Flagship tier too. It never closes a dispute a person raised.',
+                  })}
+                </span>
+              </span>
+            </label>
+            <label className="block text-sm">
+              <span className="mb-1 block">
+                {t('admin.agents.modelFamily', { defaultValue: 'Model family' })}
+              </span>
+              <input
+                type="text"
+                value={form.modelFamily}
+                onChange={(e) =>
+                  setForm({ ...form, modelFamily: e.target.value })
+                }
+                placeholder={
+                  t('admin.agents.modelFamilyPlaceholder', {
+                    defaultValue: 'e.g. claude',
+                  }) as string
+                }
+                className="block w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
+              />
             </label>
           </div>
           {status === 'suspended' && (

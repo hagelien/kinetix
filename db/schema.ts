@@ -932,6 +932,20 @@ export const agents = pgTable(
     // deciding whether a flagship-tier approval is present. Set by an admin who
     // provisions the agent; NULL never counts as flagship (fail-safe).
     modelTier: varchar('model_tier', { length: 20 }),
+    /**
+     * Server-owned T3 adjudication grant (0138). The capability matrix is
+     * monotone by role, so it cannot say "this one flagship identity may read
+     * a T3 case file"; this per-agent flag does, set only by an admin like
+     * `selfReviewEnabled`. Being flagship grants nothing on its own, and the
+     * flag grants no `dispute.resolve`.
+     */
+    adjudicator: boolean('adjudicator').notNull().default(false),
+    /**
+     * Server-owned model family (e.g. the vendor line an identity runs), for
+     * the T3 panel-diversity audit. Recorded on a case, never a gate. NULL =
+     * unknown.
+     */
+    modelFamily: varchar('model_family', { length: 40 }),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
@@ -2577,6 +2591,237 @@ export const disputes = pgTable(
     index('disputes_target_idx').on(t.targetType, t.targetId),
     // Powers the deterministic oldest-first open-dispute feed (GET /api/disputes).
     index('disputes_status_created_idx').on(t.status, t.createdAt),
+  ],
+);
+
+// ─── T3 adjudication (0138) ─────────────────────────────────────────────────
+//
+// The non-blind two-panelist appellate tier for a disagreement that survives
+// blind T2 re-verification (agents/drug-db-adjudication.md,
+// docs/plans/2026-09-18-t3-adjudication-backend.md). Shaped like the
+// governance store: a pinned immutable version, verdicts copied in rather than
+// referenced, and append-only opinions.
+
+/** One verdict as the case copied it: the appeal record a later re-verdict cannot rewrite. */
+export type AdjudicationVerdictSnapshot = {
+  verificationId: number;
+  agentId: number;
+  verdict: string;
+  rationaleMd: string;
+  evidenceRefs: AgentVerificationEvidenceRef[];
+  verifierTier: string | null;
+  model: string | null;
+  recordedAt: string;
+};
+
+/** One open dispute as the case copied it, with its provenance. */
+export type AdjudicationDisputeSnapshot = {
+  disputeId: number;
+  source: string;
+  createdBy: number;
+  reasonMd: string;
+  evidenceRefs: unknown;
+  createdAt: string;
+};
+
+export type AdjudicationTrigger =
+  | 't1_t2_disagreement'
+  | 'competing_scope'
+  | 'flagship_disagreement'
+  | 'repeated_correction_loop'
+  | 'human_request';
+export type AdjudicationDisputeOrigin = 'agent' | 'human' | 'mixed';
+export type AdjudicationCaseState =
+  | 'open'
+  | 'sealed'
+  | 'converged'
+  | 'diverged'
+  | 'invalidated';
+export type AdjudicationSeat = 'a' | 'b';
+export type AdjudicationResolution =
+  | 'approve'
+  | 'dispute'
+  | 'return'
+  | 'split_scope'
+  | 'abstain'
+  | 'human';
+
+export const adjudicationCases = pgTable(
+  'adjudication_cases',
+  {
+    id: serial('id').primaryKey(),
+    targetType: varchar('target_type', { length: 40 }).notNull(),
+    targetId: integer('target_id').notNull(),
+    /** The exact verificationTargetVersion this case adjudicates. */
+    targetVersion: varchar('target_version', { length: 80 }).notNull(),
+    /** Trigger codes that opened or later joined the case, in order. */
+    triggers: jsonb('triggers').$type<AdjudicationTrigger[]>().notNull().default([]),
+    /** Per-trigger detail, e.g. a lower-bound cycle count. */
+    triggerDetail: jsonb('trigger_detail')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    disputeOrigin: varchar('dispute_origin', { length: 10 })
+      .$type<AdjudicationDisputeOrigin>()
+      .notNull(),
+    /** Traceability only; t2Snapshot is the record of what T2 said. */
+    t2VerificationId: integer('t2_verification_id').references(
+      () => agentVerifications.id,
+      { onDelete: 'set null' },
+    ),
+    t2Snapshot: jsonb('t2_snapshot').$type<AdjudicationVerdictSnapshot[]>().notNull(),
+    t1Snapshot: jsonb('t1_snapshot')
+      .$type<{
+        verdicts: AdjudicationVerdictSnapshot[];
+        openDisputes: AdjudicationDisputeSnapshot[];
+      }>()
+      .notNull(),
+    state: varchar('state', { length: 20 })
+      .$type<AdjudicationCaseState>()
+      .notNull()
+      .default('open'),
+    panelFamilyDiversity: varchar('panel_family_diversity', { length: 10 }),
+    openedAt: timestamp('opened_at').defaultNow().notNull(),
+    sealedAt: timestamp('sealed_at'),
+    closedAt: timestamp('closed_at'),
+    invalidatedReason: text('invalidated_reason'),
+    /** When the detector last re-checked this case; the sweep rotates on it. */
+    lastCheckedAt: timestamp('last_checked_at'),
+  },
+  (t) => [
+    // Permanent, not "while live": a target version is adjudicated at most once.
+    uniqueIndex('adjudication_cases_target_version_uq').on(
+      t.targetType,
+      t.targetId,
+      t.targetVersion,
+    ),
+    index('adjudication_cases_state_checked_idx').on(t.state, t.lastCheckedAt),
+    check(
+      'adjudication_cases_dispute_origin_check',
+      sql`${t.disputeOrigin} IN ('agent', 'human', 'mixed')`,
+    ),
+    check(
+      'adjudication_cases_state_check',
+      sql`${t.state} IN ('open', 'sealed', 'converged', 'diverged', 'invalidated')`,
+    ),
+    check(
+      'adjudication_cases_panel_family_diversity_check',
+      sql`${t.panelFamilyDiversity} IS NULL OR ${t.panelFamilyDiversity} IN ('distinct', 'same', 'unknown')`,
+    ),
+  ],
+);
+
+/**
+ * When the detector sweep last classified each target and the latest
+ * verdict/dispute activity it saw, so the sweep skips unchanged targets and
+ * rotates through the rest instead of re-reading one prefix.
+ */
+export const adjudicationDetectorChecks = pgTable(
+  'adjudication_detector_checks',
+  {
+    targetType: varchar('target_type', { length: 40 }).notNull(),
+    targetId: integer('target_id').notNull(),
+    checkedAt: timestamp('checked_at').defaultNow().notNull(),
+    activityAt: timestamp('activity_at'),
+  },
+  (t) => [
+    primaryKey({
+      name: 'adjudication_detector_checks_pk',
+      columns: [t.targetType, t.targetId],
+    }),
+  ],
+);
+
+export const adjudicationCaseSeats = pgTable(
+  'adjudication_case_seats',
+  {
+    id: serial('id').primaryKey(),
+    caseId: integer('case_id')
+      .references(() => adjudicationCases.id, { onDelete: 'cascade' })
+      .notNull(),
+    seat: varchar('seat', { length: 1 }).$type<AdjudicationSeat>().notNull(),
+    agentId: integer('agent_id')
+      .references(() => agents.id)
+      .notNull(),
+    claimedAt: timestamp('claimed_at').defaultNow().notNull(),
+    sealedAt: timestamp('sealed_at'),
+  },
+  (t) => [
+    uniqueIndex('adjudication_case_seats_case_seat_uq').on(t.caseId, t.seat),
+    uniqueIndex('adjudication_case_seats_case_agent_uq').on(t.caseId, t.agentId),
+    check('adjudication_case_seats_seat_check', sql`${t.seat} IN ('a', 'b')`),
+  ],
+);
+
+/** Append-only: a database trigger refuses every UPDATE and DELETE (0138). */
+export const adjudicationOpinions = pgTable(
+  'adjudication_opinions',
+  {
+    id: serial('id').primaryKey(),
+    caseId: integer('case_id').notNull(),
+    seat: varchar('seat', { length: 1 }).$type<AdjudicationSeat>().notNull(),
+    /** Derived server-side; the loser of a concurrent append hits the unique index. */
+    revisionNo: integer('revision_no').notNull(),
+    /** On the NEW row, pointing back at the one it replaces. */
+    supersedesOpinionId: integer('supersedes_opinion_id'),
+    /** agents.model_tier at write time. */
+    adjudicatorTier: varchar('adjudicator_tier', { length: 20 }),
+    /** Self-reported, audit only. */
+    model: varchar('model', { length: 80 }),
+    resolution: varchar('resolution', { length: 20 })
+      .$type<AdjudicationResolution>()
+      .notNull(),
+    proposition: text('proposition').notNull(),
+    /** The structured scope the resolution applies to; compared in code. */
+    scopeKey: jsonb('scope_key').$type<Record<string, string>>().notNull().default({}),
+    resolvedValue: doublePrecision('resolved_value'),
+    resolvedLow: doublePrecision('resolved_low'),
+    resolvedHigh: doublePrecision('resolved_high'),
+    resolvedUnit: varchar('resolved_unit', { length: 40 }),
+    reasoningMd: text('reasoning_md').notNull(),
+    evidenceRefs: jsonb('evidence_refs').notNull().default([]),
+    confidence: varchar('confidence', { length: 10 }).notNull(),
+    humanRequired: boolean('human_required').notNull().default(false),
+    humanReason: text('human_reason'),
+    /** Non-null = final and immutable. */
+    finalizedAt: timestamp('finalized_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex('adjudication_opinions_case_seat_revision_uq').on(
+      t.caseId,
+      t.seat,
+      t.revisionNo,
+    ),
+    foreignKey({
+      name: 'adjudication_opinions_seat_fk',
+      columns: [t.caseId, t.seat],
+      foreignColumns: [adjudicationCaseSeats.caseId, adjudicationCaseSeats.seat],
+    }),
+    foreignKey({
+      name: 'adjudication_opinions_supersedes_fk',
+      columns: [t.supersedesOpinionId],
+      foreignColumns: [t.id],
+    }),
+    check(
+      'adjudication_opinions_resolution_check',
+      sql`${t.resolution} IN ('approve', 'dispute', 'return', 'split_scope', 'abstain', 'human')`,
+    ),
+    check(
+      'adjudication_opinions_confidence_check',
+      sql`${t.confidence} IN ('high', 'medium', 'low')`,
+    ),
+    check(
+      'adjudication_opinions_human_reason_check',
+      sql`NOT ${t.humanRequired} OR ${t.humanReason} IS NOT NULL`,
+    ),
+    check(
+      'adjudication_opinions_value_shape_check',
+      sql`(${t.resolvedValue} IS NULL OR (${t.resolvedLow} IS NULL AND ${t.resolvedHigh} IS NULL))
+        AND ((${t.resolvedLow} IS NULL) = (${t.resolvedHigh} IS NULL))
+        AND (${t.resolvedLow} IS NULL OR ${t.resolvedLow} <= ${t.resolvedHigh})
+        AND ((${t.resolvedUnit} IS NULL) = (${t.resolvedValue} IS NULL AND ${t.resolvedLow} IS NULL))`,
+    ),
   ],
 );
 

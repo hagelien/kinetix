@@ -48,6 +48,8 @@ function agentRow(overrides: Partial<AgentAdminRow> = {}): AgentAdminRow {
     hooksEnabled: false,
     selfReviewEnabled: false,
     modelTier: null,
+    adjudicator: false,
+    modelFamily: null,
     createdAt: '2026-01-01T00:00:00.000Z',
     username: 'kinetix-agent',
     email: 'agent@example.com',
@@ -330,5 +332,41 @@ describe('AgentsAdminSection model tier', () => {
 
     await waitFor(() => expect(patchAgent).toHaveBeenCalled());
     expect(confirm).not.toHaveBeenCalled();
+  });
+});
+
+describe('AgentsAdminSection T3 adjudicator grant', () => {
+  it('badges an adjudicator on the row', async () => {
+    fetchAdminAgents.mockResolvedValue({
+      agents: [agentRow({ adjudicator: true, modelTier: 'flagship' })],
+    });
+    render(<AgentsAdminSection />);
+
+    expect(await screen.findByText('T3 adjudicator')).toBeInTheDocument();
+  });
+
+  it('saves the grant and a model family, and leaves an untouched family out', async () => {
+    fetchAdminAgents.mockResolvedValue({ agents: [agentRow({ modelFamily: 'claude' })] });
+    render(<AgentsAdminSection />);
+
+    fireEvent.click(await screen.findByText('Edit'));
+    fireEvent.click(screen.getByLabelText(/T3 adjudicator/));
+    fireEvent.click(screen.getByText('Save'));
+
+    await waitFor(() => expect(patchAgent).toHaveBeenCalled());
+    expect(firstPatch()[1]).toMatchObject({ adjudicator: true });
+    expect(firstPatch()[1]).not.toHaveProperty('modelFamily');
+  });
+
+  it('clears the model family with an explicit null', async () => {
+    fetchAdminAgents.mockResolvedValue({ agents: [agentRow({ modelFamily: 'claude' })] });
+    render(<AgentsAdminSection />);
+
+    fireEvent.click(await screen.findByText('Edit'));
+    fireEvent.change(screen.getByLabelText('Model family'), { target: { value: '  ' } });
+    fireEvent.click(screen.getByText('Save'));
+
+    await waitFor(() => expect(patchAgent).toHaveBeenCalled());
+    expect(firstPatch()[1]).toMatchObject({ modelFamily: null });
   });
 });
