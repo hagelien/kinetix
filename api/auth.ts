@@ -62,6 +62,7 @@ async function handleMe(
       sessionMaxDays: users.sessionMaxDays,
       displayName: users.displayName,
       enabledConcentrationUnits: users.enabledConcentrationUnits,
+      ethanolConcentrationUnit: users.ethanolConcentrationUnit,
       notificationSettings: users.notificationSettings,
       favoriteParameters: users.favoriteParameters,
     })

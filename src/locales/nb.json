@@ -997,6 +997,8 @@
     "unitsMassGroup": "Masse",
     "unitsPrimaryLabel": "Primær visningsenhet",
     "unitsPrimaryHelp": "Brukes som standard visningstype i substansregister og simulatoren. Bare aktiverte enheter vises i denne listen.",
+    "ethanolUnitLabel": "Visningsenhet for etanol",
+    "ethanolUnitHelp": "Etanolkonsentrasjoner vises i denne enheten i stedet for primærenheten over. ‰ er gram per liter og % er gram per desiliter.",
     "notificationsTitle": "Varsler",
     "notificationsHelp": "E-post er av med mindre du slår den på her. Alt nedenfor vises også i varselmenyen (bjellen).",
     "tipsTitle": "Hjelpetips",
@@ -2129,7 +2131,8 @@
     }
   },
   "siteNotice": {
-    "underDevelopment": "Kinetix er under aktiv utvikling. Feil og mangler kan forekomme."
+    "underDevelopment": "Kinetix er under aktiv utvikling. Feil og mangler kan forekomme.",
+    "beta": "Beta"
   },
   "entities": {
     "title": "Biologiske entiteter",
@@ -2611,6 +2614,13 @@
     "analyticsDetection": "Analyse og deteksjon",
     "postmortem": "Postmortalt"
   },
+  "monographTabs": {
+    "navLabel": "Monografi for {{drug}}",
+    "parametersLabel": "Parametre",
+    "noParameters": "Ingen parameterverdier registrert for dette temaet ennå.",
+    "noText": "Ingen tekst om dette temaet ennå.",
+    "editTabText": "Rediger tekst: {{tab}}"
+  },
   "agentFocus": {
     "title": "Agentfokus",
     "description": "Velg hva de planlagte vedlikeholdsagentene skal fokusere på hver syklus. Dette avgrenser den automatiske arbeidskøen deres; manuelle prioriteringsflagg har fortsatt forrang.",
@@ -2635,7 +2645,7 @@
     },
     "skipWikiContent": {
       "label": "Ikke skriv monograf- eller wikiinnhold",
-      "description": "Agentene jobber bare med legemiddelparametere. De leverer ingen monograffakta og ingen wikiseksjoner, uansett hvilket omfang som er valgt ovenfor; annet agentarbeid (fagfellevurdering av artikler, PDF-håndtering, diskusjons- og godkjenningsrunder) går som før.",
+      "description": "Agentene jobber bare med legemiddelparametere. De leverer ingen monograffakta og ingen wikiseksjoner, uansett hvilket omfang som er valgt ovenfor; annet agentarbeid (fagfellevurdering av artikler, PDF-håndtering, diskusjons- og godkjenningsrunder) går som før. Faktauttrekk fra artikler som en redaktør har lagt i kø, påvirkes ikke av fokusinnstillingene.",
       "impliedByMode": "Allerede i kraft: valget «Bare utvalgte parametere» stenger monograf- og wikiinnhold av seg selv."
     },
     "pagesHeading": "Valgte sider",
@@ -2874,14 +2884,9 @@
     "pendingCount": "{{count}} venter",
     "pendingReview": "Venter på gjennomgang",
     "close": "Lukk",
-    "favorites": "Favoritter",
-    "favoriteParam": "Legg til i favoritter",
-    "unfavoriteParam": "Fjern fra favoritter",
     "compareParam": "Legg til i sammenligning",
-    "favoriteUpdateFailed": "Kunne ikke lagre favoritter — prøv igjen.",
     "showAllParameters": "Vis alle parametere",
     "showFavoritesOnly": "Vis kun favoritter",
-    "noFavoritesOnDrug": "Ingen av favorittparametrene dine er registrert for dette legemidlet ennå.",
     "metabolism": "Metabolisme",
     "metabolismFate": "Metabolsk skjebne",
     "metabolismExcretedUnchanged": "Utskilt uendret",
@@ -3412,7 +3417,8 @@
     "fullTextOnFile": "Fulltekst-PDF er lagret.",
     "pdfRequested": "Fulltekst er utilgjengelig — en vurderer trenger denne PDF-en for å fullføre vurderingen.",
     "pdfMissingForReview": "Denne artikkelen er ikke vurdert ennå fordi fulltekst mangler. Last den opp her for å muliggjøre en vurdering.",
-    "publicDatabaseRecord": "Dette er en offentlig databaseoppføring (PubChem), ikke en artikkel. Agentene leser den direkte fra PubChem, så ingen PDF trengs.",
+    "publicDatabaseRecord": "Dette er en offentlig databaseoppføring, ikke en artikkel, så ingen PDF trengs. Agentene leser oppføringen direkte og siterer den opprinnelige studien den bygger på.",
+    "siteLandingPage": "Denne lenken går til forsiden av et nettsted, ikke til en bestemt kilde, så det er ingenting å laste opp. Den må erstattes med en lenke til den eksakte siden eller studien.",
     "pdfRequestReason": "Merknad fra agent",
     "uploadPdf": "Last opp en PDF",
     "dropPdf": "Slipp for å laste opp",
@@ -3707,7 +3713,6 @@
     "failed": "Kunne ikke slette legemiddel"
   },
   "discussion": {
-    "monographTitle": "Diskusjon",
     "parameterHeading": "{{parameter}} — diskusjon",
     "factTitle": "Faktadiskusjon",
     "factAction": "Diskuter",

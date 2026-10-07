@@ -4,7 +4,7 @@ import {
   REFERENCE_MATRIX_LABEL_KEYS,
   type ReferenceMatrix,
 } from '@/lib/referenceConcentrations';
-import { convertParameterValue, formatUnitSuffix } from '@/lib/parameterUnits';
+import { convertParameterDisplayValue, formatUnitSuffix } from '@/lib/parameterUnits';
 import {
   isDrugParameterId,
   parameterIsAlreadyLogarithmic,
@@ -249,7 +249,7 @@ export function ParameterForestPlot({
   // so an already-logarithmic axis is never silently rescaled.
   const unitFactor = useMemo(() => {
     if (!displayUnit || displayUnit === summary.unit) return 1;
-    const f = convertParameterValue(
+    const f = convertParameterDisplayValue(
       1,
       summary.unit,
       displayUnit,

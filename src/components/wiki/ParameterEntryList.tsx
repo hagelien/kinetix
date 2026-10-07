@@ -27,13 +27,13 @@ import {
 } from '@/lib/parameterEntryAggregation';
 import { UnitTooltip } from '@/components/ui/UnitTooltip';
 import {
-  convertParameterValue,
+  convertParameterDisplayValue,
   formatUnitSuffix,
   preferredDisplayUnit,
 } from '@/lib/parameterUnits';
 import { getPreferredUnitDisplay } from '@/lib/unitTooltip';
 import { entryCentralValue } from '@/lib/entryDoseContext';
-import { useAppStore } from '@/stores/appStore';
+import { useDisplayUnits } from '@/components/ui/DrugUnitScope';
 import { useAuthStore } from '@/stores/authStore';
 
 interface Props {
@@ -243,7 +243,7 @@ function summaryLine(
   const unitFactor =
     unit === summary.unit
       ? 1
-      : (convertParameterValue(1, summary.unit, unit, molecularWeight) ?? 1);
+      : (convertParameterDisplayValue(1, summary.unit, unit, molecularWeight) ?? 1);
   // The pool is whole-blood-normalized, so re-framing it is the same single
   // factor the plot applies to its pooled diamond. Both must move together —
   // two unlabelled numbers for one pooled estimate is worse than either alone.
@@ -288,7 +288,7 @@ export function ParameterEntryList({
   onHighlightEntry,
 }: Props) {
   const { t } = useTranslation();
-  const enabledUnits = useAppStore((s) => s.enabledUnits);
+  const enabledUnits = useDisplayUnits();
   // `/api/drugs` — where the summary and the plot above come from — serves any
   // cookie-bearing request no-store, so every logged-in reader sees live
   // aggregates. This list has to draw the line in the same place or the two

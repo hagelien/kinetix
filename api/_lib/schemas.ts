@@ -3,6 +3,7 @@ import type { ReferenceMetadata } from './reference-metadata.js';
 import { REJECTION_REASONS } from '../../src/lib/rejectionReasons.js';
 import { sourceQuoteSchema } from '../../src/lib/parameterEntries.js';
 import { MODEL_TIERS } from '../../src/lib/modelTiers.js';
+import { isSiteLandingPageUrl } from '../../src/lib/publicDatabaseRecord.js';
 import {
   DISPUTED_CLAIM_MAX_CHARS,
   DISPUTED_CLAIM_MIN_CHARS,
@@ -420,6 +421,18 @@ function validateReferenceIdentifier(
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'URL identifier must use http or https',
+        path: ['identifier'],
+      });
+      return;
+    }
+    // A site's front page names no specific source: nothing there can be read
+    // in full, reviewed or supplied as a PDF, so a claim citing it can never
+    // be verified. Cite the exact page, document or study instead.
+    if (isSiteLandingPageUrl(data.identifier)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "URL identifier must point to a specific page or document, not a site's front page",
         path: ['identifier'],
       });
     }
@@ -1392,8 +1405,27 @@ export const createPendingEditSchema = z
     factStatement: z.string().min(1).max(400).optional(),
     factOperation: z.enum(['add', 'replace', 'remove', 'reorder']).optional(),
     factTargetAnchor: factTargetAnchorSchema.nullable().optional(),
+    // ─── Paper fact-extraction provenance ─────────────────────────────────
+    // A `wiki_fact` filed by agents/paper-fact-extractor.md names the queue
+    // job and claim token it was read under. The server checks the claim is
+    // live and held by the caller; a fact that carries one is exempt from the
+    // admin agent-focus gate (the editor queued this paper on purpose) and is
+    // refused once the claim is gone, so an editor's cancel binds mid-run.
+    paperExtraction: z
+      .object({
+        jobId: z.number().int().positive(),
+        claimToken: z.string().min(1).max(64),
+      })
+      .optional(),
   })
   .superRefine((value, ctx) => {
+    if (value.paperExtraction && value.editType !== 'wiki_fact') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['paperExtraction'],
+        message: 'paperExtraction is only accepted on wiki_fact submissions.',
+      });
+    }
     if (value.editType === 'learning_unit') {
       const content = learningUnitContentSchema.safeParse(value.proposedValue);
       if (!content.success) {

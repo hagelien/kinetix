@@ -66,7 +66,7 @@ person). The work lands in three pull requests:
      the last check (`adjudication_detector_checks`);
    - opinions are append-only at the database: a trigger refuses every UPDATE
      and DELETE on `adjudication_opinions`.
-2. **Steps 4–6** (done): migration `0139_t3_adjudication_outcomes.sql`,
+2. **Steps 4–6** (done): migration `0141_t3_adjudication_outcomes.sql`,
    `api/agent-adjudication-queue.ts` (case list, case file, claim),
    `api/agent-adjudication-opinions.ts`, and `api/_lib/adjudication/`
    `opinions.ts`, `convergence.ts`, `caseFile.ts`, `target.ts`. Where it

@@ -997,6 +997,8 @@
     "unitsMassGroup": "Mass",
     "unitsPrimaryLabel": "Primary display unit",
     "unitsPrimaryHelp": "Used as the default display kind across drug tables and the simulator. Only enabled units appear in this list.",
+    "ethanolUnitLabel": "Ethanol display unit",
+    "ethanolUnitHelp": "Ethanol concentrations are shown in this unit instead of the primary unit above. ‰ is grams per litre and % is grams per decilitre.",
     "notificationsTitle": "Notifications",
     "notificationsHelp": "Email is off unless you turn it on here. Everything below also appears in the bell menu.",
     "tipsTitle": "Helpful tips",
@@ -2129,7 +2131,8 @@
     }
   },
   "siteNotice": {
-    "underDevelopment": "Kinetix is under active development. Errors and omissions may occur."
+    "underDevelopment": "Kinetix is under active development. Errors and omissions may occur.",
+    "beta": "Beta"
   },
   "entities": {
     "title": "Biological entities",
@@ -2611,6 +2614,13 @@
     "analyticsDetection": "Analytics & detection",
     "postmortem": "Postmortem"
   },
+  "monographTabs": {
+    "navLabel": "{{drug}} monograph",
+    "parametersLabel": "Parameters",
+    "noParameters": "No parameter values recorded for this topic yet.",
+    "noText": "No text on this topic yet.",
+    "editTabText": "Edit the {{tab}} text"
+  },
   "agentFocus": {
     "title": "Agent focus",
     "description": "Choose what the scheduled maintenance agents focus on each cycle. This narrows their automatic work queue; manual priority flags still take precedence.",
@@ -2635,7 +2645,7 @@
     },
     "skipWikiContent": {
       "label": "Do not write monograph or wiki content",
-      "description": "Agents work drug parameters only. They file no monograph facts and no wiki sections, whichever scope is selected above; their other work (paper reviews, PDF handling, discussion and approval sweeps) continues as usual.",
+      "description": "Agents work drug parameters only. They file no monograph facts and no wiki sections, whichever scope is selected above; their other work (paper reviews, PDF handling, discussion and approval sweeps) continues as usual. Fact extraction from papers an editor has queued is not affected by the focus settings.",
       "impliedByMode": "Already in force: the selected parameters scope closes monograph and wiki content on its own."
     },
     "pagesHeading": "Selected pages",
@@ -2874,14 +2884,9 @@
     "pendingCount": "{{count}} pending",
     "pendingReview": "Pending review",
     "close": "Close",
-    "favorites": "Favorites",
-    "favoriteParam": "Add to favorites",
-    "unfavoriteParam": "Remove from favorites",
     "compareParam": "Add to comparison",
-    "favoriteUpdateFailed": "Couldn't save favorites — please retry.",
     "showAllParameters": "Show all parameters",
     "showFavoritesOnly": "Show favorites only",
-    "noFavoritesOnDrug": "None of your favorite parameters are recorded for this drug yet.",
     "metabolism": "Metabolism",
     "metabolismFate": "Metabolic fate",
     "metabolismExcretedUnchanged": "Excreted unchanged",
@@ -3412,7 +3417,8 @@
     "fullTextOnFile": "Full-text PDF is on file.",
     "pdfRequested": "Full text unavailable — a reviewer needs this PDF to complete the review.",
     "pdfMissingForReview": "This paper hasn't been reviewed yet because the full text isn't on file. Upload it here to enable a review.",
-    "publicDatabaseRecord": "This is a public database entry (PubChem), not a paper. Agents read it directly from PubChem, so no PDF is needed.",
+    "publicDatabaseRecord": "This is a public database entry, not a paper, so no PDF is needed. Agents read the entry directly and cite the original study it draws on.",
+    "siteLandingPage": "This link goes to a website's front page, not a specific source, so there is nothing to upload. It needs to be replaced with a link to the exact page or study.",
     "pdfRequestReason": "Agent note",
     "uploadPdf": "Upload a PDF",
     "dropPdf": "Drop to upload",
@@ -3707,7 +3713,6 @@
     "failed": "Failed to delete drug"
   },
   "discussion": {
-    "monographTitle": "Discussion",
     "parameterHeading": "{{parameter}} — discussion",
     "factTitle": "Fact discussion",
     "factAction": "Discuss",
