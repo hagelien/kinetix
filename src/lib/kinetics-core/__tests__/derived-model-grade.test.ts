@@ -255,7 +255,12 @@ describe('assessDerivedModel — §5.1 dimensions', () => {
       const withSource = provenanceOf(
         routeGrade({
           inferredParameters: ['ka'],
-          inputSources: { eliminationHalfLife: cited(1), vd: cited(2), ka: cited(3) },
+          inputSources: {
+            eliminationHalfLife: cited(1),
+            vd: cited(2),
+            ka: cited(3),
+            bioavailability: cited(4),
+          },
         }),
       );
       expect(withSource?.grade).toBe('C');
@@ -263,7 +268,7 @@ describe('assessDerivedModel — §5.1 dimensions', () => {
       const without = provenanceOf(
         routeGrade({
           inferredParameters: ['ka'],
-          inputSources: { eliminationHalfLife: cited(1), vd: cited(2) },
+          inputSources: { eliminationHalfLife: cited(1), vd: cited(2), bioavailability: cited(4) },
         }),
       );
       expect(without?.grade).toBe('D');
@@ -278,6 +283,15 @@ describe('assessDerivedModel — §5.1 dimensions', () => {
         }),
       );
       expect(provenance?.grade).toBe('C');
+    });
+
+    it('fails closed when the record omits a required input, even if every listed one is cited', () => {
+      // One-compartment first-order needs ka, t½, Vd and F; a record listing only
+      // a cited Vd must not read as "every catalog value is cited".
+      const provenance = provenanceOf(routeGrade({ inputSources: { vd: cited(1) } }));
+      expect(provenance?.grade).toBe('D');
+      expect(provenance?.reason).toContain('eliminationHalfLife (no source recorded)');
+      expect(provenance?.reason).toContain('ka (no source recorded)');
     });
 
     it('is D when no input has a recorded source at all', () => {

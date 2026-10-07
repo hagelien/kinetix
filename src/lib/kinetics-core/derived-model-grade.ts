@@ -47,7 +47,7 @@
  * Pure and portable: no DB, no engine change, no `CORE_VERSION` bump.
  */
 import type { DerivedRouteGrade, InputSource } from './derived-grade.js';
-import type { RequiredParam } from './model-structure.js';
+import { requiredParametersFor, type RequiredParam } from './model-structure.js';
 import type { DimensionAssessment, DimensionGrade } from './grade-policy.js';
 
 type LetterGrade = Exclude<DimensionGrade, 'hard-stop'>;
@@ -119,9 +119,11 @@ const UNCITED_REASON_TEXT: Record<Extract<InputSource, { basis: 'uncited' }>['re
 
 /**
  * The parameter-provenance assessment for one derived route (see step 3 of
- * `assessDerivedModel`). The inputs judged are the roles the catalog supplied:
- * every role with a recorded source, plus any inferred role, minus the defaulted
- * ones.
+ * `assessDerivedModel`). The inputs judged are every role the route's family
+ * requires, every role with a recorded source and every inferred role, minus the
+ * defaulted ones. Starting from the family rather than from the record means a
+ * record missing a required role's source fails closed instead of passing on the
+ * roles it happens to list.
  */
 function assessParameterProvenance(route: DerivedRouteGrade): DimensionAssessment {
   const inferred = route.inferredParameters ?? [];
@@ -138,8 +140,11 @@ function assessParameterProvenance(route: DerivedRouteGrade): DimensionAssessmen
     };
   }
   const defaulted = new Set(route.defaultedParameters ?? []);
+  const required = requiredParametersFor(route.family, {
+    ivInfusion: route.structure.absorption === 'iv-infusion',
+  });
   const judged = [
-    ...new Set([...(Object.keys(sources) as RequiredParam[]), ...inferred]),
+    ...new Set([...required, ...(Object.keys(sources) as RequiredParam[]), ...inferred]),
   ]
     .filter((role) => !defaulted.has(role))
     .sort();
