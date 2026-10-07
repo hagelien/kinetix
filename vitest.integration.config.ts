@@ -58,6 +58,7 @@ const MOCKED = [
   'tests/integration/drug-scoped-submission-drug-lock.test.ts',
   'tests/integration/methods-components-atomicity.test.ts',
   'tests/integration/notification-email-delivery.test.ts',
+  'tests/integration/paper-extraction-focus-exemption.test.ts',
   'tests/integration/pdf-inbox.test.ts',
   'tests/integration/pdf-requests-pubchem-queue.test.ts',
   'tests/integration/pending-edits-consensus-status-batch.test.ts',

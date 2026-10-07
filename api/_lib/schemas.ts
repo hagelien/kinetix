@@ -1392,8 +1392,27 @@ export const createPendingEditSchema = z
     factStatement: z.string().min(1).max(400).optional(),
     factOperation: z.enum(['add', 'replace', 'remove', 'reorder']).optional(),
     factTargetAnchor: factTargetAnchorSchema.nullable().optional(),
+    // ─── Paper fact-extraction provenance ─────────────────────────────────
+    // A `wiki_fact` filed by agents/paper-fact-extractor.md names the queue
+    // job and claim token it was read under. The server checks the claim is
+    // live and held by the caller; a fact that carries one is exempt from the
+    // admin agent-focus gate (the editor queued this paper on purpose) and is
+    // refused once the claim is gone, so an editor's cancel binds mid-run.
+    paperExtraction: z
+      .object({
+        jobId: z.number().int().positive(),
+        claimToken: z.string().min(1).max(64),
+      })
+      .optional(),
   })
   .superRefine((value, ctx) => {
+    if (value.paperExtraction && value.editType !== 'wiki_fact') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['paperExtraction'],
+        message: 'paperExtraction is only accepted on wiki_fact submissions.',
+      });
+    }
     if (value.editType === 'learning_unit') {
       const content = learningUnitContentSchema.safeParse(value.proposedValue);
       if (!content.success) {

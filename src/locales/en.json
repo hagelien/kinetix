@@ -2634,7 +2634,7 @@
     },
     "skipWikiContent": {
       "label": "Do not write monograph or wiki content",
-      "description": "Agents work drug parameters only. They file no monograph facts and no wiki sections, whichever scope is selected above; their other work (paper reviews, PDF handling, discussion and approval sweeps) continues as usual.",
+      "description": "Agents work drug parameters only. They file no monograph facts and no wiki sections, whichever scope is selected above; their other work (paper reviews, PDF handling, discussion and approval sweeps) continues as usual. Fact extraction from papers an editor has queued is not affected by the focus settings.",
       "impliedByMode": "Already in force: the selected parameters scope closes monograph and wiki content on its own."
     },
     "pagesHeading": "Selected pages",
