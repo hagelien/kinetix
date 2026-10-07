@@ -348,7 +348,22 @@ describe('rangeUtils', () => {
     });
 
     it('groups the integer part while keeping decimals ungrouped', () => {
-      expect(formatWithMaxDecimals(12345.678)).toBe(`12${NBSP}345.678`);
+      expect(formatWithMaxDecimals(12.345)).toBe('12.3');
+      expect(formatWithMaxDecimals(-1.2345)).toBe('-1.23');
+    });
+
+    it('drops decimals once the integer part carries the precision', () => {
+      expect(formatWithMaxDecimals(12345.678)).toBe(`12${NBSP}346`);
+      expect(formatWithMaxDecimals(3277.154)).toBe(`3${NBSP}277`);
+      expect(formatWithMaxDecimals(156.055)).toBe('156');
+      expect(formatWithMaxDecimals(78.027)).toBe('78');
+      expect(formatWithMaxDecimals(6.242)).toBe('6.24');
+    });
+
+    it('never shows more decimals than the caller allows', () => {
+      expect(formatWithMaxDecimals(1.5, 1)).toBe('1.5');
+      expect(formatWithMaxDecimals(1.234, 1)).toBe('1.2');
+      expect(formatWithMaxDecimals(1.234, 0)).toBe('1');
     });
 
     it('does not group numbers below 1000', () => {
