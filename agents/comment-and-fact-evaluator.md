@@ -23,7 +23,8 @@ The Kinetix API fires this routine via the Claude Code Routines API
 (see `api/_lib/agentHooks.ts`) on these events:
 
 - `comment_posted` — a new comment in a `drug_parameter_discussions`
-  thread (any user, any drug, any parameter or monograph-wide).
+  thread (any user, any drug, any parameter or fact). Older comments
+  may sit in the retired monograph-wide thread (`parameter` is null).
   `event` includes `drug_id`, `parameter`, `comment_id`,
   `author_user_id`. The hook does **not** include the comment body.
 - `wiki_fact_approved` — a `wiki_fact` pending edit was just applied
@@ -96,7 +97,7 @@ in this document.
 ### 2.A `comment_posted`
 
 1. Fetch the comment in context — pull the parent thread via
-   `GET /api/drug-discussions?drugId=<id>[&parameter=<id>]` so you
+   `GET /api/drug-discussions?drugId=<id>&parameter=<event.parameter>` so you
    see what was already said.
 2. Read the new comment carefully. Decide which response category it
    falls into:
@@ -142,9 +143,12 @@ in this document.
      stamp on the comment via `POST /api/approvals` with
      `targetType=drug_discussion` and `targetId=<commentId>`. Stop.
 3. When you do reply, post via
-   `POST /api/drug-discussions?drugId=<id>[&parameter=<id>]` with
+   `POST /api/drug-discussions?drugId=<id>&parameter=<event.parameter>` with
    `parentId=<commentId>` so the response lands in the same
-   sub-thread. Stay under ~80 words. Address every point sequentially.
+   sub-thread. Every comment targets a parameter or a fact; a comment in
+   the retired monograph-wide thread (`event.parameter` is null) cannot
+   be replied to there, so answer it in the thread of the parameter or
+   fact it is about, without `parentId`. Stay under ~80 words. Address every point sequentially.
 4. **Never reply to your own prior comments** (`createdBy =
 kinetix-agent`). Stamp instead, or do nothing.
 5. If an operator-provided audit helper is available, log the action
@@ -162,7 +166,7 @@ substitutions referenced below:
 | event.kind                 | step-1 fetch                                                                                   | step-3 feedback channel                                                                                | step-4 stamp `targetType` + `targetId` | step-5 verdict `targetType` + `targetId` + `targetVersion`                                  | step-7 log `--target-type` |
 | -------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | -------------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------- |
 | `parameter_approved`       | `GET /api/drug-parameter-history?drugId=<event.drug_id>&parameter=<event.parameter>` — find the row with `id = event.revision_id`; rows carry `createdAt` directly | `POST /api/drug-discussions?drugId=<event.drug_id>&parameter=<event.parameter>` | `drug_parameter_revision`, `event.revision_id` | `drug_parameter_revision`, `event.revision_id`, `drug_parameter_revisions.createdAt`         | `parameter`                |
-| `wiki_fact_approved`       | Resolve the page's `slug` and `drug_cid` from `page_id` via `GET /api/wiki/pages?pageId=<event.page_id>` (returns `{ page: { slug, drugCid, … } }`). Then `GET /api/wiki/pages?slug=<slug>` for context and `GET /api/wiki/history?slug=<slug>` to find the row with `id = event.revision_id` and read its `createdAt` | `POST /api/drug-discussions?drugId=<drug_cid>` when `drug_cid` resolved; otherwise skip the textual comment — the verdict in step 5 is the only feedback channel | `wiki_revision`, `event.revision_id`   | `wiki_revision`, `event.revision_id`, `wiki_revisions.createdAt`                             | `monograph_fact`           |
+| `wiki_fact_approved`       | Resolve the page's `slug` and `drug_cid` from `page_id` via `GET /api/wiki/pages?pageId=<event.page_id>` (returns `{ page: { slug, drugCid, … } }`). Then `GET /api/wiki/pages?slug=<slug>` for context and `GET /api/wiki/history?slug=<slug>` to find the row with `id = event.revision_id` and read its `createdAt` | `POST /api/drug-discussions?drugId=<drug_cid>&parameter=fact:<factId>` (the fact the revision added or changed) when `drug_cid` resolved; otherwise, or when no single fact applies, skip the textual comment — the verdict in step 5 is the only feedback channel | `wiki_revision`, `event.revision_id`   | `wiki_revision`, `event.revision_id`, `wiki_revisions.createdAt`                             | `monograph_fact`           |
 | `wiki_section_approved`    | Same as `wiki_fact_approved` (page + history fetch for the revision's `createdAt`)             | Section heading changes rarely warrant a comment — usually stamp + approve and stop                    | `wiki_revision`, `event.revision_id`   | `wiki_revision`, `event.revision_id`, `wiki_revisions.createdAt`                             | `monograph_fact`           |
 | `monograph_approved`       | Same as `wiki_fact_approved`                                                                   | Same as `wiki_fact_approved`                                                                           | `wiki_revision`, `event.revision_id`   | `wiki_revision`, `event.revision_id`, `wiki_revisions.createdAt`                             | `monograph_fact`           |
 | `paper_review_approved`    | `GET /api/paper-reviews?citationId=<event.citation_id>` for the review + `updatedAt`; then read the cited paper per `agents/kinectics_science_paper_review_agent_instructions.md` | No drug_id and no parameter thread — the verdict in step 5 (with rationale + evidence) is the only feedback channel. Do not invent a drug-discussion thread; that endpoint requires `drugId` and the hook payload has none. | `paper_review`, `event.paper_review_id` | `paper_review`, `event.paper_review_id`, `paper_reviews.updatedAt` (rows upsert on citation_id, so `updatedAt` — not `createdAt` — is the version)   | `paper_review`             |
