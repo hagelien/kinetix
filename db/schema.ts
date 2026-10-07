@@ -2700,6 +2700,17 @@ export type AdjudicationHandoffOpinion = {
   finalizedAt: string;
 };
 
+/**
+ * What the panel adjudicated (0141): the target exactly as the case file
+ * served it to the panel at the sealing write — hydrated, with the current
+ * value, entry or content it is compared against — and its source row.
+ */
+export type AdjudicatedTarget = {
+  /** The hydrated target (agent-verifications-queue `QueueItem`) served to the panel. */
+  served: Record<string, unknown>;
+  sourceRow: Record<string, unknown> | null;
+};
+
 /** The T4 package a person gets, so nobody reconstructs the appeal from logs (0141). */
 export type AdjudicationHandoff = {
   caseId: number;
@@ -2779,12 +2790,12 @@ export const adjudicationCases = pgTable(
     /** The T4 package for that person (0141). */
     handoff: jsonb('handoff').$type<AdjudicationHandoff>(),
     /**
-     * The target's source row as the panel adjudicated it, copied at sealing
-     * under the source-row lock — for every sealed outcome, converged or
-     * handed off — so later revisions of the live row cannot change the
-     * record of what was decided (0141).
+     * The target as the panel adjudicated it, copied at sealing under the
+     * source-row lock — for every sealed outcome, converged or handed off — so
+     * later revisions of the live row, or of the baselines served beside it,
+     * cannot change the record of what was decided (0141).
      */
-    adjudicatedTarget: jsonb('adjudicated_target').$type<Record<string, unknown>>(),
+    adjudicatedTarget: jsonb('adjudicated_target').$type<AdjudicatedTarget>(),
   },
   (t) => [
     // Permanent, not "while live": a target version is adjudicated at most once.
