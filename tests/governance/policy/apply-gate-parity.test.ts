@@ -90,11 +90,18 @@ function frozenHoldReason(
 
 /**
  * Frozen copy of `applyOnAgentConsensus`'s decision, in its actual order:
- * clinical case, then human author, then the tally, then human disputes, then
- * the apply itself (which can still refuse on a stale review token).
+ * clinical case, then an unattributed author, then the tally, then human
+ * disputes, then the apply itself (which can still refuse on a stale review
+ * token).
+ *
+ * Re-transcribed when a person's proposal began publishing on agent consensus:
+ * the early return used to refuse every non-agent author, and now refuses only
+ * a proposal with no recorded author. A person's proposal is tallied with every
+ * active agent eligible (`frozenEffectiveQuorum`'s self-review arithmetic).
  */
 function frozenLegacyGate(facts: {
   editType: string;
+  submittedBy: number | null;
   submitterIsAgent: boolean;
   summary: VerificationSummary;
   quorum: number;
@@ -103,7 +110,7 @@ function frozenLegacyGate(facts: {
   staleReviewToken?: boolean;
 }): ShadowOutcome {
   if (facts.editType === 'clinical_case') return 'hold';
-  if (!facts.submitterIsAgent) return 'hold';
+  if (facts.submittedBy === null) return 'hold';
   if (frozenHoldReason(facts.summary, facts.quorum, { highRisk: facts.highRisk })) {
     return 'hold';
   }
@@ -125,9 +132,17 @@ function summary(over: Partial<VerificationSummary> = {}): VerificationSummary {
   };
 }
 
+/** Every active agent may verify a person's proposal; an agent author's own seat counts only under self-review. */
+function frozenQuorum(activeAgents: number, authorSelfReviews: boolean, submitterIsAgent: boolean) {
+  return frozenEffectiveQuorum(activeAgents, {
+    authorSelfReviews: authorSelfReviews || !submitterIsAgent,
+  });
+}
+
 function facts(over: Partial<ConsensusFacts> = {}): ConsensusFacts {
   const activeAgents = over.activeAgents ?? 3;
   const authorSelfReviews = over.authorSelfReviews ?? false;
+  const submitterIsAgent = over.submitterIsAgent ?? true;
   return {
     pendingEditId: 1,
     editType: 'wiki_fact',
@@ -137,7 +152,7 @@ function facts(over: Partial<ConsensusFacts> = {}): ConsensusFacts {
     summary: summary(),
     activeAgents,
     authorSelfReviews,
-    quorum: frozenEffectiveQuorum(activeAgents, { authorSelfReviews }),
+    quorum: frozenQuorum(activeAgents, authorSelfReviews, submitterIsAgent),
     highRisk: false,
     hasOpenHumanDispute: false,
     ...over,
@@ -163,11 +178,40 @@ function compare(f: ConsensusFacts, opts: { staleReviewToken?: boolean } = {}) {
  * engine held on — otherwise a case could agree for the wrong reason.
  */
 describe('required parity matrix', () => {
-  it('1. human author with many agent approvals — held', () => {
-    // Agent consensus never stands in for a moderator on a person's proposal,
-    // however many agents corroborate it.
+  it('1. human author with the full quorum — applied', () => {
+    // A person's proposal publishes on agent consensus under the same bar as
+    // an agent's; people are needed only where the agents cannot settle it.
     const { legacyOutcome, evaluation, divergence } = compare(
       facts({
+        submitterIsAgent: false,
+        summary: summary({ approveCount: 2 }),
+      }),
+    );
+    expect(legacyOutcome).toBe('apply');
+    expect(evaluation.outcome).toBe('apply');
+    expect(divergence.severity).toBe('none');
+  });
+
+  it('1b. human author short of the quorum — held on quorum', () => {
+    // Every active agent may verify a person's proposal, so with three active
+    // agents one approval is short of the two the pool can supply.
+    const { legacyOutcome, evaluation } = compare(
+      facts({
+        submitterIsAgent: false,
+        summary: summary({ approveCount: 1 }),
+      }),
+    );
+    expect(legacyOutcome).toBe('hold');
+    expect(evaluation.outcome).toBe('hold');
+    expect(evaluation.reasons).toContain('assurance.independentApprovals.pool');
+    expect(evaluation.reasons).not.toContain('assurance.humanApproval');
+    expect(genericConsensusHoldReason(evaluation.decision)).toBe('quorum_unmet');
+  });
+
+  it('1c. proposal with no recorded author — held for a person whatever the tally', () => {
+    const { legacyOutcome, evaluation, divergence } = compare(
+      facts({
+        submittedBy: null,
         submitterIsAgent: false,
         summary: summary({ approveCount: 5, approveTier2Count: 3 }),
       }),
@@ -175,35 +219,8 @@ describe('required parity matrix', () => {
     expect(legacyOutcome).toBe('hold');
     expect(evaluation.outcome).toBe('hold');
     expect(evaluation.reasons).toContain('assurance.humanApproval');
-    // Issue #1375: this must not collapse to the generic `quorum_unmet`
-    // fallback — a human-submitted proposal can never clear this gate at
-    // all, however many agents approve it.
-    expect(genericConsensusHoldReason(evaluation.decision)).toBe(
-      'human_submitted',
-    );
+    expect(genericConsensusHoldReason(evaluation.decision)).toBe('human_submitted');
     expect(divergence.severity).toBe('none');
-  });
-
-  it('1b. human author with no approvals — held on the human-author rule, not quorum', () => {
-    // Issue #1405 (filed from #1403's own review): the base rule is declared
-    // before `humanAuthored` in `buildKinetixApplyPolicy`, so when BOTH are
-    // unmet at once, `decision.unmet[0]` is the base rule's entry by pure
-    // declaration order. Reporting `quorum_unmet` here would send an operator
-    // toward collecting more agent approvals — which can never publish a
-    // human's proposal, however many land.
-    const { legacyOutcome, evaluation } = compare(
-      facts({
-        submitterIsAgent: false,
-        summary: summary({ approveCount: 0 }),
-      }),
-    );
-    expect(legacyOutcome).toBe('hold');
-    expect(evaluation.outcome).toBe('hold');
-    expect(evaluation.reasons).toContain('assurance.independentApprovals.pool');
-    expect(evaluation.reasons).toContain('assurance.humanApproval');
-    expect(genericConsensusHoldReason(evaluation.decision)).toBe(
-      'human_submitted',
-    );
   });
 
   it('2. agent author with no approvals — held', () => {
@@ -266,6 +283,7 @@ describe('required parity matrix', () => {
       'upheld_dispute',
       'returned_unrevised',
       'target_unpublished',
+      'unverified_sources',
     ] as const) {
       const { evaluation } = compare(
         facts({
@@ -473,13 +491,9 @@ describe('required parity matrix', () => {
     expect(divergence.severity).toBe('none');
   });
 
-  it('11b. human-submitted clinical case — held on clinical standing, not human authorship', () => {
-    // Issue #1406 (filed from #1403's own review): `humanAuthored` and
-    // `clinicalCase` can both be unmet at once for a human-submitted clinical
-    // case. `legacyConsensusHold` refuses a clinical case before it even
-    // checks the submitter, so `clinical_case` must win here too — reporting
-    // `human_submitted` would say ordinary human moderation clears it, when a
-    // human without clinical standing still cannot approve it.
+  it('11b. human-submitted clinical case — held on clinical standing', () => {
+    // A person's proposal publishes on agent consensus, but a clinical case
+    // never does, whoever wrote it: it needs a human with clinical standing.
     const { legacyOutcome, evaluation } = compare(
       facts({
         editType: 'clinical_case',
@@ -489,7 +503,6 @@ describe('required parity matrix', () => {
     );
     expect(legacyOutcome).toBe('hold');
     expect(evaluation.outcome).toBe('hold');
-    expect(evaluation.reasons).toContain('assurance.humanApproval');
     expect(evaluation.reasons).toContain(
       'assurance.humanApprovalWithCapability',
     );
@@ -600,9 +613,11 @@ describe('exhaustive outcome parity', () => {
                       hasOpenHumanDispute,
                       activeAgents,
                       authorSelfReviews,
-                      quorum: frozenEffectiveQuorum(activeAgents, {
+                      quorum: frozenQuorum(
+                        activeAgents,
                         authorSelfReviews,
-                      }),
+                        submitterIsAgent,
+                      ),
                       summary: summary({
                         approveCount,
                         disputeCount,

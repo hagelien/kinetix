@@ -109,13 +109,10 @@ export function assuranceFromLegacySummary(
 /**
  * Build the policy context the legacy consensus gate implies.
  *
- * `authorKind` is `'agent'` unconditionally, and that is not an assumption
- * being smuggled in: `applyOnAgentConsensus` returns early for a proposal whose
- * submitter is not an active agent, so `consensusApprovalHoldReason` is only
- * ever reached for agent-authored proposals. The policy's `human-authored` rule
- * consequently never matches on this path — which is exactly right, because the
- * legacy function it is standing in for never considered human authorship
- * either.
+ * `authorKind` is `'agent'` unconditionally. The tally this stands in for
+ * (`consensusApprovalHoldReason`) never considered authorship, and since
+ * `kinetix-consensus@v2` no rule but `unattributed` does either — and an
+ * unattributed proposal is refused before any tally is computed.
  */
 export function projectLegacyConsensusContext(args: {
   summary: LegacyVerificationSummary;
@@ -171,8 +168,8 @@ export function consensusHoldReasonFromDecision(
  * The same first-unmet-requirement projection as
  * {@link consensusHoldReasonFromDecision}, but for `kinetix-consensus-apply`
  * (the whole `applyOnAgentConsensus` gate) rather than the base-quorum-only
- * `kinetix-consensus` policy. That policy's extra rules — a human author, a
- * missing source quote, a clinical case, an open dispute — each need their own
+ * `kinetix-consensus` policy. That policy's extra rules — an unattributed
+ * author, a missing source quote, a clinical case, an open dispute — each need their own
  * word instead of collapsing into `quorum_unmet`, so a maintainer reading
  * `POST /api/agent-consensus-sweep`'s response can tell a held edit needing a
  * flagship approval from one that can never clear the generic gate at all
@@ -184,6 +181,7 @@ export type GenericConsensusHoldReason =
   | 'upheld_dispute'
   | 'returned_unrevised'
   | 'target_unpublished'
+  | 'unverified_sources'
   | 'human_submitted'
   | 'high_risk_missing_flagship'
   | 'high_risk_degraded_quorum'
@@ -193,7 +191,7 @@ export type GenericConsensusHoldReason =
 /**
  * Why the generic policy's `noOpenDisputes` requirement is unmet. That
  * requirement is one boolean fact (`ConsensusFacts.hasOpenHumanDispute`) that
- * folds four legacy conditions together, so the decision alone cannot say which
+ * folds five legacy conditions together, so the decision alone cannot say which
  * one held the edit. The facts collector names the first that applies, in the
  * legacy gate's own order, and {@link genericConsensusHoldReason} reports it
  * instead of calling every one of them an `open_dispute` (issue 1404).
@@ -202,7 +200,8 @@ export type ConsensusDisputeHoldCause =
   | 'open_dispute'
   | 'upheld_dispute'
   | 'returned_unrevised'
-  | 'target_unpublished';
+  | 'target_unpublished'
+  | 'unverified_sources';
 
 export function genericConsensusHoldReason(
   decision: PolicyDecision,
@@ -218,8 +217,8 @@ export function genericConsensusHoldReason(
   //
   // The source-quote gate (`highRiskProposalWouldPublishUnquoted`) runs before
   // the generic engine is even consulted, so it outranks everything below.
-  // `legacyConsensusHold` then refuses a clinical case, then a human author,
-  // before it ever computes a tally.
+  // `legacyConsensusHold` then refuses a clinical case, then an unattributed
+  // author, before it ever computes a tally.
   //
   // The tally itself (`consensusApprovalHoldReason`/`frozenHoldReason`) checks
   // the pool-adjusted base quorum FIRST — `disputeCount === 0 && approveCount
@@ -237,11 +236,17 @@ export function genericConsensusHoldReason(
   // resolving a dispute) that can never actually clear the edit.
   if (has(KINETIX_RULE_IDS.unquoted)) return 'source_quote_missing';
   if (has(KINETIX_RULE_IDS.clinicalCase)) return 'clinical_case';
-  if (has(KINETIX_RULE_IDS.humanAuthored)) return 'human_submitted';
+  // `human_submitted` is the legacy name for "needs a person because of who
+  // wrote it"; since v2 that is only a proposal with no recorded author.
+  if (has(KINETIX_RULE_IDS.unattributed) || has(KINETIX_RULE_IDS.humanAuthored)) {
+    return 'human_submitted';
+  }
   // `legacyConsensusHold` checks `pendingEditTargetOpenToAgents` right after the
   // human-author refusal and before it computes any tally, so an unpublished
   // page outranks a short quorum or a missing flagship approval.
   if (disputeHoldCause === 'target_unpublished') return 'target_unpublished';
+  // So does an ingested fact citing an unread paper, checked right after it.
+  if (disputeHoldCause === 'unverified_sources') return 'unverified_sources';
   if (
     unmet.some(
       (u) =>

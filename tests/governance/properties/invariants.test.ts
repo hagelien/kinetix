@@ -4,8 +4,8 @@
  * The parity matrices next door prove agreement on the cases somebody thought
  * to write down. These prove statements that must hold across the whole input
  * space, which is a different claim and catches a different bug: a matrix
- * cannot tell you that *no* combination of agent approvals publishes a human's
- * proposal, only that the four you enumerated did not.
+ * cannot tell you that *no* combination of agent approvals publishes an
+ * unattributed proposal, only that the four you enumerated did not.
  *
  * Everything here is pure. No database, no harness — the policy engine is
  * synchronous by construction (§7.1), which is exactly what makes generated
@@ -292,7 +292,7 @@ describe('2. adding an open dispute never makes a held proposal publishable', ()
   });
 
   it('holds every proposal that carries a dispute verdict (consensus policy)', () => {
-    // `kinetix-consensus@v1` is fed by a tally that has never heard of the
+    // `kinetix-consensus` is fed by a tally that has never heard of the
     // unified disputes table, so the mechanism it reads is the dispute
     // *verdict*. Same invariant, stated against the input this policy has.
     fc.assert(
@@ -431,30 +431,58 @@ describe('5. changing the payload invalidates the old version', () => {
   }
 });
 
-describe('6. agent approvals alone never publish a human’s proposal', () => {
-  it('holds for every count of agent approvals, every pool, every risk level', () => {
+// Invariant 6 was "agent approvals alone never publish a human's proposal".
+// It was retired with `kinetix-consensus@v2` / `kinetix-consensus-apply@v3`,
+// when the owner decided a person's proposal publishes on agent consensus under
+// the same bar as an agent's. What replaces it is the stronger statement below
+// — authorship never moves the bar either way — plus the one authorship that
+// still needs a person: a proposal nobody can be named the author of.
+describe('6. authorship never changes the bar; an unattributed proposal needs a person', () => {
+  const arbAssurance = fc
+    .tuple(fc.integer({ min: 0, max: 20 }), fc.integer({ min: 0, max: 2 }), arbCapabilities)
+    .map(([agentApprovals, disputes, capabilities]) => ({
+      ...EMPTY_ASSURANCE_PROFILE,
+      explicitApprovals: agentApprovals,
+      independentApprovers: agentApprovals,
+      agentApprovals,
+      humanApprovals: 0,
+      disputingAssessors: disputes,
+      approvalCapabilities: capabilities,
+      humanApprovalCapabilities: [],
+    }));
+
+  it('holds a person\u2019s proposal to exactly the bar an agent\u2019s meets', () => {
     fc.assert(
       fc.property(
-        fc.integer({ min: 0, max: 20 }),
+        arbAssurance,
         arbPool,
         fc.constantFrom<'low' | 'medium' | 'high'>('low', 'medium', 'high'),
-        arbCapabilities,
-        (agentApprovals, pool, riskLevel, capabilities) => {
+        fc.boolean(),
+        (assurance, pool, riskLevel, clinical) => {
+          const risk = riskProfile(riskLevel, clinical ? [KINETIX_CLINICAL_CASE_TAG] : []);
+          const human = makeContext({ author: HUMAN_AUTHOR, risk, pool, assurance });
+          const agent = makeContext({ author: AGENT_AUTHOR, risk, pool, assurance });
+          for (const policySet of [KINETIX_APPLY_POLICY, KINETIX_POLICY]) {
+            expect(allowedBy(policySet, human)).toBe(allowedBy(policySet, agent));
+          }
+        },
+      ),
+      RUNS,
+    );
+  });
+
+  it('never publishes an unattributed proposal on agent approvals alone', () => {
+    fc.assert(
+      fc.property(
+        arbAssurance,
+        arbPool,
+        fc.constantFrom<'low' | 'medium' | 'high'>('low', 'medium', 'high'),
+        (assurance, pool, riskLevel) => {
           const context = makeContext({
-            author: HUMAN_AUTHOR,
+            author: { ...HUMAN_AUTHOR, kind: 'system' },
             risk: riskProfile(riskLevel),
             pool,
-            assurance: {
-              ...EMPTY_ASSURANCE_PROFILE,
-              explicitApprovals: agentApprovals,
-              independentApprovers: agentApprovals,
-              agentApprovals,
-              // The whole point: no human ever approved, so this stays 0
-              // however large the agent tally grows.
-              humanApprovals: 0,
-              approvalCapabilities: capabilities,
-              humanApprovalCapabilities: [],
-            },
+            assurance,
           });
           expect(allowedBy(KINETIX_APPLY_POLICY, context)).toBe(false);
           expect(allowedBy(KINETIX_POLICY, context)).toBe(false);
@@ -464,29 +492,34 @@ describe('6. agent approvals alone never publish a human’s proposal', () => {
     );
   });
 
-  it('is not vacuous — one human approval unblocks the same tally', () => {
-    const base = {
-      author: HUMAN_AUTHOR,
-      pool: reviewerPoolState({
-        poolSize: 3,
-        designTargetQuorum: KINETIX_DESIGN_TARGET_QUORUM,
-      }),
-    };
-    const heldByAgentsAlone = makeContext({
-      ...base,
-      assurance: { explicitApprovals: 2, independentApprovers: 2, agentApprovals: 2 },
+  it('is not vacuous — agents alone publish a person\u2019s proposal, and one human approval unblocks an unattributed one', () => {
+    const pool = reviewerPoolState({
+      poolSize: 3,
+      designTargetQuorum: KINETIX_DESIGN_TARGET_QUORUM,
     });
-    expect(allowedBy(KINETIX_APPLY_POLICY, heldByAgentsAlone)).toBe(false);
-    const withHuman = makeContext({
-      ...base,
-      assurance: {
-        explicitApprovals: 2,
-        independentApprovers: 2,
-        agentApprovals: 1,
-        humanApprovals: 1,
-      },
-    });
-    expect(allowedBy(KINETIX_APPLY_POLICY, withHuman)).toBe(true);
+    const agentsOnly = { explicitApprovals: 2, independentApprovers: 2, agentApprovals: 2 };
+    expect(
+      allowedBy(KINETIX_APPLY_POLICY, makeContext({ author: HUMAN_AUTHOR, pool, assurance: agentsOnly })),
+    ).toBe(true);
+    const unattributed = { ...HUMAN_AUTHOR, kind: 'system' as const };
+    expect(
+      allowedBy(KINETIX_APPLY_POLICY, makeContext({ author: unattributed, pool, assurance: agentsOnly })),
+    ).toBe(false);
+    expect(
+      allowedBy(
+        KINETIX_APPLY_POLICY,
+        makeContext({
+          author: unattributed,
+          pool,
+          assurance: {
+            explicitApprovals: 2,
+            independentApprovers: 2,
+            agentApprovals: 1,
+            humanApprovals: 1,
+          },
+        }),
+      ),
+    ).toBe(true);
   });
 });
 

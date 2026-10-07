@@ -11,7 +11,10 @@ import {
   wikiPages,
 } from '../../db/schema.js';
 import { handleMatch, resolveCitation } from '../../api/_lib/citation-store.js';
-import { mergeCitations } from '../../api/_lib/citation-merge.js';
+import {
+  lockPendingEditsCitingCitation,
+  mergeCitations,
+} from '../../api/_lib/citation-merge.js';
 import {
   resetIntegrationDb,
   setupIntegrationDb,
@@ -460,6 +463,80 @@ describe('mergeCitations — folding a split pair (#1018)', () => {
       .from(pendingEdits)
       .where(eq(pendingEdits.id, otherEdit!.id));
     expect(untouched?.targetId).toBe(loser);
+  });
+
+  it('locks the pending proposals citing the loser before touching any review', async () => {
+    // A consensus publication holds the fact's row before its cited papers'
+    // review rows; the merge takes the same order, so the two cannot deadlock.
+    const winner = await seedCitation({ type: 'pmid', identifier: PMID });
+    const loser = await seedCitation({ type: 'doi', identifier: DOI });
+    const insert = async (values: Partial<typeof pendingEdits.$inferInsert>) => {
+      const [row] = await db
+        .insert(pendingEdits)
+        .values({
+          editType: 'wiki_fact',
+          targetId: 1,
+          proposedValue: { factStatement: 'x' },
+          submittedBy: userId,
+          ...values,
+        })
+        .returning({ id: pendingEdits.id });
+      return row!.id;
+    };
+    const byColumn = await insert({ referenceId: loser });
+    const byArray = await insert({ referenceIds: [winner, loser] });
+    const byNode = await insert({
+      proposedValue: { type: 'fact', attrs: { factId: 'f', referenceIds: [loser] } },
+    });
+    const byMarker = await insert({ proposedMeta: { unverifiedReferenceIds: [loser] } });
+    // Whatever its status: a draft or returned one can turn pending mid-merge.
+    const returned = await insert({ referenceId: loser, status: 'returned' });
+    // Not locked: a queued review (the merge writes those after the reviews)
+    // and one citing only the winner.
+    await insert({ editType: 'paper_review', targetId: loser, proposedValue: {} });
+    await insert({ referenceId: winner });
+
+    const locked = await db.transaction((tx) =>
+      lockPendingEditsCitingCitation(tx as never, loser),
+    );
+    expect(locked).toEqual([byColumn, byArray, byNode, byMarker, returned]);
+  });
+
+  it("repoints an ingested fact's unread-paper marker", async () => {
+    // Consensus holds the fact until every listed paper has a read-in-full
+    // review; left on the loser, the marker would wait on a deleted citation
+    // and no review of the surviving paper could release it.
+    const winner = await seedCitation({ type: 'pmid', identifier: PMID });
+    const loser = await seedCitation({ type: 'doi', identifier: DOI });
+    const [fact] = await db
+      .insert(pendingEdits)
+      .values({
+        editType: 'wiki_fact',
+        targetId: 1,
+        proposedValue: { factStatement: 'Usjekket påstand.' },
+        proposedMeta: {
+          source: 'conversation_ingestion',
+          unverifiedSourceKeys: ['S1', 'S2'],
+          unverifiedReferenceIds: [loser, winner],
+          // Not the merge's to write: it touches the marker key alone.
+          returnedAt: '2026-10-06T00:00:00.000Z',
+        },
+        submittedBy: userId,
+      })
+      .returning({ id: pendingEdits.id });
+
+    await mergeCitations(db, winner, loser, { actorUserId: userId });
+
+    const [moved] = await db
+      .select({ proposedMeta: pendingEdits.proposedMeta })
+      .from(pendingEdits)
+      .where(eq(pendingEdits.id, fact!.id));
+    expect(moved?.proposedMeta).toEqual({
+      source: 'conversation_ingestion',
+      unverifiedSourceKeys: ['S1', 'S2'],
+      unverifiedReferenceIds: [winner],
+      returnedAt: '2026-10-06T00:00:00.000Z',
+    });
   });
 });
 

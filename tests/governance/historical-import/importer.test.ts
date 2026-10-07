@@ -1588,10 +1588,9 @@ describe('first-contact live mirroring', () => {
 describe('authorship, capture time, and the source row', () => {
   it('records a human submitter as human, not as an agent', async () => {
     // Every `pending_edits` row has a `submitted_by`, so deriving `agent` from
-    // the reference being present labels a person's proposal as an agent's.
-    // The policy's `human-authored` rule then never fires, and agent consensus
-    // stands in for the moderator on a human's work — the one direction §1.7
-    // forbids.
+    // the reference being present labels a person's proposal as an agent's,
+    // which misstates the pool arithmetic and the decision record's account of
+    // who wrote it.
     const moderator = await seedUser(db, {
       email: 'person@example.com',
       username: 'person',

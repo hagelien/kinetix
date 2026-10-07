@@ -52,7 +52,16 @@ import { agentVerifications, agents } from '../../../db/schema.js';
 import { KINETIX_SPACE } from './actor-context.js';
 import { recordAuditEvent } from './store/audit.js';
 import { recordAssessment } from './store/assessments.js';
-import { ensureSpace, ensureTarget } from './store/spaces.js';
+import {
+  advanceActivePolicyVersion,
+  ensureSpace,
+  ensureTarget,
+  findSpace,
+} from './store/spaces.js';
+import {
+  KINETIX_POLICY_ID,
+  KINETIX_POLICY_VERSION as KINETIX_POLICY_RULES_VERSION,
+} from '../../../src/lib/assurance/policy.js';
 import { findByLegacy, linkLegacyRecord } from './store/legacy-links.js';
 import {
   legacyProvenance,
@@ -62,8 +71,11 @@ import {
 } from './store/interface.js';
 import type { TargetRef } from 'assurance-core';
 
-/** The policy set Kinetix's space evaluates under (Phase 1). */
-export const KINETIX_POLICY_VERSION = 'kinetix-consensus@v1';
+/**
+ * The policy set Kinetix's space evaluates under, read off the policy itself
+ * so the space's pointer cannot lag behind a version bump.
+ */
+export const KINETIX_POLICY_VERSION = `${KINETIX_POLICY_ID}@${KINETIX_POLICY_RULES_VERSION}`;
 
 /**
  * Create the Kinetix space if it is missing.
@@ -74,11 +86,59 @@ export const KINETIX_POLICY_VERSION = 'kinetix-consensus@v1';
 export async function ensureKinetixSpace(
   db: GovernanceDb = getDb(),
 ): Promise<SpaceRecord> {
-  return ensureSpace(db, {
+  const space = await ensureSpace(db, {
     slug: KINETIX_SPACE,
     name: 'Kinetix',
     activePolicyVersion: KINETIX_POLICY_VERSION,
   });
+  // An existing space keeps whatever version it was created under
+  // (`ensureSpace` does nothing on conflict), so advance its pointer when the
+  // policy has moved on. Not retroactive: decision records carry their own
+  // version.
+  if (policyPointerIsOlder(space.activePolicyVersion)) {
+    const advanced = await advanceSpacePolicyPointer(db, space.id);
+    if (advanced) return { ...space, activePolicyVersion: KINETIX_POLICY_VERSION };
+    return (await findSpace(db, KINETIX_SPACE)) ?? space;
+  }
+  return space;
+}
+
+/**
+ * Move a space's pointer to this build's policy version, only if the pointer
+ * it holds at the moment of the write is older (or unset). The comparison is
+ * the write's own predicate (`advanceActivePolicyVersion`): two builds
+ * overlapping a deploy can both read an old pointer, and the older build's
+ * write must lose to the newer one's rather than drag it back. Returns whether
+ * this call moved it.
+ */
+export async function advanceSpacePolicyPointer(
+  db: GovernanceDb,
+  spaceId: number,
+): Promise<boolean> {
+  const m = /^(.+)@v(\d+)$/.exec(KINETIX_POLICY_VERSION);
+  if (!m) return false;
+  return advanceActivePolicyVersion(db, spaceId, {
+    policyId: m[1]!,
+    version: Number(m[2]),
+  });
+}
+
+/**
+ * True when a space's pointer names an older version of this policy (or none),
+ * so advancing it moves forward only. During an overlapping deployment an
+ * older build must not drag back a pointer the newer build already advanced,
+ * and a pointer this build cannot read is left alone rather than overwritten.
+ */
+export function policyPointerIsOlder(current: string | null): boolean {
+  if (current === null) return true;
+  const parse = (v: string) => {
+    const m = /^(.+)@v(\d+)$/.exec(v);
+    return m ? { id: m[1]!, n: Number(m[2]) } : null;
+  };
+  const have = parse(current);
+  const want = parse(KINETIX_POLICY_VERSION);
+  if (!have || !want || have.id !== want.id) return false;
+  return have.n < want.n;
 }
 
 /**

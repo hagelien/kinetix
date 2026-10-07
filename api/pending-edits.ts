@@ -247,15 +247,28 @@ function payloadReturnedAt(proposedMeta: unknown): string | null {
  */
 function withoutRevisionMarker(meta: unknown): unknown {
   if (!isRecord(meta)) return meta;
-  if (!('revisedAt' in meta) && !('returnedAt' in meta)) return meta;
+  if (!SERVER_OWNED_META_KEYS.some((key) => key in meta)) return meta;
   const rest = { ...meta };
-  // `returnedAt` is the server's too: it holds agent consensus until the
-  // author revises (`returnStandsUnrevised`), so a client must not be able to
-  // clear it — or forge one — by writing the key.
-  delete rest.revisedAt;
-  delete rest.returnedAt;
+  for (const key of SERVER_OWNED_META_KEYS) delete rest[key];
   return rest;
 }
+
+/**
+ * `proposedMeta` keys only the server writes. `returnedAt` holds agent
+ * consensus until the author revises (`returnStandsUnrevised`), and the
+ * conversation-ingestion marker (`unverifiedReferenceIds`, with the bundle
+ * keys beside it) holds it until the cited papers are read in full
+ * (`pendingEditCitesUnreadSources`), so a client must not be able to clear
+ * either — or forge one — by writing the key. Ingestion writes its marker
+ * straight to the row, and a revision carries it over from the stored row
+ * (`nextProposedMetaPreservingConflict`).
+ */
+const SERVER_OWNED_META_KEYS = [
+  'revisedAt',
+  'returnedAt',
+  'unverifiedReferenceIds',
+  'unverifiedSourceKeys',
+] as const;
 
 const SAFE_FACT_LINK_PROTOCOLS = new Set([
   'http:',
@@ -752,7 +765,7 @@ export function nextProposedMetaPreservingConflict(
     isRecord(snapshotProposedMeta) && snapshotProposedMeta.conflict != null
       ? JSON.stringify(snapshotProposedMeta.conflict)
       : null;
-  return sql`CASE
+  const withConflict = sql`CASE
     WHEN jsonb_typeof(${pendingEdits.proposedMeta}) = 'object'
       AND jsonb_exists(${pendingEdits.proposedMeta}, 'conflict')
       AND ${revisesPayload}
@@ -763,6 +776,19 @@ export function nextProposedMetaPreservingConflict(
     THEN COALESCE(${nextJson}::jsonb, '{}'::jsonb)
       || jsonb_build_object('conflict', ${pendingEdits.proposedMeta} -> 'conflict')
     ELSE ${nextJson}::jsonb
+  END`;
+  // The conversation-ingestion marker is carried over from the stored row
+  // whatever the revision supplies: a revision does not read the papers, so
+  // it must not release the unread-sources hold (`SERVER_OWNED_META_KEYS`).
+  // Read from the row the UPDATE writes, like the conflict marker above.
+  return sql`CASE
+    WHEN jsonb_typeof(${pendingEdits.proposedMeta} -> 'unverifiedReferenceIds') = 'array'
+    THEN (CASE WHEN jsonb_typeof(${withConflict}) = 'object' THEN ${withConflict} ELSE '{}'::jsonb END)
+      || jsonb_strip_nulls(jsonb_build_object(
+        'unverifiedReferenceIds', ${pendingEdits.proposedMeta} -> 'unverifiedReferenceIds',
+        'unverifiedSourceKeys', ${pendingEdits.proposedMeta} -> 'unverifiedSourceKeys'
+      ))
+    ELSE ${withConflict}
   END`;
 }
 
@@ -3682,14 +3708,14 @@ async function handlePatch(
     return;
   }
 
-  // A human's proposal is moderated by a human. Agents peer-verify every
-  // pending edit — human-submitted ones included, which is how those stop
-  // waiting unseen — but a verdict is evidence, not a decision: an agent
-  // carrying an editor role must not approve, reject, or return a person's
-  // edit through the moderator path either. The consensus auto-apply path
-  // enforces the same rule (api/agent-verifications.ts); this closes the
-  // direct route. Agent-submitted edits are unaffected: agents still moderate
-  // each other.
+  // No single agent decides a person's proposal. Agents peer-verify every
+  // pending edit, human-submitted ones included, and since kinetix-consensus@v2
+  // their consensus publishes a person's proposal at quorum exactly as it does
+  // an agent's (api/agent-verifications.ts). What this closes is the
+  // one-agent route: an agent carrying an editor role must not approve,
+  // reject, or return a person's edit through the moderator path, which would
+  // let one agent stand in for the quorum. Agent-submitted edits are
+  // unaffected here: agents still moderate each other.
   if (
     (requestedStatus === 'approved' ||
       requestedStatus === 'rejected' ||

@@ -11,7 +11,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { and, asc, desc, eq, exists, inArray, ne, not, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, exists, inArray, isNotNull, ne, not, or, sql } from 'drizzle-orm';
 import { json, error, withErrorHandling } from './_lib/response.js';
 import { getDb, inTransaction } from './_lib/db.js';
 import { getUserFromRequest } from './_lib/auth.js';
@@ -25,7 +25,9 @@ import {
   AGENT_CONSENSUS_APPROVE_QUORUM,
   approverCountsForConsensus,
   lockPendingEditTargetPage,
+  lockPendingEditSourceReviews,
   pendingEditTargetOpenToAgents,
+  pendingEditCitesUnreadSources,
   lockConsensusEligibility,
   consensusApprovalHoldReason,
   countActiveVerifierAgents,
@@ -655,7 +657,7 @@ const DEGRADED_QUORUM_WARN_THROTTLE_MS = 10 * 60_000;
 function warnDegradedConsensusQuorum(
   activeAgents: number,
   quorum: number,
-  authorSelfReviews = false,
+  author: 'agent' | 'self_review' | 'human' = 'agent',
 ): void {
   const now = Date.now();
   if (now - _lastDegradedQuorumWarnAt < DEGRADED_QUORUM_WARN_THROTTLE_MS) {
@@ -668,13 +670,19 @@ function warnDegradedConsensusQuorum(
   // restore the design target. With it, the lone approval is the author's own
   // and a SECOND agent is already enough — the author counts itself, so the
   // pool reaches quorum 2 one agent sooner.
-  const detail = authorSelfReviews
-    ? `The author reviews its own work (agents.self_review_enabled), so this ` +
-      `edit can be carried by its own verdict alone; adding a second active ` +
-      `agent restores two-reviewer consensus.`
-    : `Agent-authored edits now auto-apply on a single independent peer ` +
-      `approval; add a third active agent to restore ` +
-      `two-independent-reviewer consensus.`;
+  // A person's proposal is a third case: its author holds no seat, so the
+  // lone approval is an agent's, and one more active agent restores the bar.
+  const detail =
+    author === 'self_review'
+      ? `The author reviews its own work (agents.self_review_enabled), so this ` +
+        `edit can be carried by its own verdict alone; adding a second active ` +
+        `agent restores two-reviewer consensus.`
+      : author === 'human'
+        ? `A person's proposal now publishes on a single agent approval; add ` +
+          `a second active agent to restore two-reviewer consensus.`
+        : `Agent-authored edits now auto-apply on a single independent peer ` +
+          `approval; add a third active agent to restore ` +
+          `two-independent-reviewer consensus.`;
   console.warn(
     `[agent-consensus] degraded quorum: ${activeAgents} active agent(s) ` +
       `support a quorum of only ${quorum} (design target ` +
@@ -775,7 +783,9 @@ export type AgentConsensusHold =
   // A reviewer returned this version with a note; it must be revised first.
   | 'returned_unrevised'
   // A wiki edit whose page is not (or no longer) published.
-  | 'target_unpublished';
+  | 'target_unpublished'
+  // An ingested fact citing a paper nobody has read in full yet.
+  | 'unverified_sources';
 
 export type AgentConsensusOutcome =
   | { outcome: 'applied' }
@@ -911,18 +921,21 @@ async function legacyConsensusHold(
   // /review approval path (applyApprovedEdit) is unaffected and still publishes.
   if (pending.editType === 'clinical_case') return { reason: 'clinical_case' };
 
-  // Human-submitted edits are peer-verified but never auto-applied. Agents see
-  // every pending edit in their queue (api/agent-verifications-queue.ts) so a
-  // human proposal gets the same scrutiny — a dispute floats it, approvals
-  // corroborate it — but consensus stands in for a moderator only on the
-  // agents' own output. A human contributor's change stays a human decision.
-  if (
-    pending.submittedBy == null ||
-    !(await isActiveAgentUser(pending.submittedBy))
-  ) {
-    return { reason: 'human_submitted' };
-  }
+  // A person's proposal publishes on agent consensus too, under exactly the
+  // same bar as an agent's: the quorum, the high-risk requirements (a
+  // flagship-tier approval, the full design-target quorum), the source-quote
+  // gate, and every dispute hold below. People are needed only where the
+  // agents cannot settle something between them — a dispute holds the edit
+  // for one — not to countersign a proposal the agents all verified.
+  //
+  // A proposal with no recorded author has nobody a decision can be reported
+  // to, so it stays with a moderator.
+  if (pending.submittedBy == null) return { reason: 'human_submitted' };
   const submittedBy = pending.submittedBy;
+  // A person is not a verifier in the agent pool, so every active agent is
+  // eligible to verify their proposal — the pool arithmetic of an agent author
+  // whose own seat counts, not of one whose seat is left out.
+  const submitterIsAgent = await isActiveAgentUser(submittedBy);
 
   // A wiki edit whose page is no longer published is out of the agents'
   // reach: they cannot read a draft, so their approvals no longer vouch for
@@ -930,7 +943,12 @@ async function legacyConsensusHold(
   if (!(await pendingEditTargetOpenToAgents(pending))) {
     return { reason: 'target_unpublished' };
   }
-
+  // A conversation-ingestion fact that cites a paper nobody read in full was
+  // staged for that full-text check; agent approvals of the claim do not
+  // perform it.
+  if (await pendingEditCitesUnreadSources(pending)) {
+    return { reason: 'unverified_sources' };
+  }
 
   // Adapt the quorum to the active-agent pool. A fixed quorum of 2 is
   // unreachable for agent-authored edits whenever fewer than three agents are
@@ -948,8 +966,8 @@ async function legacyConsensusHold(
   const activeAgents = await countActiveVerifierAgents();
   const quorumOpts = {
     authorSelfReviews:
-      opts.authorSelfReviews ??
-      (await isSelfReviewAgentUser(submittedBy)),
+      !submitterIsAgent ||
+      (opts.authorSelfReviews ?? (await isSelfReviewAgentUser(submittedBy))),
   };
   const quorum = effectiveConsensusQuorum(activeAgents, quorumOpts);
   // An author without the self-review grant is not a verifier, so its own
@@ -973,7 +991,9 @@ async function legacyConsensusHold(
     warnDegradedConsensusQuorum(
       activeAgents,
       quorum,
-      quorumOpts.authorSelfReviews,
+      // The pool arithmetic treats a person like a self-reviewing author, but
+      // the operator needs to hear who actually carried the edit.
+      !submitterIsAgent ? 'human' : quorumOpts.authorSelfReviews ? 'self_review' : 'agent',
     );
   }
 
@@ -1262,6 +1282,7 @@ export async function runAgentConsensus(args: {
         revalidate: async () => {
           await lockConsensusEligibility();
           await lockPendingEditTargetPage(pending);
+          await lockPendingEditSourceReviews(pending);
           const recheck = await legacyConsensusHold(args.pendingEditId, pending, {
             authorSelfReviews: args.authorSelfReviews,
             log: false,
@@ -1410,9 +1431,96 @@ export async function sweepAgentConsensus(
   // never clear consensus without a new verdict landing — and a new verdict
   // retries consensus directly (the primary trigger), so the periodic sweep
   // has nothing to gain by holding a slot for it.
-  const quorumFloor = effectiveConsensusQuorum(await countActiveVerifierAgents(), {
+  const activeVerifiers = await countActiveVerifierAgents();
+  const quorumFloor = effectiveConsensusQuorum(activeVerifiers, {
     authorSelfReviews: false,
   });
+  // A person's proposal has every active agent as an eligible verifier, so its
+  // bar is the pool's full quorum, not the agent-author floor: with two active
+  // agents it is 2, not 1. Without this, 25 older human proposals sitting at one
+  // approval would fill every sweep window with `quorum_unmet`.
+  const humanAuthorQuorum = effectiveConsensusQuorum(activeVerifiers, {
+    authorSelfReviews: true,
+  });
+  const submitterIsActiveAgentSql = sql`exists (
+    select 1 from ${agents} sa join ${users} su on su.id = sa.user_id
+    where sa.user_id = ${pendingEdits.submittedBy}
+      and sa.status = 'active'
+      and su.role in (${sql.join(ACTIVE_AGENT_ROLES.map((r) => sql`${r}`), sql`, `)})
+  )`;
+  const blankQuote = (expr: ReturnType<typeof sql>) => sql`nullif(btrim(${expr}), '') is null`;
+  const unquotedCalculationDriving = sql`(
+    ${pendingEdits.parameter} in (${sql.join(
+      DRUG_PARAMETER_IDS.filter((id) =>
+        isHighRiskPendingEdit({ editType: 'parameter', parameter: id }),
+      ).map((id) => sql`${id}`),
+      sql`, `,
+    )})
+    and (
+      (${pendingEdits.editType} = 'parameter'
+        and ${blankQuote(sql`${pendingEdits.proposedMeta}->>'sourceQuote'`)})
+      or (${pendingEdits.editType} = 'param_entry'
+        and ${pendingEdits.proposedValue}->>'op' = 'create'
+        and ${blankQuote(sql`${pendingEdits.proposedValue}->'input'->>'quote'`)})
+      -- A person's entry update, whatever its payload says: whether the write
+      -- keeps a quote turns on the stored row and the evidence fields the
+      -- patch moves (quoteAfterUpdate), which this filter cannot evaluate in
+      -- bulk, and a person's held update is not returned to them. Left out
+      -- conservatively; a new verdict on it still runs consensus directly.
+      or (${pendingEdits.editType} = 'param_entry'
+        and ${pendingEdits.proposedValue}->>'op' = 'update'
+        and not ${submitterIsActiveAgentSql})
+    )
+  )`;
+  // An ingested fact (one carrying `unverifiedReferenceIds`) citing a paper
+  // with no read-in-full review, live or pending — the same set
+  // `pendingEditCitesUnreadSources` checks: every reference the edit cites
+  // now. It holds as `unverified_sources` on every
+  // retry, so it stays out of the window until the review lands — the sweep
+  // is what publishes it then, since no new verdict on the fact need arrive.
+  const jsonbArray = (expr: ReturnType<typeof sql>) =>
+    sql`case when jsonb_typeof(${expr}) = 'array' then ${expr} else '[]'::jsonb end`;
+  const citesUnreadSources = sql`(
+    jsonb_typeof(${pendingEdits.proposedMeta}->'unverifiedReferenceIds') = 'array'
+    and exists (
+      select 1
+      from (
+        -- Positive integers only, as the helper reads them; the CASE keeps
+        -- the cast off anything else (AND does not short-circuit in SQL).
+        select case
+          when jsonb_typeof(e.v) = 'number' and e.v #>> '{}' ~ '^[0-9]{1,15}$'
+          then (e.v #>> '{}')::bigint
+        end as id
+        from jsonb_array_elements(
+          ${jsonbArray(sql`${pendingEdits.proposedValue}->'attrs'->'referenceIds'`)}
+          || coalesce(to_jsonb(${pendingEdits.referenceIds}), '[]'::jsonb)
+          || coalesce(jsonb_build_array(${pendingEdits.referenceId}), '[]'::jsonb)
+        ) as e(v)
+      ) as u
+      where u.id > 0
+        and not exists (
+          select 1 from paper_reviews pr
+          where pr.citation_id = u.id and pr.read_in_full
+        )
+        and not exists (
+          select 1 from pending_edits pr_pe
+          where pr_pe.edit_type = 'paper_review'
+            and pr_pe.status = 'pending'
+            and pr_pe.target_id = u.id
+            and pr_pe.proposed_value->'readInFull' = 'true'::jsonb
+        )
+    )
+  )`;
+  // COALESCE: with no meta every term is NULL, and NOT NULL would drop the
+  // row from the window.
+  const returnStandsUnrevisedSql = sql`coalesce(
+    jsonb_typeof(${pendingEdits.proposedMeta}->'returnedAt') = 'string'
+    and (
+      jsonb_typeof(${pendingEdits.proposedMeta}->'revisedAt') is distinct from 'string'
+      or ${pendingEdits.proposedMeta}->>'revisedAt' <= ${pendingEdits.proposedMeta}->>'returnedAt'
+    ),
+    false
+  )`;
   // A calculation-driving edit never rides the degraded single-approval path
   // (`consensusApprovalHoldReason`), so its bar is the full design target even
   // when the pool's floor is 1. Without it, 25 older high-risk rows sitting at
@@ -1426,9 +1534,9 @@ export async function sweepAgentConsensus(
     isHighRiskPendingEdit({ editType: 'parameter', parameter: id }),
   );
   // Edits that consensus can never publish are filtered out here, before the
-  // LIMIT, not left to `legacyConsensusHold`: otherwise 25 old human-submitted
-  // or clinical rows would fill every sweep and starve the agent-authored edits
-  // behind them whose hold actually cleared. The same reasoning covers a
+  // LIMIT, not left to `legacyConsensusHold`: otherwise 25 old unattributed
+  // or clinical rows would fill every sweep and starve the edits behind them
+  // whose hold actually cleared. The same reasoning covers a
   // permanently sub-quorum tally (issue #1367): without it, 25+ edits stuck at
   // one approval in a two-approval pool would occupy the oldest-first window on
   // every cycle and starve out newer edits whose tally already clears the bar.
@@ -1462,18 +1570,7 @@ export async function sweepAgentConsensus(
       sql`count(*) >= case when ${pendingEdits.editType} in ('parameter', 'param_entry') and ${pendingEdits.parameter} in (${sql.join(
         highRiskParameterIds.map((id) => sql`${id}`),
         sql`, `,
-      )}) then ${highRiskQuorumFloor}::int else ${quorumFloor}::int end`,
-    );
-  const authorIsActiveAgent = db
-    .select({ one: sql`1` })
-    .from(agents)
-    .innerJoin(users, eq(users.id, agents.userId))
-    .where(
-      and(
-        eq(agents.userId, pendingEdits.submittedBy),
-        eq(agents.status, 'active'),
-        inArray(users.role, ACTIVE_AGENT_ROLES),
-      ),
+      )}) then ${highRiskQuorumFloor}::int when not ${submitterIsActiveAgentSql} then ${humanAuthorQuorum}::int else ${quorumFloor}::int end`,
     );
   const openHumanDispute = db
     .select({ one: sql`1` })
@@ -1492,10 +1589,30 @@ export async function sweepAgentConsensus(
       and(
         eq(pendingEdits.status, 'pending'),
         ne(pendingEdits.editType, 'clinical_case'),
-        exists(authorIsActiveAgent),
+        // A person's proposal is retried too: it publishes on consensus like
+        // an agent's. Only an unattributed one never can.
+        isNotNull(pendingEdits.submittedBy),
         exists(approvalsAtLeastQuorumFloor),
         not(exists(verdictOn('dispute'))),
         not(exists(openHumanDispute)),
+        // A calculation-driving proposal with no quote never publishes on
+        // consensus. An agent's is returned to it by the unquoted sweep; a
+        // person's stays pending for a moderator, and without this 25 of them
+        // at quorum would hold every window on `source_quote_missing`. A
+        // person's calculation-driving entry update is left out whatever its
+        // payload says (see `unquotedCalculationDriving`).
+        // COALESCE throughout: a NULL from a missing field would make NOT drop
+        // a row the filter never meant to exclude.
+        not(sql`coalesce(${unquotedCalculationDriving}, false)`),
+        not(sql`coalesce(${citesUnreadSources}, false)`),
+        // A reviewer's comment-only return keeps the approvals, so a row
+        // resubmitted unchanged sits at quorum and holds as
+        // `returned_unrevised` on every retry (`returnStandsUnrevised`). Only
+        // a revision can clear it, and that wipes the verdicts and re-runs
+        // consensus on its own, so the row has no business in the window.
+        // Both markers are the server's ISO-8601 stamps, which compare as
+        // text; anything else is left in and held by the gate as before.
+        not(returnStandsUnrevisedSql),
         // Same content gate as the verifier queue: a wiki edit only while its
         // page is published, so draft-backed rows neither publish nor fill
         // the window.

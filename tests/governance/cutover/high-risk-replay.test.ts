@@ -71,7 +71,10 @@ beforeEach(async () => {
 
 function frozenLegacyOutcome(facts: ConsensusFacts): 'apply' | 'hold' {
   if (facts.editType === 'clinical_case') return 'hold';
-  if (!facts.submitterIsAgent) return 'hold';
+  // Re-transcribed when a person's proposal began publishing on agent
+  // consensus (kinetix-consensus@v2): only a proposal with no recorded author
+  // is refused before the tally now, not every non-agent author.
+  if (facts.submittedBy === null) return 'hold';
   // The payload precondition: a calculation-driving value with no verbatim
   // source quote does not publish unattended, whatever the tally says.
   // Transcribed here because this reference is the whole gate — a precondition
@@ -97,19 +100,24 @@ interface Pool {
   agentUserIds: number[];
 }
 
-/** `n` active verifier agents plus an agent author, with the given tiers. */
-async function seedPool(tiers: Array<string | null>): Promise<Pool> {
+/** `n` active verifier agents plus an author (an agent unless `humanAuthor`), with the given tiers. */
+async function seedPool(
+  tiers: Array<string | null>,
+  opts: { humanAuthor?: boolean } = {},
+): Promise<Pool> {
   const authorId = await seedUser(db, {
     email: 'author@example.com',
     username: 'author',
     role: 'contributor',
   });
-  await db.insert(agents).values({
-    userId: authorId,
-    name: 'author-agent',
-    slug: 'author-agent',
-    status: 'active',
-  });
+  if (!opts.humanAuthor) {
+    await db.insert(agents).values({
+      userId: authorId,
+      name: 'author-agent',
+      slug: 'author-agent',
+      status: 'active',
+    });
+  }
   const drugId = await seedDrug(db, { slug: 'diazepam' });
 
   const agentIds: number[] = [];
@@ -354,31 +362,40 @@ describe('the property: generic never publishes what legacy holds', () => {
   const APPROVAL_COUNTS = [0, 1, 2];
   const DISPUTE = [false, true];
 
+  // A person's proposal publishes on agent consensus too (v2), so the human
+  // path is part of the property, not an exemption from it.
+  const AUTHORS = ['agent', 'human'] as const;
+
   it('holds across every synthetic high-risk combination', async () => {
     let permissiveDivergences = 0;
     let applied = 0;
+    let appliedHuman = 0;
     let held = 0;
 
-    for (const tiers of POOLS) {
-      for (const approvals of APPROVAL_COUNTS) {
-        if (approvals > tiers.length) continue;
-        for (const dispute of DISPUTE) {
-          await resetIntegrationDb(db);
-          const pool = await seedPool(tiers);
-          const editId = await seedHighRiskEdit(pool);
-          for (let i = 0; i < approvals; i += 1) {
-            await approve(editId, pool.agentIds[i]!, tiers[i] ?? null);
-          }
-          if (dispute && approvals < tiers.length) {
-            await approve(editId, pool.agentIds[approvals]!, tiers[approvals] ?? null, 'dispute');
-          }
+    for (const author of AUTHORS) {
+      for (const tiers of POOLS) {
+        for (const approvals of APPROVAL_COUNTS) {
+          if (approvals > tiers.length) continue;
+          for (const dispute of DISPUTE) {
+            await resetIntegrationDb(db);
+            const pool = await seedPool(tiers, { humanAuthor: author === 'human' });
+            const editId = await seedHighRiskEdit(pool);
+            for (let i = 0; i < approvals; i += 1) {
+              await approve(editId, pool.agentIds[i]!, tiers[i] ?? null);
+            }
+            if (dispute && approvals < tiers.length) {
+              await approve(editId, pool.agentIds[approvals]!, tiers[approvals] ?? null, 'dispute');
+            }
 
-          const facts = await collectConsensusFacts(editId);
-          const generic = evaluateShadowPolicy(facts!).outcome;
-          const legacy = frozenLegacyOutcome(facts!);
-          if (generic === 'apply' && legacy === 'hold') permissiveDivergences += 1;
-          if (generic === 'apply') applied += 1;
-          else held += 1;
+            const facts = await collectConsensusFacts(editId);
+            const generic = evaluateShadowPolicy(facts!).outcome;
+            const legacy = frozenLegacyOutcome(facts!);
+            if (generic === 'apply' && legacy === 'hold') permissiveDivergences += 1;
+            if (generic === 'apply') {
+              applied += 1;
+              if (author === 'human') appliedHuman += 1;
+            } else held += 1;
+          }
         }
       }
     }
@@ -389,6 +406,8 @@ describe('the property: generic never publishes what legacy holds', () => {
     // inequality vacuously and prove nothing about the permissive direction.
     expect(applied).toBeGreaterThan(0);
     expect(held).toBeGreaterThan(0);
+    // …and the human path was actually exercised in the permissive direction.
+    expect(appliedHuman).toBeGreaterThan(0);
   });
 });
 

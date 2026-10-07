@@ -498,9 +498,12 @@ const AUTHORITIES = [
 
 // ── The scenarios ─────────────────────────────────────────────────────────
 
-describe('1. human wiki fact → agent reviews → human approves → live', () => {
+describe('1. human wiki fact → agent reviews → live on agent consensus', () => {
   for (const authority of AUTHORITIES) {
     it(`carries the arc under ${authority.name}`, async () => {
+      // Two agent reviewers and a human author: a person holds no seat in the
+      // agent pool, so both reviewers are eligible and the quorum is the full
+      // design target of 2 — the first approval must not be enough.
       const world = await seedWorld({
         tiers: ['flagship', 'mid'],
         authorIsAgent: false,
@@ -508,32 +511,22 @@ describe('1. human wiki fact → agent reviews → human approves → live', () 
       const editId = await submitWikiFact(world);
       if (authority.cutOver) await cutOverWikiFact(editId);
 
-      // Agents review a person's proposal — that is not the disputed part.
-      for (const reviewer of world.reviewers) {
-        const posted = await verdict({ editId, reviewer, verdict: 'approve' });
-        expect(posted.statusCode).toBeLessThan(300);
-      }
-
-      // …and consensus still does not close it. This is the invariant the
-      // scenario exists for: agent approvals never stand in for a moderator on
-      // a human's work, whichever engine is holding the gate.
+      const first = await verdict({ editId, reviewer: world.reviewers[0]!, verdict: 'approve' });
+      expect(first.statusCode).toBeLessThan(300);
       expect(await statusOf(editId)).toBe('pending');
       expect(await pageContainsFact(world.pageId, 'fact-halflife-1')).toBe(false);
-      // Under cutover, the refusal is the generic engine's, recorded as such —
-      // otherwise "the outcome is the same either way" would be a claim about
-      // one engine that never ran.
-      if (authority.cutOver) await expectDecidedGenerically(editId, 'hold');
 
-      const approved = await call(pendingEditsHandler as Handler, {
-        as: { userId: world.moderatorUserId, role: 'admin' },
-        method: 'PATCH',
-        url: `/api/pending-edits?id=${editId}`,
-        body: { status: 'approved', reviewToken: await currentToken(editId) },
-      });
-      expect(approved.statusCode).toBeLessThan(300);
-
+      // A person's proposal publishes on agent consensus under the same bar as
+      // an agent's (kinetix-consensus-apply@v3): no moderator is needed once
+      // the agents agree, whichever engine is holding the gate.
+      const second = await verdict({ editId, reviewer: world.reviewers[1]!, verdict: 'approve' });
+      expect(second.statusCode).toBeLessThan(300);
       expect(await statusOf(editId)).toBe('approved');
       expect(await pageContainsFact(world.pageId, 'fact-halflife-1')).toBe(true);
+      // Under cutover, the publication is the generic engine's, recorded as
+      // such — otherwise "the outcome is the same either way" would be a claim
+      // about one engine that never ran.
+      if (authority.cutOver) await expectDecidedGenerically(editId, 'apply');
     });
   }
 });
