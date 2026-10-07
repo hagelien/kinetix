@@ -223,7 +223,10 @@ export function getPreferredUnitDisplay(
 
   let formatted: string | null = null;
   if (low != null && high != null) {
-    formatted = `${formatDisplayValue(low)}–${formatDisplayValue(high)}`;
+    formatted =
+      low === high
+        ? formatDisplayValue(low)
+        : `${formatDisplayValue(low)}–${formatDisplayValue(high)}`;
   } else if (low != null) {
     formatted = `≥ ${formatDisplayValue(low)}`;
   } else if (high != null) {
@@ -293,7 +296,11 @@ export function getConversionTooltipRows(
 
     let formatted: string | null = null;
     if (lowConv != null && highConv != null) {
-      formatted = `${fmt(lowConv)}–${fmt(highConv)}`;
+      // A degenerate range (low === high) is one figure; "0.854–0.854" is noise.
+      // Compare the numbers, not the rounded labels: distinct bounds that round
+      // alike are still a range.
+      formatted =
+        lowConv === highConv ? fmt(lowConv) : `${fmt(lowConv)}–${fmt(highConv)}`;
     } else if (lowConv != null) {
       formatted = `≥ ${fmt(lowConv)}`;
     } else if (highConv != null) {

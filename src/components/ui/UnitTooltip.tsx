@@ -64,76 +64,46 @@ function splitChildrenOnUnit(
   };
 }
 
-/** One row's formatted value, decomposed into decimal-aligned grid cells. */
+/** One row's formatted value, decomposed into the tooltip grid's cells. */
 interface RowParts {
   /** A leading "≥ "/"≤ " (or "< "/"> ") bound marker, when the row carries one. */
   qualifier: string;
-  lowInt: string;
-  lowFrac: string;
+  low: string;
   /** The en dash of a low–high range; empty for a single figure. */
   separator: string;
-  highInt: string;
-  highFrac: string;
-}
-
-/**
- * Split a number as `formatWithMaxDecimals` writes it — digits, optional
- * thousands spaces, optional decimal separator — into the part before the
- * separator and the part from the separator on. Returns null when the text
- * isn't a plain number (an authored `sourceFormatted`, say), so callers can
- * fall back to showing it whole.
- */
-function splitNumber(
-  text: string,
-): { intPart: string; fracPart: string } | null {
-  const match = /^(-?[\d\s]*\d)([.,]\d+)?$/.exec(text);
-  if (!match) return null;
-  return { intPart: match[1] ?? text, fracPart: match[2] ?? '' };
+  high: string;
 }
 
 /**
  * Decompose a formatted row value into the cells the tooltip grid aligns on.
  *
- * A single figure fills the low columns and leaves the separator and high
- * columns empty — those tracks are `auto`, so they collapse to nothing and the
- * unit sits straight after the number. A low–high range has *two* decimal
- * points, so it gets two aligned number slots rather than landing in the
- * integer column as one opaque string: both endpoints then line up on their own
- * separators down the panel, exactly as scalars do. Anything that doesn't parse
- * as a number (an authored source representation, for one) is shown whole in
- * the leading integer cell, right-aligned like every other entry.
+ * Each number sits whole in its own right-aligned column — the low endpoint,
+ * the range dash, the high endpoint — so every column has one clean edge, the
+ * way figures line up in a spreadsheet. (Aligning on the decimal point was
+ * tried, but rows span several orders of magnitude — `0.00276` next to
+ * `2 760` — and the long fractional tails pushed the figures apart into a
+ * ragged scatter.) A single figure leaves the dash and high columns empty;
+ * those tracks are `auto`, so they collapse and the unit sits straight after
+ * the number. Anything that isn't a plain range (an authored source
+ * representation, for one) is shown whole in the low cell.
  */
 function splitFormatted(formatted: string): RowParts {
   const qualifierMatch = /^([≥≤<>]\s*)(.*)$/.exec(formatted);
   const qualifier = qualifierMatch?.[1] ?? '';
   const rest = qualifierMatch?.[2] ?? formatted;
-  const empty = { separator: '', highInt: '', highFrac: '' };
 
   // `formatWithMaxDecimals` joins a range with an en dash; a negative number
   // uses a hyphen-minus, so the two can never be confused.
   const dash = rest.indexOf('–');
-  if (dash > 0) {
-    const low = splitNumber(rest.slice(0, dash));
-    const high = splitNumber(rest.slice(dash + 1));
-    if (low && high) {
-      return {
-        qualifier,
-        lowInt: low.intPart,
-        lowFrac: low.fracPart,
-        separator: '–',
-        highInt: high.intPart,
-        highFrac: high.fracPart,
-      };
-    }
+  if (dash > 0 && dash < rest.length - 1) {
+    return {
+      qualifier,
+      low: rest.slice(0, dash).trim(),
+      separator: '–',
+      high: rest.slice(dash + 1).trim(),
+    };
   }
-
-  const single = splitNumber(rest);
-  return {
-    qualifier,
-    lowInt: single?.intPart ?? rest,
-    lowFrac: single?.fracPart ?? '',
-    ...empty,
-  };
+  return { qualifier, low: rest, separator: '', high: '' };
 }
 
 /**
@@ -263,18 +233,15 @@ export function UnitTooltip({
       {/*
         Every enabled unit gets its own row, molar and mass alike, ordered as
         `getConversionTooltipRows` returns them (source unit first, then the
-        reader's enabled units). Each row is split across fixed grid columns —
-        bound qualifier, integer part, fractional part, range dash, the second
-        endpoint's two parts, unit — so the decimal separators line up down the
-        panel and a reader scanning the column can compare magnitudes at a
-        glance instead of parsing each figure separately. Unused tracks are
-        `auto` and collapse to zero width, so a panel of plain scalars looks
-        exactly as it did before ranges were aligned.
+        reader's enabled units). Each row is split across grid columns — bound
+        qualifier, low endpoint, range dash, high endpoint, unit — with every
+        number right-aligned and every unit left-aligned, so the panel reads as
+        a tidy table. Unused tracks are `auto` and collapse to zero width.
       */}
       <span
         className="grid items-baseline gap-y-0.5"
         style={{
-          gridTemplateColumns: 'auto auto auto auto auto auto auto',
+          gridTemplateColumns: 'auto auto auto auto auto',
         }}
       >
         {alternatives.map((a) => {
@@ -282,13 +249,11 @@ export function UnitTooltip({
           return (
             <Fragment key={a.unit}>
               <span className="text-right">{parts.qualifier}</span>
-              <span className="text-right">{parts.lowInt}</span>
-              <span className="text-left">{parts.lowFrac}</span>
+              <span className="whitespace-nowrap text-right">{parts.low}</span>
               <span className={parts.separator ? 'px-1 text-center' : undefined}>
                 {parts.separator}
               </span>
-              <span className="text-right">{parts.highInt}</span>
-              <span className="text-left">{parts.highFrac}</span>
+              <span className="whitespace-nowrap text-right">{parts.high}</span>
               <span className="whitespace-nowrap pl-1 text-left">{` ${a.unit}`}</span>
             </Fragment>
           );
