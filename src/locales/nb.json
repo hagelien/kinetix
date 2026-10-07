@@ -3157,16 +3157,6 @@
     "invalidEnabledUnits": "Velg minst én konsentrasjonsenhet.",
     "primaryUnitNotSupported": "Primærenheten må være en per-liter-enhet. Per-desiliter-enheter er fortsatt tillatt som alternativer i tipsene og konverteren."
   },
-  "approvals": {
-    "noApprovalsYet": "Ingen godkjenninger ennå",
-    "clickToApprove": "Klikk for å godkjenne",
-    "clickToWithdraw": "Klikk for å trekke tilbake godkjenningen",
-    "stampAriaLabel_one": "{{count}} godkjenning. Klikk for å legge til eller trekke tilbake stempelet ditt.",
-    "stampAriaLabel_other": "{{count}} godkjenninger. Klikk for å legge til eller trekke tilbake stempelet ditt.",
-    "errorReviewerRequired": "Bidragsyterrolle eller høyere kreves for å legge til godkjenningsstempel.",
-    "errorSelfNotAllowed": "Du kan ikke godkjenne ditt eget innhold.",
-    "errorTargetNotFound": "Dette elementet er ikke lenger tilgjengelig."
-  },
   "topicSections": {
     "empty": "Denne emnesiden har ingen seksjonsoverskrifter ennå. En administrator kan legge til overskrifter via helsidefyll; når siden er publisert, kan atomiske fakta knyttes til hver seksjon.",
     "editorHint": "Legg til eller endre atomiske fakta i hver seksjon. Helsides redigering er kun for administratorer.",

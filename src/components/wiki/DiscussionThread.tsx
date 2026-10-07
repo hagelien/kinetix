@@ -14,7 +14,6 @@ import type {
 } from '@/lib/discussionTargets';
 import { linkify } from '@/lib/linkify';
 import { UserBadge } from '@/components/ui/UserBadge';
-import { ApprovalStamp } from '@/components/ui/ApprovalStamp';
 
 interface DiscussionThreadProps {
   /** Drug monograph (`{ drugId }`) or topic page (`{ wikiPageId }`). */
@@ -91,25 +90,9 @@ function ThreadComment({
           focused ? 'border-primary bg-primary/5 ring-2 ring-primary/40' : 'border-border bg-muted/30'
         }`}
       >
-        <div className="text-xs text-muted-foreground mb-1 flex items-center justify-between gap-2">
-          <span>
-            <UserBadge user={node.comment.author} /> ·{' '}
-            {new Date(node.comment.createdAt).toLocaleString()}
-          </span>
-          <span>
-            <ApprovalStamp
-              targetType="drug_discussion"
-              targetId={node.comment.id}
-              variant="hover"
-              initial={
-                node.comment.approvals ?? {
-                  count: 0,
-                  approvers: [],
-                  approvedByMe: false,
-                }
-              }
-            />
-          </span>
+        <div className="text-xs text-muted-foreground mb-1">
+          <UserBadge user={node.comment.author} /> ·{' '}
+          {new Date(node.comment.createdAt).toLocaleString()}
         </div>
         <div className="text-sm whitespace-pre-wrap break-words">
           {linkify(node.comment.body)}

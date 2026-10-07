@@ -15,7 +15,6 @@ import {
   type DrugParameterRevisionVerificationDTO,
 } from '@/lib/drugApi';
 import { UserBadge } from '@/components/ui/UserBadge';
-import { ApprovalStamp } from '@/components/ui/ApprovalStamp';
 import type { VerificationLevelInfo } from '@/lib/verificationLevel';
 import { VerificationRationaleList } from '@/components/review/VerificationRationaleList';
 import { VerificationSummary } from './VerificationSummary';
@@ -305,23 +304,9 @@ export function ParameterHistoryDialog({
                     : 'border-border bg-muted/30'
                 }`}
               >
-                <div className="flex items-center justify-between text-xs text-muted-foreground mb-2 gap-2">
-                  <span>
-                    <UserBadge user={rev.author} /> ·{' '}
-                    {new Date(rev.createdAt).toLocaleString()}
-                  </span>
-                  <ApprovalStamp
-                    targetType="drug_parameter_revision"
-                    targetId={rev.id}
-                    initial={
-                      rev.approvals ?? {
-                        count: 0,
-                        approvers: [],
-                        approvedByMe: false,
-                      }
-                    }
-                    onChange={load}
-                  />
+                <div className="text-xs text-muted-foreground mb-2">
+                  <UserBadge user={rev.author} /> ·{' '}
+                  {new Date(rev.createdAt).toLocaleString()}
                 </div>
                 {rev.editSummary && (
                   <div className="text-sm italic mb-2">
