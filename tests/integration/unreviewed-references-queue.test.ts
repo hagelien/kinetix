@@ -7,6 +7,7 @@ import {
   parameterEntries,
 } from '../../db/schema.js';
 import { UNREVIEWED_REFERENCES_SQL } from '../../api/agent-sweep.js';
+import { findCitationsNeedingFullReview } from '../../api/_lib/reference-review-status.js';
 import {
   resetIntegrationDb,
   setupIntegrationDb,
@@ -123,6 +124,31 @@ describe('unreviewed-references queue', () => {
     await seedRevision(drugId, 'halfLife', citationId);
 
     expect(await queueCitationIds()).toContain(citationId);
+  });
+
+  it("keeps a reviewed front-page citation in the lane, and its claim flagged", async () => {
+    // A front page names no specific source, so a review of it backs nothing:
+    // the claim resting on it needs re-citing, and nothing else surfaces it.
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db);
+    const frontPage = await seedCitation('https://www.noklus.no', 'url');
+    const specific = await seedCitation('https://www.noklus.no/peth/', 'url');
+    for (const citationId of [frontPage, specific]) {
+      await seedEntry(drugId, 'analyteStability', citationId);
+      await db.insert(paperReviews).values({
+        citationId,
+        reviewMarkdown: '## Vurdering',
+        readInFull: true,
+        createdBy: userId,
+      });
+    }
+
+    const queued = await queueCitationIds();
+    expect(queued).toContain(frontPage);
+    expect(queued).not.toContain(specific);
+    expect(
+      await findCitationsNeedingFullReview([frontPage, specific]),
+    ).toEqual(new Set([frontPage]));
   });
 
   it('never surfaces a freetext source — it cannot be reviewed', async () => {

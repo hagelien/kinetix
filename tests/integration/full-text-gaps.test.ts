@@ -140,6 +140,22 @@ describe('listFullTextGaps over real SQL', () => {
     expect(await gapIds()).toEqual([]);
   });
 
+  it('ignores other database records and front-page URLs', async () => {
+    // Neither can be satisfied by a PDF; POST /api/pdf-requests refuses both.
+    const drugbank = await seedCitation(
+      'https://go.drugbank.com/drugs/DB00820',
+      'url',
+    );
+    const frontPage = await seedCitation('https://www.noklus.no', 'url');
+    const label = await seedCitation(
+      'https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=a00e5720',
+      'url',
+    );
+    for (const id of [drugbank, frontPage, label]) await citeOnParameter(id);
+
+    expect(await gapIds()).toEqual([label]);
+  });
+
   it('ignores PubChem record URLs but keeps other URL citations', async () => {
     // A public database entry agents read directly; POST /api/pdf-requests
     // refuses one, so listing it would ask for a PDF that cannot exist.

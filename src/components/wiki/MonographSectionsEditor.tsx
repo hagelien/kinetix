@@ -50,6 +50,12 @@ interface MonographSectionsEditorProps {
   pageId?: number | null;
   /** Drug id used as citation context inside the AddFactPanel. */
   drugId?: number | null;
+  /**
+   * Sections to render, for editing one monograph tab at a time. Sections
+   * left out keep their stored content and are returned unchanged by
+   * `getContent`. Omitted, every section is rendered.
+   */
+  visibleSectionIds?: readonly MonographSectionId[];
 }
 
 /**
@@ -61,7 +67,14 @@ export const MonographSectionsEditor = forwardRef<
   MonographSectionsEditorHandle,
   MonographSectionsEditorProps
 >(function MonographSectionsEditor(
-  { initialContent, onContentChange, onActiveReferenceChange, pageId, drugId },
+  {
+    initialContent,
+    onContentChange,
+    onActiveReferenceChange,
+    pageId,
+    drugId,
+    visibleSectionIds,
+  },
   ref,
 ) {
   const [content, setContent] = useState<MonographContentV2>(() => {
@@ -71,6 +84,12 @@ export const MonographSectionsEditor = forwardRef<
     if (initialContent) return wrapV1AsV2(initialContent);
     return emptyMonographContentV2();
   });
+
+  const sections = visibleSectionIds
+    ? MONOGRAPH_SECTIONS.filter((section) =>
+        visibleSectionIds.includes(section.id),
+      )
+    : MONOGRAPH_SECTIONS;
 
   const editorsRef = useRef<Map<MonographSectionId, Editor>>(new Map());
   const lastFocusedRef = useRef<MonographSectionId | null>(null);
@@ -85,11 +104,11 @@ export const MonographSectionsEditor = forwardRef<
           const editor = editorsRef.current.get(lastId);
           if (editor) return editor;
         }
-        const firstId = MONOGRAPH_SECTIONS[0]?.id;
+        const firstId = sections[0]?.id;
         return firstId ? (editorsRef.current.get(firstId) ?? null) : null;
       },
     }),
-    [content],
+    [content, sections],
   );
 
   const handleBodyChange = useCallback(
@@ -105,7 +124,7 @@ export const MonographSectionsEditor = forwardRef<
 
   return (
     <div className="space-y-3">
-      {MONOGRAPH_SECTIONS.map((section) => (
+      {sections.map((section) => (
         <MonographSectionEditor
           key={section.id}
           section={section}

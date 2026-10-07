@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Header } from '@/components/Header';
 import { useAuthStore } from '@/stores/authStore';
@@ -223,10 +223,69 @@ describe('Header', () => {
     expect(screen.getByRole('link', { name: 'nav.drugTable' })).toBeTruthy();
   });
 
-  it('shows the under-development notice', () => {
+  it('shows the under-development notice as a tag by the logo', () => {
     renderHeader('/wiki');
 
-    expect(screen.getByText('siteNotice.underDevelopment')).toBeTruthy();
+    const tag = screen.getByRole('note', {
+      name: 'siteNotice.underDevelopment',
+    });
+    expect(tag.textContent).toBe('siteNotice.beta');
+    expect(tag.getAttribute('title')).toBe('siteNotice.underDevelopment');
+  });
+
+  it('shows no drug name or tab menu without an active drug', () => {
+    useDrugStore.setState({ activeDrug: null });
+    renderHeader('/references');
+
+    expect(screen.queryByTestId('header-active-drug')).toBeNull();
+    expect(screen.queryByTestId('monograph-tab-nav')).toBeNull();
+  });
+
+  it('names the active drug and links its monograph tabs on any page', () => {
+    useDrugStore.setState({
+      activeDrug: {
+        id: '1',
+        names: { nb: 'paracetamol', en: 'paracetamol' },
+        _monographSlug: 'paracetamol',
+        _dbId: 7,
+      } as never,
+    });
+    renderHeader('/references');
+
+    expect(screen.getByTestId('header-active-drug').textContent).toBe(
+      'Paracetamol',
+    );
+    const tabs = screen.getByTestId('monograph-tab-nav');
+    const pk = within(tabs).getByRole('link', {
+      name: 'parameterGroups.pharmacokinetics',
+    });
+    expect(pk.getAttribute('href')).toBe('/wiki/paracetamol/pharmacokinetics');
+    expect(
+      within(tabs).getByRole('link', { name: 'parameterGroups.postmortem' }),
+    ).toBeTruthy();
+    // Off the monograph, no tab is marked current.
+    expect(within(tabs).queryByRole('link', { current: 'page' })).toBeNull();
+  });
+
+  it('marks the tab in the URL as current on a monograph', () => {
+    useDrugStore.setState({
+      activeDrug: {
+        id: '1',
+        names: { nb: 'paracetamol' },
+        _dbId: 7,
+      } as never,
+    });
+    renderHeader('/wiki/paracetamol/postmortem');
+
+    const tabs = screen.getByTestId('monograph-tab-nav');
+    const current = within(tabs).getByRole('link', { current: 'page' });
+    expect(current.textContent).toBe('parameterGroups.postmortem');
+    // The slug comes from the URL even when the drug row carries none.
+    expect(
+      within(tabs)
+        .getByRole('link', { name: 'parameterGroups.chemistry' })
+        .getAttribute('href'),
+    ).toBe('/wiki/paracetamol/chemistry');
   });
 
   it('keeps the header nav items identical across modules', () => {

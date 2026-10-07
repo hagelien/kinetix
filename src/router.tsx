@@ -284,7 +284,11 @@ export function AppRouter() {
         <Route path="/wiki" element={withAuthRequired(<WikiLayout />)}>
           <Route index element={withRouteFallback(<WikiHome />)} />
           <Route path="new" element={withRouteFallback(<WikiNew />)} />
-          <Route path=":slug" element={withRouteFallback(<WikiPage />)} />
+          {/* `:tab` is a drug monograph's sub-page (pharmacokinetics,
+              postmortem, …). One optional-segment route, so moving between
+              tabs never remounts the page. Static siblings (`:slug/edit`,
+              `:slug/history`, `drug/…`, `entity/…`) outrank it. */}
+          <Route path=":slug/:tab?" element={withRouteFallback(<WikiPage />)} />
           <Route path=":slug/edit" element={withRouteFallback(<WikiEdit />)} />
           <Route
             path=":slug/history"

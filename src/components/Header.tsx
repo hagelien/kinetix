@@ -16,6 +16,18 @@ import {
 import { useCan, usePermissionOverrides } from '@/lib/usePermissions';
 import { NAV_ITEM_DEFS, type NavItemId } from '@/lib/navItems';
 import { ROLES } from '@/lib/roles';
+import { capitalizeGenericDrugName, resolveDrugName } from '@/lib/drugNames';
+import {
+  MONOGRAPH_TAB_IDS,
+  isMonographTabId,
+  loadLastMonographTab,
+  monographTabLabelKey,
+  monographTabPath,
+  saveLastMonographTab,
+  type MonographTabId,
+} from '@/lib/monographTabs';
+
+const MONOGRAPH_TAB_PATH_RE = /^\/wiki\/([^/]+)\/([^/]+)\/?$/;
 
 export function Header() {
   const { t, i18n } = useTranslation();
@@ -53,6 +65,29 @@ export function Header() {
   const logout = useAuthStore((s) => s.logout);
   const setTableView = useDrugStore((s) => s.setTableView);
   const setActiveDrug = useDrugStore((s) => s.setActiveDrug);
+  const activeDrug = useDrugStore((s) => s.activeDrug);
+
+  // The active drug stays in the header on every page, with its monograph's
+  // tabs in the row below, so one click leads back to it. On a monograph tab
+  // the URL is the source of truth for which tab is current and for the
+  // page's slug (a drug row loaded by id may not carry its monograph slug).
+  const tabMatch = MONOGRAPH_TAB_PATH_RE.exec(location.pathname);
+  const currentTab: MonographTabId | null =
+    tabMatch && isMonographTabId(tabMatch[2]) ? tabMatch[2] : null;
+  const monographSlug =
+    (currentTab && tabMatch ? decodeURIComponent(tabMatch[1]!) : null) ??
+    activeDrug?._monographSlug ??
+    null;
+  const activeDrugName = activeDrug
+    ? capitalizeGenericDrugName(resolveDrugName(activeDrug.names, 'nb'))
+    : '';
+  function drugTabHref(tab: MonographTabId): string | null {
+    if (monographSlug) return monographTabPath(monographSlug, tab);
+    // No slug: the numeric drug route redirects to the monograph, which then
+    // opens the remembered tab — saved by the click handler below.
+    return activeDrug?._dbId != null ? `/wiki/drug/${activeDrug._dbId}` : null;
+  }
+  const drugHomeHref = drugTabHref(currentTab ?? loadLastMonographTab());
 
   // #310: only the drug table is reachable anonymously. Hide nav links to
   // gated routes so unauthenticated visitors don't click into a redirect
@@ -183,17 +218,45 @@ export function Header() {
       style={{ background: 'var(--header-gradient)' }}
     >
       <div className="flex items-center justify-between gap-2 px-3 py-2 sm:gap-4 sm:px-5 sm:py-3 flex-wrap">
-        {/* Brand */}
-        <Link
-          to="/"
-          onClick={handleLogoClick}
-          className="no-underline group flex items-center gap-2.5"
-        >
-          <img src="/kinetix_logo.png" alt="" className="h-8 w-auto" />
-          <span className="font-display text-lg sm:text-xl font-bold tracking-tight text-white m-0">
-            Kinetix
+        {/* Brand, development tag and the active drug */}
+        <div className="flex min-w-0 items-center gap-2.5">
+          <Link
+            to="/"
+            onClick={handleLogoClick}
+            className="no-underline group flex items-center gap-2.5"
+          >
+            <img src="/kinetix_logo.png" alt="" className="h-8 w-auto" />
+            <span className="font-display text-lg sm:text-xl font-bold tracking-tight text-white m-0">
+              Kinetix
+            </span>
+          </Link>
+          {/* #1240: a standing reminder that the app is still under active
+            development, kept as a small tag by the logo so it takes no row
+            of its own; the full notice is its tooltip. */}
+          <span
+            className="-ml-1 rounded border border-amber-200/40 px-1 py-px text-[10px] font-semibold uppercase tracking-wide text-amber-200/80 cursor-help"
+            title={t('siteNotice.underDevelopment')}
+            aria-label={t('siteNotice.underDevelopment')}
+            role="note"
+          >
+            {t('siteNotice.beta')}
           </span>
-        </Link>
+
+          {activeDrug && drugHomeHref && (
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="text-white/30" aria-hidden="true">
+                /
+              </span>
+              <Link
+                to={drugHomeHref}
+                className="truncate font-display text-lg sm:text-xl font-bold tracking-tight text-white no-underline hover:text-white/80"
+                data-testid="header-active-drug"
+              >
+                {activeDrugName}
+              </Link>
+            </div>
+          )}
+        </div>
 
         <div className="flex gap-1.5 sm:gap-2 flex-1 items-center justify-end flex-wrap">
           {/* Nav */}
@@ -290,13 +353,35 @@ export function Header() {
         </div>
       </div>
 
-      {/* #1240: a standing reminder that the app is still under active
-          development — visible on every page without competing with the nav
-          for attention. A slim second row rather than a bright alert box,
-          matching the header's own translucent-on-dark language. */}
-      <p className="border-t border-white/10 px-3 py-1 sm:px-5 text-center text-[11px] text-amber-200/80">
-        {t('siteNotice.underDevelopment')}
-      </p>
+      {/* The active drug's monograph, one tab per former parameter box. */}
+      {activeDrug && drugHomeHref && (
+        <nav
+          aria-label={t('monographTabs.navLabel', { drug: activeDrugName })}
+          className="flex gap-0.5 overflow-x-auto border-t border-white/10 px-3 sm:px-5"
+          data-testid="monograph-tab-nav"
+        >
+          {MONOGRAPH_TAB_IDS.map((tab) => {
+            const href = drugTabHref(tab);
+            if (!href) return null;
+            const isCurrent = tab === currentTab;
+            return (
+              <Link
+                key={tab}
+                to={href}
+                onClick={() => saveLastMonographTab(tab)}
+                aria-current={isCurrent ? 'page' : undefined}
+                className={`shrink-0 whitespace-nowrap border-b-2 px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                  isCurrent
+                    ? 'border-white text-white'
+                    : 'border-transparent text-white/60 hover:text-white'
+                }`}
+              >
+                {t(monographTabLabelKey(tab))}
+              </Link>
+            );
+          })}
+        </nav>
+      )}
     </header>
   );
 }

@@ -1,8 +1,7 @@
 /**
- * #321 favorites behaviour tests for DrugMonographSidebar:
- * - favorites are the default expanded section
- * - category boxes expand one at a time
- * - star button click invokes the authStore mutator
+ * Behaviour tests for DrugMonographSidebar:
+ * - category boxes expand one at a time (chemistry by default)
+ * - tab mode renders a single section without its box
  * - active section is remembered across navigation
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
@@ -15,7 +14,10 @@ import {
 } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import i18nApp from '@/i18n';
-import { DrugMonographSidebar } from './DrugMonographSidebar';
+import {
+  DrugMonographSidebar,
+  type SidebarSectionId,
+} from './DrugMonographSidebar';
 import { useAuthStore } from '@/stores/authStore';
 import { useAppStore } from '@/stores/appStore';
 import {
@@ -118,15 +120,24 @@ function setUser(
   });
 }
 
-function renderSidebar(sharedReferences?: OrderedReference[] | null) {
+function renderSidebar(
+  sharedReferences?: OrderedReference[] | null,
+  section?: SidebarSectionId,
+) {
   return render(
     <MemoryRouter>
       <DrugMonographSidebar
         drugCid={mockDrugState.pubchemCid}
         sharedReferences={sharedReferences}
+        section={section}
       />
     </MemoryRouter>,
   );
+}
+
+/** Pre-select the accordion section a test reads rows from. */
+function openSection(section: SidebarSectionId) {
+  localStorage.setItem(SIDEBAR_SECTION_STORAGE_KEY, JSON.stringify(section));
 }
 
 function deferred<T>() {
@@ -137,7 +148,7 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-describe('DrugMonographSidebar favorites (#321)', () => {
+describe('DrugMonographSidebar', () => {
   const originalState = useAuthStore.getState();
 
   beforeEach(async () => {
@@ -200,7 +211,6 @@ describe('DrugMonographSidebar favorites (#321)', () => {
   // assert against what the user actually sees rather than the raw key.
   const HALF_LIFE_LABEL = /elimination half-life/i;
   const VD_LABEL = /volume of distribution/i;
-  const BIO_LABEL = /oral bioavailability/i;
 
   it('opens the parameter dialog a notification link points at', async () => {
     setUser([]);
@@ -227,7 +237,8 @@ describe('DrugMonographSidebar favorites (#321)', () => {
   it('shows ethanol concentrations in the ethanol unit (‰ by default)', () => {
     mockDrugState.pubchemCid = 702;
     mockDrugState.molecularWeight = 46.07;
-    setUser(['therapeuticConcentration']);
+    setUser([]);
+    openSection('interpretive_concentrations');
     const { container } = renderSidebar();
     // 10 000–20 000 µmol/L × 46.07 g/mol = 0.461–0.921 g/L = ‰. The unit sits
     // in its own tooltip trigger, so match on the text content.
@@ -238,7 +249,8 @@ describe('DrugMonographSidebar favorites (#321)', () => {
     mockDrugState.pubchemCid = 702;
     mockDrugState.molecularWeight = 46.07;
     useAppStore.setState({ ethanolUnit: '%' });
-    setUser(['therapeuticConcentration']);
+    setUser([]);
+    openSection('interpretive_concentrations');
     const first = renderSidebar();
     expect(first.container.textContent).toMatch(/0\.0461–0\.0921 %/);
     first.unmount();
@@ -249,10 +261,11 @@ describe('DrugMonographSidebar favorites (#321)', () => {
     expect(second.container.textContent).toMatch(/10\D000–20\D000 µmol\/L/);
   });
 
-  it('prefixes the favorite value with the parameter symbol', () => {
+  it('prefixes a parameter value with its symbol', () => {
     setUser(['halfLife', 'bloodPlasmaRatio']);
+    openSection('pharmacokinetics');
     renderSidebar();
-    // The half-life favorite renders its conventional symbol (t½) in
+    // The half-life row renders its conventional symbol (t½) in
     // front of the value so the number reads as a recognisable quantity.
     expect(screen.getByText('t½')).toBeInTheDocument();
   });
@@ -279,33 +292,37 @@ describe('DrugMonographSidebar favorites (#321)', () => {
       },
     };
     setUser(['tmax']);
+    openSection('pharmacokinetics');
     renderSidebar();
-    expect(screen.getByText('Oral')).toBeInTheDocument();
+    // The whole pharmacokinetics section is open, so read the Tmax row only.
+    const row = screen
+      .getByText(/time to peak concentration/i)
+      .closest('.group') as HTMLElement;
+    expect(within(row).getByText('Oral')).toBeInTheDocument();
     // The pooled SPAN, as the drug-level line would render it — not a bare median, which
     // would imply a point estimate where the sources report an interval.
-    expect(screen.getByText(/2–4 h/)).toBeInTheDocument();
+    expect(within(row).getByText(/2–4 h/)).toBeInTheDocument();
     // …and the em dash the empty drug-level value would otherwise print is gone.
-    expect(screen.queryByText('—')).toBeNull();
+    expect(within(row).queryByText('—')).toBeNull();
   });
 
-  it('expands favorites by default', () => {
+  it('opens chemistry by default and shows no favorites box', () => {
     setUser(['halfLife', 'molecularWeight']);
     renderSidebar();
-    expect(screen.getByTestId('parameter-group-favorites')).toBeInTheDocument();
+    expect(screen.queryByTestId('parameter-group-favorites')).toBeNull();
     expect(
-      screen.getByTestId('parameter-group-pharmacokinetics'),
-    ).toBeInTheDocument();
+      screen.getByRole('button', { name: /chemistry/i }),
+    ).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.queryByText(HALF_LIFE_LABEL)).toBeNull();
     expect(screen.queryByText(VD_LABEL)).toBeNull();
-    expect(screen.queryByText(BIO_LABEL)).toBeNull();
-    expect(screen.getByText(HALF_LIFE_LABEL)).toBeInTheDocument();
   });
 
-  it('expands one parameter category and collapses favorites', async () => {
-    setUser(['halfLife']);
+  it('expands one parameter category at a time', async () => {
+    setUser([]);
     renderSidebar();
     fireEvent.click(screen.getByRole('button', { name: /pharmacokinetics/i }));
     expect(screen.getByText(VD_LABEL)).toBeInTheDocument();
-    expect(screen.queryByText(HALF_LIFE_LABEL)).toBeInTheDocument();
+    expect(screen.getByText(HALF_LIFE_LABEL)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /chemistry/i }));
     expect(screen.queryByText(VD_LABEL)).toBeNull();
     await waitFor(() =>
@@ -315,16 +332,19 @@ describe('DrugMonographSidebar favorites (#321)', () => {
     );
   });
 
-  it('keeps category boxes collapsed when the user has no favorites set', () => {
+  it('renders one section without its box in tab mode', () => {
     setUser([]);
-    renderSidebar();
+    renderSidebar(undefined, 'pharmacokinetics');
     expect(
-      screen.getByText(/none of your favorite parameters/i),
+      screen.getByTestId('drug-monograph-section-pharmacokinetics'),
     ).toBeInTheDocument();
-    expect(screen.queryByText(VD_LABEL)).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /pharmacokinetics/i }));
+    // No accordion: the rows show directly and no other section is offered.
     expect(screen.getByText(VD_LABEL)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /chemistry/i })).toBeNull();
+    // The tab is the page's choice; the accordion's memory is left alone.
+    expect(localStorage.getItem(SIDEBAR_SECTION_STORAGE_KEY)).toBeNull();
   });
+
 
   it('keeps category boxes collapsed for anonymous visitors', () => {
     setUser(null);
@@ -468,7 +488,8 @@ describe('DrugMonographSidebar favorites (#321)', () => {
     // page. It must also skip its own reference fetch.
     mockDrugState.indicatorRefs = { proteinBinding: [42] };
     setUser(['proteinBinding']);
-    renderSidebar([
+    renderSidebar(
+      [
       {
         index: 3,
         row: {
@@ -480,7 +501,9 @@ describe('DrugMonographSidebar favorites (#321)', () => {
           createdAt: new Date().toISOString(),
         } as unknown as OrderedReference['row'],
       },
-    ]);
+      ],
+      'pharmacokinetics',
+    );
 
     const link = await screen.findByRole('link', { name: /reference 3/i });
     expect(link).toHaveAttribute('href', '#param-ref-3');
@@ -502,6 +525,7 @@ describe('DrugMonographSidebar favorites (#321)', () => {
       } as unknown as Awaited<ReturnType<typeof fetchDrugReferences>>[number],
     ]);
     setUser(['proteinBinding']);
+    openSection('pharmacokinetics');
     renderSidebar();
 
     const link = await screen.findByRole('link', { name: /reference 1/i });
@@ -776,18 +800,13 @@ describe('DrugMonographSidebar favorites (#321)', () => {
     expect(screen.getByText(VD_LABEL)).toBeInTheDocument();
   });
 
-  it('star click invokes toggleFavoriteParameter', () => {
+  it('offers no favorite star on parameter rows', () => {
     setUser(['halfLife']);
-    const toggleSpy = vi.fn().mockResolvedValue(undefined);
-    useAuthStore.setState({ toggleFavoriteParameter: toggleSpy });
-
-    renderSidebar();
-    // The favorited halfLife row carries aria-pressed=true on its star.
-    const stars = screen.getAllByRole('button', { pressed: true });
-    expect(stars.length).toBeGreaterThan(0);
-    fireEvent.click(stars[0]!);
-    expect(toggleSpy).toHaveBeenCalled();
+    renderSidebar(undefined, 'pharmacokinetics');
+    expect(screen.getByText(HALF_LIFE_LABEL)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { pressed: true })).toBeNull();
   });
+
 
   it('keeps per-parameter action buttons hidden until hover or focus', () => {
     setUser([]);
@@ -804,9 +823,15 @@ describe('DrugMonographSidebar favorites (#321)', () => {
 
   it('lets editors flag a parameter for the agent queue', async () => {
     setUser(['halfLife'], 'editor');
+    openSection('pharmacokinetics');
     renderSidebar();
 
-    fireEvent.click(screen.getByRole('button', { name: /flag for agent/i }));
+    fireEvent.click(
+      within(screen.getByTestId('parameter-actions-halfLife')).getByRole(
+        'button',
+        { name: /flag for agent/i },
+      ),
+    );
     expect(
       screen.getByRole('heading', { name: /flag for kinetix-agent/i }),
     ).toBeInTheDocument();
@@ -919,6 +944,7 @@ describe('DrugMonographSidebar favorites (#321)', () => {
       ],
     });
     setUser(['halfLife'], 'editor');
+    openSection('pharmacokinetics');
     renderSidebar();
 
     expect(
@@ -946,6 +972,7 @@ describe('DrugMonographSidebar favorites (#321)', () => {
       ],
     });
     setUser(null);
+    openSection('pharmacokinetics');
     renderSidebar();
 
     expect(fetchPriorityFlags).not.toHaveBeenCalled();
@@ -1036,6 +1063,7 @@ describe('DrugMonographSidebar favorites (#321)', () => {
       .mockReturnValueOnce(second.promise);
 
     setUser(['halfLife'], 'editor');
+    openSection('pharmacokinetics');
     const { rerender } = renderSidebar();
     expect(
       await screen.findByText(/flagged for kinetix-agent/i),
@@ -1075,6 +1103,7 @@ describe('DrugMonographSidebar favorites (#321)', () => {
       },
     };
     setUser(['halfLife']);
+    openSection('pharmacokinetics');
     renderSidebar();
 
     // No always-visible summary line under the value.
@@ -1095,6 +1124,7 @@ describe('DrugMonographSidebar favorites (#321)', () => {
 
   it('offers the sources action to contributors before any entry exists', () => {
     setUser(['halfLife'], 'contributor');
+    openSection('pharmacokinetics');
     renderSidebar();
     const actions = screen.getByTestId('parameter-actions-halfLife');
     expect(
@@ -1109,6 +1139,7 @@ describe('DrugMonographSidebar favorites (#321)', () => {
   // now whether or not the pool has anything in it.
   it('offers no direct editor for a source-value-backed parameter', () => {
     setUser(['halfLife'], 'editor');
+    openSection('pharmacokinetics');
     renderSidebar();
     const actions = screen.getByTestId('parameter-actions-halfLife');
     expect(
@@ -1124,6 +1155,7 @@ describe('DrugMonographSidebar favorites (#321)', () => {
     // Analyte stability is matrix-specific with no valid cross-matrix pool, so
     // it is not source-value-backed and stays hand-authored.
     setUser(['analyteStability'], 'editor');
+    openSection('analytics_detection');
     renderSidebar();
     const actions = screen.getByTestId('parameter-actions-analyteStability');
     expect(

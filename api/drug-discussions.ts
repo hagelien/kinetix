@@ -2,8 +2,11 @@
  * Discussion threads.
  *
  * Two hosts share this table (drug XOR wiki page, see schema CHECK):
- *   - Drug monographs: ?drugId=&parameter=?  — parameter optional; omit for
- *     the whole-monograph thread, or pass a drug-parameter / `fact:<id>` key.
+ *   - Drug monographs: ?drugId=&parameter=  — a drug-parameter or `fact:<id>`
+ *     key. Every discussion is about a specific parameter or fact: the old
+ *     whole-monograph thread (no parameter) is retired. It can still be read
+ *     (GET without `parameter`) so its comments can be moved to the parameter
+ *     or fact they are about, but nothing new can be posted into it.
  *   - Topic (non-monograph) wiki pages: ?wikiPageId=&parameter=fact:<id>  —
  *     atomic-fact threads only. Topic pages have no whole-page or
  *     drug-parameter threads, so a fact target key is required here.
@@ -112,6 +115,16 @@ export default withErrorHandling(
       !isFactDiscussionTargetKey(parameterRaw ?? '')
     ) {
       error(res, 400, 'wikiPageId threads require a fact parameter');
+      return;
+    }
+
+    if (req.method === 'POST' && parameter === null) {
+      error(
+        res,
+        400,
+        'A discussion must target a parameter or a fact',
+        'discussion_target_required',
+      );
       return;
     }
 
