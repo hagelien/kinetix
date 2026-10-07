@@ -638,6 +638,60 @@ export function DrugMonographSidebar({
     const sourcesActionLabel = totalEntryCount
       ? t('parameterEntries.sources', { count: totalEntryCount })
       : t('parameterEntries.addSources');
+    // A source-value parameter's figure is the pooled aggregate of its source
+    // values, so the figure itself opens the sources dialog (the same one as
+    // the hover action) instead of trailing `[n]` markers: the per-source
+    // citations are listed there, next to the values they back.
+    const opensSources =
+      parameterIsSummarizable(pid) &&
+      Boolean(summary || routeSummaryEntries.length > 0 || canSubmitParameterEntry);
+    const openSources = () => setDialog({ kind: 'sources', parameter: pid });
+
+    const valueContent = (
+      <>
+        {!hasValue && routeSummaryEntries.length > 0 ? null : isConcentrationParam &&
+          displayRange &&
+          tooltipRange ? (
+          <UnitTooltip
+            value={representativeValue(tooltipRange)}
+            low={
+              typeof tooltipRange.min === 'number' ? tooltipRange.min : null
+            }
+            high={
+              typeof tooltipRange.max === 'number' ? tooltipRange.max : null
+            }
+            unit={displayRange.unit}
+            sourceUnit={tooltipRange.unit}
+            molecularWeight={drugRow.molecularWeight ?? null}
+          >
+            {formatted}
+          </UnitTooltip>
+        ) : (
+          <span>{formatted}</span>
+        )}
+        {!hasValue && routeSummaryEntries.length > 0 ? (
+          <span className="space-y-0.5">
+            {routeSummaryEntries.map(([route, rs]) => (
+              <span key={route} className="block text-xs">
+                <span className="mr-1 font-normal text-muted-foreground">
+                  {t(ROUTE_LABEL_KEYS[route as RouteId] ?? route, {
+                    defaultValue: route,
+                  })}
+                </span>
+                {/* Formatted through the SAME summary→range conversion the drug-level cache
+                    is built with, so a route line reads exactly as the drug-level one would:
+                    the pooled span, not a bare weighted median that would imply a point
+                    estimate where the sources report an interval. */}
+                {formatRange(summaryToNumericRange(rs), {
+                  showNote: false,
+                  asPercent,
+                }) || '—'}
+              </span>
+            ))}
+          </span>
+        ) : null}
+      </>
+    );
 
     return (
       <div key={pid} className="group">
@@ -697,12 +751,11 @@ export function DrugMonographSidebar({
                 over the values themselves. It's an action like the others now:
                 hover-revealed, opening the forest plot + per-source list in a
                 dialog with room to compare them. */}
-            {parameterIsSummarizable(pid) &&
-            (summary || routeSummaryEntries.length > 0 || canSubmitParameterEntry) ? (
+            {opensSources ? (
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setDialog({ kind: 'sources', parameter: pid })}
+                onClick={openSources}
                 className="h-5 w-5 p-0"
                 title={sourcesActionLabel}
                 aria-label={sourcesActionLabel}
@@ -773,53 +826,25 @@ export function DrugMonographSidebar({
               {spec.symbol}
             </span>
           ) : null}
-          {!hasValue && routeSummaryEntries.length > 0 ? null : isConcentrationParam &&
-            displayRange &&
-            tooltipRange ? (
-            <UnitTooltip
-              value={representativeValue(tooltipRange)}
-              low={
-                typeof tooltipRange.min === 'number' ? tooltipRange.min : null
-              }
-              high={
-                typeof tooltipRange.max === 'number' ? tooltipRange.max : null
-              }
-              unit={displayRange.unit}
-              sourceUnit={tooltipRange.unit}
-              molecularWeight={drugRow.molecularWeight ?? null}
+          {opensSources && (hasValue || routeSummaryEntries.length > 0) ? (
+            <button
+              type="button"
+              onClick={openSources}
+              className="cursor-pointer text-left font-medium hover:underline focus-visible:underline focus-visible:outline-none"
+              title={sourcesActionLabel}
+              data-testid={`parameter-value-sources-${pid}`}
             >
-              {formatted}
-            </UnitTooltip>
+              {valueContent}
+            </button>
           ) : (
-            <span>{formatted}</span>
+            valueContent
           )}
-          {!hasValue && routeSummaryEntries.length > 0 ? (
-            <span className="space-y-0.5">
-              {routeSummaryEntries.map(([route, rs]) => (
-                <span key={route} className="block text-xs">
-                  <span className="mr-1 font-normal text-muted-foreground">
-                    {t(ROUTE_LABEL_KEYS[route as RouteId] ?? route, {
-                      defaultValue: route,
-                    })}
-                  </span>
-                  {/* Formatted through the SAME summary→range conversion the drug-level cache
-                      is built with, so a route line reads exactly as the drug-level one would:
-                      the pooled span, not a bare weighted median that would imply a point
-                      estimate where the sources report an interval. */}
-                  {formatRange(summaryToNumericRange(rs), {
-                    showNote: false,
-                    asPercent,
-                  }) || '—'}
-                </span>
-              ))}
-            </span>
-          ) : null}
           {hasValue ? (
             <ParameterBadges
               commentCount={commentCount}
               refCount={paramRefIds.length}
-              refIndices={refIndices}
-              references={refItems}
+              refIndices={opensSources ? undefined : refIndices}
+              references={opensSources ? undefined : refItems}
               onCommentClick={() =>
                 setDialog({ kind: 'discussion', parameter: pid })
               }
