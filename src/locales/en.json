@@ -39,6 +39,7 @@
     "types": {
       "disputeOpened": "A fact or parameter you can review was disputed",
       "disputeEscalated": "A dispute has been open for over a week and was escalated to you",
+      "adjudicationHandoff": "A T3 panel left a case for a person",
       "disputeUpheld": "A dispute you're involved in was upheld",
       "disputeRejected": "A dispute you're involved in was rejected",
       "disputeWithdrawn": "A dispute you're involved in was withdrawn",

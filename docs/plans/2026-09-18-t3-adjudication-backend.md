@@ -1,7 +1,8 @@
 # T3 adjudication backend — build plan
 
-**Status:** steps 1–3 implemented (records, detector, adjudicator grant and
-seats); steps 4–7 next. See *Implementation status* below.
+**Status:** steps 1–6 implemented (records, detector, seats, case feed,
+opinions, convergence, T4 handoff); automatic closure and step 7 next. See
+*Implementation status* below.
 **Date:** 2026-09-18
 **Design authority:** `agents/drug-db-adjudication.md` (the T3 contract),
 `docs/superpowers/specs/2026-08-24-tiered-agent-cost-architecture.md` §B2–B4,
@@ -65,8 +66,25 @@ person). The work lands in three pull requests:
      the last check (`adjudication_detector_checks`);
    - opinions are append-only at the database: a trigger refuses every UPDATE
      and DELETE on `adjudication_opinions`.
-2. **Steps 4–6**: the case feed, the opinion write path, sealing, typed
-   convergence and the T4 handoff.
+2. **Steps 4–6** (done): migration `0139_t3_adjudication_outcomes.sql`,
+   `api/agent-adjudication-queue.ts` (case list, case file, claim),
+   `api/agent-adjudication-opinions.ts`, and `api/_lib/adjudication/`
+   `opinions.ts`, `convergence.ts`, `caseFile.ts`, `target.ts`. Where it
+   differs from the text below:
+   - opinions are stored as submitted and converted to the canonical unit at
+     comparison, so a unit in another family is recorded as a disagreement
+     (`unit_family_differs`) rather than refused at write; a pair that cannot
+     be converted (e.g. mass↔molar with no molecular weight) is
+     `unit_not_convertible` and goes to T4;
+   - only range parameters endorse a value; on every other target an
+     endorsing opinion states its resolution in `proposition` and `scopeKey`;
+   - a converged case where a panelist asked for a person is recorded as
+     `diverged` (it needs a person) with the comparison kept, and a converged
+     case resting on a person's dispute stays `converged` with its
+     recommendation but `t4_required`;
+   - the handoff notification reuses the dispute fan-out with no dispute id
+     (`notifications.type = 'adjudication_handoff'`), linking to the target;
+     the full package is served to reviewers by the case feed.
 3. **Automatic closure and step 7**: a converged agent-originated case closes
    its agent disputes; then the "do not schedule" banner lifts.
 

@@ -135,7 +135,12 @@ export async function disputeQueueReaderRoles(): Promise<string[]> {
  */
 export async function fanOutDisputeNotification(args: {
   type: NotificationType;
-  disputeId: number;
+  /**
+   * The dispute the event is about. Null for an event about a target rather
+   * than one dispute — a T3 panel's handoff to a person
+   * (api/_lib/adjudication/opinions.ts), which may rest on no open dispute.
+   */
+  disputeId: number | null;
   targetType: string;
   targetId: number;
   actorUserId: number;
@@ -198,7 +203,7 @@ export async function fanOutDisputeNotification(args: {
         ${args.type},
         ${args.targetType},
         ${args.targetId},
-        ${args.disputeId},
+        ${args.disputeId}::int,
         ${args.title},
         ${args.bodyMd ?? null},
         ${args.url ?? null},

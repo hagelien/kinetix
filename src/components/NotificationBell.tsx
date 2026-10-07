@@ -234,6 +234,9 @@ export function NotificationBell() {
     if (row.type === 'dispute_escalated') {
       return t('notifications.types.disputeEscalated');
     }
+    if (row.type === 'adjudication_handoff') {
+      return t('notifications.types.adjudicationHandoff');
+    }
     const feedbackKey = FEEDBACK_TITLE_KEYS[row.type];
     if (feedbackKey) return t(feedbackKey);
     if (row.type === 'dispute_resolved') {
