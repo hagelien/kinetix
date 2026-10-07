@@ -2709,6 +2709,24 @@ export type AdjudicatedTarget = {
   /** The hydrated target (agent-verifications-queue `QueueItem`) served to the panel. */
   served: Record<string, unknown>;
   sourceRow: Record<string, unknown> | null;
+  /**
+   * What the comparison converts through, pinned at binding: the parameter's
+   * canonical unit (null for a target that carries no value) and the drug's
+   * molecular weight for a mass↔molar conversion.
+   */
+  comparison: { canonicalUnit: string | null; molecularWeight: number | null };
+  /** The decided disputes on the target as served to the panel. */
+  decidedDisputes: AdjudicationDecidedDispute[];
+};
+
+export type AdjudicationDecidedDispute = {
+  disputeId: number;
+  source: string;
+  targetVersion: string | null;
+  reasonMd: string;
+  resolution: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
 };
 
 /** The T4 package a person gets, so nobody reconstructs the appeal from logs (0141). */

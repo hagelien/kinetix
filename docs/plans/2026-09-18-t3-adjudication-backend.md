@@ -88,10 +88,16 @@ person). The work lands in three pull requests:
      so a person's dispute that landed after the detector last refreshed the
      case still makes the closing act theirs; a seat claim re-reads them the
      same way, so an agent that disputed the target since cannot take a seat;
-   - every sealed case keeps the target as adjudicated (`adjudicated_target`),
-     converged or handed off: the hydrated target the sealing write served the
-     panel, with the baselines served beside it, and its source row — so a
-     person sees what the panel saw;
+   - the first seat claim binds the panel (`adjudicated_target`): the hydrated
+     target with its baselines and source row, the decided disputes, and the
+     canonical unit and molecular weight the opinions are compared with. Both
+     seats and a person are served that binding; later claims and writes
+     check the live target against it and close the case on drift
+     (`target_drifted`);
+   - a seat is refused to any agent with a verdict on the target now, not only
+     those the case copied;
+   - an endorsed value follows the parameter's contract — a range where
+     `requiresMinMax`, within the registry bounds in the canonical unit;
    - a dimensionless range parameter (pKa, logP, logD; canonical unit `''`)
      carries a value like any other;
    - the open-case feed serves identifiers only: triggers and dispute origin

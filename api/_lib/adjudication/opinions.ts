@@ -43,8 +43,11 @@ import {
   fanOutDisputeNotification,
 } from '../notifications.js';
 import { FLAGSHIP_TIER } from '../../../src/lib/modelTiers.js';
-import { entryUnitsForParameter } from '../../../src/lib/parameterUnits.js';
-import type { DrugParameterId } from '../../../src/lib/drugParameters.js';
+import {
+  convertParameterValue,
+  entryUnitsForParameter,
+} from '../../../src/lib/parameterUnits.js';
+import { getRangeSpec, type DrugParameterId } from '../../../src/lib/drugParameters.js';
 import {
   compareOpinions,
   VALUE_ENDORSING_RESOLUTIONS,
@@ -104,6 +107,8 @@ export type OpinionWriteResult =
         | 'value_required'
         | 'value_not_allowed'
         | 'unit_not_allowed'
+        | 'range_required'
+        | 'value_out_of_bounds'
         | 'human_reason_required';
       message: string;
     };
@@ -171,6 +176,32 @@ async function checkValueShape(
       'unit_not_allowed',
       `"${input.resolvedUnit}" is not a unit of ${parameter.parameter}; use one of ${units.map((u) => `"${u}"`).join(', ')}`,
     );
+  }
+  // The parameter's own contract, as every other write path applies it
+  // (validateEntryForParameter): a recommendation is a value the database
+  // would accept, never one it would refuse.
+  const spec = getRangeSpec(parameter.parameter as DrugParameterId);
+  if (spec.requiresMinMax && !rangeOk) {
+    return refuse(
+      400,
+      'range_required',
+      `${parameter.parameter} takes a range: endorse resolvedLow and resolvedHigh, not a single value`,
+    );
+  }
+  const values = scalarOk ? [input.resolvedValue!] : [input.resolvedLow!, input.resolvedHigh!];
+  for (const raw of values) {
+    // Bounds are stated in the canonical unit; an unconvertible value keeps
+    // the raw check, as on the entry write path.
+    const canonical =
+      convertParameterValue(raw, input.resolvedUnit, spec.canonicalUnit, parameter.molecularWeight) ??
+      raw;
+    if (canonical < spec.bounds.min || canonical > spec.bounds.max) {
+      return refuse(
+        400,
+        'value_out_of_bounds',
+        `${raw}${input.resolvedUnit ? ` ${input.resolvedUnit}` : ''} is outside the allowed range for ${parameter.parameter} (${spec.bounds.min}–${spec.bounds.max} ${spec.canonicalUnit || 'dimensionless'})`,
+      );
+    }
   }
   return null;
 }
@@ -463,11 +494,17 @@ async function sealIfComplete(
     .where(eq(adjudicationCases.id, caseId));
   if (!kase) return null;
 
-  const parameter = await adjudicationTargetParameter(kase.targetType, kase.targetId);
-  const result = compareOpinions(a, b, {
-    canonicalUnit: parameter?.canonicalUnit ?? null,
-    molecularWeight: parameter?.molecularWeight ?? null,
-  }, now);
+  // The basis pinned when the panel was bound (./snapshot.ts): a molecular
+  // weight edited between the two seats cannot flip the comparison.
+  let comparison = kase.adjudicatedTarget?.comparison;
+  if (!comparison) {
+    const parameter = await adjudicationTargetParameter(kase.targetType, kase.targetId);
+    comparison = {
+      canonicalUnit: parameter?.canonicalUnit ?? null,
+      molecularWeight: parameter?.molecularWeight ?? null,
+    };
+  }
+  const result = compareOpinions(a, b, comparison, now);
   const converged = result.convergence.converged && !result.convergence.humanRequested;
   const state: AdjudicationCaseState = converged ? 'converged' : 'diverged';
 
