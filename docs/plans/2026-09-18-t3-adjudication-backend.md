@@ -1,8 +1,7 @@
 # T3 adjudication backend — build plan
 
-**Status:** steps 1–6 implemented (records, detector, seats, case feed,
-opinions, convergence, T4 handoff); automatic closure and step 7 next. See
-*Implementation status* below.
+**Status:** implemented — steps 1–7 and the automatic closure of converged
+agent-only cases. See *Implementation status* below.
 **Date:** 2026-09-18
 **Design authority:** `agents/drug-db-adjudication.md` (the T3 contract),
 `docs/superpowers/specs/2026-08-24-tiered-agent-cost-architecture.md` §B2–B4,
@@ -118,8 +117,26 @@ person). The work lands in three pull requests:
      with no body: its title is localised by type, and the handoff list
      serves typed `reasons` rather than the English summary; the full package
      is served to reviewers by the case feed.
-3. **Automatic closure and step 7**: a converged agent-originated case closes
-   its agent disputes; then the "do not schedule" banner lifts.
+3. **Automatic closure and step 7** (done): `api/_lib/adjudication/closure.ts`
+   acts on a converged case that rests on agent disputes only, inside the
+   sealing write:
+   - both seats `approve` (on a numeric target, the proposal's own value): the
+     agent disputes resolve `rejected` and consensus is retried;
+   - both `dispute`/`return`: they resolve `upheld` and a pending edit is
+     returned to its author. By the owner's decision this includes a person's
+     proposal (`returnPendingEditForUpheldDispute`, `byAdjudicationPanel`);
+   - `split_scope`, a clinical case, a model-structure axis, or an approval of
+     a different (or unreadable) value hands the case to T4
+     (`closure_declined`);
+   - rows resolve with `resolved_by = null`, and `adjudication_cases.closure`
+     (migration 0142) records the outcome.
+
+   With it, `kinetix-consensus@v3`: an agent dispute verdict answered by a
+   later ruling (overruled, withdrawn or upheld) no longer counts as
+   disputing, so an overruled objection stops holding a proposal from
+   consensus — for a moderator's ruling as much as the panel's, which now also
+   retries consensus. The "do not schedule" banner is lifted and the prompt
+   wired to the endpoints (`agents/drug-db-adjudication.md` §3a).
 
 ## Goals
 
@@ -143,7 +160,8 @@ person). The work lands in three pull requests:
 
 - automatic resolution or closure of any dispute, agent-originated or not
   (spec rollout step 7; a separate governance decision, explicitly downstream of
-  prospective validation);
+  prospective validation) — since taken by the owner for converged
+  agent-originated cases (*Implementation status*, item 3);
 - any authority over a **human-originated** dispute, flag, return or rejection;
 - the shadow-audit sampler (issue
   issue 1232) — a sibling

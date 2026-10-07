@@ -77,7 +77,7 @@ export function userIdFromActorRef(actorRef: string | null | undefined): number 
  * than "is there an author reference at all". Every `pending_edits` row has a
  * `submitted_by`, so presence proves only that somebody submitted it.
  *
- * Since `kinetix-consensus@v2` a person's proposal publishes on agent
+ * Since `kinetix-consensus v2` a person's proposal publishes on agent
  * consensus under the same bar as an agent's, so `agent` versus `human` no
  * longer decides *whether* consensus may publish. It still decides the pool
  * arithmetic (a person holds no seat in the agent pool, so every active agent

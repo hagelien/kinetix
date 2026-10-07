@@ -544,7 +544,7 @@ export function actorKindOf(kind: string): StoredAssessment['assessorKind'] {
  * The same word, the same column, and the reverse conclusion — which is why
  * this is a second function rather than a shared one. For an assessor, `human`
  * *satisfies* a requirement, so an unreadable kind must not be human. For an
- * author it *attracts* one: since `kinetix-consensus@v2` the `unattributed`
+ * author it *attracts* one: since `kinetix-consensus v2` the `unattributed`
  * rule (`when: { authorKind: 'system' }`) requires a human approval for a
  * proposal nobody can be named the author of. An author kind this cannot read
  * is exactly that, so it reads as `system`; reading it as `human` (the old

@@ -517,7 +517,7 @@ describe('1. human wiki fact → agent reviews → live on agent consensus', () 
       expect(await pageContainsFact(world.pageId, 'fact-halflife-1')).toBe(false);
 
       // A person's proposal publishes on agent consensus under the same bar as
-      // an agent's (kinetix-consensus-apply@v3): no moderator is needed once
+      // an agent's (kinetix-consensus-apply@v4): no moderator is needed once
       // the agents agree, whichever engine is holding the gate.
       const second = await verdict({ editId, reviewer: world.reviewers[1]!, verdict: 'approve' });
       expect(second.statusCode).toBeLessThan(300);
@@ -558,9 +558,6 @@ describe('2. agent wiki fact → independent quorum → auto-apply', () => {
 describe('3. agent wiki fact → dispute → held → human ruling', () => {
   for (const authority of AUTHORITIES) {
     it(`holds until the dispute is closed under ${authority.name}`, async () => {
-      // Three reviewers, not two: an agent may not record a second verdict on
-      // the same target, so the approval that re-runs the gate after the ruling
-      // has to come from someone who has not voted yet.
       const world = await seedWorld({
         tiers: ['flagship', 'mid', 'mid'],
         authorIsAgent: true,
@@ -608,11 +605,11 @@ describe('3. agent wiki fact → dispute → held → human ruling', () => {
       });
       expect(ruled.statusCode).toBeLessThan(300);
 
-      // Closing a dispute does not itself publish anything; the next verdict is
-      // what re-runs the gate. Deliberately asserted rather than assumed —
+      // Overruling the objection retries consensus at once
+      // (kinetix-consensus@v3): the approvals already on record carry it, with
+      // no further verdict needed. Deliberately asserted rather than assumed —
       // "held then ruled" is only half the scenario if nothing ever unblocks.
-      expect(await statusOf(editId)).toBe('pending');
-      await verdict({ editId, reviewer: world.reviewers[2]!, verdict: 'approve' });
+      expect(JSON.parse(ruled.body ?? '{}')).toMatchObject({ autoApplied: true });
       expect(await statusOf(editId)).toBe('approved');
       if (authority.cutOver) await expectDecidedGenerically(editId, 'apply');
     });

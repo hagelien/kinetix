@@ -160,6 +160,8 @@ export async function collectConsensusFacts(
             ? pending.submittedBy
             : undefined,
         onlyActiveVerifiers: true,
+        // As the legacy gate: an overruled objection no longer holds.
+        excludeAnsweredDisputes: true,
       })
     ).get(pendingEditId) ?? null;
 

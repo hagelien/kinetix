@@ -23,6 +23,7 @@ import { assertSameOrigin, parseAndValidate } from './_lib/validate.js';
 import { adjudicationOpinionSchema } from './_lib/schemas.js';
 import { resolveAdjudicator } from './_lib/adjudication/cases.js';
 import { submitAdjudicationOpinion } from './_lib/adjudication/opinions.js';
+import { retryAgentConsensus } from './agent-verifications.js';
 
 export default withErrorHandling(async function handler(
   req: IncomingMessage,
@@ -56,5 +57,25 @@ export default withErrorHandling(async function handler(
     error(res, result.status, result.message, `adjudication_${result.code}`);
     return;
   }
-  json(res, 201, result, { headers: noStoreHeaders() });
+  // The panel overruled the agent disputes holding a proposal: retry consensus
+  // on it now, after the closure committed, rather than wait for the sweep. A
+  // failure here is logged, never an error — the sweep picks it up later.
+  const retryFor = result.outcome?.retryConsensusFor ?? null;
+  let consensusApplied: boolean | undefined;
+  if (retryFor !== null) {
+    try {
+      consensusApplied = (await retryAgentConsensus(retryFor)).outcome === 'applied';
+    } catch (err) {
+      console.error(
+        `[adjudication] consensus retry failed after closing case ${parsed.data.caseId} on pending_edit ${retryFor}; the sweep will retry`,
+        err,
+      );
+    }
+  }
+  json(
+    res,
+    201,
+    consensusApplied === undefined ? result : { ...result, consensusApplied },
+    { headers: noStoreHeaders() },
+  );
 });

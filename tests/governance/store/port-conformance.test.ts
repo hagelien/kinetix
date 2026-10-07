@@ -348,7 +348,7 @@ describe('reading a stored actor kind', () => {
   it('reads an unreadable *author* kind as system, the other way', () => {
     // The same column, the reverse conclusion, and the reason is that failing
     // closed means "toward the more demanding outcome" — which differs by
-    // role. Since kinetix-consensus@v2 the demanding author rule is
+    // role. Since kinetix-consensus v2 the demanding author rule is
     // `unattributed` (`when: { authorKind: 'system' }`, requires a human
     // approval); an unreadable author kind read as `human` or `service` would
     // match no author rule and publish on agent approvals alone.

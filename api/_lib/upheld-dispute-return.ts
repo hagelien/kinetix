@@ -142,6 +142,8 @@ export function composeUpheldReturnNote(args: {
   evidenceRefs?: AgentVerificationEvidenceRef[];
   /** When the objection was raised, so the author can date it. */
   raisedAt?: Date | null;
+  /** Who ruled: a moderator (default) or the T3 adjudication panel. */
+  ruledBy?: 'moderator' | 'adjudication_panel';
 }): string {
   // The marker dates the objection as well as naming it. The return refuses a
   // payload revised after `raisedAt`, but nothing can establish which version
@@ -154,8 +156,9 @@ export function composeUpheldReturnNote(args: {
       ? `, raised ${args.raisedAt.toISOString().slice(0, 16)}Z`
       : '';
   const header =
-    `[dispute #${args.disputeId} (${args.source}${raised}) upheld by a ` +
-    `moderator — revise and resubmit, or withdraw]`;
+    `[dispute #${args.disputeId} (${args.source}${raised}) upheld by ` +
+    `${args.ruledBy === 'adjudication_panel' ? 'the T3 adjudication panel' : 'a moderator'}` +
+    ` — revise and resubmit, or withdraw]`;
   const evidence = (args.evidenceRefs ?? [])
     .map(formatEvidenceRef)
     .filter((token): token is string => token !== null);
@@ -229,10 +232,20 @@ export async function returnPendingEditForUpheldDispute(args: {
    * without it.
    */
   targetVersion?: string | null;
-  resolvedBy: number;
+  /** The moderator who ruled; null when the T3 adjudication panel did. */
+  resolvedBy: number | null;
   mayDecide: boolean;
   mayDecideOwn: boolean;
   mayDecideModelStructure: boolean;
+  /**
+   * The T3 adjudication panel's converged ruling (api/_lib/adjudication/
+   * closure.ts), not a person's. No identity decides, so there is no
+   * self-decision to guard; and by the owner's governance decision a panel
+   * that converged on an agent's objection returns the proposal whoever
+   * submitted it, a person's included — the one door through which agents
+   * send back a person's work. The model-structure guard still applies.
+   */
+  byAdjudicationPanel?: boolean;
 }): Promise<UpheldReturnOutcome> {
   if (!args.mayDecide) return { returned: false, reason: 'decide_not_allowed' };
   const db = getDb();
@@ -261,7 +274,7 @@ export async function returnPendingEditForUpheldDispute(args: {
     typeof edit.parameter === 'string' &&
     isModelStructureParameter(edit.parameter);
 
-  if (edit.submittedBy === args.resolvedBy) {
+  if (!args.byAdjudicationPanel && args.resolvedBy !== null && edit.submittedBy === args.resolvedBy) {
     // The manual path does not read `review.edit.decideOwn` alone for a
     // self-decision, and neither may this one. The capability is the *human*
     // grant and explicitly excludes active agents: an agent token is clamped
@@ -287,6 +300,8 @@ export async function returnPendingEditForUpheldDispute(args: {
   // however it was granted the role. Agent-on-agent moderation stays allowed —
   // that is the peer pipeline working as designed.
   if (
+    !args.byAdjudicationPanel &&
+    args.resolvedBy !== null &&
     (await isActiveAgentUser(args.resolvedBy)) &&
     !(await isActiveAgentUser(edit.submittedBy))
   ) {
@@ -346,6 +361,7 @@ export async function returnPendingEditForUpheldDispute(args: {
         reasonMd: args.reasonMd,
         evidenceRefs: args.evidenceRefs,
         raisedAt: args.disputeRaisedAt,
+        ruledBy: args.byAdjudicationPanel ? 'adjudication_panel' : 'moderator',
       }),
       reviewedBy: args.resolvedBy,
       reviewedAt: new Date(),
@@ -394,7 +410,9 @@ export async function returnPendingEditForUpheldDispute(args: {
     edit,
     decision: 'returned',
     actorUserId: args.resolvedBy,
-    note: 'A dispute raised against it was upheld.',
+    note: args.byAdjudicationPanel
+      ? 'A dispute raised against it was upheld by the T3 adjudication panel.'
+      : 'A dispute raised against it was upheld.',
   });
 
   return { returned: true };
