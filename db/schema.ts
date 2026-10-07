@@ -2646,6 +2646,138 @@ export type AdjudicationResolution =
   | 'abstain'
   | 'human';
 
+/** Why two sealed opinions did not converge (null when they did). */
+export type AdjudicationDivergenceReason =
+  | 'resolution_differs'
+  | 'scope_differs'
+  | 'value_shape_differs'
+  | 'value_differs'
+  | 'unit_family_differs'
+  | 'unit_not_convertible';
+
+/** The typed comparison of the two sealed opinions (0141). */
+export type AdjudicationConvergence = {
+  converged: boolean;
+  reason: AdjudicationDivergenceReason | null;
+  /** A panelist resolved `human` or set humanRequired. */
+  humanRequested: boolean;
+  /** The canonical unit both values were compared in, when a value was. */
+  canonicalUnit: string | null;
+  comparedAt: string;
+};
+
+/** What a converged panel recommends. A recommendation only (0141). */
+export type AdjudicationRecommendation = {
+  resolution: AdjudicationResolution;
+  scopeKey: Record<string, string>;
+  /** Canonical-unit value both panelists endorsed, when they endorsed one. */
+  value:
+    | { kind: 'scalar'; value: number; unit: string }
+    | { kind: 'range'; low: number; high: number; unit: string }
+    | null;
+  opinionIds: number[];
+};
+
+/** One opinion as the T4 handoff carries it. */
+export type AdjudicationHandoffOpinion = {
+  opinionId: number;
+  seat: AdjudicationSeat;
+  agentId: number;
+  adjudicatorTier: string | null;
+  adjudicatorFamily: string | null;
+  model: string | null;
+  resolution: AdjudicationResolution;
+  proposition: string;
+  scopeKey: Record<string, string>;
+  resolvedValue: number | null;
+  resolvedLow: number | null;
+  resolvedHigh: number | null;
+  resolvedUnit: string | null;
+  reasoningMd: string;
+  evidenceRefs: unknown;
+  confidence: string;
+  humanRequired: boolean;
+  humanReason: string | null;
+  finalizedAt: string;
+};
+
+/**
+ * What the panel adjudicated (0141): the target exactly as the case file
+ * served it to the panel at the sealing write — hydrated, with the current
+ * value, entry or content it is compared against — and its source row.
+ */
+export type AdjudicatedTarget = {
+  /** The hydrated target (agent-verifications-queue `QueueItem`) served to the panel. */
+  served: Record<string, unknown>;
+  sourceRow: Record<string, unknown> | null;
+  /**
+   * What the comparison converts through, pinned at binding: the parameter's
+   * canonical unit (null for a target that carries no value) and the drug's
+   * molecular weight for a mass↔molar conversion.
+   */
+  comparison: { canonicalUnit: string | null; molecularWeight: number | null };
+  /** The decided disputes on the target as served to the panel. */
+  decidedDisputes: AdjudicationDecidedDispute[];
+  /**
+   * The lower-tier record as served to the panel: the copied verdicts and the
+   * open disputes on the version, read at binding. A dispute filed later
+   * still reaches the case record (and decides who closes it) at sealing,
+   * but never one seat's case file and not the other's.
+   */
+  lowerTier: {
+    t2Verdicts: AdjudicationVerdictSnapshot[];
+    t1Verdicts: AdjudicationVerdictSnapshot[];
+    openDisputes: AdjudicationDisputeSnapshot[];
+  };
+  /** Why the case opened and whose objection it rests on, as served to the panel. */
+  context: {
+    triggers: AdjudicationTrigger[];
+    triggerDetail: Record<string, unknown>;
+    disputeOrigin: AdjudicationDisputeOrigin;
+  };
+};
+
+export type AdjudicationDecidedDispute = {
+  disputeId: number;
+  source: string;
+  targetVersion: string | null;
+  reasonMd: string;
+  resolution: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
+};
+
+/** The T4 package a person gets, so nobody reconstructs the appeal from logs (0141). */
+export type AdjudicationHandoff = {
+  caseId: number;
+  targetType: string;
+  targetId: number;
+  targetVersion: string;
+  disputeOrigin: AdjudicationDisputeOrigin;
+  triggers: AdjudicationTrigger[];
+  /** Why a person is needed, in order of weight. */
+  reasons: Array<
+    'panel_diverged' | 'human_requested' | 'panel_abstained' | 'human_dispute' | 'panel_conflicted'
+  >;
+  /**
+   * One paragraph, in English, of what remains disputed: the record's prose
+   * for agents and the API. A screen or email renders from `reasons` and
+   * `convergence.reason` in the reader's language instead.
+   */
+  summary: string;
+  opinions: AdjudicationHandoffOpinion[];
+  t2Snapshot: AdjudicationVerdictSnapshot[];
+  t1Snapshot: {
+    verdicts: AdjudicationVerdictSnapshot[];
+    openDisputes: AdjudicationDisputeSnapshot[];
+  };
+  /** The sources both panelists cited, de-duplicated. */
+  decisiveSources: unknown[];
+  convergence: AdjudicationConvergence;
+  recommendation: AdjudicationRecommendation | null;
+  createdAt: string;
+};
+
 export const adjudicationCases = pgTable(
   'adjudication_cases',
   {
@@ -2687,6 +2819,21 @@ export const adjudicationCases = pgTable(
     invalidatedReason: text('invalidated_reason'),
     /** When the detector last re-checked this case; the sweep rotates on it. */
     lastCheckedAt: timestamp('last_checked_at'),
+    /** The typed comparison of the two sealed opinions (0141). */
+    convergence: jsonb('convergence').$type<AdjudicationConvergence>(),
+    /** What a converged panel recommends; a recommendation only (0141). */
+    recommendation: jsonb('recommendation').$type<AdjudicationRecommendation>(),
+    /** A person must take the case (0141). */
+    t4Required: boolean('t4_required').notNull().default(false),
+    /** The T4 package for that person (0141). */
+    handoff: jsonb('handoff').$type<AdjudicationHandoff>(),
+    /**
+     * The target as the panel adjudicated it, copied at sealing under the
+     * source-row lock — for every sealed outcome, converged or handed off — so
+     * later revisions of the live row, or of the baselines served beside it,
+     * cannot change the record of what was decided (0141).
+     */
+    adjudicatedTarget: jsonb('adjudicated_target').$type<AdjudicatedTarget>(),
   },
   (t) => [
     // Permanent, not "while live": a target version is adjudicated at most once.
@@ -2766,6 +2913,11 @@ export const adjudicationOpinions = pgTable(
     supersedesOpinionId: integer('supersedes_opinion_id'),
     /** agents.model_tier at write time. */
     adjudicatorTier: varchar('adjudicator_tier', { length: 20 }),
+    /**
+     * agents.model_family at write time (0141), so the panel's family
+     * diversity is recorded as the panel was, whatever the grant says later.
+     */
+    adjudicatorFamily: varchar('adjudicator_family', { length: 40 }),
     /** Self-reported, audit only. */
     model: varchar('model', { length: 80 }),
     resolution: varchar('resolution', { length: 20 })
@@ -3192,7 +3344,10 @@ export type NotificationType =
   | 'comment_reply'
   | 'comment_on_contribution'
   | 'comment_in_thread'
-  | 'contribution_endorsed';
+  | 'contribution_endorsed'
+  // A T3 panel left a case for a person: it diverged, a panelist asked for a
+  // human, or a person's dispute is part of it (0141).
+  | 'adjudication_handoff';
 
 export type NotificationAudience = 'author' | 'reviewer';
 

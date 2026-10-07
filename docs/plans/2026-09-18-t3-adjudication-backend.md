@@ -1,7 +1,8 @@
 # T3 adjudication backend — build plan
 
-**Status:** steps 1–3 implemented (records, detector, adjudicator grant and
-seats); steps 4–7 next. See *Implementation status* below.
+**Status:** steps 1–6 implemented (records, detector, seats, case feed,
+opinions, convergence, T4 handoff); automatic closure and step 7 next. See
+*Implementation status* below.
 **Date:** 2026-09-18
 **Design authority:** `agents/drug-db-adjudication.md` (the T3 contract),
 `docs/superpowers/specs/2026-08-24-tiered-agent-cost-architecture.md` §B2–B4,
@@ -65,8 +66,58 @@ person). The work lands in three pull requests:
      the last check (`adjudication_detector_checks`);
    - opinions are append-only at the database: a trigger refuses every UPDATE
      and DELETE on `adjudication_opinions`.
-2. **Steps 4–6**: the case feed, the opinion write path, sealing, typed
-   convergence and the T4 handoff.
+2. **Steps 4–6** (done): migration `0141_t3_adjudication_outcomes.sql`,
+   `api/agent-adjudication-queue.ts` (case list, case file, claim),
+   `api/agent-adjudication-opinions.ts`, and `api/_lib/adjudication/`
+   `opinions.ts`, `convergence.ts`, `caseFile.ts`, `target.ts`. Where it
+   differs from the text below:
+   - opinions are stored as submitted and converted to the canonical unit at
+     comparison, so a unit in another family is recorded as a disagreement
+     (`unit_family_differs`) rather than refused at write; a pair that cannot
+     be converted (e.g. mass↔molar with no molecular weight) is
+     `unit_not_convertible` and goes to T4;
+   - only range parameters endorse a value; on every other target an
+     endorsing opinion states its resolution in `proposition` and `scopeKey`;
+   - a converged case where a panelist asked for a person is recorded as
+     `diverged` (it needs a person) with the comparison kept, and a converged
+     case resting on a person's dispute stays `converged` with its
+     recommendation but `t4_required`;
+   - two agreed abstentions resolve nothing, so they recommend nothing and go
+     to T4 (`panel_abstained`): the version cannot open another case;
+   - the seal re-reads the version's open disputes under the source-row lock,
+     so a person's dispute that landed after the detector last refreshed the
+     case still makes the closing act theirs; a seat claim re-reads them the
+     same way, so an agent that disputed the target since cannot take a seat;
+   - the first seat claim binds the panel (`adjudicated_target`): the hydrated
+     target with its baselines and source row, the lower-tier record (copied
+     verdicts and open disputes on the version), the decided disputes, and the
+     canonical unit and molecular weight the opinions are compared with. Both
+     seats are served that binding (a person reads the case record as it
+     stands, with any dispute merged at sealing); later claims and writes
+     check the live target against it and close the case on drift
+     (`target_drifted`);
+   - a seat is refused to any agent with a verdict on the target now, not only
+     those the case copied; every opinion write re-checks the writer, and the
+     seal re-checks both seats — a seat that took a part after finalizing
+     hands the case to a person with nothing recommended (`panel_conflicted`);
+   - a case about unpublished wiki content is served only to readers cleared
+     for drafts, panelists (by their backing user's role) and people alike;
+   - an endorsed value follows the parameter's contract — a range where
+     `requiresMinMax`, within the registry bounds in the canonical unit;
+   - a dimensionless range parameter (pKa, logP, logD; canonical unit `''`)
+     carries a value like any other;
+   - the open-case feed serves identifiers only: triggers and dispute origin
+     are served after a claim, so nobody picks cases by provenance;
+   - an opinion write re-checks that the target can still be served to the
+     panel; one that cannot (a wiki page unpublished under an unchanged
+     version) closes the case as `target_unavailable`;
+   - blindness is keyed on the seal itself, not the state, so a case closed
+     mid-panel never unblinds;
+   - the handoff notification reuses the dispute fan-out with no dispute id
+     (`notifications.type = 'adjudication_handoff'`), linking to the target,
+     with no body: its title is localised by type, and the handoff list
+     serves typed `reasons` rather than the English summary; the full package
+     is served to reviewers by the case feed.
 3. **Automatic closure and step 7**: a converged agent-originated case closes
    its agent disputes; then the "do not schedule" banner lifts.
 

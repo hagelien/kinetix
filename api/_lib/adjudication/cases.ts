@@ -39,6 +39,68 @@ import { ACTIVE_AGENT_ROLES } from '../agent-verifications.js';
 import { contributionAuthorUserId } from '../notifications.js';
 import { FLAGSHIP_TIER } from '../../../src/lib/modelTiers.js';
 import { classifyAdjudicationCase, disputeOriginOf } from './detector.js';
+import { bindPanelTarget } from './snapshot.js';
+
+/**
+ * The open disputes about one version of a target. A person's dispute
+ * survives an in-place revision bound to the version it was raised against; it
+ * says nothing about the revised payload a case on the new version
+ * adjudicates. A legacy dispute with no recorded version cannot be placed, so
+ * it is kept: the safe reading where a person's authority is at stake.
+ *
+ * Read under the target's source-row lock by every T3 writer that acts on
+ * them — the detector, a seat claim and the seal — so a dispute filed a
+ * moment earlier is never missed.
+ */
+export async function openDisputesOnVersion(args: {
+  targetType: string;
+  targetId: number;
+  targetVersion: string;
+}) {
+  return getDb()
+    .select({
+      id: disputes.id,
+      source: disputes.source,
+      createdBy: disputes.createdBy,
+      reasonMd: disputes.reasonMd,
+      evidenceRefs: disputes.evidenceRefs,
+      createdAt: disputes.createdAt,
+    })
+    .from(disputes)
+    .where(
+      and(
+        eq(disputes.targetType, args.targetType),
+        eq(disputes.targetId, args.targetId),
+        eq(disputes.status, 'open'),
+        or(eq(disputes.targetVersion, args.targetVersion), isNull(disputes.targetVersion)),
+      ),
+    )
+    .orderBy(asc(disputes.id));
+}
+
+/**
+ * A case's copied open disputes with those open on its version now, by id:
+ * merged, never narrowed.
+ */
+export function mergeOpenDisputes(
+  known: AdjudicationDisputeSnapshot[],
+  openNow: Awaited<ReturnType<typeof openDisputesOnVersion>>,
+): AdjudicationDisputeSnapshot[] {
+  const ids = new Set(known.map((d) => d.disputeId));
+  return [
+    ...known,
+    ...openNow
+      .filter((d) => !ids.has(d.id))
+      .map((d) => ({
+        disputeId: d.id,
+        source: d.source,
+        createdBy: d.createdBy,
+        reasonMd: d.reasonMd,
+        evidenceRefs: d.evidenceRefs as AdjudicationDisputeSnapshot['evidenceRefs'],
+        createdAt: d.createdAt.toISOString(),
+      })),
+  ];
+}
 
 /** States a case can still act in; the rest are terminal. */
 export const LIVE_CASE_STATES = ['open', 'sealed'] as const;
@@ -50,7 +112,17 @@ export const LIVE_CASE_STATES = ['open', 'sealed'] as const;
  * dispute withdrawn in the control phase, a verdict changed) — the case
  * opened on a disagreement that did not survive, so the panel must not get it.
  */
-export type InvalidatedReason = 'target_version_moved' | 'disagreement_withdrawn';
+export type InvalidatedReason =
+  | 'target_version_moved'
+  | 'disagreement_withdrawn'
+  // The version is unchanged but the target can no longer be served to a
+  // panelist (a wiki page unpublished under it, say): nobody may adjudicate
+  // a proposition they cannot read.
+  | 'target_unavailable'
+  // The version is unchanged but what the target is compared against (a
+  // current value, entry or content served beside it) moved under the panel,
+  // so its seats may have read different packets (./snapshot.ts).
+  | 'target_drifted';
 
 export type DetectOutcome = {
   /** Live cases on this target closed because the target moved under them. */
@@ -159,30 +231,11 @@ export async function detectAdjudicationCase(args: {
         ),
       )
       .orderBy(asc(agentVerifications.id));
-    // Only disputes about THIS version. A person's dispute survives an
-    // in-place revision bound to the version it was raised against; it says
-    // nothing about the revised payload this case adjudicates. A legacy
-    // dispute with no recorded version cannot be placed, so it is kept: the
-    // safe reading where a person's authority is at stake.
-    const openDisputes = await tx
-      .select({
-        id: disputes.id,
-        source: disputes.source,
-        createdBy: disputes.createdBy,
-        reasonMd: disputes.reasonMd,
-        evidenceRefs: disputes.evidenceRefs,
-        createdAt: disputes.createdAt,
-      })
-      .from(disputes)
-      .where(
-        and(
-          eq(disputes.targetType, args.targetType),
-          eq(disputes.targetId, args.targetId),
-          eq(disputes.status, 'open'),
-          or(eq(disputes.targetVersion, version), isNull(disputes.targetVersion)),
-        ),
-      )
-      .orderBy(asc(disputes.id));
+    const openDisputes = await openDisputesOnVersion({
+      targetType: args.targetType,
+      targetId: args.targetId,
+      targetVersion: version,
+    });
     // Decided disputes across every version: the correction loop is exactly
     // the cycles a proposition went through on its way to this version.
     const [decided] = await tx
@@ -472,6 +525,9 @@ export type ClaimSeatResult =
         | 'case_not_open'
         | 'not_eligible'
         | 'conflicted'
+        | 'target_unavailable'
+        | 'target_drifted'
+        | 'target_version_moved'
         | 'panel_full';
     };
 
@@ -481,7 +537,7 @@ export type ClaimSeatResult =
  * opened without a verdict), and the agent that authored the target — the
  * panel reviews their work, so it cannot include them.
  */
-async function conflictedAgentIds(kase: {
+export async function conflictedAgentIds(kase: {
   targetType: string;
   targetId: number;
   t1Snapshot: { verdicts: { agentId: number }[]; openDisputes: { createdBy: number }[] };
@@ -491,6 +547,19 @@ async function conflictedAgentIds(kase: {
     ...kase.t2Snapshot.map((v) => v.agentId),
     ...kase.t1Snapshot.verdicts.map((v) => v.agentId),
   ]);
+  // Every agent with a verdict on the target now, not only those the case
+  // copied: the snapshots stay frozen while the disagreement holds, so an
+  // agent that judged the target since would otherwise sit on its appeal.
+  const live = await getDb()
+    .select({ agentId: agentVerifications.agentId })
+    .from(agentVerifications)
+    .where(
+      and(
+        eq(agentVerifications.targetType, kase.targetType),
+        eq(agentVerifications.targetId, kase.targetId),
+      ),
+    );
+  for (const v of live) conflicted.add(v.agentId);
   const userIds = new Set<number>(kase.t1Snapshot.openDisputes.map((d) => d.createdBy));
   const author = await contributionAuthorUserId({
     targetType: kase.targetType,
@@ -508,31 +577,73 @@ async function conflictedAgentIds(kase: {
 }
 
 /**
+ * The agents with a part in the case now: `conflictedAgentIds` over the
+ * case's disputes merged with those open on its version now. Read under the
+ * source-row lock by every T3 write that seats or hears a panelist — the
+ * claim, each opinion and the seal — so a part taken after the claim (a
+ * verdict, a dispute) is caught before it counts.
+ */
+export async function liveConflictedAgentIds(kase: {
+  targetType: string;
+  targetId: number;
+  targetVersion: string;
+  t1Snapshot: { verdicts: { agentId: number }[]; openDisputes: AdjudicationDisputeSnapshot[] };
+  t2Snapshot: { agentId: number }[];
+}): Promise<Set<number>> {
+  const openNow = await openDisputesOnVersion(kase);
+  return conflictedAgentIds({
+    ...kase,
+    t1Snapshot: {
+      ...kase.t1Snapshot,
+      openDisputes: mergeOpenDisputes(kase.t1Snapshot.openDisputes, openNow),
+    },
+  });
+}
+
+/**
  * Take a free seat on an open case, before any case content is served (§3.2).
  *
  * Eligible: an active agent whose backing user holds an active role, with the
  * server-owned `adjudicator` grant AND the flagship tier — being flagship
  * alone grants nothing — and no part in the case (`conflictedAgentIds`).
  *
- * The case row is locked for the claim, so two adjudicators racing take turns;
- * the unique indexes on (case, seat) and (case, agent) are the backstop. The
- * agent row is held FOR SHARE so an admin revoking the grant serializes with
- * it. Re-claiming returns the caller's existing seat.
+ * The claim takes the tier's lock order — the target's source row, then the
+ * case row — so two adjudicators racing take turns, and a dispute filed on the
+ * target serializes with it: the conflict check re-reads the version's open
+ * disputes under that lock, not only the case's snapshot, so an agent that
+ * disputed the target after the detector last refreshed the case cannot sit
+ * on its own appeal. The unique indexes on (case, seat) and (case, agent) are
+ * the backstop. The agent row is held FOR SHARE so an admin revoking the grant
+ * serializes with it. Re-claiming returns the caller's existing seat. The
+ * claim also binds the panel to one hydrated target (./snapshot.ts): the first
+ * copies it onto the case, and a target that cannot be served or has drifted
+ * since closes the case instead of seating anyone.
  */
 export async function claimAdjudicationSeat(args: {
   caseId: number;
   agentId: number;
 }): Promise<ClaimSeatResult> {
+  const [peek] = await getDb()
+    .select({ targetType: adjudicationCases.targetType, targetId: adjudicationCases.targetId })
+    .from(adjudicationCases)
+    .where(eq(adjudicationCases.id, args.caseId));
+  if (!peek) return { ok: false, reason: 'case_not_found' };
+
   return inTransaction(async () => {
     const tx = getDb();
+    await lockVerificationSourceRow(tx, peek.targetType, peek.targetId);
     const [kase] = await tx
       .select({
         id: adjudicationCases.id,
         targetType: adjudicationCases.targetType,
         targetId: adjudicationCases.targetId,
+        targetVersion: adjudicationCases.targetVersion,
         state: adjudicationCases.state,
         t1Snapshot: adjudicationCases.t1Snapshot,
         t2Snapshot: adjudicationCases.t2Snapshot,
+        triggers: adjudicationCases.triggers,
+        triggerDetail: adjudicationCases.triggerDetail,
+        adjudicatedTarget: adjudicationCases.adjudicatedTarget,
       })
       .from(adjudicationCases)
       .where(eq(adjudicationCases.id, args.caseId))
@@ -540,7 +651,7 @@ export async function claimAdjudicationSeat(args: {
     if (!kase) return { ok: false, reason: 'case_not_found' };
 
     const [agent] = await tx
-      .select({ id: agents.id })
+      .select({ id: agents.id, userId: agents.userId })
       .from(agents)
       .innerJoin(users, eq(users.id, agents.userId))
       .where(
@@ -567,7 +678,7 @@ export async function claimAdjudicationSeat(args: {
     if (mine) return { ok: true, seat: mine.seat, alreadySeated: true };
     if (kase.state !== 'open') return { ok: false, reason: 'case_not_open' };
 
-    if ((await conflictedAgentIds(kase)).has(args.agentId)) {
+    if ((await liveConflictedAgentIds(kase)).has(args.agentId)) {
       return { ok: false, reason: 'conflicted' };
     }
 
@@ -579,6 +690,12 @@ export async function claimAdjudicationSeat(args: {
     const free = (['a', 'b'] as const).find((s) => !takenSeats.has(s));
     if (!free) return { ok: false, reason: 'panel_full' };
 
+    // Bind the panel to one hydrated target before any content is served:
+    // the first claim copies it onto the case, a later one checks it still
+    // holds (./snapshot.ts).
+    const bound = await bindPanelTarget(kase, { agentId: agent.id, agentUserId: agent.userId });
+    if (!bound.ok) return { ok: false, reason: bound.reason };
+
     const [inserted] = await tx
       .insert(adjudicationCaseSeats)
       .values({ caseId: args.caseId, seat: free, agentId: args.agentId })
@@ -587,4 +704,33 @@ export async function claimAdjudicationSeat(args: {
     if (!inserted) return { ok: false, reason: 'panel_full' };
     return { ok: true, seat: inserted.seat, alreadySeated: false };
   });
+}
+
+/**
+ * The calling agent, when it may act as an adjudicator now: active, its
+ * backing user in an active role, the `adjudicator` grant AND the flagship
+ * tier. `null` for a user who backs no agent at all (a person), and
+ * `not_eligible` for an agent that lacks any of it.
+ */
+export async function resolveAdjudicator(
+  userId: number,
+): Promise<{ agentId: number; userId: number } | 'not_eligible' | null> {
+  const [row] = await getDb()
+    .select({
+      agentId: agents.id,
+      status: agents.status,
+      adjudicator: agents.adjudicator,
+      modelTier: agents.modelTier,
+      role: users.role,
+    })
+    .from(agents)
+    .innerJoin(users, eq(users.id, agents.userId))
+    .where(eq(agents.userId, userId));
+  if (!row) return null;
+  const eligible =
+    row.status === 'active' &&
+    row.adjudicator &&
+    row.modelTier === FLAGSHIP_TIER &&
+    ACTIVE_AGENT_ROLES.includes(row.role);
+  return eligible ? { agentId: row.agentId, userId } : 'not_eligible';
 }

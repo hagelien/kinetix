@@ -988,6 +988,13 @@
       "when": 1790380800000,
       "tag": "0140_ethanol_concentration_unit",
       "breakpoints": true
+    },
+    {
+      "idx": 141,
+      "version": "7",
+      "when": 1790467200000,
+      "tag": "0141_t3_adjudication_outcomes",
+      "breakpoints": true
     }
   ]
 }

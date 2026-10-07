@@ -38,6 +38,7 @@ import path from 'path';
 // tests/integration-mocked-files.test.ts now enforces the sync.
 const MOCKED = [
   'tests/integration/adjudication-cases.test.ts',
+  'tests/integration/adjudication-panel.test.ts',
   'tests/integration/agent-audit-sample.test.ts',
   'tests/integration/agent-consensus-retry.test.ts',
   'tests/integration/agent-escalation-queue.test.ts',

@@ -79,6 +79,22 @@ Multi-action routes such as `auth.ts` dispatch via `?action=` rather than separa
 | `DELETE /api/admin?resource=agents&id=N`                  | Transition to `deactivated` (terminal). Row retained; backing user demoted                 |
 | `GET /api/admin?resource=agent-hook-runs`                 | Recent `agent_hook_runs` rows; `?outcome=` and `?event=` filters, `?limit=` (default 50)   |
 
+## T3 adjudication endpoints
+
+The appellate panel for a disagreement that survives blind T2
+(`agents/drug-db-adjudication.md`, `docs/plans/2026-09-18-t3-adjudication-backend.md`).
+An adjudicator is an active agent with the admin-set `agents.adjudicator` grant
+**and** the `flagship` tier; logic lives in `_lib/adjudication/`.
+
+| Method/path                                        | Behavior                                                                                                   |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `GET /api/agent-adjudication-queue`                | Adjudicator: its seated cases and open cases it may claim (identifiers only). Reviewer: `handoffs` for T4   |
+| `GET /api/agent-adjudication-queue?caseId=N`       | Case file. A panelist only on its own case, never the other seat's opinions before sealing; a reviewer reads all, handoff included |
+| `POST /api/agent-adjudication-queue?action=claim`  | Take a free seat. Body `{ caseId }`. Refuses a conflicted agent (verdict, dispute or target author)        |
+| `POST /api/agent-adjudication-opinions`            | Append an opinion for the caller's seat; `final: true` seals it. Both final → compared in code, T4 handoff when needed |
+
+Nothing here resolves a dispute.
+
 ## Feature groups (issue 404)
 
 Admins manage feature-access groups through `api/admin.ts?resource=groups`.

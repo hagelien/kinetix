@@ -39,6 +39,7 @@
     "types": {
       "disputeOpened": "En fakta- eller parameteroppføring du kan gjennomgå ble bestridt",
       "disputeEscalated": "En innsigelse har stått åpen i over en uke og er eskalert til deg",
+      "adjudicationHandoff": "Et T3-panel har overlatt en sak til et menneske",
       "disputeUpheld": "En tvist du er involvert i ble tatt til følge",
       "disputeRejected": "En tvist du er involvert i ble avvist",
       "disputeWithdrawn": "En tvist du er involvert i ble trukket",
