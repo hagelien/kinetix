@@ -81,6 +81,11 @@ export const users = pgTable('users', {
     .$type<string[]>()
     .notNull()
     .default(['µmol/L', 'mg/L']),
+  // Ethanol's own display unit: ‰ and % on top of the units above, since blood
+  // alcohol is read in per mille, not µmol/L. Display only. Defaults to ‰.
+  ethanolConcentrationUnit: varchar('ethanol_concentration_unit', { length: 16 })
+    .notNull()
+    .default('‰'),
   // Per-user favorite parameter ids (#321). These are the parameters
   // the user wants visible in the monograph sidebar's collapsed mode;
   // expanding the box reveals every parameter regardless. Order is

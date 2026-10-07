@@ -19,12 +19,18 @@ import {
   resolveEmailPrefs,
   type EmailFrequency,
 } from '@/lib/emailNotificationPrefs';
+import {
+  ETHANOL_UNIT_OPTIONS,
+  normalizeEthanolUnit,
+} from '@/lib/ethanolUnits';
 
 interface FormState {
   displayName: string;
   /** Selected units in primary-first order. Always non-empty when valid. */
   enabledUnits: ConcentrationUnitName[];
   primaryUnit: ConcentrationUnitName;
+  /** Ethanol's own display unit (‰, %, or any concentration unit). */
+  ethanolUnit: ConcentrationUnitName;
   emailOnFeedback: boolean;
   emailAsReviewer: boolean;
   emailFrequency: EmailFrequency;
@@ -78,6 +84,7 @@ function formFromUser(
     displayName: user?.displayName ?? '',
     enabledUnits: enabled,
     primaryUnit: enabled[0]!,
+    ethanolUnit: normalizeEthanolUnit(user?.ethanolConcentrationUnit),
     ...(() => {
       const prefs = resolveEmailPrefs(user?.notificationSettings);
       return {
@@ -250,6 +257,7 @@ function PreferencesContent() {
             form.enabledUnits,
             form.primaryUnit,
           ),
+          ethanolConcentrationUnit: form.ethanolUnit,
           notificationSettings,
         }),
       });
@@ -266,6 +274,7 @@ function PreferencesContent() {
         preferences: {
           displayName: string | null;
           enabledConcentrationUnits: ConcentrationUnitName[];
+          ethanolConcentrationUnit?: ConcentrationUnitName;
           notificationSettings: NotificationSettings | null;
           favoriteParameters: string[];
         };
@@ -431,6 +440,31 @@ function PreferencesContent() {
               </select>
               <p className="text-xs text-muted-foreground mt-1">
                 {t('preferences.unitsPrimaryHelp')}
+              </p>
+            </div>
+            <div className="mt-4 max-w-md">
+              <label
+                htmlFor="ethanol-unit"
+                className="text-xs font-medium text-muted-foreground"
+              >
+                {t('preferences.ethanolUnitLabel')}
+              </label>
+              <select
+                id="ethanol-unit"
+                className="mt-1 bg-background border border-input rounded px-2 py-2 text-sm h-10 w-full"
+                value={form.ethanolUnit}
+                onChange={(e) =>
+                  setForm({ ...form, ethanolUnit: e.target.value })
+                }
+              >
+                {ETHANOL_UNIT_OPTIONS.map((u) => (
+                  <option key={u} value={u}>
+                    {u}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground mt-1">
+                {t('preferences.ethanolUnitHelp')}
               </p>
             </div>
           </section>

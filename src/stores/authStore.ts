@@ -45,6 +45,13 @@ export interface AuthUser {
    * and converters. Always has at least one element.
    */
   enabledConcentrationUnits: ConcentrationUnitName[];
+  /**
+   * The unit ethanol is displayed in (‰ by default; also % or any of the
+   * units above). Separate from `enabledConcentrationUnits` because blood
+   * alcohol is read in per mille, not µmol/L. Absent on a session from a
+   * server that predates the setting.
+   */
+  ethanolConcentrationUnit?: ConcentrationUnitName;
   notificationSettings: NotificationSettings | null;
   /**
    * Per-user favorite parameter ids (#321). When non-empty, the
@@ -135,6 +142,7 @@ interface AuthState {
       AuthUser,
       | 'displayName'
       | 'enabledConcentrationUnits'
+      | 'ethanolConcentrationUnit'
       | 'notificationSettings'
       | 'favoriteParameters'
     >,
@@ -270,6 +278,9 @@ export const useAuthStore = create<AuthState>((set) => ({
           ...state.user,
           displayName: prefs.displayName,
           enabledConcentrationUnits: prefs.enabledConcentrationUnits,
+          ethanolConcentrationUnit:
+            prefs.ethanolConcentrationUnit ??
+            state.user.ethanolConcentrationUnit,
           notificationSettings: prefs.notificationSettings,
           favoriteParameters: prefs.favoriteParameters,
         },
@@ -306,6 +317,7 @@ export const useAuthStore = create<AuthState>((set) => ({
           AuthUser,
           | 'displayName'
           | 'enabledConcentrationUnits'
+          | 'ethanolConcentrationUnit'
           | 'notificationSettings'
           | 'favoriteParameters'
         >;

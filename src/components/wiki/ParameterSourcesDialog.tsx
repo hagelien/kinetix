@@ -9,7 +9,7 @@ import {
   type ParameterSummary,
 } from '@/lib/parameterEntryAggregation';
 import { preferredDisplayUnit } from '@/lib/parameterUnits';
-import { useAppStore } from '@/stores/appStore';
+import { useDisplayUnits } from '@/components/ui/DrugUnitScope';
 import type { NumericRange } from '@/types';
 import { ParameterForestPlot, type MatrixFrame } from './ParameterForestPlot';
 import { ParameterEntryList } from './ParameterEntryList';
@@ -72,7 +72,7 @@ export function ParameterSourcesDialog({
   const routeEntries = Object.entries(routeSummaries?.[parameter] ?? {}).sort(
     ([a], [b]) => ROUTE_ORDER.indexOf(a) - ROUTE_ORDER.indexOf(b),
   );
-  const enabledUnits = useAppStore((s) => s.enabledUnits);
+  const enabledUnits = useDisplayUnits();
   // One display unit for the whole dialog — the reader's preferred concentration
   // unit when the summary converts into it, the canonical unit otherwise — so
   // the axis, the pooled headline and the per-source rows all agree.

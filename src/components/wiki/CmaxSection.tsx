@@ -30,6 +30,9 @@ import {
   type ReferenceMatrix,
 } from '@/lib/referenceConcentrations';
 import { ROUTE_LABEL_KEYS } from '@/lib/routeLabels';
+import { UnitTooltip } from '@/components/ui/UnitTooltip';
+import { useEthanolScopeUnit } from '@/components/ui/DrugUnitScope';
+import { getPreferredUnitDisplay } from '@/lib/unitTooltip';
 import type { RouteId } from '@/lib/kinetics-core';
 
 interface Props {
@@ -38,6 +41,8 @@ interface Props {
   canEdit?: boolean;
   isAdmin?: boolean;
   onMutated?: () => void;
+  /** Lets a molar reading convert into the ethanol unit (‰, %). */
+  molecularWeight?: number | null;
 }
 
 /** "84 ng/mL (70–98)", or "< 5 ng/mL" for a censored threshold. */
@@ -48,6 +53,34 @@ export function formatCmaxValue(e: ParameterEntryRow): string {
   const bounds = e.low != null && e.high != null ? `${e.low}–${e.high}` : null;
   if (centre != null) return `${centre}${unit}${bounds ? ` (${bounds})` : ''}`;
   return bounds ? `${bounds}${unit}` : '—';
+}
+
+/**
+ * The same reading re-expressed in `targetUnit` — the reader's ethanol unit on
+ * an ethanol monograph — keeping the "centre (low–high)" shape. Null when it
+ * stays as authored: no target, a per-dose unit, or a molar reading with no
+ * molecular weight to convert through.
+ */
+export function formatCmaxValueIn(
+  e: ParameterEntryRow,
+  targetUnit: string | null,
+  molecularWeight: number | null | undefined,
+): string | null {
+  if (!targetUnit || !e.unit || e.unit === targetUnit) return null;
+  const convert = (v: number | null): string | null | undefined =>
+    v == null
+      ? undefined
+      : (getPreferredUnitDisplay({ value: v }, e.unit, molecularWeight, [targetUnit])
+          ?.formatted ?? null);
+  const centre = convert(e.doseContext?.centralValue ?? e.median ?? null);
+  const low = convert(e.low);
+  const high = convert(e.high);
+  if (centre === null || low === null || high === null) return null;
+  const unit = ` ${targetUnit}`;
+  if (e.qualifier && centre != null) return `${e.qualifier} ${centre}${unit}`;
+  const bounds = low != null && high != null ? `${low}–${high}` : null;
+  if (centre != null) return `${centre}${unit}${bounds ? ` (${bounds})` : ''}`;
+  return bounds ? `${bounds}${unit}` : null;
 }
 
 /** Three significant digits, without trailing zeros: 0.0123, 1.5, 240. */
@@ -138,8 +171,18 @@ function outcomeEntryId(o: NormalizationOutcome): number {
   return o.kind === 'ineligible' ? o.entryId : o.entry.entryId;
 }
 
-export function CmaxSection({ drugId, drugName, canEdit = false, isAdmin = false, onMutated }: Props) {
+export function CmaxSection({
+  drugId,
+  drugName,
+  canEdit = false,
+  isAdmin = false,
+  onMutated,
+  molecularWeight = null,
+}: Props) {
   const { t } = useTranslation();
+  // Readings are listed as authored, except on ethanol, which follows the
+  // reader's ethanol unit like every other ethanol concentration on the page.
+  const ethanolUnit = useEthanolScopeUnit();
   const [entries, setEntries] = useState<ParameterEntryRow[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -388,7 +431,9 @@ export function CmaxSection({ drugId, drugName, canEdit = false, isAdmin = false
               <li key={e.id} className="rounded border border-border bg-muted/20 p-2" data-testid="cmax-entry">
                 <div className="flex items-start justify-between gap-2">
                   <span>
-                    <span className="font-medium">{formatCmaxValue(e)}</span>
+                    <span className="font-medium">
+                      <CmaxReading entry={e} targetUnit={ethanolUnit} molecularWeight={molecularWeight} />
+                    </span>
                     {mode === 'normalized' && outcomes.has(e.id) && (
                       <NormalizedValue outcome={outcomes.get(e.id)!} />
                     )}
@@ -455,6 +500,32 @@ export function CmaxSection({ drugId, drugName, canEdit = false, isAdmin = false
         </ul>
       )}
     </div>
+  );
+}
+
+/** One reading: converted (authored figure on hover) or verbatim. */
+function CmaxReading({
+  entry,
+  targetUnit,
+  molecularWeight,
+}: {
+  entry: ParameterEntryRow;
+  targetUnit: string | null;
+  molecularWeight: number | null;
+}) {
+  const converted = formatCmaxValueIn(entry, targetUnit, molecularWeight);
+  if (converted == null || targetUnit == null) return <>{formatCmaxValue(entry)}</>;
+  return (
+    <UnitTooltip
+      value={entry.doseContext?.centralValue ?? entry.median ?? null}
+      low={entry.low}
+      high={entry.high}
+      unit={targetUnit}
+      sourceUnit={entry.unit}
+      molecularWeight={molecularWeight}
+    >
+      {converted}
+    </UnitTooltip>
   );
 }
 

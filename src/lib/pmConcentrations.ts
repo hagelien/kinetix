@@ -15,9 +15,11 @@
  * can never disagree.
  */
 import {
-  convertConcentration,
+  convertToDisplayUnit,
   isConcentrationUnit,
+  isEthanolDisplayUnit,
   type ConcentrationUnit,
+  type DisplayConcentrationUnit,
 } from './unitConversion.js';
 import {
   bloodPlasmaFactorOrNull,
@@ -253,7 +255,13 @@ export function convertPmValue(
 ): number | null {
   if (value == null || !Number.isFinite(value)) return null;
   if (!isConcentrationUnit(ctx.sourceUnit)) return null;
-  if (!isConcentrationUnit(ctx.targetUnit)) return null;
+  // The target may also be an ethanol display unit (‰, %); the source never is.
+  if (
+    !isConcentrationUnit(ctx.targetUnit) &&
+    !isEthanolDisplayUnit(ctx.targetUnit)
+  ) {
+    return null;
+  }
 
   const inMatrix = convertToDisplayMatrix(
     value,
@@ -264,10 +272,10 @@ export function convertPmValue(
   if (inMatrix == null) return null;
 
   try {
-    return convertConcentration(
+    return convertToDisplayUnit(
       inMatrix,
       ctx.sourceUnit as ConcentrationUnit,
-      ctx.targetUnit as ConcentrationUnit,
+      ctx.targetUnit as DisplayConcentrationUnit,
       ctx.molecularWeight ?? undefined,
     );
   } catch {
