@@ -43,11 +43,11 @@ export function normalizePmcid(value: string): string {
   return value.toUpperCase();
 }
 
-function publicUrl(value: string): URL {
+function publicUrl(value: string, hosts: ReadonlySet<string>): URL {
   const url = new URL(value);
   if (
     url.protocol !== "https:" ||
-    !HOSTS.has(url.hostname) ||
+    !hosts.has(url.hostname) ||
     url.port ||
     url.username ||
     url.password
@@ -60,16 +60,18 @@ function publicUrl(value: string): URL {
 /** No cookies, bearer tokens, dotenv, shell, automatic retries or arbitrary source URLs. */
 export async function download(
   url: string,
+  hosts: ReadonlySet<string> = HOSTS,
+  accept = "application/xml,text/html;q=0.9",
 ): Promise<{ status: number; text: string }> {
   const signal = AbortSignal.timeout(TIMEOUT_MS);
-  let current = publicUrl(url);
+  let current = publicUrl(url, hosts);
   for (let redirects = 0; redirects <= 3; redirects++) {
     const response = await fetch(current, {
       redirect: "manual",
       signal,
       credentials: "omit",
       headers: {
-        Accept: "application/xml,text/html;q=0.9",
+        Accept: accept,
         "User-Agent": "Kinetix-Fulltext/1.0",
       },
     });
@@ -77,7 +79,7 @@ export async function download(
       await response.body?.cancel();
       const location = response.headers.get("location");
       if (!location) throw new Error("redirect_without_location");
-      current = publicUrl(new URL(location, current).href);
+      current = publicUrl(new URL(location, current).href, hosts);
       continue;
     }
     if (!response.ok) {
