@@ -20,6 +20,7 @@ import {
 } from './reference-metadata.js';
 import { getDb, inTransaction } from './db.js';
 import {
+  isMutuallySameWork,
   isSameWork,
   matchableFingerprint,
 } from '../../src/lib/citationWorkMatch.js';
@@ -384,28 +385,34 @@ async function findSameWorkForFreetext(
     .from(citations)
     .where(sql`${citations.metadata} ->> 'year' = ${String(incoming.year)}`);
 
-  const matches = candidates.filter((row) => {
+  const matches = candidates.flatMap((row) => {
+    const metadata = normalizeReferenceMetadata(row.metadata);
     const fingerprint = matchableFingerprint({
       type: row.type,
       identifier: row.identifier,
-      metadata: normalizeReferenceMetadata(row.metadata),
+      metadata,
     });
-    return fingerprint !== null && isSameWork(incoming, fingerprint);
+    if (!fingerprint || !isSameWork(incoming, fingerprint)) return [];
+    let handleKey: string | null = null;
+    if (row.type !== 'freetext') {
+      const canonical = canonicalCitationHandle(
+        { type: row.type as CitationHandleType, identifier: row.identifier },
+        metadata?.altIds,
+      );
+      handleKey = `${canonical.type}:${canonical.identifier}`;
+    }
+    return [{ ...row, fingerprint, handleKey }];
   });
   if (matches.length === 0) return null;
 
   const resolvable = new Set(
-    matches
-      .filter((row) => row.type !== 'freetext')
-      .map((row) => {
-        const canonical = canonicalCitationHandle(
-          { type: row.type as CitationHandleType, identifier: row.identifier },
-          normalizeReferenceMetadata(row.metadata)?.altIds,
-        );
-        return `${canonical.type}:${canonical.identifier}`;
-      }),
+    matches.flatMap((row) => (row.handleKey ? [row.handleKey] : [])),
   );
   if (resolvable.size > 1) return null;
+  // Each match agrees with the incoming wording; they must also agree with one
+  // another. Similarity is not transitive, so a short wording can sit between
+  // two different papers — attaching it to either would be a guess.
+  if (!isMutuallySameWork(matches)) return null;
 
   return [...matches].sort(
     (a, b) => citationHandleRank(a.type) - citationHandleRank(b.type) || a.id - b.id,

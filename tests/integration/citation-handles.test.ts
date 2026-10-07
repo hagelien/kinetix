@@ -291,6 +291,24 @@ describe('resolveCitation — one paper, one row (#1018)', () => {
     expect(resolved.created).toBe(true);
   });
 
+  it('reuses nothing when the free text sits between two different papers', async () => {
+    // Each long wording is close enough to the short one, but not to each other.
+    const base = 'Pharmacokinetics of diazepam in healthy volunteers after administration';
+    const rec = (title: string) => ({ authors: ['Klotz U'], year: 1975, title });
+    const oral = base.replace('after', 'after oral');
+    const iv = base.replace('after', 'after intravenous');
+    await seedCitation({ type: 'freetext', identifier: 'Klotz U. ' + oral, metadata: rec(oral) });
+    await seedCitation({ type: 'freetext', identifier: 'Klotz U. ' + iv, metadata: rec(iv) });
+
+    const resolved = await resolveCitation(
+      db,
+      { type: 'freetext', identifier: 'Klotz U. ' + base, metadata: rec(base) },
+      userId,
+    );
+
+    expect(resolved.created).toBe(true);
+  });
+
   it('reuses nothing when the free text matches two different papers', async () => {
     await seedCitation({ type: 'pmid', identifier: '1', metadata: schulz });
     await seedCitation({ type: 'doi', identifier: '10.1000/x', metadata: schulz });

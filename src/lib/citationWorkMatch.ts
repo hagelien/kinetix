@@ -182,13 +182,42 @@ export function matchableFingerprint(row: {
   return fingerprint;
 }
 
+/**
+ * Does every member agree with every other, not merely with a neighbour?
+ *
+ * Title similarity is not transitive: an abbreviated title can sit within the
+ * threshold of two longer ones ("… after oral …", "… after intravenous …")
+ * that are not within it of each other. A chain like that is two papers joined
+ * through a third wording, and folding it would repoint one paper's claims and
+ * review onto the other. Two resolvable rows sharing a handle are one paper by
+ * their handles, so their own titles are not compared.
+ */
+export function isMutuallySameWork(
+  members: ReadonlyArray<{
+    type: string;
+    handleKey: string | null;
+    fingerprint: WorkFingerprint;
+  }>,
+): boolean {
+  for (let i = 0; i < members.length; i += 1) {
+    for (let j = i + 1; j < members.length; j += 1) {
+      const a = members[i]!;
+      const b = members[j]!;
+      if (a.handleKey !== null && a.handleKey === b.handleKey) continue;
+      if (!isSameWork(a.fingerprint, b.fingerprint)) return false;
+    }
+  }
+  return true;
+}
+
 export interface SameWorkCluster<T extends WorkMatchRow> {
   /** Every row the title match ties together, free text and resolvable alike. */
   rows: T[];
   /**
-   * The cluster reaches two or more resolvable handles. The free text could be
-   * either paper (or they are one paper whose PMID and DOI were never
-   * crosswalked), so nothing is merged on the title alone.
+   * The cluster reaches two or more resolvable handles — the free text could
+   * be either paper (or they are one paper whose PMID and DOI were never
+   * crosswalked) — or its members are only chained together, not each a match
+   * for every other. Nothing is merged on the title alone.
    */
   ambiguous: boolean;
 }
@@ -217,10 +246,12 @@ export function clusterSameWorks<T extends WorkMatchRow>(
   };
 
   const buckets = new Map<string, Array<{ row: T; fp: WorkFingerprint }>>();
+  const fingerprintOf = new Map<number, WorkFingerprint>();
   for (const row of rows) {
     parent.set(row.id, row.id);
     const fp = matchableFingerprint(row);
     if (!fp) continue;
+    fingerprintOf.set(row.id, fp);
     const key = `${fp.surname}|${fp.year}`;
     buckets.set(key, [...(buckets.get(key) ?? []), { row, fp }]);
   }
@@ -253,6 +284,14 @@ export function clusterSameWorks<T extends WorkMatchRow>(
           .map((row) => row.handleKey)
           .filter((key): key is string => key !== null),
       );
-      return { rows: group, ambiguous: handles.size > 1 };
+      // Every member got here through a title edge, so each has a fingerprint.
+      const mutual = isMutuallySameWork(
+        group.map((row) => ({
+          type: row.type,
+          handleKey: row.handleKey,
+          fingerprint: fingerprintOf.get(row.id)!,
+        })),
+      );
+      return { rows: group, ambiguous: handles.size > 1 || !mutual };
     });
 }
