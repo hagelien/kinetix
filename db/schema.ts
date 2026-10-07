@@ -2762,6 +2762,12 @@ export type AdjudicationClosureDeclined =
   /** An agent dispute opened after the panel was bound: neither seat saw it. */
   | 'unseen_dispute'
   /**
+   * Both seats sustained the objection, but the target is not a pending edit:
+   * there is no return to give it, and a published record is corrected by a
+   * person.
+   */
+  | 'no_disposition'
+  /**
    * An agent dispute verdict with no `disputes` row to close (one recorded
    * before the dispute table mirrored verdicts): closing would leave it
    * holding the proposal.

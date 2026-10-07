@@ -124,12 +124,21 @@ function approvesProposalValue(
   return point !== null && sameNumber(point, value.value);
 }
 
-function declineReason(
+/** Why the closure will not act on this recommendation, or null when it will. Exported for tests. */
+export function closureDeclineReason(
   recommendation: AdjudicationRecommendation,
   bound: AdjudicatedTarget | null,
+  targetType: string,
 ): AdjudicationClosureDeclined | null {
   if (!OVERRULING.has(recommendation.resolution) && !UPHOLDING.has(recommendation.resolution)) {
     return 'split_scope';
+  }
+  // Sustaining an objection is acted on by returning the proposal it was
+  // raised against. Any other target — a published revision, a paper review,
+  // a discussion — has no such disposition; closing its disputes would leave
+  // the record uncorrected with nothing left to flag it, so a person takes it.
+  if (UPHOLDING.has(recommendation.resolution) && targetType !== 'pending_edit') {
+    return 'no_disposition';
   }
   const payload = ((bound?.served.payload ?? {}) as Record<string, unknown>);
   if (bound?.served.targetType === 'pending_edit') {
@@ -173,7 +182,7 @@ export async function closeConvergedAgentCase(args: {
   now: Date;
 }): Promise<ClosureResult> {
   const at = args.now.toISOString();
-  const declined = declineReason(args.recommendation, args.bound);
+  const declined = closureDeclineReason(args.recommendation, args.bound, args.targetType);
   if (declined) {
     return {
       closure: {
