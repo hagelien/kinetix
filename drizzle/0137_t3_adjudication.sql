@@ -21,6 +21,8 @@
 --                            revision. A changed mind appends a row pointing
 --                            back at the one it supersedes; a trigger refuses
 --                            every UPDATE and DELETE.
+--   adjudication_detector_checks  when the sweep last classified each target,
+--                            so it rotates through them.
 --
 -- agents.adjudicator is the per-agent grant (server-owned, set by an admin like
 -- self_review_enabled): the capability matrix is monotone by role, so it cannot
@@ -48,6 +50,7 @@ CREATE TABLE IF NOT EXISTS "adjudication_cases" (
   "sealed_at" timestamp,
   "closed_at" timestamp,
   "invalidated_reason" text,
+  "last_checked_at" timestamp,
   CONSTRAINT "adjudication_cases_dispute_origin_check"
     CHECK ("dispute_origin" IN ('agent', 'human', 'mixed')),
   CONSTRAINT "adjudication_cases_state_check"
@@ -61,7 +64,17 @@ DO $$ BEGIN
     FOREIGN KEY ("t2_verification_id") REFERENCES "agent_verifications"("id") ON DELETE set null ON UPDATE no action;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "adjudication_cases_target_version_uq" ON "adjudication_cases" ("target_type","target_id","target_version");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "adjudication_cases_state_opened_idx" ON "adjudication_cases" ("state","opened_at");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "adjudication_cases_state_checked_idx" ON "adjudication_cases" ("state","last_checked_at");--> statement-breakpoint
+-- The detector sweep's memory: when each target was last classified, and the
+-- latest verdict/dispute activity it saw then. The sweep skips a target with
+-- no newer activity, so its window drains instead of re-reading one prefix.
+CREATE TABLE IF NOT EXISTS "adjudication_detector_checks" (
+  "target_type" varchar(40) NOT NULL,
+  "target_id" integer NOT NULL,
+  "checked_at" timestamp DEFAULT now() NOT NULL,
+  "activity_at" timestamp,
+  CONSTRAINT "adjudication_detector_checks_pk" PRIMARY KEY ("target_type","target_id")
+);--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "adjudication_case_seats" (
   "id" serial PRIMARY KEY NOT NULL,
   "case_id" integer NOT NULL,

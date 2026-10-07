@@ -2680,6 +2680,8 @@ export const adjudicationCases = pgTable(
     sealedAt: timestamp('sealed_at'),
     closedAt: timestamp('closed_at'),
     invalidatedReason: text('invalidated_reason'),
+    /** When the detector last re-checked this case; the sweep rotates on it. */
+    lastCheckedAt: timestamp('last_checked_at'),
   },
   (t) => [
     // Permanent, not "while live": a target version is adjudicated at most once.
@@ -2688,7 +2690,7 @@ export const adjudicationCases = pgTable(
       t.targetId,
       t.targetVersion,
     ),
-    index('adjudication_cases_state_opened_idx').on(t.state, t.openedAt),
+    index('adjudication_cases_state_checked_idx').on(t.state, t.lastCheckedAt),
     check(
       'adjudication_cases_dispute_origin_check',
       sql`${t.disputeOrigin} IN ('agent', 'human', 'mixed')`,
@@ -2701,6 +2703,27 @@ export const adjudicationCases = pgTable(
       'adjudication_cases_panel_family_diversity_check',
       sql`${t.panelFamilyDiversity} IS NULL OR ${t.panelFamilyDiversity} IN ('distinct', 'same', 'unknown')`,
     ),
+  ],
+);
+
+/**
+ * When the detector sweep last classified each target and the latest
+ * verdict/dispute activity it saw, so the sweep skips unchanged targets and
+ * rotates through the rest instead of re-reading one prefix.
+ */
+export const adjudicationDetectorChecks = pgTable(
+  'adjudication_detector_checks',
+  {
+    targetType: varchar('target_type', { length: 40 }).notNull(),
+    targetId: integer('target_id').notNull(),
+    checkedAt: timestamp('checked_at').defaultNow().notNull(),
+    activityAt: timestamp('activity_at'),
+  },
+  (t) => [
+    primaryKey({
+      name: 'adjudication_detector_checks_pk',
+      columns: [t.targetType, t.targetId],
+    }),
   ],
 );
 
