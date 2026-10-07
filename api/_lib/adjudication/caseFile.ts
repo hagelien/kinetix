@@ -20,11 +20,11 @@ import {
   adjudicationCaseSeats,
   adjudicationCases,
   adjudicationOpinions,
-  disputes,
   type AdjudicationHandoff,
 } from '../../../db/schema.js';
 import { LIVE_CASE_STATES, conflictedAgentIds } from './cases.js';
 import { readTargetRow, targetWikiPageStatus } from './target.js';
+import { decidedDisputesOn } from './snapshot.js';
 import { callerCanReadWikiPage } from '../permissions-store.js';
 
 export const UNTRUSTED_CONTENT_NOTICE =
@@ -90,25 +90,11 @@ export async function buildCaseFile(caseId: number, viewer: CaseFileViewer) {
     )
     .orderBy(asc(adjudicationOpinions.seat), asc(adjudicationOpinions.revisionNo));
 
-  const decidedDisputes = await db
-    .select({
-      disputeId: disputes.id,
-      source: disputes.source,
-      targetVersion: disputes.targetVersion,
-      reasonMd: disputes.reasonMd,
-      resolution: disputes.resolution,
-      createdAt: disputes.createdAt,
-      resolvedAt: disputes.resolvedAt,
-    })
-    .from(disputes)
-    .where(
-      and(
-        eq(disputes.targetType, kase.targetType),
-        eq(disputes.targetId, kase.targetId),
-        eq(disputes.status, 'resolved'),
-      ),
-    )
-    .orderBy(asc(disputes.id));
+  // The decided disputes the panel is bound to (./snapshot.ts), so both seats
+  // and a person read the same history; live only for a case never bound.
+  const decidedDisputes =
+    kase.adjudicatedTarget?.decidedDisputes ??
+    (await decidedDisputesOn(kase.targetType, kase.targetId));
 
   // The target as the verification queue hydrates it. A panelist gets the
   // packet the panel is bound to (./snapshot.ts), copied onto the case at the
@@ -143,6 +129,8 @@ export async function buildCaseFile(caseId: number, viewer: CaseFileViewer) {
       closedAt: kase.closedAt,
       invalidatedReason: kase.invalidatedReason,
       panelFamilyDiversity: kase.panelFamilyDiversity,
+      // What opinions are converted with before they are compared.
+      comparison: kase.adjudicatedTarget?.comparison ?? null,
     },
     yourSeat: mySeat,
     seats: seats.map((s) => ({

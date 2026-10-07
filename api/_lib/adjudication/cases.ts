@@ -523,6 +523,19 @@ export async function conflictedAgentIds(kase: {
     ...kase.t2Snapshot.map((v) => v.agentId),
     ...kase.t1Snapshot.verdicts.map((v) => v.agentId),
   ]);
+  // Every agent with a verdict on the target now, not only those the case
+  // copied: the snapshots stay frozen while the disagreement holds, so an
+  // agent that judged the target since would otherwise sit on its appeal.
+  const live = await getDb()
+    .select({ agentId: agentVerifications.agentId })
+    .from(agentVerifications)
+    .where(
+      and(
+        eq(agentVerifications.targetType, kase.targetType),
+        eq(agentVerifications.targetId, kase.targetId),
+      ),
+    );
+  for (const v of live) conflicted.add(v.agentId);
   const userIds = new Set<number>(kase.t1Snapshot.openDisputes.map((d) => d.createdBy));
   const author = await contributionAuthorUserId({
     targetType: kase.targetType,

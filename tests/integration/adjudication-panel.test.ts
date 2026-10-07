@@ -15,7 +15,7 @@ vi.mock('../../api/_lib/auth.js', () => ({
   getUserFromRequest: getUserFromRequestMock,
 }));
 
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import {
   adjudicationCaseSeats,
   adjudicationCases,
@@ -23,6 +23,7 @@ import {
   agentVerifications,
   agents,
   disputes,
+  drugParameters,
   drugs,
   notifications,
   permissionOverrides,
@@ -274,6 +275,39 @@ describe('T3 case feed', () => {
     // A dispute on another version says nothing about this one.
     await db.update(disputes).set({ targetVersion: 'elsewhere|pending' }).where(eq(disputes.createdBy, s.a.userId));
     expect((await claim(s.a.userId, s.caseId)).status).toBe(200);
+  });
+
+  it('refuses a seat to an agent that judged the target after the case opened', async () => {
+    const s = await seedCase();
+    // The case snapshots stay frozen; only the claim's live read sees this.
+    await verdictOn(s.a.agentId, s.editId, 'approve', 'flagship', 'Stemmer.');
+    const refused = await claim(s.a.userId, s.caseId);
+    expect(refused.status).toBe(409);
+    expect(refused.raw).toContain('adjudication_conflicted');
+    expect((await claim(s.b.userId, s.caseId)).status).toBe(200);
+  });
+
+  it('serves both seats the decided disputes as they stood when the panel was bound', async () => {
+    const s = await seedCase();
+    await claim(s.a.userId, s.caseId);
+    // Resolved between the two claims.
+    const human = await seedUser(db, { email: 'r@example.com', username: 'r', role: 'contributor' });
+    await db.insert(disputes).values({
+      targetType: 'pending_edit',
+      targetId: s.editId,
+      createdBy: human,
+      source: 'human',
+      reasonMd: 'Avgjort senere.',
+      targetVersion: s.version,
+      status: 'resolved',
+      resolution: 'rejected',
+      resolvedAt: new Date(),
+    });
+    await claim(s.b.userId, s.caseId);
+    const a = await caseFile(s.a.userId, s.caseId);
+    const b = await caseFile(s.b.userId, s.caseId);
+    expect(a.body.lowerTier.decidedDisputes).toEqual([]);
+    expect(b.body.lowerTier.decidedDisputes).toEqual(a.body.lowerTier.decidedDisputes);
   });
 
   it('keeps a case abandoned before sealing blind, whatever its state', async () => {
@@ -574,6 +608,44 @@ describe('T3 sealing, convergence and the T4 handoff', () => {
     expect(refused.raw).toContain('target_drifted');
     const [kase] = await db.select().from(adjudicationCases).where(eq(adjudicationCases.id, s.caseId));
     expect(kase).toMatchObject({ state: 'invalidated', invalidatedReason: 'target_drifted', recommendation: null });
+  });
+
+  it('holds an endorsed value to the parameter’s own contract: a range, within bounds', async () => {
+    const s = await seedCase({ parameter: 'halfLife', value: 5, unit: 'h' });
+    await claim(s.a.userId, s.caseId);
+    const write = (body: Record<string, unknown>) =>
+      opinion(s.a.userId, { caseId: s.caseId, targetVersion: s.version, final: false, ...body });
+    // halfLife requires a range (requiresMinMax).
+    const scalar = await write({ resolvedValue: 5, resolvedUnit: 'h' });
+    expect(scalar.status).toBe(400);
+    expect(scalar.raw).toContain('range_required');
+    const negative = await write({ resolvedLow: -1, resolvedHigh: 5, resolvedUnit: 'h' });
+    expect(negative.status).toBe(400);
+    expect(negative.raw).toContain('value_out_of_bounds');
+    expect((await write({ resolvedLow: 4, resolvedHigh: 6, resolvedUnit: 'h' })).status).toBe(201);
+  });
+
+  it('compares with the molecular weight pinned when the panel was bound', async () => {
+    const drugId = await seedDrug(db);
+    await db.insert(drugParameters).values({ drugId, parameter: 'molecularWeight', value: 303.4 });
+    const s = await seedCase({
+      parameter: 'therapeuticConcentration',
+      value: 0.3,
+      unit: 'mg/L',
+      edit: { targetId: drugId },
+    });
+    await claim(s.a.userId, s.caseId);
+    await claim(s.b.userId, s.caseId);
+    // Edited between the two seats: 1 µmol/L would now read as 0.1517 mg/L.
+    await db
+      .update(drugParameters)
+      .set({ value: 151.7 })
+      .where(and(eq(drugParameters.drugId, drugId), eq(drugParameters.parameter, 'molecularWeight')));
+    await opinion(s.a.userId, { caseId: s.caseId, targetVersion: s.version, resolvedValue: 0.3034, resolvedUnit: 'mg/L' });
+    await opinion(s.b.userId, { caseId: s.caseId, targetVersion: s.version, resolvedValue: 1, resolvedUnit: 'µmol/L' });
+    const [kase] = await db.select().from(adjudicationCases).where(eq(adjudicationCases.id, s.caseId));
+    expect(kase).toMatchObject({ state: 'converged' });
+    expect(kase!.adjudicatedTarget!.comparison).toEqual({ canonicalUnit: 'mg/L', molecularWeight: 303.4 });
   });
 
   it('compares dimensionless parameters (pKa) on their values, in the unit ""', async () => {

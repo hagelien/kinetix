@@ -10,17 +10,25 @@
  * opinion write re-checks the live target against it, and a target that has
  * drifted closes the case. What a sealed case records as adjudicated is the
  * packet both panelists were served.
+ *
+ * The binding also freezes what else the panel is served or compared
+ * through: the decided disputes on the target, and the canonical unit and
+ * molecular weight the two opinions are converted with — so a dispute
+ * resolved, or a molecular weight edited, between the two seats changes
+ * neither what they read nor how their values compare.
  */
 
-import { eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { getDb } from '../db.js';
 import {
   adjudicationCases,
+  disputes,
   type AdjudicatedTarget,
+  type AdjudicationDecidedDispute,
   type AgentVerificationTargetType,
 } from '../../../db/schema.js';
 import { fetchSingleCandidate, type QueueItem } from '../../agent-verifications-queue.js';
-import { readTargetRow } from './target.js';
+import { adjudicationTargetParameter, readTargetRow } from './target.js';
 import type { InvalidatedReason } from './cases.js';
 
 /** The target as the case file serves it now, or null when it cannot be served. */
@@ -36,6 +44,37 @@ export function liveHydratedTarget(
     selfReviewEnabled: false,
     includeJudged: true,
   });
+}
+
+/** The decided disputes on a target, oldest first. */
+export async function decidedDisputesOn(
+  targetType: string,
+  targetId: number,
+): Promise<AdjudicationDecidedDispute[]> {
+  const rows = await getDb()
+    .select({
+      disputeId: disputes.id,
+      source: disputes.source,
+      targetVersion: disputes.targetVersion,
+      reasonMd: disputes.reasonMd,
+      resolution: disputes.resolution,
+      createdAt: disputes.createdAt,
+      resolvedAt: disputes.resolvedAt,
+    })
+    .from(disputes)
+    .where(
+      and(
+        eq(disputes.targetType, targetType),
+        eq(disputes.targetId, targetId),
+        eq(disputes.status, 'resolved'),
+      ),
+    )
+    .orderBy(asc(disputes.id));
+  return rows.map((r) => ({
+    ...r,
+    createdAt: r.createdAt.toISOString(),
+    resolvedAt: r.resolvedAt ? r.resolvedAt.toISOString() : null,
+  }));
 }
 
 /** Key-order-independent JSON, as the value round-trips through jsonb. */
@@ -115,9 +154,15 @@ export async function bindPanelTarget(
       ? { ok: true, snapshot: kase.adjudicatedTarget }
       : close('target_drifted');
   }
+  const parameter = await adjudicationTargetParameter(kase.targetType, kase.targetId);
   const snapshot: AdjudicatedTarget = {
     served,
     sourceRow: await readTargetRow(kase.targetType, kase.targetId),
+    comparison: {
+      canonicalUnit: parameter?.canonicalUnit ?? null,
+      molecularWeight: parameter?.molecularWeight ?? null,
+    },
+    decidedDisputes: await decidedDisputesOn(kase.targetType, kase.targetId),
   };
   await tx
     .update(adjudicationCases)
