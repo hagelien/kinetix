@@ -656,7 +656,7 @@ export function DrugMonographSidebar({
       Boolean(summary || routeSummaryEntries.length > 0 || canSubmitParameterEntry);
     const openSources = () => setDialog({ kind: 'sources', parameter: pid });
 
-    const valueContent = (
+    const renderValueContent = (nested: boolean) => (
       <>
         {!hasValue && routeSummaryEntries.length > 0 ? null : isConcentrationParam &&
           displayRange &&
@@ -672,6 +672,7 @@ export function DrugMonographSidebar({
             unit={displayRange.unit}
             sourceUnit={tooltipRange.unit}
             molecularWeight={drugRow.molecularWeight ?? null}
+            focusable={!nested}
           >
             {formatted}
           </UnitTooltip>
@@ -843,10 +844,10 @@ export function DrugMonographSidebar({
               title={sourcesActionLabel}
               data-testid={`parameter-value-sources-${pid}`}
             >
-              {valueContent}
+              {renderValueContent(true)}
             </button>
           ) : (
-            valueContent
+            renderValueContent(false)
           )}
           {hasValue ? (
             <ParameterBadges
