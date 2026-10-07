@@ -48,6 +48,8 @@ import {
   MODEL_STRUCTURE_DEFAULTS,
   requiredParametersFor,
   type AbsorptionKind,
+  type AssemblyRange,
+  type AssemblyRanges,
   type AssemblyValues,
   type AxisProvenance,
   type DerivedModel,
@@ -162,6 +164,12 @@ export interface CatalogParameterValue {
   value: number;
   /** The unit `value` is expressed in (converted to the parameter's canonical unit here). */
   unit: string;
+  /**
+   * The lowest and highest value the parameter's sources report, in `unit`, when the catalog holds
+   * them. Carried so assembly can draw across the published spread (`toAssemblyRanges`).
+   */
+  low?: number;
+  high?: number;
 }
 
 /**
@@ -364,6 +372,54 @@ export function applyCautiousDefaults(
  * `tmax` fills no engine role, so `toAssemblyValues` drops it — this is the parallel accessor that
  * pulls it out for the inference. Pure.
  */
+/**
+ * The reported spread behind each role of `toAssemblyValues(values)`, converted to canonical units.
+ * Mirrors its rule exactly — a later value fills a role over an earlier one, so it also replaces (or
+ * clears) the earlier value's spread — so a role's range always belongs to the value it runs on. A
+ * value whose bounds are absent or do not convert contributes no range.
+ */
+export function toAssemblyRanges(values: Iterable<CatalogParameterValue>): AssemblyRanges {
+  const out: AssemblyRanges = {};
+  for (const value of values) {
+    const role = parameterRoleFor(value.parameter);
+    if (role === null || toAssemblyValues([value])[role] === undefined) continue;
+    const range = canonicalRange(value);
+    if (range) out[role] = range;
+    else delete out[role];
+  }
+  return out;
+}
+
+/** A value's reported spread in its parameter's canonical unit, or `undefined` when it has none. */
+function canonicalRange(value: CatalogParameterValue): AssemblyRange | undefined {
+  const canonicalUnit = canonicalUnitFor(value.parameter);
+  if (canonicalUnit === null || value.low === undefined || value.high === undefined) return undefined;
+  const low = convertParameterValue(value.low, value.unit, canonicalUnit);
+  const high = convertParameterValue(value.high, value.unit, canonicalUnit);
+  if (low === null || high === null || !Number.isFinite(low) || !Number.isFinite(high)) return undefined;
+  return { low, high };
+}
+
+/**
+ * The `ka` spread an inferred `ka` gets from the Tmax spread it was solved from. `ka` falls as Tmax
+ * rises, so the shortest reported Tmax gives the highest `ka` and the longest the lowest; the
+ * half-life is held at its median, so this is the spread Tmax alone accounts for. No range when
+ * either end cannot be solved — the longest Tmax may fall in the flip-flop regime the central
+ * inference avoided — because a one-sided spread would invent the missing bound.
+ */
+export function inferredKaRange(
+  tmax: CatalogParameterValue | undefined,
+  halfLifeHours: number | undefined,
+): AssemblyRange | undefined {
+  if (!tmax || halfLifeHours === undefined || tmax.parameter !== 'tmax') return undefined;
+  const range = canonicalRange(tmax);
+  if (!range || !(range.low > 0) || !(range.low < range.high)) return undefined;
+  const fastest = inferKaFromTmax(range.low, halfLifeHours);
+  const slowest = inferKaFromTmax(range.high, halfLifeHours);
+  if (fastest.status !== 'inferred' || slowest.status !== 'inferred') return undefined;
+  return { low: slowest.kaPerHour, high: fastest.kaPerHour };
+}
+
 export function tmaxHoursFrom(values: Iterable<CatalogParameterValue>): number | undefined {
   const canonicalUnit = canonicalUnitFor('tmax');
   if (canonicalUnit === null) return undefined;

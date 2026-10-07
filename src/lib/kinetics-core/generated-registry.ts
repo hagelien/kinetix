@@ -5,7 +5,7 @@ export const GENERATED_REGISTRY_ARTIFACT = {
   "formatVersion": 1,
   "generatedAt": "snapshot-content-addressed",
   "registryVersion": "0.9.0",
-  "checksum": "518ef667",
+  "checksum": "44fb806e",
   "derivedDefinitions": [
     {
       "analyte": "3-hydroxyphenazepam",
@@ -17,16 +17,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.451227866770995
+            "kind": "triangular",
+            "min": 1.000359246064361,
+            "mode": 1.451227866770995,
+            "max": 2.4232997732138166,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 35
+            "kind": "triangular",
+            "min": 20,
+            "mode": 35,
+            "max": 60,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 1.6
+            "kind": "triangular",
+            "min": 1,
+            "mode": 1.6,
+            "max": 2.5,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
             "kind": "fixed",
@@ -54,16 +69,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "value": 1.0198991641425048
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 4.6
+            "kind": "triangular",
+            "min": 2.4,
+            "mode": 4.6,
+            "max": 6.8,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 1.755
+            "kind": "triangular",
+            "min": 0.86,
+            "mode": 1.755,
+            "max": 2.65,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.55
+            "kind": "triangular",
+            "min": 0.1,
+            "mode": 0.55,
+            "max": 1,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -87,16 +117,26 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "value": 1.46
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 30
+            "kind": "triangular",
+            "min": 21.5,
+            "mode": 30,
+            "max": 36,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
             "kind": "fixed",
             "value": 10
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.18
+            "kind": "triangular",
+            "min": 0.1,
+            "mode": 0.18,
+            "max": 0.23,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -116,20 +156,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 6.804654296312702
+            "kind": "triangular",
+            "min": 2.168055816662248,
+            "mode": 6.804654296312702,
+            "max": 12.004757099308563,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 23
+            "kind": "triangular",
+            "min": 19,
+            "mode": 23,
+            "max": 31,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 0.8
+            "kind": "triangular",
+            "min": 0.65,
+            "mode": 0.8,
+            "max": 0.95,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.95
+            "kind": "triangular",
+            "min": 0.9,
+            "mode": 0.95,
+            "max": 1,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -182,20 +242,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 0.8463567978516308
+            "kind": "triangular",
+            "min": 0.5475622166088773,
+            "mode": 0.8463567978516308,
+            "max": 2.2612143742051343,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 8
+            "kind": "triangular",
+            "min": 4.5,
+            "mode": 8,
+            "max": 11,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 7
+            "kind": "triangular",
+            "min": 4,
+            "mode": 7,
+            "max": 12,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.3
+            "kind": "triangular",
+            "min": 0.2,
+            "mode": 0.3,
+            "max": 0.45,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -215,16 +295,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 2.5873787379993605
+            "kind": "triangular",
+            "min": 1.7633933065239864,
+            "mode": 2.5873787379993605,
+            "max": 4.377858708423618,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 11.9
+            "kind": "triangular",
+            "min": 11.7,
+            "mode": 11.9,
+            "max": 16,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 1.27
+            "kind": "triangular",
+            "min": 0.84,
+            "mode": 1.27,
+            "max": 1.27,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
             "kind": "fixed",
@@ -248,20 +343,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.2495344702958806
+            "kind": "triangular",
+            "min": 0.6907198526739603,
+            "mode": 1.2495344702958806,
+            "max": 4.373621739601664,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 996
+            "kind": "triangular",
+            "min": 72,
+            "mode": 996,
+            "max": 1920,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 83
+            "kind": "triangular",
+            "min": 18,
+            "mode": 83,
+            "max": 148,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.54
+            "kind": "triangular",
+            "min": 0.22,
+            "mode": 0.54,
+            "max": 0.86,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -281,12 +396,22 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.945677692362364
+            "kind": "triangular",
+            "min": 1.1306071871025671,
+            "mode": 1.945677692362364,
+            "max": 4.738048732814522,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 16
+            "kind": "triangular",
+            "min": 12,
+            "mode": 16,
+            "max": 20,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
             "kind": "fixed",
@@ -314,20 +439,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 0.8430977570783726
+            "kind": "triangular",
+            "min": 0.3149810969189405,
+            "mode": 0.8430977570783726,
+            "max": 2.112448550277928,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 21
+            "kind": "triangular",
+            "min": 15,
+            "mode": 21,
+            "max": 40,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 14
+            "kind": "triangular",
+            "min": 10,
+            "mode": 14,
+            "max": 20,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.45
+            "kind": "triangular",
+            "min": 0.3,
+            "mode": 0.45,
+            "max": 0.62,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -347,16 +492,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 0.527008286756932
+            "kind": "triangular",
+            "min": 0.4140237269288631,
+            "mode": 0.527008286756932,
+            "max": 0.7030927330966332,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 40
+            "kind": "triangular",
+            "min": 30,
+            "mode": 40,
+            "max": 50,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 22.5
+            "kind": "triangular",
+            "min": 21,
+            "mode": 22.5,
+            "max": 24,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
             "kind": "fixed",
@@ -380,8 +540,13 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 0.8134683561616299
+            "kind": "triangular",
+            "min": 0.6707937756041492,
+            "mode": 0.8134683561616299,
+            "max": 1.0123155728973259,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
             "kind": "fixed",
@@ -413,16 +578,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.2325042371269603
+            "kind": "triangular",
+            "min": 0.9319461121132279,
+            "mode": 1.2325042371269603,
+            "max": 1.7587830057320426,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 75
+            "kind": "triangular",
+            "min": 75,
+            "mode": 75,
+            "max": 146,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 4.5
+            "kind": "triangular",
+            "min": 4,
+            "mode": 4.5,
+            "max": 4.9,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
             "kind": "fixed",
@@ -446,16 +626,26 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 5.227352894721844
+            "kind": "triangular",
+            "min": 3.158699155209681,
+            "mode": 5.227352894721844,
+            "max": 12.105301654134207,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
             "kind": "fixed",
             "value": 24
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 22.5
+            "kind": "triangular",
+            "min": 20,
+            "mode": 22.5,
+            "max": 25,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
             "kind": "fixed",
@@ -479,20 +669,35 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.104942502259078
+            "kind": "triangular",
+            "min": 0.8463567978516308,
+            "mode": 1.104942502259078,
+            "max": 1.5184733593459887,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 8
+            "kind": "triangular",
+            "min": 4,
+            "mode": 8,
+            "max": 12,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
             "kind": "fixed",
             "value": 1.3
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.55
+            "kind": "triangular",
+            "min": 0.52,
+            "mode": 0.55,
+            "max": 0.58,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -516,16 +721,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "value": 1.64
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 3.8
+            "kind": "triangular",
+            "min": 3,
+            "mode": 3.8,
+            "max": 4.5,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 0.85
+            "kind": "triangular",
+            "min": 0.7,
+            "mode": 0.85,
+            "max": 1.1,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.78
+            "kind": "triangular",
+            "min": 0.7,
+            "mode": 0.78,
+            "max": 0.85,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -549,16 +769,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "value": 3.28
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 1.1
+            "kind": "triangular",
+            "min": 0.8,
+            "mode": 1.1,
+            "max": 3.1,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 0.26
+            "kind": "triangular",
+            "min": 0.18,
+            "mode": 0.26,
+            "max": 0.35,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.95
+            "kind": "triangular",
+            "min": 0.85,
+            "mode": 0.95,
+            "max": 1,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -578,16 +813,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.2695632513760233
+            "kind": "triangular",
+            "min": 1.0123155728973259,
+            "mode": 1.2695632513760233,
+            "max": 1.6556827590177456,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 12
+            "kind": "triangular",
+            "min": 9,
+            "mode": 12,
+            "max": 15,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 2.9000000000000004
+            "kind": "triangular",
+            "min": 2.7,
+            "mode": 2.9000000000000004,
+            "max": 3.1,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
             "kind": "fixed",
@@ -615,16 +865,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "value": 2.163507884727344
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 168
+            "kind": "triangular",
+            "min": 96,
+            "mode": 168,
+            "max": 240,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 0.8
+            "kind": "triangular",
+            "min": 0.7,
+            "mode": 0.8,
+            "max": 0.9,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.95
+            "kind": "triangular",
+            "min": 0.9,
+            "mode": 0.95,
+            "max": 1,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -644,20 +909,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 2.15137430537398
+            "kind": "triangular",
+            "min": 1.4362505149838687,
+            "mode": 2.15137430537398,
+            "max": 3.7270652133093263,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 7
+            "kind": "triangular",
+            "min": 6,
+            "mode": 7,
+            "max": 8,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 0.55
+            "kind": "triangular",
+            "min": 0.5,
+            "mode": 0.55,
+            "max": 0.6,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.95
+            "kind": "triangular",
+            "min": 0.9,
+            "mode": 0.95,
+            "max": 1,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -677,20 +962,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 3.0150513275100095
+            "kind": "triangular",
+            "min": 0.8295859911470203,
+            "mode": 3.0150513275100095,
+            "max": 11.685678463868781,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 20.1
+            "kind": "triangular",
+            "min": 11,
+            "mode": 20.1,
+            "max": 32.1,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 1.15
+            "kind": "triangular",
+            "min": 0.5,
+            "mode": 1.15,
+            "max": 2,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.65
+            "kind": "triangular",
+            "min": 0.6,
+            "mode": 0.65,
+            "max": 0.84,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -710,20 +1015,35 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.6371015423366693
+            "kind": "triangular",
+            "min": 1.1928587564846507,
+            "mode": 1.6371015423366693,
+            "max": 2.3704248186334334,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 1.25
+            "kind": "triangular",
+            "min": 1,
+            "mode": 1.25,
+            "max": 1.5,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
             "kind": "fixed",
             "value": 0.2
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.95
+            "kind": "triangular",
+            "min": 0.9,
+            "mode": 0.95,
+            "max": 1,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -747,16 +1067,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "value": 2.34
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 25
+            "kind": "triangular",
+            "min": 3,
+            "mode": 25,
+            "max": 69,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 2.77
+            "kind": "triangular",
+            "min": 2.77,
+            "mode": 2.77,
+            "max": 4.95,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.514
+            "kind": "triangular",
+            "min": 0.29,
+            "mode": 0.514,
+            "max": 0.55,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -809,12 +1144,22 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 3.3121898154309046
+            "kind": "triangular",
+            "min": 1.8750037723490673,
+            "mode": 3.3121898154309046,
+            "max": 8.330339533484103,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 5
+            "kind": "triangular",
+            "min": 3,
+            "mode": 5,
+            "max": 7,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
             "kind": "fixed",
@@ -846,16 +1191,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "value": 0.45
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 18
+            "kind": "triangular",
+            "min": 12,
+            "mode": 18,
+            "max": 24,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 1.15
+            "kind": "triangular",
+            "min": 0.88,
+            "mode": 1.15,
+            "max": 1.6,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.82
+            "kind": "triangular",
+            "min": 0.7,
+            "mode": 0.82,
+            "max": 0.95,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -875,20 +1235,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 28.39160365075435
+            "kind": "triangular",
+            "min": 12.116498866069081,
+            "mode": 28.39160365075435,
+            "max": 64.96114493080901,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 7
+            "kind": "triangular",
+            "min": 5.7,
+            "mode": 7,
+            "max": 7.7,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 4.8
+            "kind": "triangular",
+            "min": 4,
+            "mode": 4.8,
+            "max": 5.5,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.62
+            "kind": "triangular",
+            "min": 0.55,
+            "mode": 0.62,
+            "max": 0.7,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -908,20 +1288,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.3047278978503756
+            "kind": "triangular",
+            "min": 0.6707937756041492,
+            "mode": 1.3047278978503756,
+            "max": 1.76855285959344,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 12
+            "kind": "triangular",
+            "min": 9,
+            "mode": 12,
+            "max": 15,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 16
+            "kind": "triangular",
+            "min": 12,
+            "mode": 16,
+            "max": 23,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.14
+            "kind": "triangular",
+            "min": 0.12,
+            "mode": 0.14,
+            "max": 0.2,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -941,20 +1341,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.4626905743141336
+            "kind": "triangular",
+            "min": 1.0090026434076336,
+            "mode": 1.4626905743141336,
+            "max": 3.4849019298145616,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 36
+            "kind": "triangular",
+            "min": 33,
+            "mode": 36,
+            "max": 43,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 14
+            "kind": "triangular",
+            "min": 12,
+            "mode": 14,
+            "max": 17,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.8
+            "kind": "triangular",
+            "min": 0.7,
+            "mode": 0.8,
+            "max": 0.9,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -974,20 +1394,35 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 3.6451541519538253
+            "kind": "triangular",
+            "min": 1.0704483871687551,
+            "mode": 3.6451541519538253,
+            "max": 13.52645294520274,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 44
+            "kind": "triangular",
+            "min": 11,
+            "mode": 44,
+            "max": 77,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
             "kind": "fixed",
             "value": 1.31
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.9
+            "kind": "triangular",
+            "min": 0.85,
+            "mode": 0.9,
+            "max": 0.95,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -1011,12 +1446,22 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "value": 3.4845715082718822
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 4.22
+            "kind": "triangular",
+            "min": 3.6,
+            "mode": 4.22,
+            "max": 5,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 2.9000000000000004
+            "kind": "triangular",
+            "min": 1.1,
+            "mode": 2.9000000000000004,
+            "max": 4.7,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
             "kind": "fixed",
@@ -1040,20 +1485,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 0.8430977570783726
+            "kind": "triangular",
+            "min": 0.47875017166128964,
+            "mode": 0.8430977570783726,
+            "max": 2.112448550277928,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 21
+            "kind": "triangular",
+            "min": 19,
+            "mode": 21,
+            "max": 37,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 12
+            "kind": "triangular",
+            "min": 9,
+            "mode": 12,
+            "max": 17,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.5
+            "kind": "triangular",
+            "min": 0.35,
+            "mode": 0.5,
+            "max": 0.62,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -1073,20 +1538,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.5348307526695695
+            "kind": "triangular",
+            "min": 1.0634206449386,
+            "mode": 1.5348307526695695,
+            "max": 5.922609961817842,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 43
+            "kind": "triangular",
+            "min": 19,
+            "mode": 43,
+            "max": 60,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 2.95
+            "kind": "triangular",
+            "min": 1.4,
+            "mode": 2.95,
+            "max": 4.4,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.9
+            "kind": "triangular",
+            "min": 0.9,
+            "mode": 0.9,
+            "max": 0.98,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -1106,20 +1591,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 8.74
+            "kind": "triangular",
+            "min": 6.49,
+            "mode": 8.74,
+            "max": 10.98,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 2.58
+            "kind": "triangular",
+            "min": 1.47,
+            "mode": 2.58,
+            "max": 3.2,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 4.5
+            "kind": "triangular",
+            "min": 3,
+            "mode": 4.5,
+            "max": 6,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.48
+            "kind": "triangular",
+            "min": 0.12,
+            "mode": 0.48,
+            "max": 0.84,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -1139,16 +1644,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 3.370549455792647
+            "kind": "triangular",
+            "min": 1.817887788620545,
+            "mode": 3.370549455792647,
+            "max": 10.646753610794052,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 13
+            "kind": "triangular",
+            "min": 12,
+            "mode": 13,
+            "max": 14,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 65
+            "kind": "triangular",
+            "min": 60,
+            "mode": 65,
+            "max": 70,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
             "kind": "fixed",
@@ -1172,20 +1692,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 0.36280696669274876
+            "kind": "triangular",
+            "min": 0.36280696669274876,
+            "mode": 0.36280696669274876,
+            "max": 3.248057246540451,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 140
+            "kind": "triangular",
+            "min": 60,
+            "mode": 140,
+            "max": 145.9,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 4.27
+            "kind": "triangular",
+            "min": 1.2,
+            "mode": 4.27,
+            "max": 4.27,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.85
+            "kind": "triangular",
+            "min": 0.75,
+            "mode": 0.85,
+            "max": 0.95,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -1205,20 +1745,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.5565421538898911
+            "kind": "triangular",
+            "min": 0.9934096554106473,
+            "mode": 1.5565421538898911,
+            "max": 2.082584883371026,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 20
+            "kind": "triangular",
+            "min": 15,
+            "mode": 20,
+            "max": 27,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 12
+            "kind": "triangular",
+            "min": 10,
+            "mode": 12,
+            "max": 15,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.34
+            "kind": "triangular",
+            "min": 0.25,
+            "mode": 0.34,
+            "max": 0.45,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -1238,20 +1798,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 6.755178915200673
+            "kind": "triangular",
+            "min": 1.9435923396668324,
+            "mode": 6.755178915200673,
+            "max": 30.278366873351363,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 44.2
+            "kind": "triangular",
+            "min": 24,
+            "mode": 44.2,
+            "max": 66,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 1.39
+            "kind": "triangular",
+            "min": 0.7,
+            "mode": 1.39,
+            "max": 4.7,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.94
+            "kind": "triangular",
+            "min": 0.94,
+            "mode": 0.94,
+            "max": 0.97,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -1304,20 +1884,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 2.4650084742539207
+            "kind": "triangular",
+            "min": 1.4792890838820263,
+            "mode": 2.4650084742539207,
+            "max": 5.760333077335147,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 37.5
+            "kind": "triangular",
+            "min": 30,
+            "mode": 37.5,
+            "max": 45,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 6.25
+            "kind": "triangular",
+            "min": 5.1,
+            "mode": 6.25,
+            "max": 7.4,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.7
+            "kind": "triangular",
+            "min": 0.6,
+            "mode": 0.7,
+            "max": 0.8,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -1337,12 +1937,22 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "iv": {
           "family": "iv-one-compartment",
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 0.1075
+            "kind": "triangular",
+            "min": 0.0967,
+            "mode": 0.1075,
+            "max": 0.3383,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 45.5
+            "kind": "triangular",
+            "min": 36,
+            "mode": 45.5,
+            "max": 55,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -1362,20 +1972,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.4362505149838687
+            "kind": "triangular",
+            "min": 0.7921682063542231,
+            "mode": 1.4362505149838687,
+            "max": 3.7270652133093263,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 7
+            "kind": "triangular",
+            "min": 3,
+            "mode": 7,
+            "max": 11,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 0.95
+            "kind": "triangular",
+            "min": 0.6,
+            "mode": 0.95,
+            "max": 1.3,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.7
+            "kind": "triangular",
+            "min": 0.6,
+            "mode": 0.7,
+            "max": 0.8,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -1395,20 +2025,35 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 0.755258229805348
+            "kind": "triangular",
+            "min": 0.5882766130438968,
+            "mode": 0.755258229805348,
+            "max": 1.0079705457929709,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 5.800000000000001
+            "kind": "triangular",
+            "min": 4.9,
+            "mode": 5.800000000000001,
+            "max": 6.7,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
             "kind": "fixed",
             "value": 5.9
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.045000000000000005
+            "kind": "triangular",
+            "min": 0.02,
+            "mode": 0.045000000000000005,
+            "max": 0.07,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -1428,16 +2073,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.1894969401296933
+            "kind": "triangular",
+            "min": 0.916500047577587,
+            "mode": 1.1894969401296933,
+            "max": 1.62444981101187,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 9.5
+            "kind": "triangular",
+            "min": 4,
+            "mode": 9.5,
+            "max": 15,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 0.115
+            "kind": "triangular",
+            "min": 0.1,
+            "mode": 0.115,
+            "max": 0.13,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
             "kind": "fixed",
@@ -1461,20 +2121,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.8230792240820017
+            "kind": "triangular",
+            "min": 1.348392048895392,
+            "mode": 1.8230792240820017,
+            "max": 4.495933086408242,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 13.11
+            "kind": "triangular",
+            "min": 10.1,
+            "mode": 13.11,
+            "max": 13.11,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 2.5
+            "kind": "triangular",
+            "min": 2.5,
+            "mode": 2.5,
+            "max": 4.5,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.28
+            "kind": "triangular",
+            "min": 0.24,
+            "mode": 0.28,
+            "max": 0.35,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -1494,20 +2174,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 0.37323354870120246
+            "kind": "triangular",
+            "min": 0.16371015423366683,
+            "mode": 0.37323354870120246,
+            "max": 0.6833107964510063,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 12.5
+            "kind": "triangular",
+            "min": 8,
+            "mode": 12.5,
+            "max": 18,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 22
+            "kind": "triangular",
+            "min": 14,
+            "mode": 22,
+            "max": 35,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.5
+            "kind": "triangular",
+            "min": 0.3,
+            "mode": 0.5,
+            "max": 0.8,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -1527,12 +2227,22 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 2.5942369231498184
+            "kind": "triangular",
+            "min": 1.76855285959344,
+            "mode": 2.5942369231498184,
+            "max": 4.388071722942401,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 12
+            "kind": "triangular",
+            "min": 10,
+            "mode": 12,
+            "max": 14,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
             "kind": "fixed",
@@ -1560,20 +2270,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 2.0246311457946518
+            "kind": "triangular",
+            "min": 1.3415875512082984,
+            "mode": 2.0246311457946518,
+            "max": 3.53710571918688,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 6
+            "kind": "triangular",
+            "min": 5.5,
+            "mode": 6,
+            "max": 8,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 3
+            "kind": "triangular",
+            "min": 2.6,
+            "mode": 3,
+            "max": 4,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.9
+            "kind": "triangular",
+            "min": 0.85,
+            "mode": 0.9,
+            "max": 1,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -1593,16 +2323,26 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 0.3476594190711787
+            "kind": "triangular",
+            "min": 0.21836731818158672,
+            "mode": 0.3476594190711787,
+            "max": 0.6441655470941611,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
             "kind": "fixed",
             "value": 11
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 1.7
+            "kind": "triangular",
+            "min": 1,
+            "mode": 1.7,
+            "max": 2.4,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
             "kind": "fixed",
@@ -1626,20 +2366,35 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 0.8943917008055323
+            "kind": "triangular",
+            "min": 0.5831027705279515,
+            "mode": 0.8943917008055323,
+            "max": 1.591096941779813,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 9
+            "kind": "triangular",
+            "min": 7,
+            "mode": 9,
+            "max": 11,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
             "kind": "fixed",
             "value": 50
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.9
+            "kind": "triangular",
+            "min": 0.8,
+            "mode": 0.9,
+            "max": 1,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -1659,20 +2414,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 3.385427191406523
+            "kind": "triangular",
+            "min": 0.6931471805599452,
+            "mode": 3.385427191406523,
+            "max": 3.385427191406523,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 2
+            "kind": "triangular",
+            "min": 2,
+            "mode": 2,
+            "max": 4,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 4
+            "kind": "triangular",
+            "min": 3,
+            "mode": 4,
+            "max": 5.5,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.6
+            "kind": "triangular",
+            "min": 0.5,
+            "mode": 0.6,
+            "max": 0.7,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -1692,20 +2467,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 3.1058876777577717
+            "kind": "triangular",
+            "min": 1.9397571861342315,
+            "mode": 3.1058876777577717,
+            "max": 9.594357000815721,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 8.4
+            "kind": "triangular",
+            "min": 6.2,
+            "mode": 8.4,
+            "max": 10.2,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 1.2
+            "kind": "triangular",
+            "min": 0.9,
+            "mode": 1.2,
+            "max": 1.6,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.93
+            "kind": "triangular",
+            "min": 0.9,
+            "mode": 0.93,
+            "max": 0.96,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -1725,20 +2520,35 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 2.040267147292653
+            "kind": "triangular",
+            "min": 1.1329070315830354,
+            "mode": 2.040267147292653,
+            "max": 6.191512414862346,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 54
+            "kind": "triangular",
+            "min": 48,
+            "mode": 54,
+            "max": 60,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
             "kind": "fixed",
             "value": 0.9
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.95
+            "kind": "triangular",
+            "min": 0.9,
+            "mode": 0.95,
+            "max": 1,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -1758,16 +2568,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 2.2639780978551127
+            "kind": "triangular",
+            "min": 1.0483857424678327,
+            "mode": 2.2639780978551127,
+            "max": 2.9408976862700684,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 3.7
+            "kind": "triangular",
+            "min": 3,
+            "mode": 3.7,
+            "max": 8.6,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 0.7
+            "kind": "triangular",
+            "min": 0.5,
+            "mode": 0.7,
+            "max": 0.85,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
             "kind": "fixed",
@@ -1791,16 +2616,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 0.7779229953815668
+            "kind": "triangular",
+            "min": 0.43552860885756967,
+            "mode": 0.7779229953815668,
+            "max": 1.9829223384280432,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 17
+            "kind": "triangular",
+            "min": 11,
+            "mode": 17,
+            "max": 23,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 0.85
+            "kind": "triangular",
+            "min": 0.7,
+            "mode": 0.85,
+            "max": 1,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
             "kind": "fixed",
@@ -1828,16 +2668,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "value": 7.55745160044246
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 3.65
+            "kind": "triangular",
+            "min": 2,
+            "mode": 3.65,
+            "max": 5.1,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 4
+            "kind": "triangular",
+            "min": 3.2,
+            "mode": 4,
+            "max": 5.9,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.54
+            "kind": "triangular",
+            "min": 0.5,
+            "mode": 0.54,
+            "max": 0.92,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -1857,20 +2712,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 2.018005286815267
+            "kind": "triangular",
+            "min": 1.1790352397289598,
+            "mode": 2.018005286815267,
+            "max": 4.8806767420821116,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 18
+            "kind": "triangular",
+            "min": 9,
+            "mode": 18,
+            "max": 27,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 7.5
+            "kind": "triangular",
+            "min": 5,
+            "mode": 7.5,
+            "max": 10,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.9
+            "kind": "triangular",
+            "min": 0.8,
+            "mode": 0.9,
+            "max": 1,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -1890,20 +2765,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 4.575879735178032
+            "kind": "triangular",
+            "min": 1.07568715268699,
+            "mode": 4.575879735178032,
+            "max": 10.824224225831562,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 14
+            "kind": "triangular",
+            "min": 10,
+            "mode": 14,
+            "max": 20,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 1
+            "kind": "triangular",
+            "min": 0.8,
+            "mode": 1,
+            "max": 1.3,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.85
+            "kind": "triangular",
+            "min": 0.8,
+            "mode": 0.85,
+            "max": 0.95,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -1923,20 +2818,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 0.667320054006198
+            "kind": "triangular",
+            "min": 0.5636087557133992,
+            "mode": 0.667320054006198,
+            "max": 0.8096780250888662,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 106
+            "kind": "triangular",
+            "min": 95,
+            "mode": 106,
+            "max": 118,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 1.5
+            "kind": "triangular",
+            "min": 1.3,
+            "mode": 1.5,
+            "max": 2,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.9
+            "kind": "triangular",
+            "min": 0.8,
+            "mode": 0.9,
+            "max": 0.95,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -1968,8 +2883,13 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "value": 11
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.022
+            "kind": "triangular",
+            "min": 0.017,
+            "mode": 0.022,
+            "max": 0.027,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -1989,20 +2909,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 6.541988310064001
+            "kind": "triangular",
+            "min": 2.0607610474839646,
+            "mode": 6.541988310064001,
+            "max": 11.589318022057359,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 19.3
+            "kind": "triangular",
+            "min": 15,
+            "mode": 19.3,
+            "max": 35,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 4.4
+            "kind": "triangular",
+            "min": 3.4,
+            "mode": 4.4,
+            "max": 5.5,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.84
+            "kind": "triangular",
+            "min": 0.7,
+            "mode": 0.84,
+            "max": 0.9,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -2022,20 +2962,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 0.3
+            "kind": "triangular",
+            "min": 0.3,
+            "mode": 0.3,
+            "max": 0.666,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 120
+            "kind": "triangular",
+            "min": 96,
+            "mode": 120,
+            "max": 144,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 25
+            "kind": "triangular",
+            "min": 12,
+            "mode": 25,
+            "max": 45,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.75
+            "kind": "triangular",
+            "min": 0.65,
+            "mode": 0.75,
+            "max": 0.8,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -2055,8 +3015,13 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 0.5308250801615401
+            "kind": "triangular",
+            "min": 0.3075471492003835,
+            "mode": 0.5308250801615401,
+            "max": 1.2223236498177066,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
             "kind": "fixed",
@@ -2092,12 +3057,22 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "value": 0.8056156490332836
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 1.1
+            "kind": "triangular",
+            "min": 0.7,
+            "mode": 1.1,
+            "max": 1.5,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 0.15000000000000002
+            "kind": "triangular",
+            "min": 0.1,
+            "mode": 0.15000000000000002,
+            "max": 0.2,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
             "kind": "fixed",
@@ -2121,20 +3096,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 0.9033750685606652
+            "kind": "triangular",
+            "min": 0.5897622303045704,
+            "mode": 0.9033750685606652,
+            "max": 1.6046545311845442,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 9.2
+            "kind": "triangular",
+            "min": 4.1,
+            "mode": 9.2,
+            "max": 190,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 0.65
+            "kind": "triangular",
+            "min": 0.6,
+            "mode": 0.65,
+            "max": 0.8,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.493
+            "kind": "triangular",
+            "min": 0.05,
+            "mode": 0.493,
+            "max": 0.74,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -2162,8 +3157,13 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "value": 3.4
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 0.21000000000000002
+            "kind": "triangular",
+            "min": 0.17,
+            "mode": 0.21000000000000002,
+            "max": 0.25,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
             "kind": "fixed",
@@ -2187,20 +3187,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.005532069521113
+            "kind": "triangular",
+            "min": 0.4758002991036535,
+            "mode": 1.005532069521113,
+            "max": 2.1036442898887917,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 20.7
+            "kind": "triangular",
+            "min": 14.5,
+            "mode": 20.7,
+            "max": 36.7,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 18
+            "kind": "triangular",
+            "min": 8,
+            "mode": 18,
+            "max": 21.5,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.6
+            "kind": "triangular",
+            "min": 0.44,
+            "mode": 0.6,
+            "max": 0.74,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -2224,16 +3244,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "value": 82.39871267218824
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 1.97
+            "kind": "triangular",
+            "min": 1.3,
+            "mode": 1.97,
+            "max": 35,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 7
+            "kind": "triangular",
+            "min": 4,
+            "mode": 7,
+            "max": 10,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.1
+            "kind": "triangular",
+            "min": 0.05,
+            "mode": 0.1,
+            "max": 0.35,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -2253,20 +3288,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 2.0394974875392085
+            "kind": "triangular",
+            "min": 1.4987466327626204,
+            "mode": 2.0394974875392085,
+            "max": 2.9737423503242324,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 3.8
+            "kind": "triangular",
+            "min": 3.4,
+            "mode": 3.8,
+            "max": 4.4,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 3.9
+            "kind": "triangular",
+            "min": 3.3,
+            "mode": 3.9,
+            "max": 4.7,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.7
+            "kind": "triangular",
+            "min": 0.65,
+            "mode": 0.7,
+            "max": 0.8,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -2286,20 +3341,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 3.4767468197948213
+            "kind": "triangular",
+            "min": 1.3460715923878597,
+            "mode": 3.4767468197948213,
+            "max": 6.7211675708853,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 2.6
+            "kind": "triangular",
+            "min": 2,
+            "mode": 2.6,
+            "max": 3.2,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 3.7
+            "kind": "triangular",
+            "min": 2.9,
+            "mode": 3.7,
+            "max": 4.5,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.3
+            "kind": "triangular",
+            "min": 0.24,
+            "mode": 0.3,
+            "max": 0.51,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -2319,16 +3394,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 0.37477321647258377
+            "kind": "triangular",
+            "min": 0.16437983845432058,
+            "mode": 0.37477321647258377,
+            "max": 1.2223236498177066,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 20
+            "kind": "triangular",
+            "min": 14,
+            "mode": 20,
+            "max": 37,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 25
+            "kind": "triangular",
+            "min": 16,
+            "mode": 25,
+            "max": 35,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
             "kind": "fixed",
@@ -2352,20 +3442,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.9549470196350767
+            "kind": "triangular",
+            "min": 1.2223236498177066,
+            "mode": 1.9549470196350767,
+            "max": 3.011002981610755,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 20
+            "kind": "triangular",
+            "min": 14,
+            "mode": 20,
+            "max": 35,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 16
+            "kind": "triangular",
+            "min": 13,
+            "mode": 16,
+            "max": 23,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.77
+            "kind": "triangular",
+            "min": 0.7,
+            "mode": 0.77,
+            "max": 0.85,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -2385,16 +3495,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 2.9253811486282673
+            "kind": "triangular",
+            "min": 2.018005286815267,
+            "mode": 2.9253811486282673,
+            "max": 4.8806767420821116,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 18
+            "kind": "triangular",
+            "min": 11,
+            "mode": 18,
+            "max": 25,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 30
+            "kind": "triangular",
+            "min": 20,
+            "mode": 30,
+            "max": 40,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
             "kind": "fixed",
@@ -2418,20 +3543,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 4.787498240162782
+            "kind": "triangular",
+            "min": 3.5526052524863387,
+            "mode": 4.787498240162782,
+            "max": 7.026364265097367,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 13
+            "kind": "triangular",
+            "min": 11,
+            "mode": 13,
+            "max": 15,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 1.05
+            "kind": "triangular",
+            "min": 0.6,
+            "mode": 1.05,
+            "max": 1.5,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.7
+            "kind": "triangular",
+            "min": 0.6,
+            "mode": 0.7,
+            "max": 0.8,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -2451,20 +3596,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 4.019995108377726
+            "kind": "triangular",
+            "min": 1.0483857424678327,
+            "mode": 4.019995108377726,
+            "max": 7.590939209946637,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 3.7
+            "kind": "triangular",
+            "min": 2.5,
+            "mode": 3.7,
+            "max": 8,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 0.6
+            "kind": "triangular",
+            "min": 0.55,
+            "mode": 0.6,
+            "max": 0.75,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.95
+            "kind": "triangular",
+            "min": 0.85,
+            "mode": 0.95,
+            "max": 1,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -2488,16 +3653,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "value": 11.842831766319552
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 0.94
+            "kind": "triangular",
+            "min": 0.568,
+            "mode": 0.94,
+            "max": 5.5,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 4.8
+            "kind": "triangular",
+            "min": 3,
+            "mode": 4.8,
+            "max": 7,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.32
+            "kind": "triangular",
+            "min": 0.2,
+            "mode": 0.32,
+            "max": 0.85,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -2521,12 +3701,22 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "value": 2.389307075658813
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 5.5
+            "kind": "triangular",
+            "min": 4,
+            "mode": 5.5,
+            "max": 7,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 1.75
+            "kind": "triangular",
+            "min": 1.5,
+            "mode": 1.75,
+            "max": 2,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
             "kind": "fixed",
@@ -2550,20 +3740,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 0.662130832738866
+            "kind": "triangular",
+            "min": 0.3057264612484687,
+            "mode": 0.662130832738866,
+            "max": 1.3460715923878597,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 2.6
+            "kind": "triangular",
+            "min": 1.5,
+            "mode": 2.6,
+            "max": 4.5,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 3
+            "kind": "triangular",
+            "min": 2.5,
+            "mode": 3,
+            "max": 4,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.65
+            "kind": "triangular",
+            "min": 0.5,
+            "mode": 0.65,
+            "max": 0.8,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -2583,20 +3793,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 0.3424428157908809
+            "kind": "triangular",
+            "min": 0.18168181096664618,
+            "mode": 0.3424428157908809,
+            "max": 0.8710572177151393,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 8.5
+            "kind": "triangular",
+            "min": 5,
+            "mode": 8.5,
+            "max": 12,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 2.4
+            "kind": "triangular",
+            "min": 1.8,
+            "mode": 2.4,
+            "max": 3,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.75
+            "kind": "triangular",
+            "min": 0.7,
+            "mode": 0.75,
+            "max": 0.8,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -2616,8 +3846,13 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.5565421538898911
+            "kind": "triangular",
+            "min": 1.2223236498177066,
+            "mode": 1.5565421538898911,
+            "max": 2.082584883371026,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
             "kind": "fixed",
@@ -2649,12 +3884,22 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.7552286891769604
+            "kind": "triangular",
+            "min": 0.9529964587793063,
+            "mode": 1.7552286891769604,
+            "max": 5.494576772718438,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 30
+            "kind": "triangular",
+            "min": 23,
+            "mode": 30,
+            "max": 37,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
             "kind": "fixed",
@@ -2682,16 +3927,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.0616501603230801
+            "kind": "triangular",
+            "min": 0.9375018861745337,
+            "mode": 1.0616501603230801,
+            "max": 1.214778687476791,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 10
+            "kind": "triangular",
+            "min": 8,
+            "mode": 10,
+            "max": 12,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 17.5
+            "kind": "triangular",
+            "min": 10,
+            "mode": 17.5,
+            "max": 25,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
             "kind": "fixed",
@@ -2715,20 +3975,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 2.0904269906816224
+            "kind": "triangular",
+            "min": 1.3906987279179284,
+            "mode": 2.0904269906816224,
+            "max": 3.63577557724109,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 6.5
+            "kind": "triangular",
+            "min": 5,
+            "mode": 6.5,
+            "max": 8,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 6.5
+            "kind": "triangular",
+            "min": 3,
+            "mode": 6.5,
+            "max": 10,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.30000000000000004
+            "kind": "triangular",
+            "min": 0.2,
+            "mode": 0.30000000000000004,
+            "max": 0.4,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -2748,16 +4028,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.836557723943776
+            "kind": "triangular",
+            "min": 0.7046589816139597,
+            "mode": 1.836557723943776,
+            "max": 4.522576991265014,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 13.4
+            "kind": "triangular",
+            "min": 11.5,
+            "mode": 13.4,
+            "max": 16.2,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 0.62
+            "kind": "triangular",
+            "min": 0.5,
+            "mode": 0.62,
+            "max": 0.75,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
             "kind": "fixed",
@@ -2781,20 +4076,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 2.0466305070749806
+            "kind": "triangular",
+            "min": 1.3745456154407205,
+            "mode": 2.0466305070749806,
+            "max": 5.454073056927174,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 29
+            "kind": "triangular",
+            "min": 24,
+            "mode": 29,
+            "max": 35,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 1.1
+            "kind": "triangular",
+            "min": 0.9,
+            "mode": 1.1,
+            "max": 1.3,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.98
+            "kind": "triangular",
+            "min": 0.95,
+            "mode": 0.98,
+            "max": 1,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -2814,20 +4129,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 3.7270652133093263
+            "kind": "triangular",
+            "min": 2.15137430537398,
+            "mode": 3.7270652133093263,
+            "max": 9.151759470356064,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 7
+            "kind": "triangular",
+            "min": 6,
+            "mode": 7,
+            "max": 8,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 0.6
+            "kind": "triangular",
+            "min": 0.5,
+            "mode": 0.6,
+            "max": 0.7,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 1
+            "kind": "triangular",
+            "min": 0.95,
+            "mode": 1,
+            "max": 1,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -2847,20 +4182,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 2.082584883371026
+            "kind": "triangular",
+            "min": 0.8280474538577262,
+            "mode": 2.082584883371026,
+            "max": 5.007924013903809,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 20
+            "kind": "triangular",
+            "min": 15,
+            "mode": 20,
+            "max": 30,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 33
+            "kind": "triangular",
+            "min": 20,
+            "mode": 33,
+            "max": 45,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.5
+            "kind": "triangular",
+            "min": 0.45,
+            "mode": 0.5,
+            "max": 0.55,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -2892,8 +4247,13 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "value": 2.4
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.155
+            "kind": "triangular",
+            "min": 0.06,
+            "mode": 0.155,
+            "max": 0.25,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -2913,8 +4273,13 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 2.539893947916972
+            "kind": "triangular",
+            "min": 1.2614442448887815,
+            "mode": 2.539893947916972,
+            "max": 11.899632466921108,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
             "kind": "fixed",
@@ -2946,20 +4311,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.04
+            "kind": "triangular",
+            "min": 0.82,
+            "mode": 1.04,
+            "max": 1.26,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 14.3
+            "kind": "triangular",
+            "min": 9.4,
+            "mode": 14.3,
+            "max": 21,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 1.3
+            "kind": "triangular",
+            "min": 0.84,
+            "mode": 1.3,
+            "max": 1.5,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.9
+            "kind": "triangular",
+            "min": 0.85,
+            "mode": 0.9,
+            "max": 0.99,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -2979,20 +4364,35 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.328887124281325
+            "kind": "triangular",
+            "min": 0.3178905057079873,
+            "mode": 1.328887124281325,
+            "max": 10.090026434076336,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 3.6
+            "kind": "triangular",
+            "min": 1.2,
+            "mode": 3.6,
+            "max": 7.3,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
             "kind": "fixed",
             "value": 0.47
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.8
+            "kind": "triangular",
+            "min": 0.71,
+            "mode": 0.8,
+            "max": 0.91,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -3016,16 +4416,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "value": 1.4453131689348666
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 6
+            "kind": "triangular",
+            "min": 4,
+            "mode": 6,
+            "max": 8,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 2.42
+            "kind": "triangular",
+            "min": 0.9,
+            "mode": 2.42,
+            "max": 3.94,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.55
+            "kind": "triangular",
+            "min": 0.5,
+            "mode": 0.55,
+            "max": 0.6,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -3045,20 +4460,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.5348449675783558
+            "kind": "triangular",
+            "min": 0.8770356445530689,
+            "mode": 1.5348449675783558,
+            "max": 4.021040688247571,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 31.2
+            "kind": "triangular",
+            "min": 13,
+            "mode": 31.2,
+            "max": 58,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 4.1
+            "kind": "triangular",
+            "min": 2.74,
+            "mode": 4.1,
+            "max": 6.7,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.86
+            "kind": "triangular",
+            "min": 0.72,
+            "mode": 0.86,
+            "max": 0.99,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -3078,20 +4513,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.0088775667373469
+            "kind": "triangular",
+            "min": 0.6682296470142552,
+            "mode": 1.0088775667373469,
+            "max": 1.7633933065239864,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 11.9
+            "kind": "triangular",
+            "min": 6,
+            "mode": 11.9,
+            "max": 15.3,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 3.5
+            "kind": "triangular",
+            "min": 3,
+            "mode": 3.5,
+            "max": 5,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.67
+            "kind": "triangular",
+            "min": 0.65,
+            "mode": 0.67,
+            "max": 0.79,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -3111,20 +4566,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 5.494576772718438
+            "kind": "triangular",
+            "min": 3.338616009269206,
+            "mode": 5.494576772718438,
+            "max": 12.630802449598043,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 30
+            "kind": "triangular",
+            "min": 24,
+            "mode": 30,
+            "max": 90,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 0.7
+            "kind": "triangular",
+            "min": 0.6,
+            "mode": 0.7,
+            "max": 0.77,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 1
+            "kind": "triangular",
+            "min": 0.95,
+            "mode": 1,
+            "max": 1,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -3144,16 +4619,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 0.44183544344527126
+            "kind": "triangular",
+            "min": 0.275379708376294,
+            "mode": 0.44183544344527126,
+            "max": 0.654114534922941,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 7.6
+            "kind": "triangular",
+            "min": 3.2,
+            "mode": 7.6,
+            "max": 9.2,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 3.8
+            "kind": "triangular",
+            "min": 3.2,
+            "mode": 3.8,
+            "max": 4.2,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
             "kind": "fixed",
@@ -3177,12 +4667,22 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 2.0904269906816224
+            "kind": "triangular",
+            "min": 1.3906987279179284,
+            "mode": 2.0904269906816224,
+            "max": 3.63577557724109,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 6.5
+            "kind": "triangular",
+            "min": 3,
+            "mode": 6.5,
+            "max": 10,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
             "kind": "fixed",
@@ -3210,12 +4710,22 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 0.27161121088012463
+            "kind": "triangular",
+            "min": 0.07289641246103909,
+            "mode": 0.27161121088012463,
+            "max": 0.5156555941330273,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 11.4
+            "kind": "triangular",
+            "min": 10.6,
+            "mode": 11.4,
+            "max": 12.3,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
             "kind": "fixed",
@@ -3243,16 +4753,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 2.1940358614712006
+            "kind": "triangular",
+            "min": 1.2971184615749092,
+            "mode": 2.1940358614712006,
+            "max": 5.227352894721844,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 24
+            "kind": "triangular",
+            "min": 20,
+            "mode": 24,
+            "max": 40,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 4.5
+            "kind": "triangular",
+            "min": 4,
+            "mode": 4.5,
+            "max": 6,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
             "kind": "fixed",
@@ -3280,12 +4805,22 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "value": 1.632
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 1.34
+            "kind": "triangular",
+            "min": 1.16,
+            "mode": 1.34,
+            "max": 3.1,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 3.3
+            "kind": "triangular",
+            "min": 2.4,
+            "mode": 3.3,
+            "max": 4.5,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
             "kind": "fixed",
@@ -3309,20 +4844,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 2.882537089666505
+            "kind": "triangular",
+            "min": 1.233709847154411,
+            "mode": 2.882537089666505,
+            "max": 6.581453871233274,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 75.3
+            "kind": "triangular",
+            "min": 30,
+            "mode": 75.3,
+            "max": 219.9,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 1.13
+            "kind": "triangular",
+            "min": 0.8,
+            "mode": 1.13,
+            "max": 1.52,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 1
+            "kind": "triangular",
+            "min": 0.9,
+            "mode": 1,
+            "max": 1,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -3342,12 +4897,22 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.9055851098482322
+            "kind": "triangular",
+            "min": 1.3483556261477305,
+            "mode": 1.9055851098482322,
+            "max": 2.9408976862700684,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 3.7
+            "kind": "triangular",
+            "min": 3,
+            "mode": 3.7,
+            "max": 4.4,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
             "kind": "fixed",
@@ -3375,20 +4940,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 0.8324570261008938
+            "kind": "triangular",
+            "min": 0.5273736095079575,
+            "mode": 0.8324570261008938,
+            "max": 1.662795619755717,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 5.2
+            "kind": "triangular",
+            "min": 1.8,
+            "mode": 5.2,
+            "max": 8.6,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 3.41
+            "kind": "triangular",
+            "min": 2.77,
+            "mode": 3.41,
+            "max": 9.96,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.84
+            "kind": "triangular",
+            "min": 0.77,
+            "mode": 0.84,
+            "max": 0.92,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -3408,20 +4993,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 0.5520316359051507
+            "kind": "triangular",
+            "min": 0.3125006287248445,
+            "mode": 0.5520316359051507,
+            "max": 1.136034657597495,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 30
+            "kind": "triangular",
+            "min": 15,
+            "mode": 30,
+            "max": 52,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 19
+            "kind": "triangular",
+            "min": 15,
+            "mode": 19,
+            "max": 25,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.56
+            "kind": "triangular",
+            "min": 0.46,
+            "mode": 0.56,
+            "max": 0.7,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -3441,20 +5046,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.502872483072066
+            "kind": "triangular",
+            "min": 0.8360582402611988,
+            "mode": 1.502872483072066,
+            "max": 9.414678321579059,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 7.8
+            "kind": "triangular",
+            "min": 6,
+            "mode": 7.8,
+            "max": 9.5,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 2.7
+            "kind": "triangular",
+            "min": 2.2,
+            "mode": 2.7,
+            "max": 3.8,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.74
+            "kind": "triangular",
+            "min": 0.6,
+            "mode": 0.74,
+            "max": 0.85,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -3478,8 +5103,13 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "value": 0.8350144853387111
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 7.78
+            "kind": "triangular",
+            "min": 7.25,
+            "mode": 7.78,
+            "max": 9.43,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
             "kind": "fixed",
@@ -3507,20 +5137,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 0.6498024082514221
+            "kind": "triangular",
+            "min": 0.3889614976907834,
+            "mode": 0.6498024082514221,
+            "max": 0.9914611692140216,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 34
+            "kind": "triangular",
+            "min": 27,
+            "mode": 34,
+            "max": 52,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 15
+            "kind": "triangular",
+            "min": 12,
+            "mode": 15,
+            "max": 18,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.7
+            "kind": "triangular",
+            "min": 0.6,
+            "mode": 0.7,
+            "max": 0.8,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -3540,20 +5190,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 0.8431020460000597
+            "kind": "triangular",
+            "min": 0.452184712386876,
+            "mode": 0.8431020460000597,
+            "max": 1.6712332217369836,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 5.8
+            "kind": "triangular",
+            "min": 4.9,
+            "mode": 5.8,
+            "max": 19.4,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 0.52
+            "kind": "triangular",
+            "min": 0.35,
+            "mode": 0.52,
+            "max": 1.17,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.928
+            "kind": "triangular",
+            "min": 0.928,
+            "mode": 0.928,
+            "max": 0.93,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -3573,20 +5243,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.7574122811450485
+            "kind": "triangular",
+            "min": 1.1980052644247685,
+            "mode": 1.7574122811450485,
+            "max": 3.9343045906051244,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 3.5
+            "kind": "triangular",
+            "min": 3,
+            "mode": 3.5,
+            "max": 4.8,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 2.6
+            "kind": "triangular",
+            "min": 2.1,
+            "mode": 2.6,
+            "max": 3.2,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.69
+            "kind": "triangular",
+            "min": 0.6,
+            "mode": 0.69,
+            "max": 0.87,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -3606,20 +5296,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.3415875512082984
+            "kind": "triangular",
+            "min": 0.730082955478503,
+            "mode": 1.3415875512082984,
+            "max": 3.53710571918688,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 6
+            "kind": "triangular",
+            "min": 4,
+            "mode": 6,
+            "max": 9,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 4.2
+            "kind": "triangular",
+            "min": 3,
+            "mode": 4.2,
+            "max": 6,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.8
+            "kind": "triangular",
+            "min": 0.7,
+            "mode": 0.8,
+            "max": 0.9,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -3639,20 +5349,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 3.747732164725838
+            "kind": "triangular",
+            "min": 1.6437983845432051,
+            "mode": 3.747732164725838,
+            "max": 8.280474538577261,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 2
+            "kind": "triangular",
+            "min": 1.5,
+            "mode": 2,
+            "max": 3,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 0.9
+            "kind": "triangular",
+            "min": 0.7,
+            "mode": 0.9,
+            "max": 1.1,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.77
+            "kind": "triangular",
+            "min": 0.63,
+            "mode": 0.77,
+            "max": 0.89,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -3705,20 +5435,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 0.58629660254907
+            "kind": "triangular",
+            "min": 0.3149810969189405,
+            "mode": 0.58629660254907,
+            "max": 1.2423550711031084,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 21
+            "kind": "triangular",
+            "min": 15,
+            "mode": 21,
+            "max": 30,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 13
+            "kind": "triangular",
+            "min": 3,
+            "mode": 13,
+            "max": 28,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.64
+            "kind": "triangular",
+            "min": 0.5,
+            "mode": 0.64,
+            "max": 1,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -3738,8 +5488,13 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "iv": {
           "family": "iv-one-compartment",
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 28
+            "kind": "triangular",
+            "min": 18,
+            "mode": 28,
+            "max": 42,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
             "kind": "fixed",
@@ -3763,8 +5518,13 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 0.9538902883626303
+            "kind": "triangular",
+            "min": 0.4224897100555856,
+            "mode": 0.9538902883626303,
+            "max": 15.533552691461345,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
             "kind": "fixed",
@@ -3796,12 +5556,22 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.6560949077154523
+            "kind": "triangular",
+            "min": 0.9375018861745337,
+            "mode": 1.6560949077154523,
+            "max": 4.165169766742052,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 10
+            "kind": "triangular",
+            "min": 8,
+            "mode": 10,
+            "max": 12,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
             "kind": "fixed",
@@ -3829,20 +5599,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 2.2639780978551127
+            "kind": "triangular",
+            "min": 1.0483857424678327,
+            "mode": 2.2639780978551127,
+            "max": 7.590939209946637,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 3.7
+            "kind": "triangular",
+            "min": 2.8,
+            "mode": 3.7,
+            "max": 5.2,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 4.4
+            "kind": "triangular",
+            "min": 3.7,
+            "mode": 4.4,
+            "max": 5.2,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.52
+            "kind": "triangular",
+            "min": 0.4,
+            "mode": 0.52,
+            "max": 0.65,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -3862,20 +5652,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 3.8912834711292166
+            "kind": "triangular",
+            "min": 1.1649326401415347,
+            "mode": 3.8912834711292166,
+            "max": 6.315401224799022,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 60
+            "kind": "triangular",
+            "min": 60,
+            "mode": 60,
+            "max": 100,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 1.2
+            "kind": "triangular",
+            "min": 0.9,
+            "mode": 1.2,
+            "max": 1.5,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.82
+            "kind": "triangular",
+            "min": 0.8,
+            "mode": 0.82,
+            "max": 0.95,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -3895,20 +5705,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 4.27062810876618
+            "kind": "triangular",
+            "min": 1.7092594395855087,
+            "mode": 4.27062810876618,
+            "max": 10.22352596793125,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 10.9
+            "kind": "triangular",
+            "min": 5.1,
+            "mode": 10.9,
+            "max": 17.5,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 0.6
+            "kind": "triangular",
+            "min": 0.53,
+            "mode": 0.6,
+            "max": 0.72,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.98
+            "kind": "triangular",
+            "min": 0.92,
+            "mode": 0.98,
+            "max": 1,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -3932,8 +5762,13 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "value": 1.4618353289966994
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 16.5
+            "kind": "triangular",
+            "min": 7,
+            "mode": 16.5,
+            "max": 26,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
             "kind": "fixed",
@@ -3965,16 +5800,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "value": 1.9
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 99
+            "kind": "triangular",
+            "min": 70,
+            "mode": 99,
+            "max": 126,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 0.54
+            "kind": "triangular",
+            "min": 0.5,
+            "mode": 0.54,
+            "max": 0.7,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.95
+            "kind": "triangular",
+            "min": 0.9,
+            "mode": 0.95,
+            "max": 1,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -4002,8 +5852,13 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "value": 3.6
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 3
+            "kind": "triangular",
+            "min": 2.5,
+            "mode": 3,
+            "max": 5,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
             "kind": "fixed",
@@ -4027,20 +5882,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 0.48829246119732844
+            "kind": "triangular",
+            "min": 0.17382970953558935,
+            "mode": 0.48829246119732844,
+            "max": 1.2614442448887815,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 22
+            "kind": "triangular",
+            "min": 12,
+            "mode": 22,
+            "max": 36,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 0.64
+            "kind": "triangular",
+            "min": 0.58,
+            "mode": 0.64,
+            "max": 0.8,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.88
+            "kind": "triangular",
+            "min": 0.7,
+            "mode": 0.88,
+            "max": 0.95,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -4068,12 +5943,22 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "value": 4
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 2
+            "kind": "triangular",
+            "min": 1,
+            "mode": 2,
+            "max": 3,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.725
+            "kind": "triangular",
+            "min": 0.5,
+            "mode": 0.725,
+            "max": 0.95,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -4093,20 +5978,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 2.5181748420410472
+            "kind": "triangular",
+            "min": 0.7496702825073791,
+            "mode": 2.5181748420410472,
+            "max": 3.597257729301381,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 6.3
+            "kind": "triangular",
+            "min": 5.8,
+            "mode": 6.3,
+            "max": 6.8,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 0.53
+            "kind": "triangular",
+            "min": 0.48,
+            "mode": 0.53,
+            "max": 0.58,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.9
+            "kind": "triangular",
+            "min": 0.9,
+            "mode": 0.9,
+            "max": 0.95,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -4126,20 +6031,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.0394775436824784
+            "kind": "triangular",
+            "min": 0.5076224777988443,
+            "mode": 1.0394775436824784,
+            "max": 2.15137430537398,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 7
+            "kind": "triangular",
+            "min": 6,
+            "mode": 7,
+            "max": 10,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 15
+            "kind": "triangular",
+            "min": 12,
+            "mode": 15,
+            "max": 25,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.13
+            "kind": "triangular",
+            "min": 0.05,
+            "mode": 0.13,
+            "max": 0.2,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -4159,20 +6084,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.76855285959344
+            "kind": "triangular",
+            "min": 1.0123155728973259,
+            "mode": 1.76855285959344,
+            "max": 1.76855285959344,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 12
+            "kind": "triangular",
+            "min": 9,
+            "mode": 12,
+            "max": 19,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 20
+            "kind": "triangular",
+            "min": 12,
+            "mode": 20,
+            "max": 35,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.25
+            "kind": "triangular",
+            "min": 0.2,
+            "mode": 0.25,
+            "max": 0.3,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -4192,20 +6137,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.873866082362919
+            "kind": "triangular",
+            "min": 1.0951244332177545,
+            "mode": 1.873866082362919,
+            "max": 3.0369467186919774,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 4
+            "kind": "triangular",
+            "min": 3,
+            "mode": 4,
+            "max": 5,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 4.3
+            "kind": "triangular",
+            "min": 3.5,
+            "mode": 4.3,
+            "max": 5.6,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.26
+            "kind": "triangular",
+            "min": 0.25,
+            "mode": 0.26,
+            "max": 0.35,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -4225,12 +6190,22 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 0.6707937756041492
+            "kind": "triangular",
+            "min": 0.3650414777392515,
+            "mode": 0.6707937756041492,
+            "max": 1.76855285959344,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 12
+            "kind": "triangular",
+            "min": 9,
+            "mode": 12,
+            "max": 16,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
             "kind": "fixed",
@@ -4291,16 +6266,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.1040632718103014
+            "kind": "triangular",
+            "min": 0.7393569925972749,
+            "mode": 1.1040632718103014,
+            "max": 1.9059929175586126,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 15
+            "kind": "triangular",
+            "min": 13,
+            "mode": 15,
+            "max": 17,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 7
+            "kind": "triangular",
+            "min": 5,
+            "mode": 7,
+            "max": 9,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
             "kind": "fixed",
@@ -4324,16 +6314,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 2.893334751503085
+            "kind": "triangular",
+            "min": 1.5184733593459887,
+            "mode": 2.893334751503085,
+            "max": 9.476097465629044,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 8
+            "kind": "triangular",
+            "min": 6,
+            "mode": 8,
+            "max": 10,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 2.5
+            "kind": "triangular",
+            "min": 2,
+            "mode": 2.5,
+            "max": 3,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
             "kind": "fixed",
@@ -4361,8 +6366,13 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "value": 1.5244982082805352
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 3.25
+            "kind": "triangular",
+            "min": 2.5,
+            "mode": 3.25,
+            "max": 4,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
             "kind": "fixed",
@@ -4390,20 +6400,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 0.3106614574400916
+            "kind": "triangular",
+            "min": 0.1732867951399863,
+            "mode": 0.3106614574400916,
+            "max": 0.7019595734382832,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 8
+            "kind": "triangular",
+            "min": 5,
+            "mode": 8,
+            "max": 11,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 1
+            "kind": "triangular",
+            "min": 0.8,
+            "mode": 1,
+            "max": 1.2,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.925
+            "kind": "triangular",
+            "min": 0.85,
+            "mode": 0.925,
+            "max": 1,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -4423,20 +6453,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 2.723387352430332
+            "kind": "triangular",
+            "min": 0.9434445234381817,
+            "mode": 2.723387352430332,
+            "max": 7.1550676702962095,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 3.1
+            "kind": "triangular",
+            "min": 2,
+            "mode": 3.1,
+            "max": 30,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 0.14
+            "kind": "triangular",
+            "min": 0.11,
+            "mode": 0.14,
+            "max": 0.25,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.95
+            "kind": "triangular",
+            "min": 0.8,
+            "mode": 0.95,
+            "max": 1,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -4456,20 +6506,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 6.624379630861809
+            "kind": "triangular",
+            "min": 1.3150387076345647,
+            "mode": 6.624379630861809,
+            "max": 13.138402475193452,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 2.5
+            "kind": "triangular",
+            "min": 1.4,
+            "mode": 2.5,
+            "max": 4.3,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 2
+            "kind": "triangular",
+            "min": 1.4,
+            "mode": 2,
+            "max": 3,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.13
+            "kind": "triangular",
+            "min": 0.1,
+            "mode": 0.13,
+            "max": 0.3,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -4493,8 +6563,13 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "value": 0.37702666166742815
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 72.5
+            "kind": "triangular",
+            "min": 55,
+            "mode": 72.5,
+            "max": 90,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
             "kind": "fixed",
@@ -4522,20 +6597,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 2.9737423503242324
+            "kind": "triangular",
+            "min": 1.0643430002478564,
+            "mode": 2.9737423503242324,
+            "max": 7.656560975721384,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 3.8
+            "kind": "triangular",
+            "min": 3,
+            "mode": 3.8,
+            "max": 5,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 1.5
+            "kind": "triangular",
+            "min": 1.2,
+            "mode": 1.5,
+            "max": 1.6,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.41
+            "kind": "triangular",
+            "min": 0.25,
+            "mode": 0.41,
+            "max": 0.63,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -4555,20 +6650,35 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.3808053913027258
+            "kind": "triangular",
+            "min": 1.07568715268699,
+            "mode": 1.3808053913027258,
+            "max": 1.8635326066546631,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 14
+            "kind": "triangular",
+            "min": 10,
+            "mode": 14,
+            "max": 18,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
             "kind": "fixed",
             "value": 1.21
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.925
+            "kind": "triangular",
+            "min": 0.9,
+            "mode": 0.925,
+            "max": 0.95,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -4592,8 +6702,13 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "value": 2.334910185109453
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 8.75
+            "kind": "triangular",
+            "min": 4.5,
+            "mode": 8.75,
+            "max": 13,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
             "kind": "fixed",
@@ -4621,20 +6736,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 2.000718492128722
+            "kind": "triangular",
+            "min": 0.4414429707665293,
+            "mode": 2.000718492128722,
+            "max": 11.356641460301741,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 17.5
+            "kind": "triangular",
+            "min": 15,
+            "mode": 17.5,
+            "max": 21,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 0.95
+            "kind": "triangular",
+            "min": 0.8,
+            "mode": 0.95,
+            "max": 1.1,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.6
+            "kind": "triangular",
+            "min": 0.36,
+            "mode": 0.6,
+            "max": 0.85,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -4658,16 +6793,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "value": 1.6783483487544193
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 3.93
+            "kind": "triangular",
+            "min": 3.9,
+            "mode": 3.93,
+            "max": 5.8,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 7.7
+            "kind": "triangular",
+            "min": 6.5,
+            "mode": 7.7,
+            "max": 9.5,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.32
+            "kind": "triangular",
+            "min": 0.29,
+            "mode": 0.32,
+            "max": 0.348,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -4687,16 +6837,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 7.216149483887709
+            "kind": "triangular",
+            "min": 5.066739974666882,
+            "mode": 7.216149483887709,
+            "max": 11.789495586077264,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 21
+            "kind": "triangular",
+            "min": 18,
+            "mode": 21,
+            "max": 24,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 7.1
+            "kind": "triangular",
+            "min": 6.6,
+            "mode": 7.1,
+            "max": 7.6,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
             "kind": "fixed",
@@ -4720,20 +6885,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 2.2421472178723
+            "kind": "triangular",
+            "min": 1.214778687476791,
+            "mode": 2.2421472178723,
+            "max": 5.547334064557599,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 10
+            "kind": "triangular",
+            "min": 5.3,
+            "mode": 10,
+            "max": 17.8,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 1.1
+            "kind": "triangular",
+            "min": 0.8,
+            "mode": 1.1,
+            "max": 1.5,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.95
+            "kind": "triangular",
+            "min": 0.9,
+            "mode": 0.95,
+            "max": 1,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -4753,20 +6938,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 2.4835241385266182
+            "kind": "triangular",
+            "min": 1.104942502259078,
+            "mode": 2.4835241385266182,
+            "max": 3.891355384724728,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 8
+            "kind": "triangular",
+            "min": 6,
+            "mode": 8,
+            "max": 12,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 0.45
+            "kind": "triangular",
+            "min": 0.3,
+            "mode": 0.45,
+            "max": 0.7,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.96
+            "kind": "triangular",
+            "min": 0.9,
+            "mode": 0.96,
+            "max": 1,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -4786,16 +6991,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 442.95706542797774
+            "kind": "triangular",
+            "min": 280.0411746485284,
+            "mode": 442.95706542797774,
+            "max": 963.5681549363948,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 11
+            "kind": "triangular",
+            "min": 7,
+            "mode": 11,
+            "max": 18,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 2.1
+            "kind": "triangular",
+            "min": 1.4,
+            "mode": 2.1,
+            "max": 2.8,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
             "kind": "fixed",
@@ -4819,16 +7039,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 2.0904269906816224
+            "kind": "triangular",
+            "min": 1.3906987279179284,
+            "mode": 2.0904269906816224,
+            "max": 3.63577557724109,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 6.5
+            "kind": "triangular",
+            "min": 4,
+            "mode": 6.5,
+            "max": 9,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 1.4500000000000002
+            "kind": "triangular",
+            "min": 0.8,
+            "mode": 1.4500000000000002,
+            "max": 2.1,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
             "kind": "fixed",
@@ -4852,20 +7087,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.5710730672154412
+            "kind": "triangular",
+            "min": 0.8371655655400696,
+            "mode": 1.5710730672154412,
+            "max": 3.0349891525656045,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 20.6
+            "kind": "triangular",
+            "min": 19,
+            "mode": 20.6,
+            "max": 25,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 0.68
+            "kind": "triangular",
+            "min": 0.6,
+            "mode": 0.68,
+            "max": 0.8,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.85
+            "kind": "triangular",
+            "min": 0.8,
+            "mode": 0.85,
+            "max": 0.9,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -4885,20 +7140,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.3415875512082984
+            "kind": "triangular",
+            "min": 0.9642869345196596,
+            "mode": 1.3415875512082984,
+            "max": 2.0246311457946518,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 6
+            "kind": "triangular",
+            "min": 5,
+            "mode": 6,
+            "max": 7.4,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 2.8
+            "kind": "triangular",
+            "min": 2.6,
+            "mode": 2.8,
+            "max": 3.1,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.84
+            "kind": "triangular",
+            "min": 0.7,
+            "mode": 0.84,
+            "max": 0.9,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -4951,20 +7226,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.2223236498177066
+            "kind": "triangular",
+            "min": 0.8280474538577262,
+            "mode": 1.2223236498177066,
+            "max": 2.082584883371026,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 20
+            "kind": "triangular",
+            "min": 15,
+            "mode": 20,
+            "max": 24,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 35
+            "kind": "triangular",
+            "min": 25,
+            "mode": 35,
+            "max": 45,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.47
+            "kind": "triangular",
+            "min": 0.4,
+            "mode": 0.47,
+            "max": 0.55,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -4984,20 +7279,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.8411372696080843
+            "kind": "triangular",
+            "min": 0.706943893353904,
+            "mode": 1.8411372696080843,
+            "max": 4.531628126332142,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 13.5
+            "kind": "triangular",
+            "min": 8.5,
+            "mode": 13.5,
+            "max": 16,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 0.16
+            "kind": "triangular",
+            "min": 0.13,
+            "mode": 0.16,
+            "max": 0.23,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.99
+            "kind": "triangular",
+            "min": 0.9,
+            "mode": 0.99,
+            "max": 1,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -5021,16 +7336,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "value": 1.3906987279179284
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 6.5
+            "kind": "triangular",
+            "min": 4,
+            "mode": 6.5,
+            "max": 9,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 0.24000000000000002
+            "kind": "triangular",
+            "min": 0.14,
+            "mode": 0.24000000000000002,
+            "max": 0.34,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.175
+            "kind": "triangular",
+            "min": 0.1,
+            "mode": 0.175,
+            "max": 0.25,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -5050,20 +7380,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 5.1745116986645545
+            "kind": "triangular",
+            "min": 1.166205541055903,
+            "mode": 5.1745116986645545,
+            "max": 8.072021147261069,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 4.5
+            "kind": "triangular",
+            "min": 3.9,
+            "mode": 4.5,
+            "max": 5,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 2.6
+            "kind": "triangular",
+            "min": 2.5,
+            "mode": 2.6,
+            "max": 3,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.15
+            "kind": "triangular",
+            "min": 0.12,
+            "mode": 0.15,
+            "max": 0.18,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -5083,16 +7433,31 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.230188596801534
+            "kind": "triangular",
+            "min": 0.6575193538172823,
+            "mode": 1.230188596801534,
+            "max": 3.3121898154309046,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 5
+            "kind": "triangular",
+            "min": 3,
+            "mode": 5,
+            "max": 7,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 7.5
+            "kind": "triangular",
+            "min": 4,
+            "mode": 7.5,
+            "max": 9,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
             "kind": "fixed",
@@ -5116,12 +7481,22 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 0.6575193538172823
+            "kind": "triangular",
+            "min": 0.4092753855841673,
+            "mode": 0.6575193538172823,
+            "max": 1.230188596801534,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 5
+            "kind": "triangular",
+            "min": 3,
+            "mode": 5,
+            "max": 7,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
             "kind": "fixed",
@@ -5149,20 +7524,35 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 4.6199773445487065
+            "kind": "triangular",
+            "min": 4.285243829149726,
+            "mode": 4.6199773445487065,
+            "max": 5.001796230321805,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 7
+            "kind": "triangular",
+            "min": 6,
+            "mode": 7,
+            "max": 8,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
             "kind": "fixed",
             "value": 0.8
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.7
+            "kind": "triangular",
+            "min": 0.6,
+            "mode": 0.7,
+            "max": 0.8,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -5182,8 +7572,13 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 0.4204814149629271
+            "kind": "triangular",
+            "min": 0.32155506538062545,
+            "mode": 0.4204814149629271,
+            "max": 0.5847239876583382,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
             "kind": "fixed",
@@ -5252,16 +7647,26 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "value": 5.41
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 2.5
+            "kind": "triangular",
+            "min": 1.4,
+            "mode": 2.5,
+            "max": 3.8,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
             "kind": "fixed",
             "value": 0.525
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.675
+            "kind": "triangular",
+            "min": 0.65,
+            "mode": 0.675,
+            "max": 0.7,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -5281,16 +7686,26 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.179737166241049
+            "kind": "triangular",
+            "min": 0.7041495167593094,
+            "mode": 1.179737166241049,
+            "max": 2.776404539429782,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
             "kind": "fixed",
             "value": 63
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 1.5
+            "kind": "triangular",
+            "min": 1.2,
+            "mode": 1.5,
+            "max": 1.8,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
             "kind": "fixed",
@@ -5314,20 +7729,40 @@ export const GENERATED_REGISTRY_ARTIFACT = {
         "oral": {
           "family": "one-compartment-first-order",
           "kaPerHour": {
-            "kind": "fixed",
-            "value": 1.9071528999470393
+            "kind": "triangular",
+            "min": 1.2540873603917984,
+            "mode": 1.9071528999470393,
+            "max": 3.36058378544265,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 5.2
+            "kind": "triangular",
+            "min": 3.5,
+            "mode": 5.2,
+            "max": 6.5,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 1.3
+            "kind": "triangular",
+            "min": 1.2,
+            "mode": 1.3,
+            "max": 1.6,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
-            "kind": "fixed",
-            "value": 0.8
+            "kind": "triangular",
+            "min": 0.75,
+            "mode": 0.8,
+            "max": 0.82,
+            "bounds": {
+              "kind": "extrema"
+            }
           }
         }
       },
@@ -5351,12 +7786,22 @@ export const GENERATED_REGISTRY_ARTIFACT = {
             "value": 1.7659426487354237
           },
           "eliminationHalfLifeHours": {
-            "kind": "fixed",
-            "value": 456
+            "kind": "triangular",
+            "min": 288,
+            "mode": 456,
+            "max": 624,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "vdLitersPerKg": {
-            "kind": "fixed",
-            "value": 17.5
+            "kind": "triangular",
+            "min": 15,
+            "mode": 17.5,
+            "max": 20,
+            "bounds": {
+              "kind": "extrema"
+            }
           },
           "bioavailability": {
             "kind": "fixed",

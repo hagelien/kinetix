@@ -19,30 +19,32 @@
  * reviewed scorer's discipline: an unknown is never an A, and improving a grade
  * means recording evidence rather than softening a rule.
  *
- * **What this produces, on today's implementation: D.** Several dimensions sit at
- * C for reasons no curation can lift (the derivation is automatic, so no reviewer
- * has attested it; the catalog records no source population for a pooled value;
- * the derived tier's native matrix is a disclosed default). Two sit at **D** for
- * reasons that are about the CODE rather than the data, and they are the honest
- * blockers on this tier ever rendering:
+ * **What this produces: D for most routes, C at best.** Several dimensions sit
+ * at C for reasons no curation can lift (the derivation is automatic, so no
+ * reviewer has attested it; the catalog records no source population for a pooled
+ * value; the derived tier's native matrix is a disclosed default). Three can sit
+ * at **D**, each for a reason the data can close:
  *
- *   - **uncertainty-semantics** — a derived route is `fixed(median)` with no
- *     observation-error layer, so the engine emits a bare point estimate. CV-3b's
- *     band widening reaches the disclosure but no simulation path applies it.
+ *   - **completeness**, when the drug's model-structure axes or route are
+ *     disclosed defaults rather than asserted.
+ *   - **uncertainty-semantics**, for a route with an input that has no reported
+ *     spread. Assembly draws each input across the lowest and highest value its
+ *     sources report, so a route whose every catalog input has a spread carries a
+ *     plausible-range band and reaches C here; an input fixed at one value keeps
+ *     it at D.
  *   - **parameter-provenance**, for a route any of whose values is uncited — a
  *     drug-level value can come from a seeded or backfilled cache row with nothing
  *     cited behind it. Generation records each input's source (`inputSources`), so
  *     a route whose every catalog value pools cited entries reaches C here; the
  *     others stay D until a curator cites their values.
  *
- * Weakest-link therefore lands every derived model at **D**, which §5.1 admits only
- * to a reviewer holding a recorded per-model acknowledgement. That acknowledgement
- * IS now implemented (`modelAcknowledgementStore`, the review-workspace state of
- * `ModelGradeNotice`), so a derived curve can be looked at by a reviewer who
- * explicitly accepts its stated deficiencies — and by nobody else. Saying so plainly
- * is the point: the gate is correct and the tier is not yet fit for a general
- * audience. Closing either D is a code change, not an owner decision; §5.2's public
- * tier is a separate question that only matters once they are closed.
+ * Weakest-link lands a route with any of these at **D**, which §5.1 admits only to
+ * a reviewer holding a recorded per-model acknowledgement
+ * (`modelAcknowledgementStore`, the review-workspace state of `ModelGradeNotice`).
+ * A route clear of all three is **C**: §5.1 renders it to editors and admins with
+ * its limitations, and to nobody below them — §5.2's disclosed public tier covers
+ * the reviewed override tier only, and extending it to derived models is an owner
+ * decision this module does not make.
  *
  * Pure and portable: no DB, no engine change, no `CORE_VERSION` bump.
  */
@@ -51,7 +53,7 @@ import { requiredParametersFor, type RequiredParam } from './model-structure.js'
 import type { DimensionAssessment, DimensionGrade } from './grade-policy.js';
 
 type LetterGrade = Exclude<DimensionGrade, 'hard-stop'>;
-import type { DrugModelDefinition } from './types.js';
+import type { DrugModelDefinition, ParamSpec } from './types.js';
 
 /** View- and subject-dependent facts the definition itself cannot answer. */
 export interface DerivedModelEvidence {
@@ -171,6 +173,55 @@ function assessParameterProvenance(route: DerivedRouteGrade): DimensionAssessmen
     dimension: 'parameter-provenance',
     grade: 'C',
     reason: `Every catalog value this curve runs on (${judged.join(', ')}) is pooled from source entries that each cite a reference, but only to study level: no per-input extraction record (table or page, unit conversion, population) is kept, and several sources may pool into one number.${inferredNote}`,
+  };
+}
+
+/** The route-parameter field each spec-valued role is stored in. */
+const ROLE_FIELDS: Partial<Record<RequiredParam, string>> = {
+  eliminationHalfLife: 'eliminationHalfLifeHours',
+  vd: 'vdLitersPerKg',
+  ka: 'kaPerHour',
+  bioavailability: 'bioavailability',
+  zeroOrderDuration: 'zeroOrderDurationHours',
+  firstOrderFraction: 'firstOrderFraction',
+};
+
+/** The uncertainty-semantics assessment for one derived route (step 7 of `assessDerivedModel`). */
+function assessUncertaintySemantics(
+  model: DrugModelDefinition,
+  route: DerivedRouteGrade,
+): DimensionAssessment {
+  const params = model.routes[route.route] as unknown as Record<string, unknown> | undefined;
+  const defaulted = new Set(route.defaultedParameters ?? []);
+  const judged = requiredParametersFor(route.family, {
+    ivInfusion: route.structure.absorption === 'iv-infusion',
+  }).filter((role) => ROLE_FIELDS[role] !== undefined && !defaulted.has(role));
+  const specOf = (role: RequiredParam): ParamSpec | undefined =>
+    params?.[ROLE_FIELDS[role]!] as ParamSpec | undefined;
+  const ranged = judged.filter((role) => {
+    const spec = specOf(role);
+    return spec !== undefined && spec.kind !== 'fixed';
+  });
+  const single = judged.filter((role) => !ranged.includes(role)).sort();
+  if (judged.length === 0 || ranged.length === 0) {
+    return {
+      dimension: 'uncertainty-semantics',
+      grade: 'D',
+      reason:
+        'Every input is fixed at a single value, so the output is a point estimate with no interval — not a range of any kind.',
+    };
+  }
+  if (single.length > 0) {
+    return {
+      dimension: 'uncertainty-semantics',
+      grade: 'D',
+      reason: `The band spans the reported spread of ${[...ranged].sort().join(', ')}, but ${single.join(', ')} ${single.length === 1 ? 'has' : 'have'} no reported spread and ${single.length === 1 ? 'is' : 'are'} fixed at one value, so the band is narrower than the evidence allows.`,
+    };
+  }
+  return {
+    dimension: 'uncertainty-semantics',
+    grade: 'C',
+    reason: `The band spans the curves the reported values allow: each input (${[...ranged].sort().join(', ')}) is drawn across the lowest and highest value its sources report, peaked at the pooled median, independently of the others. It is a plausible range, not a confidence or prediction interval.`,
   };
 }
 
@@ -312,23 +363,18 @@ export function assessDerivedModel(
         },
   );
 
-  // 7. Uncertainty semantics. A derived route is assembled as `fixed(median)`
-  //    (CV-4b) and declares no observation-error layer, so every draw is identical
-  //    and the engine emits p05 = p25 = median = p75 = p95. CV-3b's grade band
-  //    widening exists but no simulation path applies it — it reaches the
-  //    DISCLOSURE only. So there is no interval here at all, not a pooled one:
-  //    the output is a bare point estimate, which §5.1 scores D.
-  //
-  //    Lifting this needs the grade's proportional CV composed into the emitted
-  //    bands (or a real parameter-variability layer, SC-1B) before the curve is
-  //    rendered. Until then, calling this a "plausible range" would be the
-  //    mislabelled interval §5.1 makes a hard stop.
-  assessments.push({
-    dimension: 'uncertainty-semantics',
-    grade: 'D',
-    reason:
-      'Every parameter is fixed at its median and no uncertainty layer reaches the curve, so the output is a single point estimate with no interval — not a range of any kind.',
-  });
+  // 7. Uncertainty semantics, read off the route the engine will run. Assembly
+  //    turns an input with a reported spread into a triangular spec across it
+  //    and leaves one without at `fixed(median)` (CV-4b). C needs every input
+  //    the catalog supplied to carry its spread: the band then spans the curves
+  //    the reported values allow, but it pools the inputs' spreads, samples them
+  //    independently and treats the extremes as bounds, so it is a plausible
+  //    range — §5.1's C — and never a confidence or prediction interval. An
+  //    input fixed at one value would make the band look narrower than the
+  //    evidence is, the false precision §5.1 scores D; with none ranged there is
+  //    no band at all. A defaulted input is exempt: it is a disclosed one-sided
+  //    bound (F = 1), not a measured value.
+  assessments.push(assessUncertaintySemantics(model, route));
 
   // 8. Unresolved contradictions. The derivation refuses to resolve one — a
   //    molecule-axis conflict, or two disagreeing absorption shapes for a route,

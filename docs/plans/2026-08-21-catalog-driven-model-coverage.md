@@ -767,9 +767,16 @@ drugs). A DB edit changes the next snapshot, never a curve already pinned.
        the way to improve those 174 and to reach the 517 that still derive nothing — a route-scoped
        row is better evidence than an attributed route, and it is what the coverage report's 51
        `no administration route could be assembled` entries are asking for.
-    2. **Compose the grade CV into the emitted bands** (or land a real parameter-variability layer,
-       SC-1B) so a derived curve stops being a point estimate. Until then uncertainty-semantics is D
-       and no non-reviewer can be shown one.
+    2. ~~**Compose the grade CV into the emitted bands**~~ **(LANDED as a data-spread layer,
+       2026-10-07).** Owner decision: the band comes from the published spread, not from widening by
+       grade. Each input with a reported low and high becomes `triangular(low, median, high)`
+       (extrema bounds), so the median curve is unchanged and a Monte-Carlo run draws across the
+       values the sources report; an inferred `ka` takes the spread its Tmax range solves to, with
+       the half-life held at its median. An input with no usable spread stays `fixed(median)`.
+       Uncertainty-semantics is C ("plausible range") when every catalog input has a spread and D
+       otherwise; a defaulted F is exempt. On the 2026-10-07 snapshot, 79 of 163 routes reach C here,
+       and 8 models reach C overall (clonazepam, codeine, diazepam, fluoxetine, gabapentin,
+       lorazepam, methadone, paracetamol — all oral).
     3. ~~**Carry per-input provenance**~~ **(LANDED, 2026-10-07).** Generation records each input's
        source in `DerivedRouteGrade.inputSources`: `cited` with its citation ids when every entry the
        value pools names a citation, otherwise `uncited` with why (a hand-entered value, an uncited
@@ -780,8 +787,9 @@ drugs). A DB edit changes the next snapshot, never a curve already pinned.
        This does not lift any model's overall grade on its own: uncertainty-semantics (item 2) is
        still D everywhere, and completeness is D for the 138 routes whose drug records no
        model-structure axis at all.
-    4. Only then is extending §5.2 to the derived track a question worth asking — and only once 2
-       and 3 are closed, since its floor is C and a D clears nothing.
+    4. Extending §5.2 to the derived track is now a live question: 2 and 3 are closed, and the
+       models that reach C would be eligible under its four conditions. Until the owner extends it,
+       a derived C renders to editors and admins only.
 
 ## 8. Risks & non-goals
 

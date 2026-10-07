@@ -87,8 +87,10 @@ export type {
   RouteProvenance,
   DerivedModel,
 } from "./derive-model.js";
-export { assembleRouteParams } from "./assemble-model.js";
+export { assembleRouteParams, rangeIsUsable } from "./assemble-model.js";
 export type {
+  AssemblyRange,
+  AssemblyRanges,
   AssemblyValues,
   AssembleOptions,
   ModelAssembly,
