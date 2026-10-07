@@ -218,38 +218,65 @@ export async function listAdjudicatorCases(agentId: number, limit = 20) {
         eq(adjudicationCaseSeats.agentId, agentId),
       ),
     );
-  const openRows = await db
-    .select({
-      caseId: adjudicationCases.id,
-      targetType: adjudicationCases.targetType,
-      targetId: adjudicationCases.targetId,
-      targetVersion: adjudicationCases.targetVersion,
-      openedAt: adjudicationCases.openedAt,
-      t1Snapshot: adjudicationCases.t1Snapshot,
-      t2Snapshot: adjudicationCases.t2Snapshot,
-    })
-    .from(adjudicationCases)
-    .where(
-      and(
-        eq(adjudicationCases.state, 'open'),
-        notExists(mine),
-        sql`(select count(*) from (${seatCount}) as s) < 2`,
-      ),
-    )
-    .orderBy(asc(adjudicationCases.openedAt))
-    .limit(limit * 3);
-
+  // Conflicts are only known per case, in the application, so page through the
+  // queue oldest first until `limit` eligible cases are found: a limit applied
+  // before the filter would starve an adjudicator who conflicts with the head
+  // of the queue.
+  const pageSize = limit * 3;
+  // Each case's conflict check is a few queries, so the scan is bounded: an
+  // adjudicator conflicting with more than MAX_PAGES pages of the queue sees
+  // a short list rather than a request that outlives the function timeout.
+  const MAX_PAGES = 5;
   const available = [];
-  for (const row of openRows) {
-    if (available.length >= limit) break;
-    if ((await conflictedAgentIds(row)).has(agentId)) continue;
-    available.push({
-      caseId: row.caseId,
-      targetType: row.targetType,
-      targetId: row.targetId,
-      targetVersion: row.targetVersion,
-      openedAt: row.openedAt,
-    });
+  // Keyset, not offset: cases claimed or closed mid-read must not shift the
+  // next page past unvisited rows.
+  // openedAt travels as database text: a JS Date would truncate microseconds.
+  type QueueCursor = { openedAt: string; id: number };
+  let after = null as QueueCursor | null;
+  for (let page = 0; page < MAX_PAGES && available.length < limit; page++) {
+    const cursor: QueueCursor | null = after;
+    const openRows = await db
+      .select({
+        caseId: adjudicationCases.id,
+        targetType: adjudicationCases.targetType,
+        targetId: adjudicationCases.targetId,
+        targetVersion: adjudicationCases.targetVersion,
+        openedAt: adjudicationCases.openedAt,
+        openedAtCursor: sql<string>`${adjudicationCases.openedAt}::text`,
+        t1Snapshot: adjudicationCases.t1Snapshot,
+        t2Snapshot: adjudicationCases.t2Snapshot,
+      })
+      .from(adjudicationCases)
+      .where(
+        and(
+          eq(adjudicationCases.state, 'open'),
+          notExists(mine),
+          sql`(select count(*) from (${seatCount}) as s) < 2`,
+          cursor
+            ? sql`(${adjudicationCases.openedAt}, ${adjudicationCases.id}) > (${cursor.openedAt}::timestamptz, ${cursor.id})`
+            : sql`true`,
+        ),
+      )
+      .orderBy(asc(adjudicationCases.openedAt), asc(adjudicationCases.id))
+      .limit(pageSize);
+    // A page's checks are independent, so run them together.
+    const conflicted = await Promise.all(
+      openRows.map(async (row) => (await conflictedAgentIds(row)).has(agentId)),
+    );
+    for (const [i, row] of openRows.entries()) {
+      if (available.length >= limit) break;
+      if (conflicted[i]) continue;
+      available.push({
+        caseId: row.caseId,
+        targetType: row.targetType,
+        targetId: row.targetId,
+        targetVersion: row.targetVersion,
+        openedAt: row.openedAt,
+      });
+    }
+    const last = openRows[openRows.length - 1];
+    if (!last || openRows.length < pageSize) break;
+    after = { openedAt: last.openedAtCursor, id: last.caseId };
   }
   return { seated, available };
 }
