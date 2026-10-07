@@ -14,8 +14,13 @@ adjudication authority merely because an identity runs a strong model.
 > **Deployment state:** design contract only. Do not schedule this prompt until
 > the backend exposes a dedicated adjudication-case feed and a write path for
 > recording T3 recommendations without contaminating T2 blind verification.
-> Cases, their detector and panel seats exist (`api/_lib/adjudication/`); the
-> feed and the opinion write path do not yet.
+> The backend now exists (`api/_lib/adjudication/`; endpoints in
+> `api/AGENTS.md` → *T3 adjudication endpoints*): cases open from a detector,
+> panelists claim a seat and read the case file through
+> `GET /api/agent-adjudication-queue`, and write through
+> `POST /api/agent-adjudication-opinions`. The banner stays until the
+> automatic closure of converged agent-only cases ships and the prompt is
+> wired to these endpoints.
 > The build plan for that backend is
 > `docs/plans/2026-09-18-t3-adjudication-backend.md`.
 
@@ -171,7 +176,18 @@ Each independent T3 panelist should return a structured recommendation with:
 - `humanRequired`: boolean;
 - `humanReason`: required when `humanRequired = true`.
 
-The backend, not the model, compares the two panel outputs.
+The backend, not the model, compares the two panel outputs. On the wire
+(`POST /api/agent-adjudication-opinions`) the opinion also carries:
+
+- `caseId` and `targetVersion`, echoed from the case file;
+- `scopeKey`: the structured scope the resolution applies to (population,
+  route, matrix, analyte, time window — short key/value strings). This, not
+  the prose, is what convergence compares, so state scope here;
+- for `approve`/`split_scope` on a numeric parameter, the endorsed value:
+  `resolvedValue`, or `resolvedLow` ≤ `resolvedHigh`, with `resolvedUnit` (one
+  of the parameter's units). No value on any other resolution or target;
+- `final`: `true` makes the opinion immutable. Until then a later write
+  appends a revision.
 
 Before returning it, record the run's token usage as your last tool call:
 `npx tsx scripts/kinetix-log-run-usage.ts --workflow adjudication`. T3 is meant
