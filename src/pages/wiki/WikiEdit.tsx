@@ -13,6 +13,7 @@ import { fetchPendingEdits, updatePendingEdit } from '@/lib/pendingEditsApi';
 import { fetchDrugByWikiDrugId } from '@/lib/drugApi';
 import { useCan } from '@/lib/usePermissions';
 import type { TipTapDoc } from '@/lib/monographContent';
+import { isMonographTabId, sectionsForTab } from '@/lib/monographTabs';
 
 interface WikiPageData {
   id: number;
@@ -52,6 +53,11 @@ function WikiEditContent() {
   // delegated page submitter would otherwise land on fact controls backed by
   // an endpoint they don't hold, with no way to edit prose at all.
   const legacy = searchParams.get('legacy') === '1';
+  // Editing from a monograph tab opens only that tab's prose sections.
+  const tabParam = searchParams.get('tab');
+  const monographSectionIds = isMonographTabId(tabParam)
+    ? sectionsForTab(tabParam)
+    : undefined;
   const canSubmitWholePage = useCan('wiki.page.submit');
   const [page, setPage] = useState<WikiPageData | null>(null);
   // Internal drugs.id resolved from page.drugCid. wiki_pages.drug_cid is a
@@ -205,6 +211,11 @@ function WikiEditContent() {
       drugCid={resolvedDrugId ?? undefined}
       initialParentId={page.parentId ?? null}
       initialParentTitle={parentTitle}
+      monographSectionIds={
+        monographSectionIds && monographSectionIds.length > 0
+          ? monographSectionIds
+          : undefined
+      }
       onSave={async (title, content, editSummary, options, action) => {
         if (pendingEditId) {
           await updatePendingEdit(Number(pendingEditId), {
