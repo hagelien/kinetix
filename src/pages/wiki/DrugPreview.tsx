@@ -11,6 +11,8 @@ import { drugRowToComponent, fetchDrugById, type DrugRow } from '@/lib/drugApi';
 import { fetchDrugWikiPage } from '@/lib/wikiApi';
 import { formatGenericDrugName, resolveDrugName } from '@/lib/drugNames';
 import { activeLangCode } from '@/lib/useDrugName';
+import { DrugUnitScope } from '@/components/ui/DrugUnitScope';
+import { isEthanolDrug } from '@/lib/ethanolUnits';
 
 export function DrugPreview() {
   const { t, i18n } = useTranslation();
@@ -151,51 +153,53 @@ export function DrugPreview() {
   }
 
   return (
-    <div className="flex flex-col lg:flex-row gap-8">
-      <article className="flex-1 min-w-0 order-2 lg:order-1">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold">
-            {drugName ?? t('wiki.loading')}
-          </h1>
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-muted text-xs mt-2">
-            {t('wiki.drugMonograph')}
-          </span>
-          <DrugAnalyticalMethods drug={drugComponent} />
-          <DrugPmConcentrations
-            drugDbId={drugComponent?._dbId ?? null}
-            molecularWeight={drugComponent?.molecularWeight ?? null}
-          />
-        </div>
+    <DrugUnitScope isEthanol={isEthanolDrug(drugComponent)}>
+      <div className="flex flex-col lg:flex-row gap-8">
+        <article className="flex-1 min-w-0 order-2 lg:order-1">
+          <div className="mb-6">
+            <h1 className="text-3xl font-bold">
+              {drugName ?? t('wiki.loading')}
+            </h1>
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-muted text-xs mt-2">
+              {t('wiki.drugMonograph')}
+            </span>
+            <DrugAnalyticalMethods drug={drugComponent} />
+            <DrugPmConcentrations
+              drugDbId={drugComponent?._dbId ?? null}
+              molecularWeight={drugComponent?.molecularWeight ?? null}
+            />
+          </div>
 
-        <div className="border border-dashed border-border rounded-lg p-8 text-center">
-          <p className="text-muted-foreground mb-4">
-            {t('drugPreview.noMonographYet')}
-          </p>
-          {canEdit ? (
-            <button
-              onClick={handleCreate}
-              disabled={creating}
-              className="text-sm bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/90 disabled:opacity-50"
-            >
-              {creating
-                ? t('drugPreview.creating')
-                : t('drugPreview.createMonograph')}
-            </button>
-          ) : !isAuthenticated ? (
-            <Link
-              to="/login"
-              state={{ message: t('drugPreview.signInMessage') }}
-              className="text-sm text-primary hover:underline"
-            >
-              {t('drugPreview.signInToContribute')}
-            </Link>
-          ) : null}
-        </div>
-      </article>
+          <div className="border border-dashed border-border rounded-lg p-8 text-center">
+            <p className="text-muted-foreground mb-4">
+              {t('drugPreview.noMonographYet')}
+            </p>
+            {canEdit ? (
+              <button
+                onClick={handleCreate}
+                disabled={creating}
+                className="text-sm bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/90 disabled:opacity-50"
+              >
+                {creating
+                  ? t('drugPreview.creating')
+                  : t('drugPreview.createMonograph')}
+              </button>
+            ) : !isAuthenticated ? (
+              <Link
+                to="/login"
+                state={{ message: t('drugPreview.signInMessage') }}
+                className="text-sm text-primary hover:underline"
+              >
+                {t('drugPreview.signInToContribute')}
+              </Link>
+            ) : null}
+          </div>
+        </article>
 
-      <aside className="w-full lg:w-80 lg:shrink-0 order-1 lg:order-2">
-        <DrugMonographSidebar drugCid={cid} />
-      </aside>
-    </div>
+        <aside className="w-full lg:w-80 lg:shrink-0 order-1 lg:order-2">
+          <DrugMonographSidebar drugCid={cid} />
+        </aside>
+      </div>
+    </DrugUnitScope>
   );
 }

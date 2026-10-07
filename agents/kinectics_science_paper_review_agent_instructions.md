@@ -61,9 +61,11 @@ Use this hierarchy:
 2. **Legitimately free complete full text:** journal, PubMed Central, preprint server, institutional repository, or author-hosted manuscript.
 3. **No complete full text:** do not write a paper review. File `POST /api/pdf-requests?citationId=<id>` with a short reason and skip the review this cycle.
 
-A PubChem record URL is a public database entry, not a paper: read it with
-`node scripts/kinetix-fulltext.mjs pubchem <CID>` and never file a PDF request for it
-(see `agents/fulltext-acquisition.md` §0b).
+A public database record (PubChem, DrugBank, ChEMBL, ChemSpider, Guide to Pharmacology,
+LIPID MAPS) is not a paper: read it directly (PubChem with
+`node scripts/kinetix-fulltext.mjs pubchem <CID>`) and never file a PDF request for it. A URL
+that is only a site's front page is not a source: re-cite the claim to the specific source
+instead. See `agents/fulltext-acquisition.md` §0b–§0c.
 
 Do not use unauthorized access routes.
 

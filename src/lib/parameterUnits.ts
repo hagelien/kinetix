@@ -15,7 +15,9 @@ import {
 } from './drugParameters.js';
 import {
   convertConcentration,
+  convertToDisplayUnit,
   isConcentrationUnit,
+  isEthanolDisplayUnit,
   type ConcentrationUnit,
 } from './unitConversion.js';
 import { REFERENCE_UNITS } from './referenceConcentrations.js';
@@ -84,6 +86,28 @@ export function convertParameterValue(
 }
 
 /**
+ * {@link convertParameterValue} for DISPLAY: also converts a concentration into
+ * the ethanol display units (‰, %). Kept apart so pooling and canonicalisation
+ * never meet a unit that only exists on screen.
+ */
+export function convertParameterDisplayValue(
+  value: number,
+  from: string,
+  to: string,
+  molecularWeight?: number | null,
+): number | null {
+  if (from !== to && isEthanolDisplayUnit(to)) {
+    if (!isConcentrationUnit(from)) return null;
+    try {
+      return convertToDisplayUnit(value, from, to, molecularWeight ?? undefined);
+    } catch {
+      return null;
+    }
+  }
+  return convertParameterValue(value, from, to, molecularWeight);
+}
+
+/**
  * The family a unit can be pooled within — the answer to "would two values in
  * these units ever end up in one aggregate?".
  *
@@ -117,7 +141,7 @@ export function preferredDisplayUnit(
 ): string {
   const preferred = enabledUnits?.[0];
   if (!preferred || preferred === sourceUnit) return sourceUnit;
-  const probe = convertParameterValue(1, sourceUnit, preferred, molecularWeight);
+  const probe = convertParameterDisplayValue(1, sourceUnit, preferred, molecularWeight);
   return probe != null && Number.isFinite(probe) ? preferred : sourceUnit;
 }
 

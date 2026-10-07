@@ -85,6 +85,10 @@ describe('GET /api/pdf-requests and PubChem compound records', () => {
       'https://pubchem.ncbi.nlm.nih.gov/substance/12345',
     );
 
+    // Neither of these can take a PDF either.
+    await seedOpenRequest('https://go.drugbank.com/drugs/DB00820');
+    await seedOpenRequest('https://www.noklus.no');
+
     const list = await get('/api/pdf-requests');
     expect(list.statusCode).toBe(200);
     expect(

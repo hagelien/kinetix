@@ -5,6 +5,7 @@ import { AuthGuard } from './components/AuthGuard';
 import { ModeRedirect } from './components/modeling/ModeRedirect';
 import { useAuthStore } from './stores/authStore';
 import { useAppStore } from './stores/appStore';
+import { normalizeEthanolUnit } from './lib/ethanolUnits';
 
 const App = lazy(() => import('./App'));
 const PatternCasePage = lazy(() =>
@@ -196,6 +197,14 @@ export function AppRouter() {
       setEnabledUnits(enabledUnits as Parameters<typeof setEnabledUnits>[0]);
     }
   }, [enabledUnits, setEnabledUnits]);
+  // Ethanol's own display unit, mirrored the same way.
+  const ethanolUnit = useAuthStore(
+    (s) => s.user?.ethanolConcentrationUnit ?? null,
+  );
+  const setEthanolUnit = useAppStore((s) => s.setEthanolUnit);
+  useEffect(() => {
+    if (ethanolUnit) setEthanolUnit(normalizeEthanolUnit(ethanolUnit));
+  }, [ethanolUnit, setEthanolUnit]);
 
   // Reset of user-specific singleton stores on auth identity change is
   // wired in `src/stores/authStore.ts` via a module-level subscribe.
@@ -275,7 +284,11 @@ export function AppRouter() {
         <Route path="/wiki" element={withAuthRequired(<WikiLayout />)}>
           <Route index element={withRouteFallback(<WikiHome />)} />
           <Route path="new" element={withRouteFallback(<WikiNew />)} />
-          <Route path=":slug" element={withRouteFallback(<WikiPage />)} />
+          {/* `:tab` is a drug monograph's sub-page (pharmacokinetics,
+              postmortem, …). One optional-segment route, so moving between
+              tabs never remounts the page. Static siblings (`:slug/edit`,
+              `:slug/history`, `drug/…`, `entity/…`) outrank it. */}
+          <Route path=":slug/:tab?" element={withRouteFallback(<WikiPage />)} />
           <Route path=":slug/edit" element={withRouteFallback(<WikiEdit />)} />
           <Route
             path=":slug/history"

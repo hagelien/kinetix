@@ -81,6 +81,11 @@ export const users = pgTable('users', {
     .$type<string[]>()
     .notNull()
     .default(['µmol/L', 'mg/L']),
+  // Ethanol's own display unit: ‰ and % on top of the units above, since blood
+  // alcohol is read in per mille, not µmol/L. Display only. Defaults to ‰.
+  ethanolConcentrationUnit: varchar('ethanol_concentration_unit', { length: 16 })
+    .notNull()
+    .default('‰'),
   // Per-user favorite parameter ids (#321). These are the parameters
   // the user wants visible in the monograph sidebar's collapsed mode;
   // expanding the box reveals every parameter regardless. Order is
@@ -2650,7 +2655,7 @@ export type AdjudicationDivergenceReason =
   | 'unit_family_differs'
   | 'unit_not_convertible';
 
-/** The typed comparison of the two sealed opinions (0139). */
+/** The typed comparison of the two sealed opinions (0141). */
 export type AdjudicationConvergence = {
   converged: boolean;
   reason: AdjudicationDivergenceReason | null;
@@ -2661,7 +2666,7 @@ export type AdjudicationConvergence = {
   comparedAt: string;
 };
 
-/** What a converged panel recommends. A recommendation only (0139). */
+/** What a converged panel recommends. A recommendation only (0141). */
 export type AdjudicationRecommendation = {
   resolution: AdjudicationResolution;
   scopeKey: Record<string, string>;
@@ -2695,7 +2700,7 @@ export type AdjudicationHandoffOpinion = {
   finalizedAt: string;
 };
 
-/** The T4 package a person gets, so nobody reconstructs the appeal from logs (0139). */
+/** The T4 package a person gets, so nobody reconstructs the appeal from logs (0141). */
 export type AdjudicationHandoff = {
   caseId: number;
   targetType: string;
@@ -2765,19 +2770,19 @@ export const adjudicationCases = pgTable(
     invalidatedReason: text('invalidated_reason'),
     /** When the detector last re-checked this case; the sweep rotates on it. */
     lastCheckedAt: timestamp('last_checked_at'),
-    /** The typed comparison of the two sealed opinions (0139). */
+    /** The typed comparison of the two sealed opinions (0141). */
     convergence: jsonb('convergence').$type<AdjudicationConvergence>(),
-    /** What a converged panel recommends; a recommendation only (0139). */
+    /** What a converged panel recommends; a recommendation only (0141). */
     recommendation: jsonb('recommendation').$type<AdjudicationRecommendation>(),
-    /** A person must take the case (0139). */
+    /** A person must take the case (0141). */
     t4Required: boolean('t4_required').notNull().default(false),
-    /** The T4 package for that person (0139). */
+    /** The T4 package for that person (0141). */
     handoff: jsonb('handoff').$type<AdjudicationHandoff>(),
     /**
      * The target's source row as the panel adjudicated it, copied at sealing
      * under the source-row lock — for every sealed outcome, converged or
      * handed off — so later revisions of the live row cannot change the
-     * record of what was decided (0139).
+     * record of what was decided (0141).
      */
     adjudicatedTarget: jsonb('adjudicated_target').$type<Record<string, unknown>>(),
   },
@@ -3287,7 +3292,7 @@ export type NotificationType =
   | 'comment_in_thread'
   | 'contribution_endorsed'
   // A T3 panel left a case for a person: it diverged, a panelist asked for a
-  // human, or a person's dispute is part of it (0139).
+  // human, or a person's dispute is part of it (0141).
   | 'adjudication_handoff';
 
 export type NotificationAudience = 'author' | 'reviewer';
