@@ -1939,6 +1939,18 @@ export const createAgentSchema = z
      * flagship). See src/lib/modelTiers.ts and the consensus gate.
      */
     modelTier: z.enum(MODEL_TIERS).optional(),
+    /**
+     * T3 adjudication grant (agents.adjudicator). Lets a flagship-tier agent
+     * claim a seat on a T3 case; never grants `dispute.resolve`.
+     */
+    adjudicator: z.boolean().optional(),
+    /** Model family for the T3 panel-diversity audit (agents.model_family). */
+    modelFamily: z
+      .string()
+      .trim()
+      .min(1)
+      .max(40)
+      .regex(/^[a-z0-9][a-z0-9._-]*$/, 'lowercase letters, digits, ".", "_" or "-"').optional(),
   })
   .strict();
 
@@ -1969,6 +1981,19 @@ export const patchAgentSchema = z
      * high-risk consensus gate reads.
      */
     modelTier: z.enum(MODEL_TIERS).nullable().optional(),
+    /**
+     * T3 adjudication grant (agents.adjudicator). Admin-only; an agent cannot
+     * set it on itself. Lets a flagship-tier agent claim a seat on a T3 case
+     * and never grants `dispute.resolve`.
+     */
+    adjudicator: z.boolean().optional(),
+    /** Model family for the T3 panel-diversity audit; `null` clears it. */
+    modelFamily: z
+      .string()
+      .trim()
+      .min(1)
+      .max(40)
+      .regex(/^[a-z0-9][a-z0-9._-]*$/, 'lowercase letters, digits, ".", "_" or "-"').nullable().optional(),
   })
   .strict()
   .refine((v) => Object.keys(v).length > 0, {

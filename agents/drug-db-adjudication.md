@@ -14,6 +14,8 @@ adjudication authority merely because an identity runs a strong model.
 > **Deployment state:** design contract only. Do not schedule this prompt until
 > the backend exposes a dedicated adjudication-case feed and a write path for
 > recording T3 recommendations without contaminating T2 blind verification.
+> Cases, their detector and panel seats exist (`api/_lib/adjudication/`); the
+> feed and the opinion write path do not yet.
 > The build plan for that backend is
 > `docs/plans/2026-09-18-t3-adjudication-backend.md`.
 
