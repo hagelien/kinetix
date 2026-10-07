@@ -114,7 +114,7 @@ function snapshotDispute(d: DetectorDispute): AdjudicationDisputeSnapshot {
  * the closing act stays with a person (contract §1, §7).
  */
 export function disputeOriginOf(
-  openDisputes: readonly DetectorDispute[],
+  openDisputes: readonly { source: string }[],
 ): AdjudicationDisputeOrigin {
   const human = openDisputes.some((d) => d.source !== 'agent');
   const agent = openDisputes.some((d) => d.source === 'agent');

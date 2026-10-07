@@ -285,6 +285,92 @@ describe('T3 case detection', () => {
     expect(second.opened).toHaveLength(1);
   });
 
+  it('retires an unfinished case when its disagreement is withdrawn, and reopens it if it returns', async () => {
+    const s = await seedDisagreement();
+    await detectAdjudicationCase({ targetType: 'pending_edit', targetId: s.editId });
+    // The T1 agent withdraws in the control phase: its verdict becomes abstain.
+    await verdictOn(s.t1.agentId, s.editId, 'abstain', 'mid');
+    expect(
+      (await detectAdjudicationCase({ targetType: 'pending_edit', targetId: s.editId })).result,
+    ).toBe('retired');
+    let [kase] = await casesFor(s.editId);
+    expect([kase!.state, kase!.invalidatedReason]).toEqual(['invalidated', 'disagreement_withdrawn']);
+
+    // Another agent disputes the same version before anyone adjudicated it.
+    const other = await seedAgent('t1b', { tier: 'mid' });
+    await verdictOn(other.agentId, s.editId, 'dispute', 'mid', 'Feil enhet.');
+    expect(
+      (await detectAdjudicationCase({ targetType: 'pending_edit', targetId: s.editId })).result,
+    ).toBe('reopened');
+    const cases = await casesFor(s.editId);
+    expect(cases).toHaveLength(1);
+    [kase] = cases;
+    expect(kase!.state).toBe('open');
+    expect(kase!.t1Snapshot.verdicts.map((v) => [v.agentId, v.verdict])).toEqual([
+      [s.t1.agentId, 'abstain'],
+      [other.agentId, 'dispute'],
+    ]);
+  });
+
+  it('keeps a retired case closed once a panelist has written an opinion', async () => {
+    const s = await seedDisagreement();
+    const { caseId } = await detectAdjudicationCase({ targetType: 'pending_edit', targetId: s.editId });
+    const adj = await seedAgent('adj-a', { tier: 'flagship', adjudicator: true });
+    await claimAdjudicationSeat({ caseId: caseId!, agentId: adj.agentId });
+    await db.insert(adjudicationOpinions).values({
+      caseId: caseId!,
+      seat: 'a',
+      revisionNo: 1,
+      resolution: 'abstain',
+      proposition: 'P',
+      reasoningMd: 'R',
+      confidence: 'low',
+    });
+    await verdictOn(s.t1.agentId, s.editId, 'abstain', 'mid');
+    await detectAdjudicationCase({ targetType: 'pending_edit', targetId: s.editId });
+    await verdictOn(s.t1.agentId, s.editId, 'dispute', 'mid');
+    expect(
+      (await detectAdjudicationCase({ targetType: 'pending_edit', targetId: s.editId })).result,
+    ).toBe('terminal');
+  });
+
+  it('makes a live case a person’s once they dispute the same version', async () => {
+    const s = await seedDisagreement();
+    await detectAdjudicationCase({ targetType: 'pending_edit', targetId: s.editId });
+    const human = await seedUser(db, { email: 'h@example.com', username: 'h', role: 'contributor' });
+    await db.insert(disputes).values({
+      targetType: 'pending_edit',
+      targetId: s.editId,
+      createdBy: human,
+      source: 'human',
+      reasonMd: 'Feil populasjon.',
+      targetVersion: s.version,
+    });
+    expect(
+      (await detectAdjudicationCase({ targetType: 'pending_edit', targetId: s.editId })).result,
+    ).toBe('joined');
+    const [kase] = await casesFor(s.editId);
+    expect(kase!.disputeOrigin).toBe('human');
+    expect(kase!.t1Snapshot.openDisputes.map((d) => d.source)).toEqual(['human']);
+  });
+
+  it('leaves out a dispute raised against an earlier version', async () => {
+    const s = await seedDisagreement();
+    const human = await seedUser(db, { email: 'h@example.com', username: 'h', role: 'contributor' });
+    await db.insert(disputes).values({
+      targetType: 'pending_edit',
+      targetId: s.editId,
+      createdBy: human,
+      source: 'human',
+      reasonMd: 'Om den gamle teksten.',
+      targetVersion: '2020-01-01T00:00:00.000Z|pending',
+    });
+    await detectAdjudicationCase({ targetType: 'pending_edit', targetId: s.editId });
+    const [kase] = await casesFor(s.editId);
+    expect(kase!.disputeOrigin).toBe('agent');
+    expect(kase!.t1Snapshot.openDisputes).toEqual([]);
+  });
+
   it('opens the case at verdict time when the T2 approval lands through the API', async () => {
     const author = await seedAgent('author', { tier: 'mid' });
     const t1 = await seedAgent('t1', { tier: 'mid' });
@@ -322,6 +408,46 @@ describe('T3 case detection', () => {
 
     const [kase] = await casesFor(edit.editId);
     expect(kase).toMatchObject({ state: 'open', triggers: ['t1_t2_disagreement'] });
+  });
+});
+
+describe('T3 detector sweep', () => {
+  it('rotates through live cases instead of re-reading the oldest ones', async () => {
+    const author = await seedAgent('author', { tier: 'mid' });
+    const t1 = await seedAgent('t1', { tier: 'mid' });
+    const t2 = await seedAgent('t2', { tier: 'flagship' });
+    const edits = [];
+    for (let i = 0; i < 4; i++) {
+      const e = await seedEdit(author.userId);
+      await verdictOn(t1.agentId, e.editId, 'dispute', 'mid');
+      await verdictOn(t2.agentId, e.editId, 'approve', 'flagship');
+      await detectAdjudicationCase({ targetType: 'pending_edit', targetId: e.editId });
+      edits.push(e);
+    }
+    // Every target moves; nobody verdicts again, so only the live window
+    // can notice. A window of one must still reach all four.
+    for (const e of edits) {
+      await db
+        .update(pendingEdits)
+        .set({ status: 'returned' })
+        .where(eq(pendingEdits.id, e.editId));
+    }
+    let invalidated = 0;
+    for (let i = 0; i < 4; i++) invalidated += (await sweepAdjudicationCases(1)).invalidated;
+    expect(invalidated).toBe(4);
+  });
+
+  it('skips a target with no new activity since it was checked', async () => {
+    const s = await seedDisagreement();
+    expect((await sweepAdjudicationCases()).checked).toBe(1);
+    // Checked once (and its case is live, so the live window still sees it),
+    // but the candidate window does not keep re-reading it.
+    await db.update(adjudicationCases).set({ state: 'converged' });
+    expect((await sweepAdjudicationCases()).checked).toBe(0);
+    // New activity brings it back.
+    const late = await seedAgent('late', { tier: 'mid' });
+    await verdictOn(late.agentId, s.editId, 'dispute', 'mid');
+    expect((await sweepAdjudicationCases()).checked).toBe(1);
   });
 });
 
@@ -392,6 +518,36 @@ describe('T3 panel seats', () => {
       .set({ adjudicator: true })
       .where(eq(agents.id, s.t2.agentId));
     expect(await claimAdjudicationSeat({ caseId: s.caseId, agentId: s.t2.agentId })).toEqual({
+      ok: false,
+      reason: 'conflicted',
+    });
+  });
+
+  it('refuses the agent behind a dispute the case rests on, verdict or not', async () => {
+    const s = await openCase();
+    const disputer = await seedAgent('disputer', { tier: 'flagship', adjudicator: true });
+    await db.insert(disputes).values({
+      targetType: 'pending_edit',
+      targetId: s.editId,
+      createdBy: disputer.userId,
+      source: 'agent',
+      reasonMd: 'Direkte innsigelse.',
+      targetVersion: s.version,
+    });
+    await detectAdjudicationCase({ targetType: 'pending_edit', targetId: s.editId });
+    expect(await claimAdjudicationSeat({ caseId: s.caseId, agentId: disputer.agentId })).toEqual({
+      ok: false,
+      reason: 'conflicted',
+    });
+  });
+
+  it('refuses the agent that authored the target', async () => {
+    const s = await openCase();
+    await db
+      .update(agents)
+      .set({ adjudicator: true, modelTier: 'flagship' })
+      .where(eq(agents.id, s.author.agentId));
+    expect(await claimAdjudicationSeat({ caseId: s.caseId, agentId: s.author.agentId })).toEqual({
       ok: false,
       reason: 'conflicted',
     });

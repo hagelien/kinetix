@@ -48,7 +48,21 @@ person). The work lands in three pull requests:
      records the count as a lower bound;
    - `competing_scope` and `human_request` are typed but never produced: they
      still have no persisted input (issue 1280);
-   - an agent whose verdict a case rests on cannot take a seat on it;
+   - no agent with a part in the case takes a seat: neither one whose verdict
+     it rests on, nor the identity behind a dispute it rests on (a dispute
+     can be raised without a verdict), nor the target's author;
+   - a case binds only the disputes raised against its own version (a legacy
+     dispute with no recorded version is kept), and a person's dispute that
+     appears after a case opened makes it theirs: the origin is recomputed
+     over every dispute the case has seen and never narrows back to `agent`;
+   - an `open` case whose disagreement goes away on the same version (a
+     control-phase withdrawal) retires as `disagreement_withdrawn`; if the
+     disagreement returns before any opinion was written, the same case
+     reopens on a fresh cut — this is the one exception to "never reopen",
+     because nothing about that version was ever decided;
+   - the sweep rotates: live cases least recently checked first, and
+     candidate targets only when their verdict/dispute activity is newer than
+     the last check (`adjudication_detector_checks`);
    - opinions are append-only at the database: a trigger refuses every UPDATE
      and DELETE on `adjudication_opinions`.
 2. **Steps 4–6**: the case feed, the opinion write path, sealing, typed
