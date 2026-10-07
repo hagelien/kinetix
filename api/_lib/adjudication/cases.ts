@@ -617,6 +617,8 @@ export async function claimAdjudicationSeat(args: {
         state: adjudicationCases.state,
         t1Snapshot: adjudicationCases.t1Snapshot,
         t2Snapshot: adjudicationCases.t2Snapshot,
+        triggers: adjudicationCases.triggers,
+        triggerDetail: adjudicationCases.triggerDetail,
         adjudicatedTarget: adjudicationCases.adjudicatedTarget,
       })
       .from(adjudicationCases)

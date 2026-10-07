@@ -141,6 +141,8 @@ function refuse(
 async function checkValueShape(
   input: OpinionInput,
   target: { targetType: string; targetId: number },
+  /** The molecular weight the panel is bound to (./snapshot.ts), for the bounds. */
+  molecularWeight: number | null,
 ): Promise<OpinionWriteResult | null> {
   const hasScalar = input.resolvedValue != null;
   const hasRange = input.resolvedLow != null || input.resolvedHigh != null;
@@ -197,8 +199,7 @@ async function checkValueShape(
     // Bounds are stated in the canonical unit; an unconvertible value keeps
     // the raw check, as on the entry write path.
     const canonical =
-      convertParameterValue(raw, input.resolvedUnit, spec.canonicalUnit, parameter.molecularWeight) ??
-      raw;
+      convertParameterValue(raw, input.resolvedUnit, spec.canonicalUnit, molecularWeight) ?? raw;
     if (canonical < spec.bounds.min || canonical > spec.bounds.max) {
       return refuse(
         400,
@@ -228,9 +229,6 @@ export async function submitAdjudicationOpinion(args: {
     .from(adjudicationCases)
     .where(eq(adjudicationCases.id, input.caseId));
   if (!peek) return refuse(404, 'case_not_found', 'No such case');
-
-  const shapeError = await checkValueShape(input, peek);
-  if (shapeError) return shapeError;
 
   return inTransaction(async () => {
     const tx = getDb();
@@ -303,6 +301,14 @@ export async function submitAdjudicationOpinion(args: {
     const bound = await bindPanelTarget(kase, { agentId: agent.id, agentUserId: agent.userId });
     if (!bound.ok) return refuse(409, bound.reason, PANEL_TARGET_REFUSALS[bound.reason]);
     if (seat.sealedAt) return refuse(409, 'seat_final', 'Your opinion on this case is final');
+    // Checked under the locks against the basis the panel is bound to, so the
+    // bounds convert with the same molecular weight the seal compares with.
+    const shapeError = await checkValueShape(
+      input,
+      kase,
+      bound.snapshot.comparison.molecularWeight,
+    );
+    if (shapeError) return shapeError;
 
     const [previous] = await tx
       .select({ id: adjudicationOpinions.id, revisionNo: adjudicationOpinions.revisionNo })

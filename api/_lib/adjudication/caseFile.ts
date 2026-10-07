@@ -119,9 +119,15 @@ export async function buildCaseFile(caseId: number, viewer: CaseFileViewer) {
       targetType: kase.targetType,
       targetId: kase.targetId,
       targetVersion: kase.targetVersion,
-      triggers: kase.triggers,
-      triggerDetail: kase.triggerDetail,
-      disputeOrigin: kase.disputeOrigin,
+      // A panelist reads the context the panel was bound to; a person, the
+      // case as it now stands.
+      ...(viewer.kind === 'panelist' && kase.adjudicatedTarget
+        ? kase.adjudicatedTarget.context
+        : {
+            triggers: kase.triggers,
+            triggerDetail: kase.triggerDetail,
+            disputeOrigin: kase.disputeOrigin,
+          }),
       state: kase.state,
       openedAt: kase.openedAt,
       sealedAt: kase.sealedAt,

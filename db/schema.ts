@@ -2728,6 +2728,12 @@ export type AdjudicatedTarget = {
     t1Verdicts: AdjudicationVerdictSnapshot[];
     openDisputes: AdjudicationDisputeSnapshot[];
   };
+  /** Why the case opened and whose objection it rests on, as served to the panel. */
+  context: {
+    triggers: AdjudicationTrigger[];
+    triggerDetail: Record<string, unknown>;
+    disputeOrigin: AdjudicationDisputeOrigin;
+  };
 };
 
 export type AdjudicationDecidedDispute = {
