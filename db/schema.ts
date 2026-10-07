@@ -2684,6 +2684,7 @@ export type AdjudicationHandoffOpinion = {
   seat: AdjudicationSeat;
   agentId: number;
   adjudicatorTier: string | null;
+  adjudicatorFamily: string | null;
   model: string | null;
   resolution: AdjudicationResolution;
   proposition: string;
@@ -2912,6 +2913,11 @@ export const adjudicationOpinions = pgTable(
     supersedesOpinionId: integer('supersedes_opinion_id'),
     /** agents.model_tier at write time. */
     adjudicatorTier: varchar('adjudicator_tier', { length: 20 }),
+    /**
+     * agents.model_family at write time (0141), so the panel's family
+     * diversity is recorded as the panel was, whatever the grant says later.
+     */
+    adjudicatorFamily: varchar('adjudicator_family', { length: 40 }),
     /** Self-reported, audit only. */
     model: varchar('model', { length: 80 }),
     resolution: varchar('resolution', { length: 20 })

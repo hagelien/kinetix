@@ -26,6 +26,10 @@ ALTER TABLE "adjudication_cases"
 ALTER TABLE "adjudication_cases"
   ADD COLUMN IF NOT EXISTS "t4_required" boolean DEFAULT false NOT NULL;--> statement-breakpoint
 ALTER TABLE "adjudication_cases"
-  ADD COLUMN IF NOT EXISTS "handoff" jsonb;;--> statement-breakpoint
+  ADD COLUMN IF NOT EXISTS "handoff" jsonb;--> statement-breakpoint
 ALTER TABLE "adjudication_cases"
-  ADD COLUMN IF NOT EXISTS "adjudicated_target" jsonb;
+  ADD COLUMN IF NOT EXISTS "adjudicated_target" jsonb;--> statement-breakpoint
+-- The adjudicator's model family at write time, beside its tier: the panel's
+-- family diversity is derived from what the seats were when they wrote.
+ALTER TABLE "adjudication_opinions"
+  ADD COLUMN IF NOT EXISTS "adjudicator_family" varchar(40);

@@ -257,7 +257,12 @@ export async function submitAdjudicationOpinion(args: {
     // Authority at write time, not at claim time: a grant or tier revoked
     // since the claim stops the write.
     const [agent] = await tx
-      .select({ id: agents.id, userId: agents.userId, modelTier: agents.modelTier })
+      .select({
+        id: agents.id,
+        userId: agents.userId,
+        modelTier: agents.modelTier,
+        modelFamily: agents.modelFamily,
+      })
       .from(agents)
       .innerJoin(users, eq(users.id, agents.userId))
       .where(
@@ -341,6 +346,7 @@ export async function submitAdjudicationOpinion(args: {
         revisionNo: (previous?.revisionNo ?? 0) + 1,
         supersedesOpinionId: previous?.id ?? null,
         adjudicatorTier: agent.modelTier,
+        adjudicatorFamily: agent.modelFamily,
         model: input.model ?? null,
         resolution: input.resolution,
         proposition: input.proposition,
@@ -389,7 +395,8 @@ async function finalOpinions(caseId: number) {
       id: adjudicationOpinions.id,
       seat: adjudicationOpinions.seat,
       agentId: adjudicationCaseSeats.agentId,
-      modelFamily: agents.modelFamily,
+      // The family the seat had when it finalized, never the live grant.
+      modelFamily: adjudicationOpinions.adjudicatorFamily,
       adjudicatorTier: adjudicationOpinions.adjudicatorTier,
       model: adjudicationOpinions.model,
       resolution: adjudicationOpinions.resolution,
@@ -429,6 +436,7 @@ function handoffOpinion(o: FinalOpinion): AdjudicationHandoffOpinion {
     seat: o.seat,
     agentId: o.agentId,
     adjudicatorTier: o.adjudicatorTier,
+    adjudicatorFamily: o.modelFamily,
     model: o.model,
     resolution: o.resolution,
     proposition: o.proposition,

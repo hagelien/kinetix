@@ -830,6 +830,27 @@ describe('T3 sealing, convergence and the T4 handoff', () => {
     }
   });
 
+  it('records the panel’s family diversity as the seats were when they wrote', async () => {
+    const s = await seedCase();
+    await claim(s.a.userId, s.caseId);
+    await claim(s.b.userId, s.caseId);
+    const value = { resolvedValue: 60, resolvedUnit: 'L/h' };
+    await opinion(s.a.userId, { caseId: s.caseId, targetVersion: s.version, ...value });
+    // An admin relabels seat A's family after it finalized.
+    await db.update(agents).set({ modelFamily: 'gpt' }).where(eq(agents.id, s.a.agentId));
+    await opinion(s.b.userId, { caseId: s.caseId, targetVersion: s.version, ...value });
+    const [kase] = await db.select().from(adjudicationCases).where(eq(adjudicationCases.id, s.caseId));
+    expect(kase!.panelFamilyDiversity).toBe('distinct');
+    const families = await db
+      .select({ seat: adjudicationOpinions.seat, family: adjudicationOpinions.adjudicatorFamily })
+      .from(adjudicationOpinions)
+      .where(eq(adjudicationOpinions.caseId, s.caseId));
+    expect(families.sort((x, y) => x.seat.localeCompare(y.seat))).toEqual([
+      { seat: 'a', family: 'claude' },
+      { seat: 'b', family: 'gpt' },
+    ]);
+  });
+
   it('sends a case to a person when a panelist asks for one, even on agreement', async () => {
     const s = await seedCase();
     const why = { resolution: 'human', humanReason: 'Needs a clinical policy call.' };
