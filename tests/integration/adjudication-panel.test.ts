@@ -1030,6 +1030,20 @@ describe('T3 automatic closure of converged agent-only cases', () => {
     expect(disputeRows.every((d) => d.status === 'open')).toBe(true);
   });
 
+  it('hands the case to a person when a bound agent dispute was restated after binding', async () => {
+    const s = await seedCase({ agentDispute: true });
+    await claim(s.a.userId, s.caseId);
+    // Same row, new objection: the panel was served the old text.
+    await db
+      .update(disputes)
+      .set({ reasonMd: 'Ny begrunnelse ingen i panelet har sett.', evidenceRefs: [{ citationId: 9 }] })
+      .where(eq(disputes.targetId, s.editId));
+    const value = { resolvedValue: 60, resolvedUnit: 'L/h' };
+    const { kase, disputeRows } = await decide(s, value, value);
+    expect(kase.closure).toMatchObject({ action: 'declined', declined: 'unseen_dispute' });
+    expect(disputeRows.every((d) => d.status === 'open')).toBe(true);
+  });
+
   it('hands the case to a person when an agent dispute verdict has no row to close', async () => {
     // T1's dispute verdict stands with no mirrored disputes row, as one
     // recorded before the dispute table did.

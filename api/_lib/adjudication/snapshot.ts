@@ -87,7 +87,7 @@ export async function decidedDisputesOn(
 }
 
 /** Key-order-independent JSON, as the value round-trips through jsonb. */
-function canonicalJson(value: unknown): string {
+export function canonicalJson(value: unknown): string {
   const normalised = JSON.parse(JSON.stringify(value ?? null)) as unknown;
   const walk = (v: unknown): unknown => {
     if (Array.isArray(v)) return v.map(walk);

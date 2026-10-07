@@ -46,6 +46,7 @@ import { disputeTargetUrl } from '../agent-verifications.js';
 import { convertParameterValue } from '../../../src/lib/parameterUnits.js';
 import { isModelStructureParameter } from '../../../src/lib/drugParameters.js';
 import { sameNumber } from './convergence.js';
+import { canonicalJson } from './snapshot.js';
 
 /** Resolutions that mean "the proposition stands; the objection was wrong". */
 const OVERRULING = new Set(['approve']);
@@ -59,8 +60,11 @@ type NumericClaim = {
   unit: string | null;
 };
 
-const num = (v: unknown): number | null =>
-  typeof v === 'number' && Number.isFinite(v) ? v : null;
+/** A number, or a numeric string as a Postgres `numeric` column reads back (#108). */
+const num = (v: unknown): number | null => {
+  const n = typeof v === 'string' && v.trim() !== '' ? Number(v) : v;
+  return typeof n === 'number' && Number.isFinite(n) ? n : null;
+};
 
 /**
  * The numbers the proposal itself asserts, read off the packet the panel was
@@ -202,7 +206,12 @@ export async function closeConvergedAgentCase(args: {
   // with no recorded version is kept, as the detector keeps it). Never a
   // person's.
   const open = await db
-    .select({ id: disputes.id, targetVersion: disputes.targetVersion })
+    .select({
+      id: disputes.id,
+      targetVersion: disputes.targetVersion,
+      reasonMd: disputes.reasonMd,
+      evidenceRefs: disputes.evidenceRefs,
+    })
     .from(disputes)
     .where(
       and(
@@ -228,14 +237,24 @@ export async function closeConvergedAgentCase(args: {
     },
     retryConsensusFor: null,
   });
-  // Only the objections the panel was served: one opened after the binding
-  // reached neither seat, so the panel's agreement says nothing about it.
-  const bound = new Set(
+  // Only the objections the panel was served, as it was served them: one
+  // opened after the binding — or restated since, which keeps its row and
+  // replaces its text and evidence — reached neither seat, so the panel's
+  // agreement says nothing about it.
+  const bound = new Map(
     (args.bound?.lowerTier.openDisputes ?? [])
       .filter((d) => d.source === 'agent')
-      .map((d) => d.disputeId),
+      .map((d) => [d.disputeId, d] as const),
   );
-  if (onVersion.some((d) => !bound.has(d.id))) return declineWith('unseen_dispute');
+  const asServed = (d: (typeof onVersion)[number]) => {
+    const seen = bound.get(d.id);
+    return (
+      seen !== undefined &&
+      seen.reasonMd === d.reasonMd &&
+      canonicalJson(seen.evidenceRefs ?? []) === canonicalJson(d.evidenceRefs ?? [])
+    );
+  };
+  if (!onVersion.every(asServed)) return declineWith('unseen_dispute');
   const ids = onVersion.map((d) => d.id);
   if (ids.length === 0) {
     // Nothing to close — unless an agent's dispute verdict still stands with
