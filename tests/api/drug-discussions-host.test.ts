@@ -162,6 +162,34 @@ describe('/api/drug-discussions host validation', () => {
     }
   });
 
+  it('rejects a new comment on a drug without a parameter or fact target', async () => {
+    getUserFromRequestMock.mockResolvedValue({
+      userId: 7,
+      role: 'contributor',
+    });
+    const chain = mockInsertDb({ id: 2, drugId: 9, wikiPageId: null });
+    const { res, state } = createResponse();
+    await handler(createRequest('drugId=9', 'POST'), res);
+    expect(state.statusCode).toBe(400);
+    expect(chain.values).not.toHaveBeenCalled();
+  });
+
+  it('still lists the retired whole-monograph thread', async () => {
+    mockSelectDb([]);
+    const { res, state } = createResponse();
+    await handler(createRequest('drugId=9'), res);
+    expect(state.statusCode).toBe(200);
+  });
+
+  it('reads the retired thread only without a parameter key, never as parameter=null', async () => {
+    // Agents fetch a legacy comment's thread from `event.parameter`, which is
+    // null for it: the key must be omitted, as a literal "null" is refused.
+    mockSelectDb([]);
+    const { res, state } = createResponse();
+    await handler(createRequest('drugId=9&parameter=null'), res);
+    expect(state.statusCode).toBe(400);
+  });
+
   it('rejects a wikiPageId thread without a fact parameter', async () => {
     const { res, state } = createResponse();
     await handler(createRequest('wikiPageId=5'), res);

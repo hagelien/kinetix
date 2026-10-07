@@ -2128,7 +2128,8 @@
     }
   },
   "siteNotice": {
-    "underDevelopment": "Kinetix is under active development. Errors and omissions may occur."
+    "underDevelopment": "Kinetix is under active development. Errors and omissions may occur.",
+    "beta": "Beta"
   },
   "entities": {
     "title": "Biological entities",
@@ -2610,6 +2611,13 @@
     "analyticsDetection": "Analytics & detection",
     "postmortem": "Postmortem"
   },
+  "monographTabs": {
+    "navLabel": "{{drug}} monograph",
+    "parametersLabel": "Parameters",
+    "noParameters": "No parameter values recorded for this topic yet.",
+    "noText": "No text on this topic yet.",
+    "editTabText": "Edit the {{tab}} text"
+  },
   "agentFocus": {
     "title": "Agent focus",
     "description": "Choose what the scheduled maintenance agents focus on each cycle. This narrows their automatic work queue; manual priority flags still take precedence.",
@@ -2873,14 +2881,9 @@
     "pendingCount": "{{count}} pending",
     "pendingReview": "Pending review",
     "close": "Close",
-    "favorites": "Favorites",
-    "favoriteParam": "Add to favorites",
-    "unfavoriteParam": "Remove from favorites",
     "compareParam": "Add to comparison",
-    "favoriteUpdateFailed": "Couldn't save favorites — please retry.",
     "showAllParameters": "Show all parameters",
     "showFavoritesOnly": "Show favorites only",
-    "noFavoritesOnDrug": "None of your favorite parameters are recorded for this drug yet.",
     "metabolism": "Metabolism",
     "metabolismFate": "Metabolic fate",
     "metabolismExcretedUnchanged": "Excreted unchanged",
@@ -3707,7 +3710,6 @@
     "failed": "Failed to delete drug"
   },
   "discussion": {
-    "monographTitle": "Discussion",
     "parameterHeading": "{{parameter}} — discussion",
     "factTitle": "Fact discussion",
     "factAction": "Discuss",
