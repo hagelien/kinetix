@@ -2128,7 +2128,8 @@
     }
   },
   "siteNotice": {
-    "underDevelopment": "Kinetix er under aktiv utvikling. Feil og mangler kan forekomme."
+    "underDevelopment": "Kinetix er under aktiv utvikling. Feil og mangler kan forekomme.",
+    "beta": "Beta"
   },
   "entities": {
     "title": "Biologiske entiteter",
@@ -2610,6 +2611,13 @@
     "analyticsDetection": "Analyse og deteksjon",
     "postmortem": "Postmortalt"
   },
+  "monographTabs": {
+    "navLabel": "Monografi for {{drug}}",
+    "parametersLabel": "Parametre",
+    "noParameters": "Ingen parameterverdier registrert for dette temaet ennå.",
+    "noText": "Ingen tekst om dette temaet ennå.",
+    "editTabText": "Rediger tekst: {{tab}}"
+  },
   "agentFocus": {
     "title": "Agentfokus",
     "description": "Velg hva de planlagte vedlikeholdsagentene skal fokusere på hver syklus. Dette avgrenser den automatiske arbeidskøen deres; manuelle prioriteringsflagg har fortsatt forrang.",
@@ -2873,14 +2881,9 @@
     "pendingCount": "{{count}} venter",
     "pendingReview": "Venter på gjennomgang",
     "close": "Lukk",
-    "favorites": "Favoritter",
-    "favoriteParam": "Legg til i favoritter",
-    "unfavoriteParam": "Fjern fra favoritter",
     "compareParam": "Legg til i sammenligning",
-    "favoriteUpdateFailed": "Kunne ikke lagre favoritter — prøv igjen.",
     "showAllParameters": "Vis alle parametere",
     "showFavoritesOnly": "Vis kun favoritter",
-    "noFavoritesOnDrug": "Ingen av favorittparametrene dine er registrert for dette legemidlet ennå.",
     "metabolism": "Metabolisme",
     "metabolismFate": "Metabolsk skjebne",
     "metabolismExcretedUnchanged": "Utskilt uendret",
@@ -3707,7 +3710,6 @@
     "failed": "Kunne ikke slette legemiddel"
   },
   "discussion": {
-    "monographTitle": "Diskusjon",
     "parameterHeading": "{{parameter}} — diskusjon",
     "factTitle": "Faktadiskusjon",
     "factAction": "Diskuter",

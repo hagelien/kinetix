@@ -42,6 +42,7 @@ import {
   MonographSectionsEditor,
   type MonographSectionsEditorHandle,
 } from "./MonographSectionsEditor";
+import type { MonographSectionId } from "@/lib/monographSections";
 import "@/styles/wiki-prose.css";
 
 /**
@@ -108,6 +109,12 @@ interface WikiEditorProps {
    * so the kinetix + PubChem lookups run immediately for it.
    */
   initialSearchQuery?: string;
+  /**
+   * Monograph sections to show in the section editor — the prose of the tab
+   * the author came from. Omitted, every section is shown. Hidden sections
+   * keep their content and are saved unchanged.
+   */
+  monographSectionIds?: readonly MonographSectionId[];
   onSave: (
     title: string,
     content: unknown,
@@ -130,6 +137,7 @@ export function WikiEditor({
   initialParentTitle = null,
   initialNewDrug,
   initialSearchQuery = "",
+  monographSectionIds,
   onSave,
   onCancel,
 }: WikiEditorProps) {
@@ -1161,6 +1169,7 @@ export function WikiEditor({
                   onActiveReferenceChange={setActiveReferenceId}
                   pageId={pageId ?? null}
                   drugId={selectedDrugCid ?? drugCid ?? null}
+                  visibleSectionIds={monographSectionIds}
                 />
               </div>
             ) : (
