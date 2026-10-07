@@ -1,6 +1,7 @@
 import {
   Children,
   Fragment,
+  useEffect,
   useId,
   useLayoutEffect,
   useRef,
@@ -40,7 +41,8 @@ interface UnitTooltipProps {
   /**
    * Whether the trigger takes keyboard focus (default true). Pass `false` when
    * the tooltip sits inside another interactive element, such as a button, so
-   * that element is the only tab stop.
+   * that element is the only tab stop. The nearest such ancestor then opens
+   * and is described by the panel on keyboard focus.
    */
   focusable?: boolean;
   /** Optional className applied to the wrapping span. */
@@ -133,7 +135,9 @@ export function UnitTooltip({
   // Shared grace hook: spreading `hoverProps` on both the trigger wrapper and
   // the popover keeps it open while the pointer travels into it (the deferred
   // close bridges the gap between the trigger and the offset panel).
-  const { open, hoverProps } = useHoverGrace();
+  const { open, hoverProps, show } = useHoverGrace();
+  const onBlurRef = useRef(hoverProps.onBlur);
+  onBlurRef.current = hoverProps.onBlur;
   const [position, setPosition] = useState<{
     left: number;
     top: number;
@@ -209,6 +213,34 @@ export function UnitTooltip({
       window.removeEventListener('resize', place);
     };
   }, [open, alternatives.length]);
+
+  /**
+   * A non-focusable trigger sits inside another interactive element (a button)
+   * that is the real tab stop. Focus on that ancestor never reaches the
+   * descendant trigger, so the ancestor itself opens and describes the panel.
+   */
+  const hasAlternatives = alternatives.length > 0;
+  useEffect(() => {
+    if (focusable || !hasAlternatives) return;
+    const host = triggerRef.current?.closest<HTMLElement>(
+      'button, a[href], [role="button"]',
+    );
+    if (!host) return;
+    const previous = host.getAttribute('aria-describedby');
+    host.setAttribute(
+      'aria-describedby',
+      previous ? `${previous} ${tooltipId}` : tooltipId,
+    );
+    const onFocusOut = () => onBlurRef.current();
+    host.addEventListener('focusin', show);
+    host.addEventListener('focusout', onFocusOut);
+    return () => {
+      host.removeEventListener('focusin', show);
+      host.removeEventListener('focusout', onFocusOut);
+      if (previous) host.setAttribute('aria-describedby', previous);
+      else host.removeAttribute('aria-describedby');
+    };
+  }, [focusable, hasAlternatives, tooltipId, show]);
 
   if (alternatives.length === 0) {
     return <span className={className}>{children}</span>;
