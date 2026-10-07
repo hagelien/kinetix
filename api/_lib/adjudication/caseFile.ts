@@ -226,11 +226,9 @@ export async function listAdjudicatorCases(agentId: number, limit = 20) {
   const available = [];
   // Keyset, not offset: cases claimed or closed mid-read must not shift the
   // next page past unvisited rows.
-  type QueueCursor = { openedAt: Date; id: number };
+  // openedAt travels as database text: a JS Date would truncate microseconds.
+  type QueueCursor = { openedAt: string; id: number };
   let after = null as QueueCursor | null;
-  // The cursor's timestamp is a millisecond Date over a microsecond column, so
-  // the boundary row can come back once more; never offer a case twice.
-  const seen = new Set<number>();
   while (available.length < limit) {
     const cursor: QueueCursor | null = after;
     const openRows = await db
@@ -240,6 +238,7 @@ export async function listAdjudicatorCases(agentId: number, limit = 20) {
         targetId: adjudicationCases.targetId,
         targetVersion: adjudicationCases.targetVersion,
         openedAt: adjudicationCases.openedAt,
+        openedAtCursor: sql<string>`${adjudicationCases.openedAt}::text`,
         t1Snapshot: adjudicationCases.t1Snapshot,
         t2Snapshot: adjudicationCases.t2Snapshot,
       })
@@ -250,7 +249,7 @@ export async function listAdjudicatorCases(agentId: number, limit = 20) {
           notExists(mine),
           sql`(select count(*) from (${seatCount}) as s) < 2`,
           cursor
-            ? sql`(${adjudicationCases.openedAt}, ${adjudicationCases.id}) > (${cursor.openedAt.toISOString()}::timestamptz, ${cursor.id})`
+            ? sql`(${adjudicationCases.openedAt}, ${adjudicationCases.id}) > (${cursor.openedAt}::timestamptz, ${cursor.id})`
             : sql`true`,
         ),
       )
@@ -258,8 +257,6 @@ export async function listAdjudicatorCases(agentId: number, limit = 20) {
       .limit(pageSize);
     for (const row of openRows) {
       if (available.length >= limit) break;
-      if (seen.has(row.caseId)) continue;
-      seen.add(row.caseId);
       if ((await conflictedAgentIds(row)).has(agentId)) continue;
       available.push({
         caseId: row.caseId,
@@ -271,7 +268,7 @@ export async function listAdjudicatorCases(agentId: number, limit = 20) {
     }
     const last = openRows[openRows.length - 1];
     if (!last || openRows.length < pageSize) break;
-    after = { openedAt: last.openedAt, id: last.caseId };
+    after = { openedAt: last.openedAtCursor, id: last.caseId };
   }
   return { seated, available };
 }
