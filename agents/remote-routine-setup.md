@@ -169,10 +169,10 @@ jobs**.
 The model is chosen on the **Routine form** (§2), not in the repo. The T1
 **producer** identities share `agents/drug-db-maintainer.md`. The T2
 **flagship verifier** uses `agents/drug-db-escalation.md`, because it must do
-only blind escalation/high-risk verification. T3 has its own design contract in
-`agents/drug-db-adjudication.md`, but **must not be scheduled yet**: the required
-adjudication-case feed and independent panel write path do not exist. T4 is a
-human workflow, not a Routine.
+only blind escalation/high-risk verification. T3 uses
+`agents/drug-db-adjudication.md`, scheduled only under identities with the T3
+adjudicator grant (`agents/adding-a-new-agent.md`); its case feed and panel
+write path are live. T4 is a human workflow, not a Routine.
 
 ### Four-level decision workflow
 
@@ -255,11 +255,12 @@ source and `abstain`. T3 cannot reason a missing PDF into existence.
 ### T3 authority boundary
 
 Do not give every flagship identity `dispute.resolve`. T3 model capability and
-workflow authority are separate concerns. Initially, T3 should record a
-structured recommendation only. If prospective validation later supports
-automation, consider a narrow path for convergent **agent-originated** disputes.
-A human-originated dispute/flag/return/rejection stays human-controlled unless a
-separate explicit governance decision changes that rule.
+workflow authority are separate concerns. A panel records a structured
+recommendation; by the owner's governance decision the backend then acts on a
+convergent case that rests on **agent-originated** disputes only (overruling or
+upholding them, and returning an upheld proposal —
+`agents/drug-db-adjudication.md` §1). A human-originated
+dispute/flag/return/rejection stays human-controlled.
 
 ### Shadow audit (measures the thing that licenses lowering a tier)
 
@@ -338,9 +339,9 @@ Before T1/T2 can run as designed:
 3. durable **per-target-version decision history**, so a decision record cannot
    mutate underneath a later audit or appeal.
 
-Before T3 can run at all (in addition to the above) — these five are
-planned in `docs/plans/2026-09-18-t3-adjudication-backend.md`, which also inventories
-which of the prerequisites above are already satisfied on `main`:
+Before T3 could run — these five are now built
+(`docs/plans/2026-09-18-t3-adjudication-backend.md`, *Implementation status*);
+item 8 remains a deployment precondition for every T3 Routine:
 
 4. a **T3 case feed** that hydrates the complete appeal only after T2 is final;
 5. two independent T3 write slots/results that remain hidden from the other

@@ -232,17 +232,16 @@ Do not quote or reconstruct lower-tier dispute rationales. Nothing more.
 
 ## Not yet available (tracked follow-up)
 
-One capability in the full four-level workflow still needs a backend endpoint
-that is **separate, focused follow-up work** (it needs durable case/version
-semantics rather than prompt-only conventions). Two others — the blind,
-identifier-only T2 escalation feed, and the recent-applied-work sampler — are
-now available; see §1 and §2 respectively.
+Every capability of the four-level workflow is now available: the blind,
+identifier-only T2 escalation feed (§1), the recent-applied-work sampler (§2),
+and the T3 adjudication tier.
 
-- **A T3 adjudication-case feed + write path** that becomes available only after
-  the blind T2 verdict is stored, then exposes the complete lower-tier
-  disagreement to dedicated adjudicator identities as defined in
-  `agents/drug-db-adjudication.md`. The two T3 panelists must not see each
-  other's draft/result before both are final.
+- ~~A T3 adjudication-case feed + write path~~ — done: cases open from a
+  detector once the blind T2 verdict is stored, and dedicated adjudicator
+  identities work them through `GET /api/agent-adjudication-queue` and
+  `POST /api/agent-adjudication-opinions` (`agents/drug-db-adjudication.md`
+  §3a). It is not yours to call: as a T2 verifier you hold no adjudicator
+  grant, and your verdicts are what a case rests on.
 - ~~A recent-applied-work sampler returning immutable applied revisions (with
   their payload + references) for an unbiased, self-excluding shadow audit~~ —
   done: `GET /api/agent-audit-sample` (§2). It supplies the population for the

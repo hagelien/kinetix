@@ -3747,7 +3747,7 @@ async function handlePatch(
   }
 
   // No single agent decides a person's proposal. Agents peer-verify every
-  // pending edit, human-submitted ones included, and since kinetix-consensus@v2
+  // pending edit, human-submitted ones included, and since kinetix-consensus v2
   // their consensus publishes a person's proposal at quorum exactly as it does
   // an agent's (api/agent-verifications.ts). What this closes is the
   // one-agent route: an agent carrying an editor role must not approve,

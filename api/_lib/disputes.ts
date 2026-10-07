@@ -272,7 +272,8 @@ export async function withdrawAgentDisputesForTarget(args: {
 export async function resolveDisputeById(args: {
   id: number;
   resolution: DisputeResolution;
-  resolvedBy: number;
+  /** The moderator who ruled; null when the T3 adjudication panel did. */
+  resolvedBy: number | null;
 }): Promise<{
   id: number;
   targetType: string;

@@ -47,6 +47,7 @@ import {
   disputeTargetUrl,
   resolveActiveAgent,
   summariseVerificationsForTargets,
+  answeredDisputeVerdictSql,
   mirrorAgentDisputeVerdict,
   targetAuthorUserId,
   verificationTargetVersion,
@@ -999,6 +1000,9 @@ async function legacyConsensusHold(
       // Only agents eligible to verify now; a suspended agent's approval no
       // longer carries standing (re-checked under the apply lock too).
       onlyActiveVerifiers: true,
+      // An objection a moderator or the T3 panel overruled no longer holds
+      // the proposal; an upheld one holds through its own gate below.
+      excludeAnsweredDisputes: true,
     })
   ).get(pendingEditId);
   if (!summary) return { reason: 'quorum_unmet' };
@@ -1427,18 +1431,18 @@ export async function sweepAgentConsensus(
   limit = CONSENSUS_SWEEP_LIMIT,
 ): Promise<Array<{ pendingEditId: number } & AgentConsensusOutcome>> {
   const db = getDb();
-  const verdictOn = (verdict: 'approve' | 'dispute') =>
-    db
-      .select({ one: sql`1` })
-      .from(agentVerifications)
-      .where(
-        and(
-          eq(agentVerifications.targetType, 'pending_edit'),
-          eq(agentVerifications.targetId, pendingEdits.id),
-          eq(agentVerifications.verdict, verdict),
-          eq(agentVerifications.isImplicit, false),
-        ),
-      );
+  const unansweredDisputeVerdict = db
+    .select({ one: sql`1` })
+    .from(agentVerifications)
+    .where(
+      and(
+        eq(agentVerifications.targetType, 'pending_edit'),
+        eq(agentVerifications.targetId, pendingEdits.id),
+        eq(agentVerifications.verdict, 'dispute'),
+        eq(agentVerifications.isImplicit, false),
+        not(answeredDisputeVerdictSql()),
+      ),
+    );
   // The floor of `effectiveConsensusQuorum` across this sweep's candidates: the
   // lowest bar any of them could be held to (a self-review author only ever
   // raises its own quorum, never lowers it, so this is a safe under-estimate
@@ -1608,7 +1612,10 @@ export async function sweepAgentConsensus(
         // an agent's. Only an unattributed one never can.
         isNotNull(pendingEdits.submittedBy),
         exists(approvalsAtLeastQuorumFloor),
-        not(exists(verdictOn('dispute'))),
+        // An unanswered agent objection holds the proposal; one a moderator
+        // or the T3 panel has overruled no longer does (the gate's
+        // `excludeAnsweredDisputes`), so the sweep picks it up again.
+        not(exists(unansweredDisputeVerdict)),
         not(exists(openHumanDispute)),
         // A calculation-driving proposal with no quote never publishes on
         // consensus. An agent's is returned to it by the unquoted sweep; a

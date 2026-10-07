@@ -995,6 +995,13 @@
       "when": 1790467200000,
       "tag": "0141_t3_adjudication_outcomes",
       "breakpoints": true
+    },
+    {
+      "idx": 142,
+      "version": "7",
+      "when": 1790553600000,
+      "tag": "0142_t3_adjudication_closure",
+      "breakpoints": true
     }
   ]
 }

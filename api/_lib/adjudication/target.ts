@@ -64,6 +64,8 @@ async function parameterAndDrug(
   if (edit.editType !== 'param_entry') return null;
   // A create targets the drug; an update or delete targets the entry.
   const op = (edit.proposedValue as { op?: unknown } | null)?.op;
+  // Approving a deletion endorses no value: the entry goes (#100).
+  if (op === 'delete') return null;
   if (op === 'create') return { parameter: edit.parameter, drugId: edit.targetId };
   if (edit.targetId == null) return { parameter: edit.parameter, drugId: null };
   const [entry] = await db

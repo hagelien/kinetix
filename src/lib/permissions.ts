@@ -461,7 +461,7 @@ export const CAPABILITY_LIST = [
     group: 'review',
     defaultTier: 'admin',
     floorTier: 'editor',
-    enforcedAt: ['knowledge-governance policy (kinetix-consensus@v2)'],
+    enforcedAt: ['knowledge-governance policy (kinetix-consensus@v3)'],
   },
   {
     id: 'review.edit.decide',

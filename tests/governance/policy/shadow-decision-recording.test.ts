@@ -174,7 +174,7 @@ describe('collectConsensusFacts', () => {
 
   it('marks a human submitter as not an agent, held on the tally alone', async () => {
     // A person's proposal publishes on agent consensus under the same bar as
-    // an agent's (kinetix-consensus-apply@v3): it waits on approvals, not on
+    // an agent's (kinetix-consensus-apply@v4): it waits on approvals, not on
     // a human approval.
     const world = await seedWorld({ humanAuthor: true });
     const facts = await collectConsensusFacts(world.editId);
@@ -238,8 +238,9 @@ describe('recordShadowDecision', () => {
     // exists to prove a decision names the version it was made under, and
     // comparing the constant against itself would prove nothing. It moves when
     // the apply policy's rules move — v2 added `unquoted-calculation-driving`,
-    // v3 retired `human-authored` and added `unattributed`.
-    expect(decision!.policyVersion).toBe('v3');
+    // v3 retired `human-authored` and added `unattributed`, v4 stopped counting
+    // an answered dispute as disputing.
+    expect(decision!.policyVersion).toBe('v4');
   });
 
   it('records the decision that would apply once the quorum is met', async () => {

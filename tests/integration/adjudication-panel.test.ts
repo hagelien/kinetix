@@ -23,6 +23,7 @@ import {
   agentVerifications,
   agents,
   disputes,
+  drugParameterRevisions,
   drugParameters,
   drugs,
   notifications,
@@ -103,9 +104,18 @@ async function seedCase(
     value?: number;
     unit?: string;
     edit?: Record<string, unknown>;
+    /** Mirror T1's dispute verdict as the agent dispute row the API writes. */
+    agentDispute?: boolean;
+    /** A person, not an agent, submitted the proposal. */
+    humanAuthor?: boolean;
   } = {},
 ) {
-  const author = await seedAgent('author', { tier: 'mid' });
+  const author = opts.humanAuthor
+    ? {
+        userId: await seedUser(db, { email: 'person@example.com', username: 'person', role: 'contributor' }),
+        agentId: null,
+      }
+    : await seedAgent('author', { tier: 'mid' });
   const t1 = await seedAgent('t1', { tier: 'mid' });
   const t2 = await seedAgent('t2', { tier: 'flagship' });
   const [edit] = await db
@@ -126,6 +136,16 @@ async function seedCase(
   const version = `${edit!.submittedAt.toISOString()}|pending`;
   await verdictOn(t1.agentId, edit!.id, 'dispute', 'mid', `Verdien er feil. ${INJECTION}`);
   await verdictOn(t2.agentId, edit!.id, 'approve', 'flagship', 'Stemmer med kilden.');
+  if (opts.agentDispute) {
+    await db.insert(disputes).values({
+      targetType: 'pending_edit',
+      targetId: edit!.id,
+      createdBy: t1.userId,
+      source: 'agent',
+      reasonMd: 'Verdien er feil: kilden oppgir 75 L/h.',
+      targetVersion: version,
+    });
+  }
   if (opts.humanDispute) {
     const human = await seedUser(db, { email: 'h@example.com', username: 'h', role: 'contributor' });
     await db.insert(disputes).values({
@@ -140,7 +160,7 @@ async function seedCase(
   const { caseId } = await detectAdjudicationCase({ targetType: 'pending_edit', targetId: edit!.id });
   const a = await seedAgent('adj-a', { tier: 'flagship', adjudicator: true, family: 'claude' });
   const b = await seedAgent('adj-b', { tier: 'flagship', adjudicator: true, family: 'gpt' });
-  return { editId: edit!.id, version, caseId: caseId!, a, b, t2 };
+  return { editId: edit!.id, version, caseId: caseId!, a, b, t1, t2, author };
 }
 
 function createResponse() {
@@ -494,20 +514,26 @@ describe('T3 sealing, convergence and the T4 handoff', () => {
     return { second, kase: kase! };
   }
 
-  it('converges an agent-only case on the same value in different units, recommending only', async () => {
-    const s = await seedCase();
+  it('converges an agent-only case on the same value in different units', async () => {
+    const s = await seedCase({ agentDispute: true });
     const reviewer = await seedUser(db, { email: 'ed@example.com', username: 'ed', role: 'editor' });
     const { second, kase } = await panel(
       s,
       { resolvedValue: 60, resolvedUnit: 'L/h' },
       { resolvedValue: 1, resolvedUnit: 'L/min' },
     );
-    expect(second.body.outcome).toEqual({ state: 'converged', converged: true, t4Required: false });
+    expect(second.body.outcome).toMatchObject({
+      state: 'converged',
+      converged: true,
+      t4Required: false,
+      closure: 'overruled',
+    });
     expect(kase).toMatchObject({ state: 'converged', t4Required: false, panelFamilyDiversity: 'distinct', handoff: null });
     expect(kase.recommendation).toMatchObject({ resolution: 'approve', value: { kind: 'scalar', value: 60, unit: 'L/h' } });
-    expect(await db.select().from(notifications).where(eq(notifications.userId, reviewer))).toEqual([]);
-    // A recommendation resolves nothing: no dispute changed.
-    expect((await db.select().from(disputes)).every((d) => d.status === 'open')).toBe(true);
+    // Reviewers hear the dispute was resolved, as for a moderator's ruling;
+    // nothing is handed to them.
+    const notes = await db.select().from(notifications).where(eq(notifications.userId, reviewer));
+    expect(notes.map((n) => [n.type, n.title])).toEqual([['dispute_resolved', 'Dispute rejected']]);
   });
 
   it('hands a diverged case to the reviewers with the whole appeal', async () => {
@@ -518,7 +544,12 @@ describe('T3 sealing, convergence and the T4 handoff', () => {
       { resolvedValue: 60, resolvedUnit: 'L/h', evidenceRefs: [{ citationId: 7 }] },
       { resolvedValue: 75, resolvedUnit: 'L/h', evidenceRefs: [{ citationId: 7 }, { citationId: 9 }] },
     );
-    expect(second.body.outcome).toEqual({ state: 'diverged', converged: false, t4Required: true });
+    expect(second.body.outcome).toMatchObject({
+      state: 'diverged',
+      converged: false,
+      t4Required: true,
+      closure: null,
+    });
     expect(kase.convergence).toMatchObject({ converged: false, reason: 'value_differs' });
     expect(kase.handoff).toMatchObject({
       reasons: ['panel_diverged'],
@@ -727,6 +758,21 @@ describe('T3 sealing, convergence and the T4 handoff', () => {
     expect(written.status).toBe(201);
   });
 
+  it('takes an approval of an entry deletion without a value (#100)', async () => {
+    const s = await seedCase({ edit: { proposedValue: { op: 'delete' } } });
+    await claim(s.a.userId, s.caseId);
+    const written = await opinion(s.a.userId, { caseId: s.caseId, targetVersion: s.version, final: false });
+    expect(written.status).toBe(201);
+    const withValue = await opinion(s.a.userId, {
+      caseId: s.caseId,
+      targetVersion: s.version,
+      final: false,
+      resolvedValue: 60,
+      resolvedUnit: 'L/h',
+    });
+    expect(withValue.raw).toContain('value_not_allowed');
+  });
+
   it('compares dimensionless parameters (pKa) on their values, in the unit ""', async () => {
     const s = await seedCase({ parameter: 'pKa', value: 9.5, unit: '' });
     await claim(s.a.userId, s.caseId);
@@ -857,5 +903,202 @@ describe('T3 sealing, convergence and the T4 handoff', () => {
     const { kase } = await panel(s, why, why);
     expect(kase).toMatchObject({ state: 'diverged', t4Required: true });
     expect(kase.handoff!.reasons).toEqual(['human_requested']);
+  });
+});
+
+describe('T3 automatic closure of converged agent-only cases', () => {
+  async function decide(
+    s: Awaited<ReturnType<typeof seedCase>>,
+    a: Record<string, unknown>,
+    b: Record<string, unknown>,
+  ) {
+    await claim(s.a.userId, s.caseId);
+    await claim(s.b.userId, s.caseId);
+    await opinion(s.a.userId, { caseId: s.caseId, targetVersion: s.version, ...a });
+    const second = await opinion(s.b.userId, { caseId: s.caseId, targetVersion: s.version, ...b });
+    const [kase] = await db.select().from(adjudicationCases).where(eq(adjudicationCases.id, s.caseId));
+    const disputeRows = await db.select().from(disputes).orderBy(disputes.id);
+    const [edit] = await db.select().from(pendingEdits).where(eq(pendingEdits.id, s.editId));
+    return { second, kase: kase!, disputeRows, edit: edit! };
+  }
+
+  it('overrules the agent dispute when both seats approve the proposal’s own value', async () => {
+    const s = await seedCase({ agentDispute: true });
+    const { second, kase, disputeRows, edit } = await decide(
+      s,
+      { resolvedValue: 60, resolvedUnit: 'L/h' },
+      { resolvedValue: 1, resolvedUnit: 'L/min' },
+    );
+    expect(second.status).toBe(201);
+    expect(second.body.outcome).toMatchObject({ closure: 'overruled', t4Required: false });
+    expect(disputeRows).toMatchObject([{ status: 'resolved', resolution: 'rejected', resolvedBy: null }]);
+    expect(kase.closure).toMatchObject({ action: 'overruled', disputeIds: [disputeRows[0]!.id] });
+    expect(kase.handoff).toBeNull();
+    // The proposal stands; publishing it is consensus's call (one approval here).
+    expect(edit.status).toBe('pending');
+  });
+
+  it('upholds the agent dispute and returns the proposal when both seats sustain the objection', async () => {
+    const s = await seedCase({ agentDispute: true });
+    const { second, kase, disputeRows, edit } = await decide(s, { resolution: 'return' }, { resolution: 'return' });
+    expect(second.body.outcome).toMatchObject({ closure: 'upheld', t4Required: false });
+    expect(disputeRows).toMatchObject([{ status: 'resolved', resolution: 'upheld', resolvedBy: null }]);
+    expect(kase.closure).toMatchObject({ action: 'upheld', pendingEditReturned: true });
+    expect(edit.status).toBe('returned');
+    expect(edit.rejectionComment).toContain('upheld by the T3 adjudication panel');
+    expect(edit.rejectionComment).toContain('kilden oppgir 75 L/h');
+    expect(edit.reviewedBy).toBeNull();
+  });
+
+  it('returns a person’s proposal too, by the owner’s governance decision', async () => {
+    const s = await seedCase({ agentDispute: true, humanAuthor: true });
+    const { kase, edit } = await decide(s, { resolution: 'dispute' }, { resolution: 'dispute' });
+    expect(kase.closure).toMatchObject({ action: 'upheld', pendingEditReturned: true });
+    expect(edit.status).toBe('returned');
+  });
+
+  it('hands the case to a person when both seats approve a value other than the proposal’s', async () => {
+    const s = await seedCase({ agentDispute: true });
+    const reviewer = await seedUser(db, { email: 'ed@example.com', username: 'ed', role: 'editor' });
+    const value = { resolvedValue: 75, resolvedUnit: 'L/h' };
+    const { kase, disputeRows, edit } = await decide(s, value, value);
+    expect(kase).toMatchObject({ state: 'converged', t4Required: true });
+    expect(kase.closure).toMatchObject({ action: 'declined', declined: 'value_differs' });
+    expect(kase.handoff!.reasons).toEqual(['closure_declined']);
+    expect(disputeRows).toMatchObject([{ status: 'open' }]);
+    expect(edit.status).toBe('pending');
+    const notes = await db.select().from(notifications).where(eq(notifications.userId, reviewer));
+    expect(notes.map((n) => n.type)).toEqual(['adjudication_handoff']);
+  });
+
+  it('approves a stated range only as that range, never by its centre alone', async () => {
+    const s = await seedCase({
+      agentDispute: true,
+      edit: {
+        proposedValue: {
+          op: 'create',
+          input: { low: 40, high: 80, median: 60, unit: 'L/h', quote: 'CL 40–80 L/h, median 60.' },
+        },
+      },
+    });
+    const centre = { resolvedValue: 60, resolvedUnit: 'L/h' };
+    const { kase, disputeRows } = await decide(s, centre, centre);
+    expect(kase.closure).toMatchObject({ action: 'declined', declined: 'value_differs' });
+    expect(disputeRows).toMatchObject([{ status: 'open' }]);
+  });
+
+  it('overrules on an approval of the stated range itself', async () => {
+    const s = await seedCase({
+      agentDispute: true,
+      edit: {
+        proposedValue: {
+          op: 'create',
+          input: { low: 40, high: 80, median: 60, unit: 'L/h', quote: 'CL 40–80 L/h, median 60.' },
+        },
+      },
+    });
+    const range = { resolvedLow: 40, resolvedHigh: 80, resolvedUnit: 'L/h' };
+    const { kase } = await decide(s, range, range);
+    expect(kase.closure).toMatchObject({ action: 'overruled' });
+  });
+
+  it('hands a split-scope outcome to a person', async () => {
+    const s = await seedCase({ agentDispute: true });
+    const split = { resolution: 'split_scope', resolvedValue: 60, resolvedUnit: 'L/h' };
+    const { kase, disputeRows } = await decide(s, split, split);
+    expect(kase.closure).toMatchObject({ action: 'declined', declined: 'split_scope' });
+    expect(kase.t4Required).toBe(true);
+    expect(disputeRows).toMatchObject([{ status: 'open' }]);
+  });
+
+  it('hands the case to a person when an agent dispute opened after the panel was bound', async () => {
+    const s = await seedCase({ agentDispute: true });
+    await claim(s.a.userId, s.caseId);
+    // Neither seat is served this one: the case file was bound at the claim.
+    const late = await seedAgent('late', { tier: 'mid' });
+    await db.insert(disputes).values({
+      targetType: 'pending_edit',
+      targetId: s.editId,
+      createdBy: late.userId,
+      source: 'agent',
+      reasonMd: 'En ny innsigelse ingen i panelet har sett.',
+      targetVersion: s.version,
+    });
+    const value = { resolvedValue: 60, resolvedUnit: 'L/h' };
+    const { kase, disputeRows } = await decide(s, value, value);
+    expect(kase.closure).toMatchObject({ action: 'declined', declined: 'unseen_dispute' });
+    expect(kase.t4Required).toBe(true);
+    expect(disputeRows.every((d) => d.status === 'open')).toBe(true);
+  });
+
+  it('hands the case to a person when a bound agent dispute was restated after binding', async () => {
+    const s = await seedCase({ agentDispute: true });
+    await claim(s.a.userId, s.caseId);
+    // Same row, new objection: the panel was served the old text.
+    await db
+      .update(disputes)
+      .set({ reasonMd: 'Ny begrunnelse ingen i panelet har sett.', evidenceRefs: [{ citationId: 9 }] })
+      .where(eq(disputes.targetId, s.editId));
+    const value = { resolvedValue: 60, resolvedUnit: 'L/h' };
+    const { kase, disputeRows } = await decide(s, value, value);
+    expect(kase.closure).toMatchObject({ action: 'declined', declined: 'unseen_dispute' });
+    expect(disputeRows.every((d) => d.status === 'open')).toBe(true);
+  });
+
+  it('hands the case to a person when an agent dispute verdict has no row to close', async () => {
+    // T1's dispute verdict stands with no mirrored disputes row, as one
+    // recorded before the dispute table did.
+    const s = await seedCase();
+    const value = { resolvedValue: 60, resolvedUnit: 'L/h' };
+    const { kase } = await decide(s, value, value);
+    expect(kase.closure).toMatchObject({ action: 'declined', declined: 'unmirrored_dispute' });
+    expect(kase.t4Required).toBe(true);
+  });
+
+  it('hands off an unmirrored dispute verdict on a published revision too', async () => {
+    const author = await seedAgent('rev-author', { tier: 'mid' });
+    const t1 = await seedAgent('rev-t1', { tier: 'mid' });
+    const t2 = await seedAgent('rev-t2', { tier: 'flagship' });
+    const drugId = await seedDrug(db);
+    const [rev] = await db
+      .insert(drugParameterRevisions)
+      .values({ drugId, parameter: 'nameShort', newValue: 'Testmid', createdBy: author.userId })
+      .returning({ id: drugParameterRevisions.id });
+    for (const [agent, verdict, tier] of [
+      [t1, 'dispute', 'mid'],
+      [t2, 'approve', 'flagship'],
+    ] as const) {
+      await db.insert(agentVerifications).values({
+        agentId: agent.agentId,
+        targetType: 'drug_parameter_revision',
+        targetId: rev!.id,
+        verdict,
+        rationaleMd: 'Vurdert mot kilden.',
+        evidenceRefs: [],
+        isImplicit: false,
+        verifierTier: tier,
+        recordedVerifierTier: tier,
+      });
+    }
+    const { caseId } = await detectAdjudicationCase({ targetType: 'drug_parameter_revision', targetId: rev!.id });
+    const [opened] = await db.select().from(adjudicationCases).where(eq(adjudicationCases.id, caseId!));
+    const a = await seedAgent('rev-a', { tier: 'flagship', adjudicator: true, family: 'claude' });
+    const b = await seedAgent('rev-b', { tier: 'flagship', adjudicator: true, family: 'gpt' });
+    expect((await claim(a.userId, caseId!)).status).toBe(200);
+    expect((await claim(b.userId, caseId!)).status).toBe(200);
+    const body = { caseId, targetVersion: opened!.targetVersion };
+    await opinion(a.userId, body);
+    expect((await opinion(b.userId, body)).status).toBe(201);
+    const [kase] = await db.select().from(adjudicationCases).where(eq(adjudicationCases.id, caseId!));
+    expect(kase!.closure).toMatchObject({ action: 'declined', declined: 'unmirrored_dispute' });
+    expect(kase!.t4Required).toBe(true);
+  });
+
+  it('never closes anything on a case that rests on a person’s dispute', async () => {
+    const s = await seedCase({ agentDispute: true, humanDispute: true });
+    const value = { resolvedValue: 60, resolvedUnit: 'L/h' };
+    const { kase, disputeRows } = await decide(s, value, value);
+    expect(kase).toMatchObject({ t4Required: true, closure: null });
+    expect(disputeRows.every((d) => d.status === 'open')).toBe(true);
   });
 });
