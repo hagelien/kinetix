@@ -26,6 +26,7 @@ import {
   agents,
   users,
   type AdjudicationCaseState,
+  type AdjudicationClosure,
   type AdjudicationHandoff,
   type AdjudicationHandoffOpinion,
   type AdjudicationResolution,
@@ -38,6 +39,7 @@ import {
 } from '../verification-targets.js';
 import { ACTIVE_AGENT_ROLES, disputeTargetUrl } from '../agent-verifications.js';
 import { bindPanelTarget } from './snapshot.js';
+import { closeConvergedAgentCase, type ClosureResult } from './closure.js';
 import {
   contributionAuthorUserId,
   fanOutDisputeNotification,
@@ -94,6 +96,10 @@ export type OpinionWriteResult =
         state: AdjudicationCaseState;
         converged: boolean;
         t4Required: boolean;
+        /** What the automatic closure did with a converged agent-only case. */
+        closure: AdjudicationClosure['action'] | null;
+        /** A pending edit to retry consensus on once this write commits. */
+        retryConsensusFor: number | null;
       } | null;
     }
   | {
@@ -490,6 +496,16 @@ function handoffSummary(
   for (const o of asked) {
     parts.push(`Seat ${o.seat.toUpperCase()} asked for a person: ${o.humanReason}`);
   }
+  if (reasons.includes('closure_declined')) {
+    parts.push(
+      'The panel converged on an agent-only case, but the automatic closure does not act on this outcome (a split scope, a clinical case, a model-structure axis, or an approval of a value other than the proposal’s own); the panel’s recommendation is attached.',
+    );
+  }
+  if (reasons.includes('return_refused')) {
+    parts.push(
+      'The panel upheld the objection and its disputes were closed, but the proposal could not be returned to its author; it still needs a disposition.',
+    );
+  }
   if (reasons.includes('panel_conflicted')) {
     parts.push(
       'A panelist took a part in this case after finalizing (a verdict or a dispute on the target), so the panel was not independent and nothing is recommended.',
@@ -565,8 +581,27 @@ async function sealIfComplete(
   const conflicted = await liveConflictedAgentIds({ ...kase, t1Snapshot });
   const panelConflicted = conflicted.has(a.agentId) || conflicted.has(b.agentId);
   if (panelConflicted) reasons.push('panel_conflicted');
-  const t4Required = reasons.length > 0;
   if (panelConflicted) result.recommendation = null;
+
+  // A converged agent-only case is acted on now (./closure.ts): its agent
+  // disputes are overruled or upheld, or the case is handed to a person when
+  // the closure will not act. This write checked the live target against the
+  // binding a moment ago, under the same locks.
+  let closure: ClosureResult | null = null;
+  if (reasons.length === 0 && state === 'converged' && result.recommendation) {
+    closure = await closeConvergedAgentCase({
+      caseId: kase.id,
+      targetType: kase.targetType,
+      targetId: kase.targetId,
+      targetVersion: kase.targetVersion,
+      recommendation: result.recommendation,
+      bound: kase.adjudicatedTarget,
+      now,
+    });
+    if (closure.closure.action === 'declined') reasons.push('closure_declined');
+    if (closure.closure.pendingEditReturned === false) reasons.push('return_refused');
+  }
+  const t4Required = reasons.length > 0;
 
   const families = [a.modelFamily, b.modelFamily];
   const panelFamilyDiversity =
@@ -616,6 +651,7 @@ async function sealIfComplete(
       panelFamilyDiversity,
       disputeOrigin,
       t1Snapshot,
+      closure: closure?.closure ?? null,
     })
     .where(eq(adjudicationCases.id, caseId));
 
@@ -645,5 +681,11 @@ async function sealIfComplete(
       }),
     });
   }
-  return { state, converged, t4Required };
+  return {
+    state,
+    converged,
+    t4Required,
+    closure: closure?.closure.action ?? null,
+    retryConsensusFor: closure?.retryConsensusFor ?? null,
+  };
 }

@@ -1,0 +1,283 @@
+/**
+ * Automatic closure of a converged agent-only T3 case (the owner's governance
+ * decision; docs/plans/2026-09-18-t3-adjudication-backend.md, PR 3).
+ *
+ * When both panelists converge on a case that rests on agent disputes alone,
+ * the backend acts on the recommendation rather than leaving it for a person:
+ *
+ * - both seats `approve` the proposition: the objection was wrong. Every open
+ *   agent dispute on the version resolves `rejected`, and the proposal no
+ *   longer held by it can publish on agent consensus (kinetix-consensus@v3);
+ * - both seats `dispute` or `return` it: the objection was right. The agent
+ *   disputes resolve `upheld`, and a pending edit goes back to its author
+ *   with the objection as the return note, as a moderator's uphold does.
+ *
+ * Anything else is a person's: `split_scope` (a decision about
+ * representation), a clinical case, a categorical axis that changes the
+ * model family, and an approval of a value other than the proposal's own (or
+ * one that cannot be read off it). Those hand the case to T4 instead.
+ *
+ * A person's dispute is never closed here: a case resting on one is
+ * `t4_required` before this runs, and this closes `source = 'agent'` rows
+ * only. No identity decides — `resolved_by` is null and the case records the
+ * ruling — so no model gains the capability to resolve disputes.
+ *
+ * Runs inside the opinion write that sealed the case, under the target's
+ * source-row lock and the case lock, after that write checked the live
+ * hydrated target against the packet the panel was bound to
+ * (./snapshot.ts): what is closed is what the panel adjudicated.
+ */
+
+import { and, asc, eq } from 'drizzle-orm';
+import { getDb } from '../db.js';
+import {
+  disputes,
+  type AdjudicatedTarget,
+  type AdjudicationClosure,
+  type AdjudicationClosureDeclined,
+  type AdjudicationRecommendation,
+  type AgentVerificationEvidenceRef,
+  type DisputeTargetType,
+} from '../../../db/schema.js';
+import { resolveDisputeById } from '../disputes.js';
+import { returnPendingEditForUpheldDispute } from '../upheld-dispute-return.js';
+import { contributionAuthorUserId, fanOutDisputeNotification } from '../notifications.js';
+import { disputeTargetUrl } from '../agent-verifications.js';
+import { convertParameterValue } from '../../../src/lib/parameterUnits.js';
+import { isModelStructureParameter } from '../../../src/lib/drugParameters.js';
+import { sameNumber } from './convergence.js';
+
+/** Resolutions that mean "the proposition stands; the objection was wrong". */
+const OVERRULING = new Set(['approve']);
+/** Resolutions that mean "the objection was right". */
+const UPHOLDING = new Set(['dispute', 'return']);
+
+type NumericClaim = {
+  low: number | null;
+  high: number | null;
+  point: number | null;
+  unit: string | null;
+};
+
+const num = (v: unknown): number | null =>
+  typeof v === 'number' && Number.isFinite(v) ? v : null;
+
+/**
+ * The numbers the proposal itself asserts, read off the packet the panel was
+ * served: a parameter entry's create input or its update patch over the
+ * current entry, or a drug-level parameter value. Null when the packet is
+ * none of those.
+ */
+function proposalClaim(served: Record<string, unknown>): NumericClaim | null {
+  if (served.targetType !== 'pending_edit') return null;
+  const payload = (served.payload ?? {}) as Record<string, unknown>;
+  const proposed = (payload.proposedValue ?? {}) as Record<string, unknown>;
+  let source: Record<string, unknown> | null = null;
+  if (payload.editType === 'param_entry') {
+    if (proposed.op === 'create') source = (proposed.input ?? null) as Record<string, unknown> | null;
+    if (proposed.op === 'update') {
+      source = {
+        ...((payload.currentEntry ?? {}) as Record<string, unknown>),
+        ...((proposed.patch ?? {}) as Record<string, unknown>),
+      };
+    }
+  } else if (payload.editType === 'parameter') {
+    source = proposed;
+  }
+  if (!source) return null;
+  return {
+    low: num(source.low) ?? num(source.min),
+    high: num(source.high) ?? num(source.max),
+    point: num(source.median) ?? num(source.centralValue) ?? num(source.mean) ?? num(source.value),
+    unit: typeof source.unit === 'string' ? source.unit : null,
+  };
+}
+
+/** Whether an approval endorses the proposal's own value, in the canonical unit. */
+function approvesProposalValue(
+  value: NonNullable<AdjudicationRecommendation['value']>,
+  claim: NumericClaim,
+  comparison: AdjudicatedTarget['comparison'],
+): boolean {
+  const canonical = comparison.canonicalUnit ?? '';
+  const unit = claim.unit ?? canonical;
+  const convert = (v: number | null) =>
+    v === null ? null : convertParameterValue(v, unit, canonical, comparison.molecularWeight);
+  const low = convert(claim.low);
+  const high = convert(claim.high);
+  const point = convert(claim.point);
+  if (value.kind === 'range') {
+    return low !== null && high !== null && sameNumber(low, value.low) && sameNumber(high, value.high);
+  }
+  if (point !== null) return sameNumber(point, value.value);
+  return low !== null && high !== null && sameNumber(low, value.value) && sameNumber(high, value.value);
+}
+
+function declineReason(
+  recommendation: AdjudicationRecommendation,
+  bound: AdjudicatedTarget | null,
+): AdjudicationClosureDeclined | null {
+  if (!OVERRULING.has(recommendation.resolution) && !UPHOLDING.has(recommendation.resolution)) {
+    return 'split_scope';
+  }
+  const payload = ((bound?.served.payload ?? {}) as Record<string, unknown>);
+  if (bound?.served.targetType === 'pending_edit') {
+    if (payload.editType === 'clinical_case') return 'clinical';
+    if (
+      payload.editType === 'param_entry' &&
+      typeof payload.parameter === 'string' &&
+      isModelStructureParameter(payload.parameter)
+    ) {
+      return 'model_structure';
+    }
+  }
+  if (OVERRULING.has(recommendation.resolution) && recommendation.value) {
+    const claim = bound ? proposalClaim(bound.served) : null;
+    if (!claim || !bound) return 'value_unverifiable';
+    if (!approvesProposalValue(recommendation.value, claim, bound.comparison)) {
+      return 'value_differs';
+    }
+  }
+  return null;
+}
+
+export interface ClosureResult {
+  closure: AdjudicationClosure;
+  /** A pending edit whose agent disputes were overruled: retry consensus on it after commit. */
+  retryConsensusFor: number | null;
+}
+
+/**
+ * Act on a converged agent-only case's recommendation. The caller has already
+ * established that the case converged, needs no person, and carries a
+ * recommendation.
+ */
+export async function closeConvergedAgentCase(args: {
+  caseId: number;
+  targetType: string;
+  targetId: number;
+  targetVersion: string;
+  recommendation: AdjudicationRecommendation;
+  bound: AdjudicatedTarget | null;
+  now: Date;
+}): Promise<ClosureResult> {
+  const at = args.now.toISOString();
+  const declined = declineReason(args.recommendation, args.bound);
+  if (declined) {
+    return {
+      closure: {
+        action: 'declined',
+        declined,
+        disputeIds: [],
+        pendingEditReturned: null,
+        returnSkipped: null,
+        at,
+      },
+      retryConsensusFor: null,
+    };
+  }
+
+  const db = getDb();
+  // The agent disputes the case rests on: open, on this version (a legacy row
+  // with no recorded version is kept, as the detector keeps it). Never a
+  // person's.
+  const open = await db
+    .select({ id: disputes.id, targetVersion: disputes.targetVersion })
+    .from(disputes)
+    .where(
+      and(
+        eq(disputes.targetType, args.targetType),
+        eq(disputes.targetId, args.targetId),
+        eq(disputes.status, 'open'),
+        eq(disputes.source, 'agent'),
+      ),
+    )
+    .orderBy(asc(disputes.id));
+  const ids = open
+    .filter((d) => d.targetVersion === null || d.targetVersion === args.targetVersion)
+    .map((d) => d.id);
+  const upholding = UPHOLDING.has(args.recommendation.resolution);
+  if (ids.length === 0) {
+    return {
+      closure: {
+        action: 'none',
+        declined: null,
+        disputeIds: [],
+        pendingEditReturned: null,
+        returnSkipped: null,
+        at,
+      },
+      retryConsensusFor: args.targetType === 'pending_edit' ? args.targetId : null,
+    };
+  }
+
+  const resolution = upholding ? 'upheld' : 'rejected';
+  const resolved: Array<NonNullable<Awaited<ReturnType<typeof resolveDisputeById>>>> = [];
+  for (const id of ids) {
+    const row = await resolveDisputeById({ id, resolution, resolvedBy: null });
+    if (row) resolved.push(row);
+  }
+
+  // An upheld objection sends a pending edit back to its author, carrying the
+  // oldest sustained objection as the return note, as a moderator's would.
+  let pendingEditReturned: boolean | null = null;
+  let returnSkipped: string | null = null;
+  const first = resolved[0];
+  if (upholding && args.targetType === 'pending_edit' && first) {
+    const outcome = await returnPendingEditForUpheldDispute({
+      pendingEditId: args.targetId,
+      disputeId: first.id,
+      source: first.source,
+      reasonMd: first.reasonMd,
+      evidenceRefs: first.evidenceRefs as AgentVerificationEvidenceRef[],
+      disputeRaisedAt: first.createdAt,
+      targetVersion: first.targetVersion,
+      resolvedBy: null,
+      mayDecide: true,
+      mayDecideOwn: true,
+      // A model-structure axis was declined above; this keeps the guard.
+      mayDecideModelStructure: false,
+      byAdjudicationPanel: true,
+    });
+    pendingEditReturned = outcome.returned;
+    returnSkipped = outcome.returned ? null : outcome.reason;
+  }
+
+  if (resolved.length > 0) {
+    const url = await disputeTargetUrl({
+      targetType: args.targetType as DisputeTargetType,
+      targetId: args.targetId,
+    });
+    const targetAuthorUserId = await contributionAuthorUserId({
+      targetType: args.targetType,
+      targetId: args.targetId,
+    });
+    for (const row of resolved) {
+      await fanOutDisputeNotification({
+        type: 'dispute_resolved',
+        disputeId: row.id,
+        targetType: row.targetType,
+        targetId: row.targetId,
+        // No person ruled: the panel did. Nobody is excluded as the actor.
+        actorUserId: 0,
+        targetAuthorUserId,
+        raisedByUserId: row.createdBy,
+        // The outcome token the bell recovers (`Dispute upheld|rejected`).
+        title: `Dispute ${resolution}`,
+        url,
+      });
+    }
+  }
+
+  return {
+    closure: {
+      action: upholding ? 'upheld' : 'overruled',
+      declined: null,
+      disputeIds: resolved.map((r) => r.id),
+      pendingEditReturned,
+      returnSkipped,
+      at,
+    },
+    retryConsensusFor: !upholding && args.targetType === 'pending_edit' ? args.targetId : null,
+  };
+}

@@ -67,7 +67,7 @@ type CanonicalValue =
   | { kind: 'scalar'; value: number }
   | { kind: 'range'; low: number; high: number };
 
-function sameNumber(a: number, b: number): boolean {
+export function sameNumber(a: number, b: number): boolean {
   if (a === b) return true;
   const scale = Math.max(Math.abs(a), Math.abs(b));
   return Math.abs(a - b) <= RELATIVE_TOLERANCE * scale;

@@ -17,6 +17,7 @@ import {
   agentVerdictReconsiderations,
   agentVerifications,
   agents,
+  disputes,
   drugParameterDiscussions,
   drugParameterRevisions,
   learningUnitRevisions,
@@ -918,6 +919,17 @@ export async function summariseVerificationsForTargets(args: {
    * after the revocation must not publish on its earlier approval.
    */
   onlyActiveVerifiers?: boolean;
+  /**
+   * Leave out a `dispute` verdict that has been answered: a dispute its author
+   * raised on the target was resolved after the verdict was recorded
+   * (`disputes.resolved_at >= agent_verifications.updated_at` — the same rule
+   * as `unresolvedDisputeVerdictCount`). Consensus sets it: an objection a
+   * moderator or the T3 panel has overruled no longer holds the proposal, and
+   * one that was upheld holds it through its own gate
+   * (`pendingEditUpheldRulingStands`). A new dispute bumps the verdict past
+   * the old resolution, so it counts again.
+   */
+  excludeAnsweredDisputes?: boolean;
 }): Promise<Map<number, VerificationSummary>> {
   const ids = args.targetIds.filter(Number.isInteger);
   if (ids.length === 0) return new Map();
@@ -930,6 +942,9 @@ export async function summariseVerificationsForTargets(args: {
       // Server-owned tier SNAPSHOTTED at verdict time (not the caller-supplied
       // model, and not the mutable current agent row).
       verifierTier: agentVerifications.verifierTier,
+      answered: args.excludeAnsweredDisputes
+        ? answeredDisputeVerdictSql()
+        : sql<boolean>`false`,
     })
     .from(agentVerifications)
     .where(
@@ -980,10 +995,34 @@ export async function summariseVerificationsForTargets(args: {
       // verdict time counts toward the high-risk gate. Implicit rows are
       // excluded above; an unclassified (NULL) tier never counts (fail-safe).
       if (row.verifierTier === FLAGSHIP_TIER) summary.approveTier2Count += 1;
-    } else if (row.verdict === 'dispute') summary.disputeCount += 1;
-    else if (row.verdict === 'abstain') summary.abstainCount += 1;
+    } else if (row.verdict === 'dispute') {
+      if (!row.answered) summary.disputeCount += 1;
+    } else if (row.verdict === 'abstain') summary.abstainCount += 1;
   }
   return out;
+}
+
+/**
+ * True for an `agent_verifications` row whose objection has been answered
+ * (columns are table-qualified: a single-table query renders bare names,
+ * which the joined `disputes` would make ambiguous): a
+ * dispute its author raised on the same target was resolved after the verdict
+ * was recorded. Authorship joins through `agents.user_id`, since
+ * `disputes.created_by` is the agent's backing user. Kept in step with
+ * `unresolvedDisputeVerdictCounts` (./disputes.ts), which applies the same
+ * rule to the review queue.
+ */
+export function answeredDisputeVerdictSql() {
+  return sql<boolean>`exists (
+    select 1 from ${disputes} ad
+    join ${agents} aa on aa.user_id = ad.created_by
+    where aa.id = ${agentVerifications}.agent_id
+      and ad.target_type = ${agentVerifications}.target_type
+      and ad.target_id = ${agentVerifications}.target_id
+      and ad.status = 'resolved'
+      and ad.resolved_at is not null
+      and ad.resolved_at >= ${agentVerifications}.updated_at
+  )`;
 }
 
 /** Convenience for callers (UI badge) that want the zero summary as a default. */
