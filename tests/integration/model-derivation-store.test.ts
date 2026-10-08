@@ -1619,6 +1619,31 @@ describe('saturable (Michaelis–Menten) elimination', () => {
     expect(withMw!.values.km).toBeCloseTo(13.812, 6);
   });
 
+  it('drops an impossible mean − SD endpoint from the Km spread, keeping the usable side', async () => {
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db);
+    await seedSaturableDrug(drugId, userId);
+    await insertNumeric(drugId, userId, 'vmax', null, { low: 15, median: 15, unit: 'mg/L/h', matrix: 'plasma' });
+    // 10 ± 12 mg/L: the low endpoint is arithmetic (−2), not a Km anyone measured.
+    await db.insert(parameterEntries).values({
+      drugId,
+      parameter: 'km',
+      centralValue: '10',
+      centralStatistic: 'arithmetic_mean',
+      low: '-2',
+      high: '22',
+      intervalKind: 'sd',
+      unit: 'mg/L',
+      matrix: 'plasma',
+      createdBy: userId,
+      origin: 'contributor',
+    } as never);
+    await insertNumeric(drugId, userId, 'km', null, { low: 6, median: 6, unit: 'mg/L', matrix: 'plasma' });
+
+    const [oral] = await readDrugRouteAssemblyInputs(drugId);
+    expect(oral!.ranges?.km).toEqual({ low: 6, high: 22 });
+  });
+
   it('runs no curve at all without Vmax and Km — never a first-order stand-in', async () => {
     const drugId = await seedDrug(db);
     const userId = await seedUser(db);
