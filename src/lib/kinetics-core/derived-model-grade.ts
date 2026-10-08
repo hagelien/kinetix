@@ -53,7 +53,7 @@ import { requiredParametersFor, type RequiredParam } from './model-structure.js'
 import type { DimensionAssessment, DimensionGrade } from './grade-policy.js';
 
 type LetterGrade = Exclude<DimensionGrade, 'hard-stop'>;
-import type { DrugModelDefinition, ParamSpec } from './types.js';
+import type { DrugModelDefinition, ModelFamily, ParamSpec } from './types.js';
 
 /** View- and subject-dependent facts the definition itself cannot answer. */
 export interface DerivedModelEvidence {
@@ -184,6 +184,17 @@ const ROLE_FIELDS: Partial<Record<RequiredParam, string>> = {
   bioavailability: 'bioavailability',
   zeroOrderDuration: 'zeroOrderDurationHours',
   firstOrderFraction: 'firstOrderFraction',
+  vmax: 'vmaxMgPerLPerHour',
+  km: 'kmMgPerL',
+};
+
+/**
+ * Roles a family carries for display only — they do not move the curve, so a missing spread on
+ * them cannot make the band narrower than the evidence allows. A saturable model's half-life is a
+ * nominal label; Vmax and Km drive its elimination.
+ */
+const DISPLAY_ONLY_ROLES: Partial<Record<ModelFamily, readonly RequiredParam[]>> = {
+  'michaelis-menten': ['eliminationHalfLife'],
 };
 
 /** The uncertainty-semantics assessment for one derived route (step 7 of `assessDerivedModel`). */
@@ -195,7 +206,12 @@ function assessUncertaintySemantics(
   const defaulted = new Set(route.defaultedParameters ?? []);
   const judged = requiredParametersFor(route.family, {
     ivInfusion: route.structure.absorption === 'iv-infusion',
-  }).filter((role) => ROLE_FIELDS[role] !== undefined && !defaulted.has(role));
+  }).filter(
+    (role) =>
+      ROLE_FIELDS[role] !== undefined &&
+      !defaulted.has(role) &&
+      !(DISPLAY_ONLY_ROLES[route.family] ?? []).includes(role),
+  );
   const specOf = (role: RequiredParam): ParamSpec | undefined =>
     params?.[ROLE_FIELDS[role]!] as ParamSpec | undefined;
   const ranged = judged.filter((role) => {

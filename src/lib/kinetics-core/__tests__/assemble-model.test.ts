@@ -6,7 +6,16 @@
  * an absent/non-finite required value is `incomplete` (missing stays missing); otherwise `assembled`.
  */
 import { describe, it, expect } from 'vitest';
-import { deriveModel, assembleRouteParams, fixed, type AssemblyValues } from '../index';
+import {
+  deriveModel,
+  assembleRouteParams,
+  findModel,
+  fixed,
+  triangular,
+  type AssemblyValues,
+  type MichaelisMentenRouteParams,
+  type ParamSpec,
+} from '../index';
 
 describe('CV-4b — assembleRouteParams (fixed(median))', () => {
   it('assembles an IV bolus one-compartment route from t½ + Vd', () => {
@@ -193,17 +202,69 @@ describe('CV-4b — assembleRouteParams (fixed(median))', () => {
   });
 
   it('is unsupported for a family whose inputs the catalog cannot yet supply', () => {
-    // Saturable (Michaelis–Menten) elimination composes to a real family, but assembling it needs
-    // canonical-unit Vmax/Km this primitive does not yet map.
+    // Two-compartment disposition composes to a real family, but the catalog stores no k12/k21 or
+    // central volume, so this primitive does not map it.
     const derived = deriveModel(
+      { disposition: 'two-compartment', absorption: 'first-order' },
+      ['ka', 'eliminationHalfLife', 'vd', 'bioavailability', 'k12', 'k21'],
+    );
+    expect(derived.outcome).toBe('modelable');
+    expect(derived.family).toBe('two-compartment-first-order');
+    const result = assembleRouteParams(derived, {});
+    expect(result.outcome).toBe('unsupported');
+    if (result.outcome === 'unsupported') expect(result.reason).toMatch(/two-compartment/);
+  });
+});
+
+describe('assembleRouteParams — saturable (Michaelis–Menten) elimination', () => {
+  const saturable = () =>
+    deriveModel(
       { disposition: 'one-compartment', elimination: 'michaelis-menten', absorption: 'first-order' },
       ['ka', 'vmax', 'km', 'vd', 'bioavailability', 'eliminationHalfLife'],
     );
-    expect(derived.outcome).toBe('modelable');
-    expect(derived.family).toBe('michaelis-menten');
-    const result = assembleRouteParams(derived, {});
-    expect(result.outcome).toBe('unsupported');
-    if (result.outcome === 'unsupported') expect(result.reason).toMatch(/michaelis-menten/);
+
+  it('assembles the same route the reviewed GHB model runs, from the same numbers', () => {
+    const ghb = findModel('ghb')!.routes.oral as MichaelisMentenRouteParams;
+    const central = (spec: ParamSpec) => (spec as { value: number }).value;
+    const result = assembleRouteParams(
+      saturable(),
+      {
+        ka: central(ghb.kaPerHour),
+        vmax: central(ghb.vmaxMgPerLPerHour),
+        km: central(ghb.kmMgPerL),
+        eliminationHalfLife: central(ghb.eliminationHalfLifeHours),
+        vd: central(ghb.vdLitersPerKg),
+        bioavailability: central(ghb.bioavailability),
+      },
+      { vdScaling: 'lean-body-mass' },
+    );
+    expect(result.outcome).toBe('assembled');
+    if (result.outcome === 'assembled') expect(result.params).toEqual(ghb);
+  });
+
+  it('is incomplete without Vmax and Km — never assembled as first-order', () => {
+    const result = assembleRouteParams(saturable(), {
+      ka: 1,
+      eliminationHalfLife: 4,
+      vd: 0.6,
+      bioavailability: 0.8,
+    });
+    expect(result.outcome).toBe('incomplete');
+    if (result.outcome === 'incomplete') expect(result.missing.sort()).toEqual(['km', 'vmax']);
+  });
+
+  it('draws Vmax and Km across their reported spread', () => {
+    const result = assembleRouteParams(
+      saturable(),
+      { ka: 1, vmax: 10, km: 20, eliminationHalfLife: 4, vd: 0.6, bioavailability: 0.8 },
+      { ranges: { vmax: { low: 6, high: 15 }, km: { low: 25, high: 40 } } },
+    );
+    expect(result.outcome).toBe('assembled');
+    if (result.outcome === 'assembled' && result.params.family === 'michaelis-menten') {
+      expect(result.params.vmaxMgPerLPerHour).toEqual(triangular(6, 10, 15));
+      // A spread that does not contain the median is dropped, not clipped.
+      expect(result.params.kmMgPerL).toEqual(fixed(20));
+    }
   });
 });
 

@@ -28,6 +28,8 @@ and Kinetix records it per analyte per analytical method.
 | `logP` | `(none)` | -10–15 dimensionless | forbidden | forbidden | optional |
 | `logD` | `(none)` | -10–15 dimensionless | forbidden | forbidden | optional |
 | `clearance` | `L/h`, `L/min`, `mL/min`, `L/h/kg`, `mL/min/kg` | 0–100000 L/h | forbidden | forbidden | optional |
+| `vmax` | `mg/L/h`, `µg/mL/h`, `mg/dL/h`, `g/L/h`, `mg/L/min` | 0.0001–100000 mg/L/h | forbidden | forbidden | optional |
+| `km` | any concentration unit (see below) | 0.000001–1000000 mg/L | forbidden | forbidden | optional |
 | `postmortemRedistribution` | `ratio` | 0–100 ratio | forbidden | forbidden | optional |
 | `pmAmRatio` | `ratio` | 0–1000 ratio | forbidden | forbidden | optional |
 | `therapeuticDose` | `mg`, `g`, `µg`, `mg/kg`, `mg/day`, `mg/kg/day` | 0–1000000 mg | forbidden | forbidden | optional |

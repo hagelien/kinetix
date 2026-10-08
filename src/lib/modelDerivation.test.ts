@@ -554,6 +554,15 @@ describe('CV-4c-2 — toAssemblyValues', () => {
     });
   });
 
+  it('maps the saturable pair, converting Vmax and Km to mg/L/h and mg/L', () => {
+    const values = toAssemblyValues([
+      { parameter: 'vmax', value: 15, unit: 'mg/dL/h' },
+      { parameter: 'km', value: 0.1, unit: 'mg/dL' },
+    ]);
+    expect(values.vmax).toBeCloseTo(150, 6);
+    expect(values.km).toBeCloseTo(1, 6);
+  });
+
   it('rescales a non-canonical unit (clearance L/min → L/h)', () => {
     const values = toAssemblyValues([{ parameter: 'clearance', value: 2, unit: 'L/min' }]);
     expect(values.clearance).toBeCloseTo(120, 6);
@@ -764,6 +773,22 @@ describe('applyKaInference — ka solved from a route Tmax', () => {
     });
     const out = applyKaInference(mixed, { ...VALUES }, 1);
     expect(out.inferredParameters).toEqual(['ka']);
+  });
+
+  it('declines under saturable elimination, where the time of peak depends on the dose', () => {
+    const saturable = deriveDrugModel({
+      declaration: {
+        disposition: 'one-compartment',
+        elimination: 'michaelis-menten',
+        absorption: 'first-order',
+      },
+      presentParameters: ['halfLife', 'volumeOfDistribution', 'bioavailability', 'vmax', 'km'],
+    });
+    expect(saturable.family).toBe('michaelis-menten');
+    const out = applyKaInference(saturable, { ...VALUES, vmax: 10, km: 20 }, 1);
+    expect(out.inferredParameters).toEqual([]);
+    expect(out.values.ka).toBeUndefined();
+    expect(out.declined).toMatch(/saturable elimination/);
   });
 
   it('does nothing for a not-modelable derivation', () => {

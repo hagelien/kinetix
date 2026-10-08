@@ -1541,3 +1541,64 @@ describe('reported spreads reach the assembled model', () => {
     expect(iv.vdLitersPerKg!.kind).toBe('triangular');
   });
 });
+
+describe('saturable (Michaelis–Menten) elimination', () => {
+  /** A drug declaring saturable elimination with a curated oral route (ka + F) and t½ + Vd. */
+  async function seedSaturableDrug(drugId: number, userId: number): Promise<void> {
+    await insertAxis(drugId, userId, 'dispositionModel', 'one-compartment');
+    await insertAxis(drugId, userId, 'eliminationModel', 'michaelis-menten');
+    await insertAxis(drugId, userId, 'absorptionModel', 'first-order', 'oral');
+    await setDrugLevelParameter(drugId, userId, 'halfLife', { median: 4, unit: 'h' });
+    await setDrugLevelParameter(drugId, userId, 'volumeOfDistribution', { median: 0.6, unit: 'L/kg' });
+    await insertNumeric(drugId, userId, 'ka', 'oral', { median: 2, unit: '1/h' });
+    await insertNumeric(drugId, userId, 'bioavailability', 'oral', { median: 0.9, unit: 'fraction' });
+  }
+
+  it('assembles the saturable family once Vmax and Km are curated, in canonical units', async () => {
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db);
+    await seedSaturableDrug(drugId, userId);
+    await setDrugLevelParameter(drugId, userId, 'vmax', { median: 1.5, unit: 'mg/dL/h' });
+    await setDrugLevelParameter(drugId, userId, 'km', { median: 12, unit: 'mg/L' });
+
+    const assembly = await readDrugModelDefinition(drugId);
+    expect(assembly.outcome).toBe('assembled');
+    if (assembly.outcome !== 'assembled') throw new Error('expected assembled');
+    const oral = assembly.definition.routes.oral!;
+    expect(oral.family).toBe('michaelis-menten');
+    if (oral.family !== 'michaelis-menten') throw new Error('expected michaelis-menten');
+    expect(oral.vmaxMgPerLPerHour).toEqual({ kind: 'fixed', value: 15 });
+    expect(oral.kmMgPerL).toEqual({ kind: 'fixed', value: 12 });
+  });
+
+  it('runs no curve at all without Vmax and Km — never a first-order stand-in', async () => {
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db);
+    await seedSaturableDrug(drugId, userId);
+
+    const assembly = await readDrugModelDefinition(drugId);
+    expect(assembly.outcome).toBe('not-modelable');
+    expect(assembly.routeOutcomes).toEqual([
+      expect.objectContaining({ route: 'oral', outcome: 'incomplete', missing: ['vmax', 'km'] }),
+    ]);
+  });
+
+  it('does not solve ka from a Tmax under saturable elimination, and says why', async () => {
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db);
+    await insertAxis(drugId, userId, 'dispositionModel', 'one-compartment');
+    await insertAxis(drugId, userId, 'eliminationModel', 'michaelis-menten');
+    await insertAxis(drugId, userId, 'absorptionModel', 'first-order', 'oral');
+    await setDrugLevelParameter(drugId, userId, 'halfLife', { median: 4, unit: 'h' });
+    await setDrugLevelParameter(drugId, userId, 'volumeOfDistribution', { median: 0.6, unit: 'L/kg' });
+    await setDrugLevelParameter(drugId, userId, 'vmax', { median: 15, unit: 'mg/L/h' });
+    await setDrugLevelParameter(drugId, userId, 'km', { median: 12, unit: 'mg/L' });
+    await insertNumeric(drugId, userId, 'bioavailability', 'oral', { median: 0.9, unit: 'fraction' });
+    await insertNumeric(drugId, userId, 'tmax', 'oral', { median: 1, unit: 'h' });
+
+    const [oral] = await readDrugRouteAssemblyInputs(drugId);
+    expect(oral!.values.ka).toBeUndefined();
+    expect(oral!.inferredParameters).toBeUndefined();
+    expect(oral!.inferenceDeclined).toMatch(/saturable elimination/);
+  });
+});

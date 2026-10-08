@@ -797,6 +797,20 @@ drugs). A DB edit changes the next snapshot, never a curve already pinned.
        pull request. The snapshot stays the unit of reproducibility; only the manual step is gone.
        It needs a `REGISTRY_REFRESH_TOKEN` secret, because GitHub starts no workflows for a pull
        request opened with the built-in token.
+    6. **Saturable elimination (LANDED, 2026-10-08).** A curator recording a cited
+       Michaelis–Menten elimination used to remove the drug's curve: the family composed, but the
+       catalog had nowhere to store Vmax or Km and the assembler did not map it (the 2026-10-08
+       dry run lost beta-hydroxybutyrate and salicylic acid this way). `vmax` (canonical mg/L/h)
+       and `km` (canonical mg/L, mass units only) are now molecule-level, pooled catalog
+       parameters, and `assembleRouteParams` builds the `michaelis-menten` family from them — the
+       same route the reviewed GHB model runs, from the same numbers. CV-2c-8's rule stands: a
+       declared saturable elimination is never drawn first-order, so such a drug has no curve
+       until both numbers are curated, and its route reports `vmax`/`km` as the missing inputs.
+       `ka` is never solved from Tmax under saturable elimination (the time of peak depends on the
+       dose), so the route needs an authored `ka`. The nominal half-life the family carries is
+       display-only and is not judged for uncertainty semantics; Vmax and Km are. Vmax reported as
+       an amount per time (mg/h, mg/kg/day) is not accepted: converting it needs Vd, which is a
+       separate parameter, not a unit factor.
 
 ## 8. Risks & non-goals
 
