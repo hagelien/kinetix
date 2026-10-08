@@ -237,7 +237,8 @@ function MetricPlot({
 }) {
   const { t } = useTranslation();
   const metricLabel = useMetricLabel();
-  const { values, inverseStrength, hasUnitMismatch } = comparison;
+  const { values, direction, hasUnitMismatch } = comparison;
+  const inverseStrength = direction === 'inverse';
   const reference =
     values.find((value) => value.drugId === referenceDrugId) ?? null;
   const populated = values.filter((value) => value.numeric !== null);
@@ -273,14 +274,16 @@ function MetricPlot({
       ) : null}
       <div className="space-y-2">
         {values.map((value) => {
-          const ratio = hasUnitMismatch
-            ? null
-            : relativeRatio(
-                value.numeric,
-                reference?.numeric ?? null,
-                inverseStrength,
-              );
-          const numeric = value.numeric;
+          const ratio =
+            direction === null
+              ? null
+              : relativeRatio(
+                  value.numeric,
+                  reference?.numeric ?? null,
+                  inverseStrength,
+                );
+          // Values in different units have no shared axis: list them only.
+          const numeric = hasUnitMismatch ? null : value.numeric;
           const dot = numeric === null ? null : pct(project(numeric), axisMin, axisMax);
           const start =
             numeric === null
@@ -300,7 +303,7 @@ function MetricPlot({
               </span>
               {dot === null ? (
                 <span className="text-muted-foreground">
-                  {t('comparison.unavailable')}
+                  {value.numeric === null ? t('comparison.unavailable') : ''}
                 </span>
               ) : (
                 <div className="relative h-5">
