@@ -10,6 +10,7 @@ vi.mock('../../api/_lib/model-derivation-store.js', () => ({
 }));
 
 import handler from '../../api/derived-model.ts';
+import { clearRateLimitState } from '../../api/_lib/rate-limit.js';
 
 function createRequest(method: string, url: string): IncomingMessage {
   const req = Readable.from([]) as IncomingMessage;
@@ -38,7 +39,10 @@ function createResponse() {
   return { res: res as unknown as ServerResponse, state };
 }
 
-beforeEach(() => readLiveMock.mockReset());
+beforeEach(() => {
+  readLiveMock.mockReset();
+  clearRateLimitState();
+});
 
 describe('GET /api/derived-model', () => {
   it('returns the live build, edge-cached for a minute', async () => {
@@ -69,5 +73,16 @@ describe('GET /api/derived-model', () => {
     await handler(createRequest('POST', '/api/derived-model?slug=x'), post.res);
     expect(post.state.status).toBe(405);
     expect(readLiveMock).not.toHaveBeenCalled();
+  });
+
+  it('rate-limits a client before any database work', async () => {
+    readLiveMock.mockResolvedValue({ status: 'not-found' });
+    for (let i = 0; i < 60; i += 1) {
+      await handler(createRequest('GET', `/api/derived-model?slug=nope-${i}`), createResponse().res);
+    }
+    const limited = createResponse();
+    await handler(createRequest('GET', '/api/derived-model?slug=nope-x'), limited.res);
+    expect(limited.state.status).toBe(429);
+    expect(readLiveMock).toHaveBeenCalledTimes(60);
   });
 });
