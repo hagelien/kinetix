@@ -660,10 +660,16 @@ export async function readDrugRouteAssemblyInputs(
   }
 
   // Concentration-scale roles, pooled from the entries measured in the derived model's own matrix.
-  // A molar entry converts with the drug's molecular weight; with none recorded it stays out.
+  // A molar entry converts with the drug's molecular weight; with none recorded it stays out. Read
+  // only for a drug that declares saturable elimination — no other family consumes Vmax or Km, and
+  // the catalog-wide snapshot calls this once per drug, so an unconditional read would add two
+  // round trips to every one of them.
   const mwRaw = drugLevelRows.find((row) => row.parameter === 'molecularWeight')?.value;
   const molecularWeight = typeof mwRaw === 'number' && mwRaw > 0 ? mwRaw : null;
-  for (const parameter of MATRIX_BASIS_ROLE_IDS) {
+  const usesSaturableElimination = derivations.some(
+    (derived) => derived.structure.elimination === 'michaelis-menten',
+  );
+  for (const parameter of usesSaturableElimination ? MATRIX_BASIS_ROLE_IDS : []) {
     const targetUnit = canonicalUnitFor(parameter);
     if (targetUnit === null) continue;
     const entries = (await loadEntryValuesForParameter(drugId, parameter)).filter(
