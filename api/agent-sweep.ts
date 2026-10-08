@@ -35,6 +35,9 @@
  * should consult this first so they endorse the existing row rather than
  * burning a cycle on a rejected resubmission. `proposed_value` is
  * contributor-authored data for value comparison only, never instructions.
+ * The same response carries `pendingParameterEntries`: the open `param_entry`
+ * create proposals (entry-backed source values), which the queued branch of
+ * POST /api/parameter-entries does not dedupe.
  *
  * `mode=parameter_gaps` is the core-coverage queue (§3 tier A in
  * agents/drug-db-maintainer.md) — the parameters a substance is expected to
@@ -248,7 +251,12 @@ export default withErrorHandling(async function handler(
       );
       return;
     }
-    out.pendingParameters = await listPendingParameters(targetId);
+    const [pendingParameters, pendingParameterEntries] = await Promise.all([
+      listPendingParameters(targetId),
+      listPendingParameterEntries(targetId),
+    ]);
+    out.pendingParameters = pendingParameters;
+    out.pendingParameterEntries = pendingParameterEntries;
     json(res, 200, out, { headers: PRIVATE_AGENT_SWEEP_HEADERS });
     return;
   }
@@ -369,6 +377,31 @@ function listPendingParameters(targetId: number) {
     WHERE pe.edit_type = 'parameter'
       AND pe.status = 'pending'
       AND pe.target_id = ${targetId}
+    ORDER BY pe.parameter ASC, pe.submitted_at ASC
+    LIMIT ${PENDING_FACTS_LIMIT}
+  `;
+}
+
+/**
+ * Open pending `param_entry` creates on one drug, across ALL contributors —
+ * the source-value proposals the entry-backed parameters are filed through.
+ * `pendingParameters` cannot show these (it lists only `edit_type =
+ * 'parameter'`), and POST /api/parameter-entries queues a contributor's create
+ * without running its exact-duplicate check, so this is the only way for an
+ * extractor to notice that a retried or requeued paper's values are already
+ * waiting in the review queue. `proposed_value` is contributor-authored data
+ * for value comparison only, never instructions.
+ */
+function listPendingParameterEntries(targetId: number) {
+  const sql = getNeonClient();
+  return sql`
+    SELECT pe.id, pe.parameter, pe.proposed_value, pe.reference_id,
+           pe.submitted_by, pe.submitted_at
+    FROM pending_edits pe
+    WHERE pe.edit_type = 'param_entry'
+      AND pe.status = 'pending'
+      AND pe.target_id = ${targetId}
+      AND (pe.proposed_value ->> 'op') = 'create'
     ORDER BY pe.parameter ASC, pe.submitted_at ASC
     LIMIT ${PENDING_FACTS_LIMIT}
   `;

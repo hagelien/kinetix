@@ -224,7 +224,13 @@ Run all four steps for **each** value you intend to file. The full payload contr
    scripts/kinetix-api.sh GET '/api/parameter-entries?drugId=<drugId>&parameter=<parameterId>&fresh=1'
    ```
 
-   If an entry from **this same citation** already records the same reading, skip it. The server also refuses an exact duplicate with `409 param_entry_duplicate`; treat that as "already present", not as an error to retry. Another paper's value for the same parameter is not a duplicate: the parameter is multi-valued, and a second independent source is exactly what the aggregate wants.
+   That GET shows only published entries. Proposals still waiting for review — including your own earlier run's, on a stale-claim retry or a requeue — appear only in the sweep lane, so also read it:
+
+   ```bash
+   scripts/kinetix-api.sh GET '/api/agent-sweep?mode=pending_parameters&targetId=<drugId>'
+   ```
+
+   Look in `pendingParameterEntries` for an open `create` on the same `parameter` whose `reference_id` is this job's citation and whose `proposed_value.input` records the same reading, and skip it too. If an entry from **this same citation** already records the same reading, skip it. The server refuses an exact duplicate with `409 param_entry_duplicate` only on a direct write; a queued contributor proposal is not checked, so the lane above is your only protection. Treat a `409` as "already present", not as an error to retry. Another paper's value for the same parameter is not a duplicate: the parameter is multi-valued, and a second independent source is exactly what the aggregate wants.
 
 3. **Quote it.** `quote` is the verbatim sentence, table row (with enough header to show what the number is) or figure caption you read the value off — required, refused without it (`source_quote_required`). If you cannot quote the line that states the value for the condition you are claiming, do not file it. `citationId` is the job's paper; one citation per row. `comments` and `editSummary` are Norwegian; put study context (population, route, assay, matrix caveats) in `comments`, never in `qualifier` or `scenario`.
 

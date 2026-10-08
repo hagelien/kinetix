@@ -195,11 +195,51 @@ describe("GET /api/agent-sweep?mode=pending_parameters", () => {
 
     expect(state.statusCode).toBe(200);
     expect(state.headers["Cache-Control"]).toBe("no-store");
-    expect(JSON.parse(state.body)).toEqual({ pendingParameters: rows });
-    expect(sqlSpy).toHaveBeenCalledTimes(1);
-    // The interpolated values include the numeric drug id.
-    const values = sqlSpy.mock.calls[0].slice(1);
-    expect(values).toContain(42);
+    expect(JSON.parse(state.body)).toEqual({
+      pendingParameters: rows,
+      pendingParameterEntries: rows,
+    });
+    // One query per lane; both are scoped to the numeric drug id.
+    expect(sqlSpy).toHaveBeenCalledTimes(2);
+    for (const call of sqlSpy.mock.calls) {
+      expect(call.slice(1)).toContain(42);
+    }
+  });
+
+  it("lists open param_entry creates as a separate lane from parameter edits", async () => {
+    const entries = [
+      {
+        id: 5,
+        parameter: "halfLife",
+        proposed_value: { op: "create", input: { centralValue: 7.3 } },
+        reference_id: 11,
+        submitted_by: 9,
+      },
+    ];
+    const sqlSpy = vi
+      .fn()
+      .mockImplementation((strings: TemplateStringsArray) =>
+        Promise.resolve(
+          strings.join("?").includes("'param_entry'") ? entries : [],
+        ),
+      );
+    getNeonClientMock.mockReturnValue(sqlSpy);
+
+    const { res, state } = createResponse();
+    await handler(
+      createRequest("/api/agent-sweep?mode=pending_parameters&targetId=42"),
+      res,
+    );
+
+    expect(JSON.parse(state.body)).toEqual({
+      pendingParameters: [],
+      pendingParameterEntries: entries,
+    });
+    const entrySql = sqlSpy.mock.calls
+      .map(([strings]) => (strings as TemplateStringsArray).join("?"))
+      .find((text) => text.includes("'param_entry'"));
+    expect(entrySql).toContain("'create'");
+    expect(entrySql).toContain("status = 'pending'");
   });
 
   it("requires an active agent token", async () => {
