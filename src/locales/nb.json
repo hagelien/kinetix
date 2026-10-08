@@ -3162,7 +3162,34 @@
     "relative": "Relativt",
     "unavailable": "Utilgjengelig",
     "logScale": "logaritmisk skala",
-    "addedToast": "La til {{drug}} i kurven"
+    "addedToast": "La til {{drug}} i kurven",
+    "pd": {
+      "title": "Farmakodynamikk",
+      "body": "Reseptorprofil for legemidlene i kurven. Hver celle viser sterkeste rapporterte affinitet eller potens (Ki, ellers EC50, ellers IC50) — mørkere betyr sterkere. Velg reseptorer for å sammenligne legemidlene side om side.",
+      "targetDrugCount_one": "{{count}} legemiddel i kurven virker her",
+      "targetDrugCount_other": "{{count}} legemidler i kurven virker her",
+      "matrixLegend": "Molare verdier er regnet om til nM. Mørkere farge = lavere konsentrasjon = sterkere binding eller potens. – = ingen registrert mekanisme.",
+      "noMeasurement": "Ingen verdi",
+      "noTargets": "Ingen av legemidlene i kurven har registrerte reseptormekanismer ennå.",
+      "relativeTo": "Forhold relativt til {{drug}}: over 1x betyr sterkere (Ki/EC50/IC50) eller høyere (Emax).",
+      "relativeHint": "Relativt til referanselegemiddelet",
+      "mechanism": "Mekanisme",
+      "species": "Art (forsøk)",
+      "noMechanism": "Ingen mekanisme ved denne reseptoren",
+      "noMeasurements": "Ingen kvantitative målinger registrert ved denne reseptoren.",
+      "tier": {
+        "primary": "primær",
+        "secondary": "sekundær",
+        "tertiary": "tertiær"
+      },
+      "metric": {
+        "affinity": "Affinitet",
+        "potency": "Potens",
+        "efficacy": "Effekt",
+        "selectivityRatio": "Selektivitet"
+      },
+      "loadError": "Kunne ikke laste reseptormekanismene. Prøv å laste siden på nytt."
+    }
   },
   "paramEdit": {
     "editTitle": "Rediger {{label}}",
