@@ -206,3 +206,48 @@ describe('CV-4b — assembleRouteParams (fixed(median))', () => {
     if (result.outcome === 'unsupported') expect(result.reason).toMatch(/michaelis-menten/);
   });
 });
+
+describe('assembleRouteParams — reported spreads become triangular specs', () => {
+  const oral = () =>
+    deriveModel({ disposition: 'one-compartment', absorption: 'first-order' }, [
+      'ka',
+      'eliminationHalfLife',
+      'vd',
+      'bioavailability',
+    ]);
+  const values = { ka: 1, eliminationHalfLife: 4, vd: 0.7, bioavailability: 0.8 };
+
+  it('draws a role across its reported spread, peaked at the median the fixed spec used', () => {
+    const result = assembleRouteParams(oral(), values, {
+      ranges: { eliminationHalfLife: { low: 2, high: 9 }, bioavailability: { low: 0.6, high: 0.9 } },
+    });
+    expect(result.outcome).toBe('assembled');
+    if (result.outcome !== 'assembled' || result.params.family !== 'one-compartment-first-order') return;
+    expect(result.params.eliminationHalfLifeHours).toEqual({
+      kind: 'triangular',
+      min: 2,
+      mode: 4,
+      max: 9,
+      bounds: { kind: 'extrema' },
+    });
+    expect(result.params.bioavailability).toMatchObject({ kind: 'triangular', min: 0.6, mode: 0.8, max: 0.9 });
+    // A role with no spread is unchanged.
+    expect(result.params.vdLitersPerKg).toEqual(fixed(0.7));
+  });
+
+  it('keeps fixed(median) when a spread is unusable rather than clipping it', () => {
+    const unusable = {
+      eliminationHalfLife: { low: 5, high: 9 }, // excludes the median
+      vd: { low: 0.7, high: 0.7 }, // not an interval
+      ka: { low: 0, high: 3 }, // reaches a non-positive rate
+      bioavailability: { low: 0.5, high: 1.2 }, // leaves [0, 1]
+    };
+    const result = assembleRouteParams(oral(), values, { ranges: unusable });
+    expect(result.outcome).toBe('assembled');
+    if (result.outcome !== 'assembled' || result.params.family !== 'one-compartment-first-order') return;
+    expect(result.params.eliminationHalfLifeHours).toEqual(fixed(4));
+    expect(result.params.vdLitersPerKg).toEqual(fixed(0.7));
+    expect(result.params.kaPerHour).toEqual(fixed(1));
+    expect(result.params.bioavailability).toEqual(fixed(0.8));
+  });
+});
