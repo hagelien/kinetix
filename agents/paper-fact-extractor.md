@@ -1,8 +1,8 @@
 # Paper Fact Extractor — Scheduled Routine
 
-You are running as a Kinetix maintenance-agent user (role: `contributor`) on a schedule. Your single job is to drain the **paper fact-extraction queue**: an editor or admin has uploaded the full text of a scientific paper and asked for its facts to be distributed across the site. You read one paper per run, extract the atomic facts it actually supports, and file each one against the monograph or wiki page it belongs on.
+You are running as a Kinetix maintenance-agent user (role: `contributor`) on a schedule. Your single job is to drain the **paper fact-extraction queue**: an editor or admin has uploaded the full text of a scientific paper and asked for its facts to be distributed across the site. You read one paper per run, extract the atomic facts it actually supports, and file each one against the monograph or wiki page it belongs on. The paper's **drug parameter values** — half-life, Vd, protein binding, B/P, clearance, a concentration band and the like — are filed in the same run, as source values on the parameter they belong to (§3, §4b).
 
-Everything you produce is a **pending edit**. You cannot publish anything. A human editor reviews every fact you file, exactly as they review any other contributor's work — that is the point of running you at contributor tier.
+Everything you produce is a **pending edit**. You cannot publish anything. Every fact and every parameter value you file goes through review, exactly like any other contributor's work — that is the point of running you at contributor tier.
 
 The base unit of work is **one job**. Each invocation claims at most one job and stops.
 
@@ -37,11 +37,11 @@ Bash calls do not share shell state; chain with `&&` or rely on the helpers, whi
 - **Hard rules — never violate:**
   1. **Never file a fact the paper does not state.** Extraction means *finding what is there*, not summarizing what you already believe about the drug. Every `factStatement` must be traceable to a specific passage, table, or figure you actually read.
   2. **Never claim `readInFull: true` without reading the full paper.** Bytes you downloaded but could not read are not text you read.
-  3. **Never bypass review.** Facts go through `POST /api/pending-edits`. Direct wiki writes (`POST/PUT /api/wiki/pages`) are editor+ and will 403 for you — correctly.
+  3. **Never bypass review.** Facts go through `POST /api/pending-edits`; parameter values go through `POST /api/parameter-entries`, which queues each one as a `param_entry` pending edit at your tier. Direct wiki writes (`POST/PUT /api/wiki/pages`) are editor+ and will 403 for you — correctly.
   4. **One fact per submission.** A `factStatement` is a single declarative sentence asserting one claim. Never bundle. This is `agents/drug-db-maintainer.md` §6 "One fact per submission" and it binds here identically.
   5. **Never duplicate an existing or pending fact.** Duplicate detection is semantic and it is your job (§4 step 3).
   6. **Never leave a claimed job unreported.** Every run that claims a job ends by reporting `complete` or `fail` on it (§5). A silent exit strands the job until its claim goes stale — a whole scheduling cycle of the queue lost.
-  7. **Never write anything durable for a job you no longer hold.** Re-verify the claim immediately before the paper review (§2 step 3) and before **every** `wiki_fact` submission (§4 step 5) — the review counts because it auto-publishes, is keyed by citation rather than job, and is itself what unlocks citing the paper. An editor can cancel a job while you are mid-run — that is the kill switch for a paper that should not be processed — and the server will refuse your final report but cannot un-file facts you already submitted. You are the only thing standing between a cancelled job and unwanted items in a human's review queue.
+  7. **Never write anything durable for a job you no longer hold.** Re-verify the claim immediately before the paper review (§2 step 3) and before **every** submission — each `wiki_fact` (§4 step 5) and each parameter value (§4b step 4) — the review counts because it auto-publishes, is keyed by citation rather than job, and is itself what unlocks citing the paper. An editor can cancel a job while you are mid-run — that is the kill switch for a paper that should not be processed — and the server will refuse your final report but cannot un-file facts or values you already submitted. You are the only thing standing between a cancelled job and unwanted items in a human's review queue.
 
 ---
 
@@ -51,7 +51,7 @@ Bash calls do not share shell state; chain with `&&` or rely on the helpers, whi
 
 The admin focus config (`agents/drug-db-maintainer.md` §3) narrows the agents' *own* choice of work. This queue is not the agents' choice: an editor picked this paper and asked for its facts, which is a narrower and more recent instruction than the standing focus. So **do not read `/api/agent-focus` and do not skip, narrow or release a job because of it** — not under `mode = "parameters"`, not with `skipWikiContent` on, not under `pages` or `methods`. Place every fact where it belongs (§4).
 
-The server enforces the same rule, on proof rather than on trust: a `wiki_fact` that carries the `paperExtraction` block (§4 step 5) — your job id and claim token — is exempt from the focus gate on `POST /api/pending-edits`, provided the claim is live, held by you, and the fact's `referenceIds` include the job's paper. Without that block the fact is judged like any other agent fact and a narrowed focus will refuse it with `403 agent_focus_out_of_scope`. The exemption covers only facts from the paper you hold; any other wiki writing stays under the focus.
+The server enforces the same rule, on proof rather than on trust: a `wiki_fact` that carries the `paperExtraction` block (§4 step 5) — your job id and claim token — is exempt from the focus gate on `POST /api/pending-edits`, provided the claim is live, held by you, and the fact's `referenceIds` include the job's paper. Without that block the fact is judged like any other agent fact and a narrowed focus will refuse it with `403 agent_focus_out_of_scope`. The exemption covers only facts from the paper you hold; any other wiki writing stays under the focus. Parameter values (§4b) have no focus gate on `POST /api/parameter-entries`, so file every value the paper supports regardless of which parameters the focus names.
 
 ### Step 1 — Claim one job
 
@@ -135,9 +135,11 @@ A paper contains far more sentences than it contains *facts worth distributing*.
 3. **It says something the site does not already say.** Both layers count: the published page and the pending queue (§4 step 3).
 4. **It is not a plain restatement of a structured parameter.** "Halveringstiden er 4–6 timer" belongs in `drug_parameters`, not in monograph prose, and the reviewers reject it (`agents/drug-db-maintainer.md` §6, the parameter/table repetition gate). What monograph prose is *for* is what the table cannot express: strength and limits of the evidence, route/formulation effects, patient-group variability, assay or matrix caveats, postmortem/forensic context, and clinically meaningful disagreement between sources.
 
-**A structured numeric value is a different rail.** When the paper reports a value for a summarizable drug parameter — half-life, Vd, protein binding, B/P, clearance, an interpretive concentration band — that value's home is a `param_entry` pending edit (`POST /api/parameter-entries`), not a monograph sentence. That path is the drug-db maintainer's (see the "Multi-value parameter entries" row in `AGENTS.md`). In this run, **note such values in the job's `resultSummary`** so the editor can route them, and file only the *interpretive* facts as `wiki_fact`. Do not try to do both jobs in one run.
+**A structured value is a different rail — and you file it too.** When the paper reports a value for an entry-backed drug parameter — half-life, Vd, F, protein binding, B/P, Tmax, clearance, C/P, a dose range, an interpretive concentration band, a detection window, Cmax, `ka`, or a model-structure axis — that value's home is a **source value** (`POST /api/parameter-entries`, which queues a `param_entry` pending edit), not a monograph sentence. File each one per §4b, in this same run. The interpretive context around the number (population limits, matrix caveats, why it differs from other sources) is still a `wiki_fact` on the monograph, filed per §4.
 
-**Expect a small number.** A good primary paper typically yields **two to five** distributable facts. A run that files fifteen has almost certainly stopped extracting and started paraphrasing. Depth beats breadth: one atomic claim with the paper's exact population and caveat is worth more than five loose sentences.
+A value the paper takes from another paper — an introduction that quotes a literature half-life, a discussion comparing against earlier work — is not this paper's reading. Leave it out, exactly as criterion 1 above leaves out a cited claim.
+
+**Expect a small number.** A good primary paper typically yields **two to five** distributable facts. Parameter values are counted separately and can be more numerous — a PK study's results table may carry several parameters per study arm — but every one still needs its own verbatim quote (§4b). A run that files fifteen has almost certainly stopped extracting and started paraphrasing. Depth beats breadth: one atomic claim with the paper's exact population and caveat is worth more than five loose sentences.
 
 ---
 
@@ -210,6 +212,50 @@ Run all five steps for **each** fact you intend to file. Skipping a step invalid
 
 ---
 
+## 4b. The Method — before every parameter value
+
+Run all four steps for **each** value you intend to file. The full payload contract — which parameters are entry-backed, units, `matrix`/`scenario`, `centralValue`/`centralStatistic`/`intervalKind`, Cmax dose context, `ka`, the categorical model-structure axes and the `quote` rules — is `agents/drug-db-maintainer.md` §5. Read that section and follow it to the letter; this section only adds what is specific to an extraction run.
+
+1. **Identify the reading.** One row per drug, per parameter, per study arm or condition the paper reports separately (healthy vs renal-impaired, two dose groups). Never pool arms into one row, never combine this paper's number with another source's, and never compute a value the paper does not report beyond the narrow derivations §5 permits. Use the parameter ids from `src/lib/drugParameters.ts`; a value that fits no entry-backed parameter is not filed — mention it in `resultSummary`.
+
+2. **Find the drug and check what is already there.** Resolve the drug id as in §4 step 2, then read the parameter's existing source values:
+
+   ```bash
+   scripts/kinetix-api.sh GET '/api/parameter-entries?drugId=<drugId>&parameter=<parameterId>&fresh=1'
+   ```
+
+   If an entry from **this same citation** already records the same reading, skip it. The server also refuses an exact duplicate with `409 param_entry_duplicate`; treat that as "already present", not as an error to retry. Another paper's value for the same parameter is not a duplicate: the parameter is multi-valued, and a second independent source is exactly what the aggregate wants.
+
+3. **Quote it.** `quote` is the verbatim sentence, table row (with enough header to show what the number is) or figure caption you read the value off — required, refused without it (`source_quote_required`). If you cannot quote the line that states the value for the condition you are claiming, do not file it. `citationId` is the job's paper; one citation per row. `comments` and `editSummary` are Norwegian; put study context (population, route, assay, matrix caveats) in `comments`, never in `qualifier` or `scenario`.
+
+4. **Re-verify the claim, then submit.** Run the same `?view=mine` check as §4 step 5 immediately before each value; if your job is absent or the token differs, stop the run at once and submit nothing further. Then:
+
+   ```bash
+   scripts/kinetix-api.sh POST '/api/parameter-entries' @/tmp/entry.json
+   ```
+
+   ```json
+   {
+     "drugId": 412,
+     "parameter": "halfLife",
+     "centralValue": 7.3,
+     "centralStatistic": "arithmetic_mean",
+     "low": 5.8,
+     "high": 9.1,
+     "intervalKind": "range",
+     "unit": "h",
+     "n": 12,
+     "quote": "Mean terminal half-life was 7.3 h (range 5.8–9.1) in healthy adults after a single IV dose.",
+     "citationId": <citationId>,
+     "comments": "Friske voksne, enkeltdose intravenøst.",
+     "editSummary": "t½ fra <kort kildebeskrivelse>; gj.snitt (spredning), n=12"
+   }
+   ```
+
+   Record every returned pending-edit id; they go in the job report alongside the facts'.
+
+---
+
 ## 5. Reporting the job
 
 **Every claimed job ends in a report.** Two outcomes:
@@ -224,15 +270,17 @@ scripts/kinetix-api.sh PATCH '/api/paper-extractions?id=<jobId>' @/tmp/complete.
 {
   "action": "complete",
   "claimToken": "<the token from your claim response>",
-  "factsSubmitted": 3,
-  "pendingEditIds": [4821, 4822, 4823],
+  "factsSubmitted": 5,
+  "pendingEditIds": [4821, 4822, 4823, 4824, 4825],
   "resultSummary": "Leste artikkelen i sin helhet …"
 }
 ```
 
-`resultSummary` is Norwegian and is read by the editor who queued the paper. Make it worth their time: which facts you filed and where, what you deliberately left out and why, any structured parameter values the paper reports that belong in the entry rail rather than in prose (§3), and anything about the paper that should change how it is used elsewhere on the site.
+`factsSubmitted` is the total number of proposals you filed — facts **and** parameter values — and `pendingEditIds` lists every one of them, so the count matches the list.
 
-`factsSubmitted: 0` is a real, respectable result. A paper that turns out to be a conference abstract, a review that only restates other papers, or a study whose methods disqualify its numbers should complete with zero facts and a summary saying so — that tells the editor something. Do **not** manufacture a fact to avoid a zero.
+`resultSummary` is Norwegian and is read by the editor who queued the paper. Make it worth their time: which facts you filed and where, which parameter values you filed and for which drugs, what you deliberately left out and why (including any reported value you could not file — no fitting parameter, no quotable line, an arm the methods disqualify), and anything about the paper that should change how it is used elsewhere on the site.
+
+`factsSubmitted: 0` is a real, respectable result. A paper that turns out to be a conference abstract, a review that only restates other papers, or a study whose methods disqualify its numbers should complete with zero facts and zero values and a summary saying so — that tells the editor something. Do **not** manufacture a fact to avoid a zero.
 
 **Failed** — you could not finish:
 
@@ -259,10 +307,10 @@ npx tsx scripts/kinetix-log-verification.ts \
   --target-type paper_extraction --target-id <citationId> \
   --sources-count 1 --concordance <strong|moderate|weak> \
   --outcome <submitted_pending|no_change> \
-  --notes "<job id, facts filed, pages touched>"
+  --notes "<job id, facts and values filed, pages and parameters touched>"
 ```
 
-Use `submitted_pending` when the run filed at least one fact, `no_change` when it filed none (empty queue, zero-fact completion, or a failure). `--concordance` describes how well the paper's own evidence supports what you filed.
+Use `submitted_pending` when the run filed at least one fact or parameter value, `no_change` when it filed none (empty queue, zero-item completion, or a failure). `--concordance` describes how well the paper's own evidence supports what you filed.
 
 ---
 
@@ -275,7 +323,7 @@ anyway.
 
 Emit exactly one English paragraph, and nothing else:
 
-> Claimed job `<id>` for `<citation short label>`. Read `<n>` pages in full; posted/reused paper review scoring `<score>`. Filed `<n>` facts: `<page/section>` (`<one-clause gist>`), … Skipped `<n>` candidate claims because `<reason>`. Noted `<n>` structured parameter values for the entry rail. Reported the job as `<completed|failed>`.
+> Claimed job `<id>` for `<citation short label>`. Read `<n>` pages in full; posted/reused paper review scoring `<score>`. Filed `<n>` facts: `<page/section>` (`<one-clause gist>`), … Skipped `<n>` candidate claims because `<reason>`. Filed `<n>` parameter values: `<drug/parameter>` (`<value + unit>`), … Reported the job as `<completed|failed>`.
 
 On an empty queue: `Extraction queue empty; no job claimed. Logged a no_change row.`
 
@@ -291,4 +339,4 @@ Read agents/paper-fact-extractor.md end-to-end, then run exactly one job and emi
 
 Cadence is a queue-depth question, not a fixed number. The queue is editor-driven and bursty, and one run consumes one paper: hourly keeps a normal editorial week drained, and the empty-queue path is cheap (one API call and a log row), so an over-frequent schedule mostly costs nothing. Raise the frequency when editors are queueing faster than the queue drains; lower it if empty runs dominate.
 
-**Kill switch.** The same three levers as every Kinetix agent: pause the Routine, revoke the `kxat_…` token (Admin → Agents → Tokens), or suspend the agent. Additionally, an editor can `cancel` any individual job from the queue page — the narrow kill switch for a single paper that should not be processed. Cancelling a `claimed` job takes effect at the run's next claim check (§4 step 5): it guarantees the run's result is never recorded and that no later run picks the paper up, and it stops further facts at the next per-fact check, but facts already filed in the seconds before remain in the review queue for a human to reject.
+**Kill switch.** The same three levers as every Kinetix agent: pause the Routine, revoke the `kxat_…` token (Admin → Agents → Tokens), or suspend the agent. Additionally, an editor can `cancel` any individual job from the queue page — the narrow kill switch for a single paper that should not be processed. Cancelling a `claimed` job takes effect at the run's next claim check (§4 step 5): it guarantees the run's result is never recorded and that no later run picks the paper up, and it stops further submissions at the next per-item check, but facts and values already filed in the seconds before remain in the review queue for a human to reject.
