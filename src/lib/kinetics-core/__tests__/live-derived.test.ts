@@ -64,7 +64,7 @@ describe('live derived overlay', () => {
     const live = renamed('alprazolam', slug);
     core.installLiveDerivedEntry({ analyte: slug, ...live });
 
-    expect(core.resolveModel(slug)?.modelId).toBe(`${slug}-derived-v1`);
+    expect(core.resolveModel(slug)?.modelId).toMatch(new RegExp(`^${slug}-derived-v1\\+live\\.[0-9a-f]+$`));
     expect(core.resolvableAnalyteIds()).toContain(slug);
     expect(core.isDerivedAnalyte(slug)).toBe(true);
     expect(core.derivedRouteGrade(slug, 'oral')).toEqual(live.grade.routes[0]);
@@ -124,6 +124,36 @@ describe('live derived overlay', () => {
     const live = renamed('alprazolam', slug);
     expect(core.installLiveDerivedEntry({ analyte: slug, ...live })).toBe(true);
     expect(core.installLiveDerivedEntry({ analyte: slug, ...JSON.parse(JSON.stringify(live)) })).toBe(false);
+  });
+
+  it('versions the model id per build, so a curve is only graded by the build that produced it', async () => {
+    const core = await loadCore();
+    const first = committed('alprazolam');
+    core.installLiveDerivedEntry({ analyte: 'alprazolam', ...first });
+    const firstId = core.resolveModel('alprazolam')!.modelId;
+    expect(firstId).not.toBe(first.definition.modelId);
+
+    // The worker re-installs the held (already versioned) entry: same build, same id, no change.
+    expect(core.installLiveDerivedEntry(core.liveDerivedEntry('alprazolam')!)).toBe(false);
+    expect(core.resolveModel('alprazolam')!.modelId).toBe(firstId);
+
+    // New parameters are a new build with a new id; the old id no longer resolves.
+    const refreshed = committed('alprazolam');
+    (refreshed.definition.routes.oral as unknown as Record<string, unknown>).eliminationHalfLifeHours =
+      { kind: 'fixed', value: 20 };
+    core.installLiveDerivedEntry({ analyte: 'alprazolam', ...refreshed });
+    const refreshedId = core.resolveModel('alprazolam')!.modelId;
+    expect(refreshedId).not.toBe(firstId);
+    expect(core.resolvableAnalyteIds().map((a) => core.resolveModel(a)?.modelId)).not.toContain(firstId);
+
+    // So do new grade facts alone: the curve's disclosure belongs to its build too.
+    const regraded = committed('alprazolam');
+    core.installLiveDerivedEntry({
+      analyte: 'alprazolam',
+      definition: refreshed.definition,
+      grade: { ...regraded.grade, routes: regraded.grade.routes.map((r) => ({ ...r, inputSources: {} })) },
+    });
+    expect(core.resolveModel('alprazolam')!.modelId).not.toBe(refreshedId);
   });
 
   it('rejects an answer whose model belongs to another analyte', async () => {

@@ -243,6 +243,10 @@ describe('gradeResult — derived tier', () => {
     // A live refresh can withdraw a derived model while a curve it produced is still on
     // screen. Its id then resolves nothing, and `null` would let the curve render to everyone.
     vi.mocked(core.resolvableAnalyteIds).mockReturnValue([]);
+    for (const modelId of ['withdrawn-drug-derived-v1+live.0a1b2c3d']) {
+      // A superseded live build: the id names a build that is no longer held.
+      expect(gradeResult(result({ modelId }), { role: null, displayMatrix: 'plasma' })?.disposition).toBe('hidden');
+    }
     const graded = gradeResult(result({ modelId: 'withdrawn-drug-derived-v1' }), {
       role: null,
       displayMatrix: 'plasma',

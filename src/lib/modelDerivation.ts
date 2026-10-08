@@ -498,7 +498,8 @@ export const DERIVED_MODEL_SUPPORTED_BASES: readonly DoseBasis[] = ['active-moie
 export const DERIVED_MODEL_ID_SUFFIX = '-derived-v1';
 
 export function isDerivedModelId(modelId: string): boolean {
-  return /-derived-v\d+$/.test(modelId);
+  // A live build carries a `+live.<hash>` tag after the id (kinetics-core `live-derived.ts`).
+  return /-derived-v\d+(\+live\.[0-9a-f]+)?$/.test(modelId);
 }
 
 export function derivedDefinitionMetadata(identity: DerivedDrugIdentity): DrugDefinitionMetadata {

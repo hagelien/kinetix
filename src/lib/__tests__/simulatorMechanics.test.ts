@@ -409,6 +409,7 @@ describe('mechanics document — live derived tier (§2)', () => {
       '**The derived tier is built live from the catalogue; the reviewed tier stays pinned.**',
     );
     expect(doc).toContain('versioned `<version>+live`');
+    expect(doc).toContain('each live build carries its own model id (`<id>+live.<hash>`)');
     const replaced = { ...committed, displayName: 'live answer' };
     const release = loadGeneratedRegistry(reviewed, GENERATED_REGISTRY_ARTIFACT, [
       { analyte: committed.analyte, definition: replaced, grade: null },

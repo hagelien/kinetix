@@ -93,6 +93,9 @@ but only for derived curves:
 - the run manifest still names the release it actually resolved through: a release holding a live
   answer is versioned `<version>+live` and checksummed over what it actually contains, so a
   manifest never claims the committed release for a live curve;
+- each live build carries its own model id (`<id>+live.<hash>`), so a curve on screen is only ever
+  graded by the build that produced it; once a newer build replaces it, the older curve is withheld
+  until it is rerun, rather than shown under evidence that did not produce it;
 - reviewed models are untouched: they are never fetched, and a live answer can never displace one.
 
 The reviewed tier is therefore small on purpose. The set of analytes this build resolves, and each
