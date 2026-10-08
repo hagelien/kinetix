@@ -28,8 +28,11 @@ name: catalog-drift
 # accident, when an unrelated edit to that workflow file triggered it.
 #
 # Both artifacts rot from the same cause and are refreshed by the same kind of
-# command, so they share one weekly alarm rather than two. Fix a registry
-# failure with `npm run kinetics:registry`; review the regenerated file as data,
+# command, so they share one weekly alarm rather than two. The registry is now
+# rebuilt nightly by `derived-registry-refresh.yml`, which opens a pull request
+# for it; a failure here means that pull request is still open (stuck on review
+# or CI) or the job could not run. Fix it by landing that pull request, or run
+# `npm run kinetics:registry` by hand; review the regenerated file as data,
 # because it is a snapshot of what the catalog currently says.
 on:
   schedule:
