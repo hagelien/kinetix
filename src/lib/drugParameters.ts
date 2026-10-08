@@ -528,11 +528,11 @@ const CLEARANCE_UNITS = ['L/h', 'L/min', 'mL/min', 'L/h/kg', 'mL/min/kg'] as con
 
 // Saturable elimination. Vmax is the concentration fall per hour at saturation
 // (canonical mg/L/h, the engine's unit); Km the concentration at which
-// elimination runs at half that rate (canonical mg/L). Km is restricted to MASS
-// concentrations: the model is assembled from canonical values with no molecular
-// weight to hand, so a molar Km would be dropped from the model rather than used.
+// elimination runs at half that rate (canonical mg/L). Km takes every
+// concentration unit, as the entry path does for any concentration: a molar Km
+// converts with the drug's molecular weight, and stays out of the model when the
+// drug has none recorded.
 const VMAX_UNITS = ['mg/L/h', 'µg/mL/h', 'mg/dL/h', 'g/L/h', 'mg/L/min'] as const;
-const KM_UNITS = ['mg/L', 'µg/mL', 'mg/dL', 'µg/L', 'ng/mL'] as const;
 
 // ─── Registry ───────────────────────────────────────────────────────────────
 
@@ -959,7 +959,7 @@ export const DRUG_PARAMETERS: Record<DrugParameterId, ParameterSpec> = {
     symbol: 'Km',
     kind: 'range',
     group: 'pharmacokinetics',
-    allowedUnits: KM_UNITS,
+    allowedUnits: CONCENTRATION_UNITS,
     canonicalUnit: 'mg/L',
     bounds: { min: 0.000001, max: 1_000_000 },
     requiresMinMax: false,
@@ -968,7 +968,7 @@ export const DRUG_PARAMETERS: Record<DrugParameterId, ParameterSpec> = {
     // (the auto-built model uses plasma/serum entries only).
     matrixRelevant: true,
     summarizable: true,
-    zod: rangeSchema({ min: 0.000001, max: 1_000_000, allowedUnits: KM_UNITS, requiresMinMax: false }),
+    zod: rangeSchema({ min: 0.000001, max: 1_000_000, allowedUnits: CONCENTRATION_UNITS, requiresMinMax: false }),
     format: rangeFormatter,
   },
   postmortemRedistribution: {

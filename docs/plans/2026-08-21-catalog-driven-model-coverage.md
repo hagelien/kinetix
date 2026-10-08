@@ -801,7 +801,7 @@ drugs). A DB edit changes the next snapshot, never a curve already pinned.
        Michaelis–Menten elimination used to remove the drug's curve: the family composed, but the
        catalog had nowhere to store Vmax or Km and the assembler did not map it (the 2026-10-08
        dry run lost beta-hydroxybutyrate and salicylic acid this way). `vmax` (canonical mg/L/h)
-       and `km` (canonical mg/L, mass units only) are now molecule-level, pooled catalog
+       and `km` (canonical mg/L; a molar Km converts with the drug's molecular weight) are now molecule-level, pooled catalog
        parameters, and `assembleRouteParams` builds the `michaelis-menten` family from them — the
        same route the reviewed GHB model runs, from the same numbers. CV-2c-8's rule stands: a
        declared saturable elimination is never drawn first-order, so such a drug has no curve

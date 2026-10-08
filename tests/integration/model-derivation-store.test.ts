@@ -1602,6 +1602,23 @@ describe('saturable (Michaelis–Menten) elimination', () => {
     expect(oral!.values.vmax).toBe(10);
   });
 
+  it('converts a molar Km with the drug’s molecular weight, and leaves it out without one', async () => {
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db);
+    await seedSaturableDrug(drugId, userId);
+    await insertNumeric(drugId, userId, 'vmax', null, { low: 15, median: 15, unit: 'mg/L/h', matrix: 'plasma' });
+    await insertNumeric(drugId, userId, 'km', null, { low: 100, median: 100, unit: 'µmol/L', matrix: 'plasma' });
+
+    // No molecular weight: µmol/L cannot become mg/L, so Km stays missing rather than guessed.
+    const [withoutMw] = await readDrugRouteAssemblyInputs(drugId);
+    expect(withoutMw!.values.km).toBeUndefined();
+
+    // 100 µmol/L × 138.12 g/mol = 13.812 mg/L (salicylic acid).
+    await setDrugLevelParameter(drugId, userId, 'molecularWeight', 138.12);
+    const [withMw] = await readDrugRouteAssemblyInputs(drugId);
+    expect(withMw!.values.km).toBeCloseTo(13.812, 6);
+  });
+
   it('runs no curve at all without Vmax and Km — never a first-order stand-in', async () => {
     const drugId = await seedDrug(db);
     const userId = await seedUser(db);

@@ -648,13 +648,16 @@ export async function readDrugRouteAssemblyInputs(
   }
 
   // Concentration-scale roles, pooled from the entries measured in the derived model's own matrix.
+  // A molar entry converts with the drug's molecular weight; with none recorded it stays out.
+  const mwRaw = drugLevelRows.find((row) => row.parameter === 'molecularWeight')?.value;
+  const molecularWeight = typeof mwRaw === 'number' && mwRaw > 0 ? mwRaw : null;
   for (const parameter of MATRIX_BASIS_ROLE_IDS) {
     const targetUnit = canonicalUnitFor(parameter);
     if (targetUnit === null) continue;
     const entries = (await loadEntryValuesForParameter(drugId, parameter)).filter(
       (entry) => entry.matrix !== null && DERIVED_MODEL_MATRICES.has(entry.matrix),
     );
-    const summary = aggregateEntries(entries, { targetUnit, matrixRelevant: false });
+    const summary = aggregateEntries(entries, { targetUnit, molecularWeight, matrixRelevant: false });
     if (!summary || summary.representative === null) continue;
     drugLevelValues.push({
       parameter,
