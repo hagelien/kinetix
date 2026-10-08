@@ -1,6 +1,7 @@
 import { and, eq, inArray, or, sql } from 'drizzle-orm';
 import {
   bioEntityFunctions,
+  citationFreetextAliases,
   citationPdfs,
   citations,
   drugEliminationRoutes,
@@ -1305,6 +1306,24 @@ export async function mergeCitations(
           : (foldedResolvedAt ?? new Date()),
     })
     .where(eq(citations.id, winnerId));
+
+  // The same, for free text: `altIds` has no slot for it, so without an alias
+  // the next write citing the loser's wording would match nothing and recreate
+  // the row this merge deletes. The loser's own aliases move first — the
+  // cascade below would otherwise take them with it.
+  await db
+    .update(citationFreetextAliases)
+    .set({ citationId: winnerId })
+    .where(eq(citationFreetextAliases.citationId, loserId));
+  if (loser.type === 'freetext') {
+    await db
+      .insert(citationFreetextAliases)
+      .values({ citationId: winnerId, identifier: loser.identifier })
+      .onConflictDoUpdate({
+        target: citationFreetextAliases.identifier,
+        set: { citationId: winnerId },
+      });
+  }
 
   await db.delete(citations).where(eq(citations.id, loserId));
 

@@ -18,7 +18,8 @@ vi.mock('../../api/_lib/auth.js', () => ({
 }));
 
 import handler from '../../api/citation-merge.js';
-import { agents, citations, pdfRequests } from '../../db/schema.js';
+import { resolveCitation } from '../../api/_lib/citation-store.js';
+import { agents, citationFreetextAliases, citations, pdfRequests } from '../../db/schema.js';
 import {
   resetIntegrationDb,
   setupIntegrationDb,
@@ -158,6 +159,35 @@ describe('POST /api/citation-merge', () => {
     const requests = await db.select().from(pdfRequests);
     expect(requests).toHaveLength(1);
     expect(requests[0]!.citationId).toBe(a);
+  });
+
+  it('resolves a merged-away spelling to the kept row instead of recreating it (Codex P1, review comment 4215789765)', async () => {
+    const [a, b, c] = await seedSchulzSpellings();
+    const [bRow] = await db.select().from(citations).where(eq(citations.id, b));
+    const res = await call('POST', '/api/citation-merge', { survivorId: a, mergeIds: [b, c] });
+    expect(res.status).toBe(200);
+
+    const again = await resolveCitation(
+      db,
+      { type: 'freetext', identifier: bRow!.identifier },
+      adminId,
+    );
+    expect(again).toMatchObject({ id: a, created: false });
+    const rows = await db.select({ id: citations.id }).from(citations);
+    expect(rows.map((row) => row.id)).toEqual([a]);
+  });
+
+  it('carries a loser’s own aliases over when it is folded again', async () => {
+    const [a, b, c] = await seedSchulzSpellings();
+    const [bRow] = await db.select().from(citations).where(eq(citations.id, b));
+    await call('POST', '/api/citation-merge', { survivorId: b, mergeIds: [c] });
+    const pmid = await seedCitation('pmid', '22835221', 'Therapeutic and toxic blood concentrations');
+    const res = await call('POST', '/api/citation-merge', { survivorId: pmid, mergeIds: [a, b] });
+    expect(res.status).toBe(200);
+
+    const aliases = await db.select().from(citationFreetextAliases);
+    expect(aliases.map((alias) => alias.citationId)).toEqual([pmid, pmid, pmid]);
+    expect(aliases.map((alias) => alias.identifier)).toContain(bRow!.identifier);
   });
 
   it('keeps the PMID row rather than a free-text one', async () => {

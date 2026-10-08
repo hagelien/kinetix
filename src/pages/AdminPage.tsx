@@ -667,13 +667,14 @@ export function AdminPage() {
     // editor who holds only their own capability, so this follows the same
     // `requiredAnyCapability` pattern as `/wiki/:slug/edit`. `AdminContent`
     // itself still gates each pane (and each section within a pane) on its
-    // own capability, so a caller who only holds `dispute.queue.read` or
-    // `admin.navVisibility.manage` sees just that one tab.
+    // own capability, so a caller who only holds `dispute.queue.read`,
+    // `admin.navVisibility.manage` or `citation.merge` sees just that one tab.
     <AuthGuard
       requiredAnyCapability={[
         'admin.panel.access',
         'dispute.queue.read',
         'admin.navVisibility.manage',
+        'citation.merge',
       ]}
     >
       <AdminContent />

@@ -58,6 +58,9 @@ export function Header() {
   // own /admin link too, not just the route-level AuthGuard that admits
   // them — otherwise they have no in-app path to the pane they can manage.
   const canManageNavVisibility = useCan('admin.navVisibility.manage');
+  // Same for `citation.merge`, which an admin may lower to editor: the merge
+  // pane admits that editor, so the header has to lead them there.
+  const canMergeCitations = useCan('citation.merge');
   const permissionOverrides = usePermissionOverrides();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const hiddenNavItems = useAuthStore((s) => s.hiddenNavItems);
@@ -313,7 +316,7 @@ export function Header() {
           {/* Auth */}
           {isAuthenticated && user ? (
             <div className="flex items-center gap-2">
-              {(canOpenAdmin || canManageNavVisibility) && (
+              {(canOpenAdmin || canManageNavVisibility || canMergeCitations) && (
                 <Link
                   to="/admin"
                   className="text-xs font-medium text-white/50 hover:text-white inline-flex items-center justify-center gap-1 transition-colors min-h-9 min-w-9 sm:min-h-0 sm:min-w-0"

@@ -156,6 +156,28 @@ describe('AdminPage capability gating (#1233 / PR #1299 P1)', () => {
     });
   });
 
+  it('lets an editor delegated only citation.merge reach the Merge pane (Codex P1, review comment 4215789774)', () => {
+    setAuthState({
+      user: makeUser('editor'),
+      isAuthenticated: true,
+      isLoading: false,
+      permissionOverrides: { 'citation.merge': 'editor' },
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/admin?pane=merge']}>
+        <AdminPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByText('auth.accessDenied')).toBeNull();
+    const pane = screen.getByRole('tab', { name: 'admin.panes.merge' });
+    expect(pane).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByText('admin.citationMerge.title')).toBeInTheDocument();
+    // The drug merge stays with its own capability.
+    expect(screen.queryByText('admin.drugMerge.title')).toBeNull();
+  });
+
   it('still denies /admin to a contributor with neither capability', () => {
     setAuthState({
       user: makeUser('contributor'),
