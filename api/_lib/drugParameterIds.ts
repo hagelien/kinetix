@@ -39,6 +39,9 @@ export const DRUG_PARAMETER_IDS = [
   'clearance',
   // Route-specific first-order absorption rate (CV-2c), stored per route.
   'ka',
+  // Saturable (Michaelis–Menten) elimination pair, molecule-level.
+  'vmax',
+  'km',
   'postmortemRedistribution',
   'pmAmRatio',
   // Model structure (CV-1b): categorical PK model-shape axes.

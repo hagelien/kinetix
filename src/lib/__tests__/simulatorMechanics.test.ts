@@ -46,6 +46,7 @@ import {
 import { DEFAULT_DRAW_COUNT, DEFAULT_SEED } from '@/stores/simulatorStore';
 import {
   applyCautiousDefaults,
+  applyKaInference,
   CAUTIOUS_DEFAULT_BIOAVAILABILITY,
   resolveDrugModelsByRoute,
 } from '@/lib/modelDerivation';
@@ -404,6 +405,22 @@ describe('mechanics document — catalogue-derived structure (§5)', () => {
     const saturable = derive([], ['michaelis-menten']);
     expect(saturable.dispositionFallback).toBeUndefined();
     expect(saturable.family).toBe('michaelis-menten');
+  });
+
+  it('builds a saturable curve only from a stored Vmax and Km, as §5 states', () => {
+    expect(doc).toContain('**A saturable elimination is built from its own two numbers.**');
+    const saturable = derive([], ['michaelis-menten']);
+    const base = { ka: 1, eliminationHalfLife: 4, vd: 0.6, bioavailability: 0.8 };
+    expect(assembleRouteParams(saturable, { ...base, vmax: 15, km: 12 })).toMatchObject({
+      outcome: 'assembled',
+      family: 'michaelis-menten',
+    });
+    // "Until both are stored, the drug gets no curve."
+    expect(assembleRouteParams(saturable, { ...base, vmax: 15 }).outcome).toBe('incomplete');
+    // "A recorded Tmax is never solved for an absorption rate."
+    expect(doc).toContain('a recorded Tmax is\n  never solved for an absorption rate');
+    const withoutKa = applyKaInference(saturable, { eliminationHalfLife: 4, vd: 0.6 }, 1);
+    expect(withoutKa.values.ka).toBeUndefined();
   });
 
   it('defaults only a missing F, to 100 %, as §5 states', () => {

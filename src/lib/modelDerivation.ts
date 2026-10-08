@@ -91,9 +91,10 @@ export const MODEL_STRUCTURE_AXIS_PARAMETERS = {
  * and `ke` (`tmax = ln(ka/ke)/(ka−ke)`), so recovering `ka` from it needs `ke` and an implicit
  * two-root solve — `tmax`→`ka` would manufacture a rate. So `ka` is present per route when a
  * reviewer has authored it, and otherwise stays in `missingParameters`. The two-compartment
- * micro-rates (`k12`/`k21`), central volume (`centralVolume`), saturable pair (`vmax`/`km`), input
- * durations, and parent/metabolite roles remain source-less: a family that requires any of them
- * reports it as `missingParameters`, the honest "incomplete, grade it down" signal.
+ * micro-rates (`k12`/`k21`), central volume (`centralVolume`), input durations, and
+ * parent/metabolite roles remain source-less: a family that requires any of them reports it as
+ * `missingParameters`, the honest "incomplete, grade it down" signal. The saturable pair
+ * (`vmax`/`km`) has its own molecule-level catalog parameters.
  */
 const PARAMETER_ROLES: Partial<Record<DrugParameterId, RequiredParam>> = {
   halfLife: 'eliminationHalfLife',
@@ -104,6 +105,10 @@ const PARAMETER_ROLES: Partial<Record<DrugParameterId, RequiredParam>> = {
   // parameter. It is supplied per route (a route's `presentParameters`), so an
   // oral first-order model can finally be completed once a reviewer authors it.
   ka: 'ka',
+  // The saturable pair: a drug that declares Michaelis–Menten elimination runs that family once
+  // both are curated (molecule-level, pooled like the half-life).
+  vmax: 'vmax',
+  km: 'km',
 };
 
 /**
@@ -263,8 +268,10 @@ export interface KaInferenceOutcome {
  *     purely zero-order input has no `ka`, and one authored for it would be a contradiction);
  *  2. no cited `ka` is already present (an authored value is evidence and always wins);
  *  3. an attributable `tmax` was supplied by the caller;
- *  4. the route has an elimination half-life to solve against;
- *  5. the solve succeeds — i.e. the pair is not in the flip-flop regime, where the stored half-life
+ *  4. elimination is first-order — under saturable (Michaelis–Menten) elimination the time of
+ *     peak depends on the dose, so one stored `tmax` does not pin down an absorption rate;
+ *  5. the route has an elimination half-life to solve against;
+ *  6. the solve succeeds — i.e. the pair is not in the flip-flop regime, where the stored half-life
  *     cannot be read as an elimination half-life at all.
  *
  * Any condition failing leaves `values` untouched. Pure; the returned `values` is a copy, so the
@@ -282,6 +289,13 @@ export function applyKaInference(
   // An authored, cited ka is evidence; an inference is an assumption. Evidence wins.
   if (values[TMAX_INFERRED_ROLE] !== undefined) return unchanged;
   if (tmaxHours === undefined) return unchanged;
+  if (derived.structure.elimination === 'michaelis-menten') {
+    return {
+      ...unchanged,
+      declined:
+        'saturable elimination makes the time of peak depend on the dose, so a stored Tmax cannot be solved for an absorption rate',
+    };
+  }
 
   const halfLife = values.eliminationHalfLife;
   if (halfLife === undefined) {

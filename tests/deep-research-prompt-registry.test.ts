@@ -227,6 +227,8 @@ describe('deep-research seeding prompt vs parameter registry', () => {
     //       concentrations, whose value means nothing without both.
     //   ² — not summarizable: matrix-specific analytical properties with no
     //       valid cross-matrix pool (`SUMMARIZED_PARAMETER_IDS` excludes them).
+    //   ⁴ — matrix-relevant only: a pooled concentration-scale quantity
+    //       (Vmax, Km) whose matrix must be named but which has no scenario.
     const idColumn = columnIndex(measuredTable!, 'Parameter ID');
     const kindColumn = columnIndex(measuredTable!, 'Value kind');
 
@@ -239,10 +241,15 @@ describe('deep-research seeding prompt vs parameter registry', () => {
         expect(kindCell.includes('²'), `² (not cross-matrix aggregatable) marker on ${id}`).toBe(
           !parameterIsSummarizable(id),
         );
+        expect(kindCell.includes('⁴'), `⁴ (matrix only) marker on ${id}`).toBe(
+          parameterIsMatrixRelevant(id) &&
+            parameterIsSummarizable(id) &&
+            !parameterIsScenarioRelevant(id),
+        );
         if (parameterIsMatrixRelevant(id)) {
-          // Every matrix-relevant parameter must carry one marker or the other;
-          // which one depends on whether its values pool across sources.
-          expect(/[¹²]/.test(kindCell), `a footnote marker on matrix-relevant ${id}`).toBe(true);
+          // Every matrix-relevant parameter must carry one marker; which one
+          // depends on whether it is scenario-relevant and pools across sources.
+          expect(/[¹²⁴]/.test(kindCell), `a footnote marker on matrix-relevant ${id}`).toBe(true);
         }
       }
     }

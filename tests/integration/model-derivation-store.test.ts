@@ -74,12 +74,20 @@ async function insertNumeric(
   userId: number,
   parameter: string,
   route: string | null,
-  over: { low?: number; high?: number; median?: number; unit?: string; qualifier?: string } = {},
+  over: {
+    low?: number;
+    high?: number;
+    median?: number;
+    unit?: string;
+    qualifier?: string;
+    matrix?: string;
+  } = {},
 ): Promise<void> {
   await db.insert(parameterEntries).values({
     drugId,
     parameter,
     ...(over.qualifier ? { qualifier: over.qualifier } : {}),
+    ...(over.matrix ? { matrix: over.matrix } : {}),
     low: String(over.low ?? 1),
     high: over.high != null ? String(over.high) : null,
     median: over.median != null ? String(over.median) : null,
@@ -1539,5 +1547,175 @@ describe('reported spreads reach the assembled model', () => {
     const iv = build.snapshot.definitions.find((d) => d.analyte === 'point-analyte')!.routes.iv as unknown as Record<string, { kind: string }>;
     expect(iv.eliminationHalfLifeHours).toEqual({ kind: 'fixed', value: 4 });
     expect(iv.vdLitersPerKg!.kind).toBe('triangular');
+  });
+});
+
+describe('saturable (Michaelis–Menten) elimination', () => {
+  /** A drug declaring saturable elimination with a curated oral route (ka + F) and t½ + Vd. */
+  async function seedSaturableDrug(drugId: number, userId: number): Promise<void> {
+    await insertAxis(drugId, userId, 'dispositionModel', 'one-compartment');
+    await insertAxis(drugId, userId, 'eliminationModel', 'michaelis-menten');
+    await insertAxis(drugId, userId, 'absorptionModel', 'first-order', 'oral');
+    await setDrugLevelParameter(drugId, userId, 'halfLife', { median: 4, unit: 'h' });
+    await setDrugLevelParameter(drugId, userId, 'volumeOfDistribution', { median: 0.6, unit: 'L/kg' });
+    await insertNumeric(drugId, userId, 'ka', 'oral', { median: 2, unit: '1/h' });
+    await insertNumeric(drugId, userId, 'bioavailability', 'oral', { median: 0.9, unit: 'fraction' });
+  }
+
+  it('assembles the saturable family once Vmax and Km are curated, in canonical units', async () => {
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db);
+    await seedSaturableDrug(drugId, userId);
+    await insertNumeric(drugId, userId, 'vmax', null, { low: 1.5, median: 1.5, unit: 'mg/dL/h', matrix: 'plasma' });
+    await insertNumeric(drugId, userId, 'km', null, { low: 12, median: 12, unit: 'mg/L', matrix: 'serum' });
+
+    const assembly = await readDrugModelDefinition(drugId);
+    expect(assembly.outcome).toBe('assembled');
+    if (assembly.outcome !== 'assembled') throw new Error('expected assembled');
+    const oral = assembly.definition.routes.oral!;
+    expect(oral.family).toBe('michaelis-menten');
+    if (oral.family !== 'michaelis-menten') throw new Error('expected michaelis-menten');
+    expect(oral.vmaxMgPerLPerHour).toEqual({ kind: 'fixed', value: 15 });
+    expect(oral.kmMgPerL).toEqual({ kind: 'fixed', value: 12 });
+  });
+
+  it('uses only plasma or serum Vmax and Km, never a whole-blood or matrix-less value', async () => {
+    // The derived model is a plasma model and consumes these concentrations directly, so a
+    // whole-blood figure — or the drug-level cache, which pools them normalized to whole blood —
+    // would put the curve on the wrong concentration scale.
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db);
+    await seedSaturableDrug(drugId, userId);
+    await insertNumeric(drugId, userId, 'vmax', null, { median: 20, unit: 'mg/L/h', matrix: 'whole_blood' });
+    await insertNumeric(drugId, userId, 'vmax', null, { median: 30, unit: 'mg/L/h' });
+    await insertNumeric(drugId, userId, 'km', null, { median: 12, unit: 'mg/L', matrix: 'plasma' });
+    await setDrugLevelParameter(drugId, userId, 'vmax', { median: 20, unit: 'mg/L/h' });
+
+    const assembly = await readDrugModelDefinition(drugId);
+    expect(assembly.outcome).toBe('not-modelable');
+    expect(assembly.routeOutcomes).toEqual([
+      expect.objectContaining({ route: 'oral', outcome: 'incomplete', missing: ['vmax'] }),
+    ]);
+
+    await insertNumeric(drugId, userId, 'vmax', null, { median: 10, unit: 'mg/L/h', matrix: 'plasma' });
+    const [oral] = await readDrugRouteAssemblyInputs(drugId);
+    expect(oral!.values.vmax).toBe(10);
+  });
+
+  it('converts a molar Km with the drug’s molecular weight, and leaves it out without one', async () => {
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db);
+    await seedSaturableDrug(drugId, userId);
+    await insertNumeric(drugId, userId, 'vmax', null, { low: 15, median: 15, unit: 'mg/L/h', matrix: 'plasma' });
+    await insertNumeric(drugId, userId, 'km', null, { low: 100, median: 100, unit: 'µmol/L', matrix: 'plasma' });
+
+    // No molecular weight: µmol/L cannot become mg/L, so Km stays missing rather than guessed.
+    const [withoutMw] = await readDrugRouteAssemblyInputs(drugId);
+    expect(withoutMw!.values.km).toBeUndefined();
+
+    // 100 µmol/L × 138.12 g/mol = 13.812 mg/L (salicylic acid).
+    await setDrugLevelParameter(drugId, userId, 'molecularWeight', 138.12);
+    const [withMw] = await readDrugRouteAssemblyInputs(drugId);
+    expect(withMw!.values.km).toBeCloseTo(13.812, 6);
+  });
+
+  it('drops an impossible mean − SD endpoint from the Km spread, keeping the usable side', async () => {
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db);
+    await seedSaturableDrug(drugId, userId);
+    await insertNumeric(drugId, userId, 'vmax', null, { low: 15, median: 15, unit: 'mg/L/h', matrix: 'plasma' });
+    // 10 ± 12 mg/L: the low endpoint is arithmetic (−2), not a Km anyone measured.
+    await db.insert(parameterEntries).values({
+      drugId,
+      parameter: 'km',
+      centralValue: '10',
+      centralStatistic: 'arithmetic_mean',
+      low: '-2',
+      high: '22',
+      intervalKind: 'sd',
+      unit: 'mg/L',
+      matrix: 'plasma',
+      createdBy: userId,
+      origin: 'contributor',
+    } as never);
+    await insertNumeric(drugId, userId, 'km', null, { low: 6, median: 6, unit: 'mg/L', matrix: 'plasma' });
+
+    const [oral] = await readDrugRouteAssemblyInputs(drugId);
+    expect(oral!.ranges?.km).toEqual({ low: 6, high: 22 });
+  });
+
+  it('names only the studies whose Km actually reached the pool as its source', async () => {
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db);
+    await seedSaturableDrug(drugId, userId);
+    const used = await seedAdmissibleCitation(db, { identifier: '2001' });
+    const skipped = await seedAdmissibleCitation(db, { identifier: '2002' });
+    const cite = (parameter: string, median: number, unit: string, citationId: number) =>
+      db.insert(parameterEntries).values({
+        drugId,
+        parameter,
+        low: String(median),
+        median: String(median),
+        unit,
+        matrix: 'plasma',
+        citationId,
+        createdBy: userId,
+        origin: 'contributor',
+      } as never);
+    await cite('vmax', 15, 'mg/L/h', used);
+    await cite('km', 12, 'mg/L', used);
+    // Molar, and the drug has no molecular weight: this study's number cannot reach the pool.
+    await cite('km', 100, 'µmol/L', skipped);
+
+    const [oral] = await readDrugRouteAssemblyInputs(drugId);
+    expect(oral!.values.km).toBe(12);
+    expect(oral!.inputSources?.km).toEqual({ basis: 'cited', citationIds: [used] });
+  });
+
+  it('does not read Vmax or Km for a drug whose elimination is first-order', async () => {
+    // The snapshot reads every drug; only a saturable one can use these, so no other pays for them.
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db);
+    await insertAxis(drugId, userId, 'eliminationModel', 'first-order');
+    await insertAxis(drugId, userId, 'absorptionModel', 'first-order', 'oral');
+    await setDrugLevelParameter(drugId, userId, 'halfLife', { median: 4, unit: 'h' });
+    await setDrugLevelParameter(drugId, userId, 'volumeOfDistribution', { median: 0.6, unit: 'L/kg' });
+    await insertNumeric(drugId, userId, 'vmax', null, { low: 15, median: 15, unit: 'mg/L/h', matrix: 'plasma' });
+    await insertNumeric(drugId, userId, 'km', null, { low: 12, median: 12, unit: 'mg/L', matrix: 'plasma' });
+
+    const [oral] = await readDrugRouteAssemblyInputs(drugId);
+    expect(oral!.values.vmax).toBeUndefined();
+    expect(oral!.values.km).toBeUndefined();
+  });
+
+  it('runs no curve at all without Vmax and Km — never a first-order stand-in', async () => {
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db);
+    await seedSaturableDrug(drugId, userId);
+
+    const assembly = await readDrugModelDefinition(drugId);
+    expect(assembly.outcome).toBe('not-modelable');
+    expect(assembly.routeOutcomes).toEqual([
+      expect.objectContaining({ route: 'oral', outcome: 'incomplete', missing: ['vmax', 'km'] }),
+    ]);
+  });
+
+  it('does not solve ka from a Tmax under saturable elimination, and says why', async () => {
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db);
+    await insertAxis(drugId, userId, 'dispositionModel', 'one-compartment');
+    await insertAxis(drugId, userId, 'eliminationModel', 'michaelis-menten');
+    await insertAxis(drugId, userId, 'absorptionModel', 'first-order', 'oral');
+    await setDrugLevelParameter(drugId, userId, 'halfLife', { median: 4, unit: 'h' });
+    await setDrugLevelParameter(drugId, userId, 'volumeOfDistribution', { median: 0.6, unit: 'L/kg' });
+    await insertNumeric(drugId, userId, 'vmax', null, { median: 15, unit: 'mg/L/h', matrix: 'plasma' });
+    await insertNumeric(drugId, userId, 'km', null, { median: 12, unit: 'mg/L', matrix: 'plasma' });
+    await insertNumeric(drugId, userId, 'bioavailability', 'oral', { median: 0.9, unit: 'fraction' });
+    await insertNumeric(drugId, userId, 'tmax', 'oral', { median: 1, unit: 'h' });
+
+    const [oral] = await readDrugRouteAssemblyInputs(drugId);
+    expect(oral!.values.ka).toBeUndefined();
+    expect(oral!.inferredParameters).toBeUndefined();
+    expect(oral!.inferenceDeclined).toMatch(/saturable elimination/);
   });
 });

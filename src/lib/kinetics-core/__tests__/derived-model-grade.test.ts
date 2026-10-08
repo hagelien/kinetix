@@ -475,4 +475,37 @@ describe('uncertainty semantics from the reported spreads', () => {
   it('is D when every input is fixed', () => {
     expect(uncertaintyOf(oralWith({}))?.grade).toBe('D');
   });
+
+  describe('a saturable model', () => {
+    const saturableRoute = routeGrade({
+      structure: { disposition: 'one-compartment', elimination: 'michaelis-menten', absorption: 'first-order' },
+      family: 'michaelis-menten',
+    });
+    const saturableWith = (vmax: ReturnType<typeof fixed>) =>
+      derivedDefinition({
+        routes: {
+          oral: {
+            family: 'michaelis-menten',
+            kaPerHour: triangular(0.5, 1, 2),
+            vmaxMgPerLPerHour: vmax,
+            kmMgPerL: triangular(10, 20, 40),
+            eliminationHalfLifeHours: fixed(4),
+            vdLitersPerKg: triangular(0.5, 1, 2),
+            bioavailability: triangular(0.6, 0.8, 0.9),
+          },
+        },
+      });
+
+    it('judges Vmax and Km, which drive its elimination', () => {
+      const assessment = uncertaintyOf(saturableWith(fixed(10)), saturableRoute);
+      expect(assessment?.grade).toBe('D');
+      expect(assessment?.reason).toContain('vmax has no reported spread');
+    });
+
+    it('does not judge its nominal half-life, which does not move the curve', () => {
+      const assessment = uncertaintyOf(saturableWith(triangular(6, 10, 15)), saturableRoute);
+      expect(assessment?.grade).toBe('C');
+      expect(assessment?.reason).not.toContain('eliminationHalfLife');
+    });
+  });
 });

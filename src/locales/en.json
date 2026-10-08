@@ -2756,6 +2756,14 @@
       "label": "ka",
       "longLabel": "Absorption rate constant"
     },
+    "vmax": {
+      "label": "Vmax",
+      "longLabel": "Maximum elimination rate (saturable)"
+    },
+    "km": {
+      "label": "Km",
+      "longLabel": "Michaelis constant (saturable elimination)"
+    },
     "postmortemRedistribution": {
       "label": "C/P",
       "longLabel": "C/P (central–peripheral concentration ratio)"
