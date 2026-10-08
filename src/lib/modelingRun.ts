@@ -53,6 +53,7 @@ import {
 } from '@/lib/unitConversion';
 import { isEthanolDrugId } from '@/lib/ethanolSimulator';
 import {
+  coreAnalyteFor,
   coreResultToMonteCarloResult,
   interpolateCoreBand,
   routeIdFor,
@@ -1348,7 +1349,7 @@ async function runCoreDoses(
 ): Promise<{ ok: true; core: CanonicalResult } | { ok: false; detail: string }> {
   const build = (draws: number) =>
     toCanonicalScenario({
-      analyte: analyteId(config, drugComponent),
+      analyte: coreAnalyteFor([drugComponent?._slug, analyteId(config, drugComponent)]),
       route: mcConfig.route,
       subject: { weightKg: mcConfig.weight ?? 70 },
       doses,
