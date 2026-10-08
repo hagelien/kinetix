@@ -810,7 +810,10 @@ drugs). A DB edit changes the next snapshot, never a curve already pinned.
        dose), so the route needs an authored `ka`. The nominal half-life the family carries is
        display-only and is not judged for uncertainty semantics; Vmax and Km are. Vmax reported as
        an amount per time (mg/h, mg/kg/day) is not accepted: converting it needs Vd, which is a
-       separate parameter, not a unit factor.
+       separate parameter, not a unit factor. Both are `matrixRelevant` (a concentration scale), so
+       an entry records its matrix; the read adapter pools them from the drug's plasma and serum
+       entries only (`MATRIX_BASIS_ROLE_IDS`), because the derived model is a plasma model and the
+       drug-level cache normalizes them to whole blood.
 
 ## 8. Risks & non-goals
 

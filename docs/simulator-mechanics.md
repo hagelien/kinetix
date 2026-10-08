@@ -274,9 +274,11 @@ The two tiers are treated differently, and deliberately so:
   cited as saturable (Michaelis–Menten) is never drawn with first-order elimination.
   **A saturable elimination is built from its own two numbers.** Where a drug's elimination
   is cited as saturable and the catalogue holds its maximum elimination rate (Vmax) and its
-  Michaelis constant (Km), the curve runs the saturable form, so concentrations climb faster
+  Michaelis constant (Km), measured in plasma or serum, the curve runs the saturable form, so concentrations climb faster
   than dose at high doses and fall at a near-constant rate until the level drops below Km.
-  Until both are stored, the drug gets no curve. Its absorption rate must be stored too:
+  Both are concentrations, so a value measured in whole blood, or with no matrix recorded, is
+  not used: it would put a plasma curve on the wrong scale. Until both are stored, the drug
+  gets no curve. Its absorption rate must be stored too:
   under saturable elimination the time to peak depends on the dose, so a recorded Tmax is
   never solved for an absorption rate. The half-life such a model carries is a label only;
   it does not move the curve.
