@@ -40,14 +40,19 @@ export function ReviewPage() {
   const isReviewerUser = useCan('review.queue.readAll');
   const canFulfilPdfs = useCan('citation.pdf.access');
   const canDropPdfsInBulk = useCan('pdfInbox.upload');
+  const canReadDisputeQueue = useCan('dispute.queue.read');
   const typeFilter = (searchParams.get('type') as TypeFilter | null) ?? 'all';
+  const editId = searchParams.get('id');
+  // A deep link to one edit (`?id=`, e.g. from a dispute notification) shows
+  // it whatever its status: a dispute often outlives the edit's review, and
+  // defaulting to 'pending' would hide an already-decided edit behind an
+  // empty queue.
   const statusFilter =
     (searchParams.get('status') as StatusFilter | null) ??
-    (isReviewerUser ? 'pending' : 'all');
+    (isReviewerUser && !editId ? 'pending' : 'all');
   const mineOnly = searchParams.get('mine') === '1' || !isReviewerUser;
   const submittedBy = searchParams.get('submittedBy');
   const targetId = searchParams.get('targetId');
-  const editId = searchParams.get('id');
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -63,7 +68,10 @@ export function ReviewPage() {
   ) {
     const sp = new URLSearchParams(searchParams);
     for (const [key, value] of Object.entries(next)) {
-      if (!value || value === 'all' || value === '0') sp.delete(key);
+      // Reviewers default to 'pending', so dropping `status=all` from the URL
+      // would snap the filter straight back to 'pending' — keep it explicit.
+      if (key === 'status' && value === 'all') sp.set(key, value);
+      else if (!value || value === 'all' || value === '0') sp.delete(key);
       else sp.set(key, value);
     }
     setSearchParams(sp);
@@ -139,6 +147,13 @@ export function ReviewPage() {
     ],
     [t],
   );
+
+  // Arrived by deep link (e.g. from a dispute) at an edit that is no longer
+  // awaiting review: say so up front, since a dispute still open against it
+  // is likely stale and can be closed from the admin dispute queue.
+  const linkedEdit = editId && edits.length === 1 ? edits[0] : undefined;
+  const decidedLinkedEdit =
+    linkedEdit && linkedEdit.status !== 'pending' ? linkedEdit : null;
 
   const canReviewOthers = isReviewerUser;
   const title =
@@ -245,6 +260,23 @@ export function ReviewPage() {
           </p>
         ) : (
           <div className="space-y-3">
+            {decidedLinkedEdit ? (
+              <div
+                role="status"
+                className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
+              >
+                {t('review.linkedEditDecided', {
+                  status: t(`review.status.${decidedLinkedEdit.status}`, {
+                    defaultValue: decidedLinkedEdit.status,
+                  }),
+                })}{' '}
+                {canReadDisputeQueue ? (
+                  <Link to="/admin?pane=disputes" className="underline">
+                    {t('review.linkedEditDecidedDisputesLink')}
+                  </Link>
+                ) : null}
+              </div>
+            ) : null}
             {edits.map((edit) => (
               <PendingEditCard
                 key={edit.id}

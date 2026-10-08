@@ -2312,6 +2312,8 @@
     "showMine": "Show my edits",
     "loading": "Loading…",
     "noMatch": "No edits match the current filters.",
+    "linkedEditDecided": "This edit is no longer awaiting review (status: {{status}}). Any objection still open against it is probably out of date.",
+    "linkedEditDecidedDisputesLink": "Close it under Admin → Disputes.",
     "parameter": "Parameter",
     "newPage": "New page",
     "pageEdit": "Page edit",
