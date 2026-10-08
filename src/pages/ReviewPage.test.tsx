@@ -139,4 +139,61 @@ describe('ReviewPage', () => {
       expect(screen.queryByText('review.loading')).not.toBeInTheDocument(),
     );
   });
+
+  it('keeps the "all" status filter selected for a reviewer', async () => {
+    fetchPendingEdits.mockResolvedValue({ pendingEdits: [] });
+
+    render(
+      <MemoryRouter>
+        <ReviewPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() =>
+      expect(fetchPendingEdits).toHaveBeenLastCalledWith(
+        expect.objectContaining({ status: 'pending' }),
+      ),
+    );
+
+    // Two "review.all" buttons: the type filter's, then the status filter's.
+    fireEvent.click(screen.getAllByRole('button', { name: 'review.all' })[1]!);
+
+    await waitFor(() =>
+      expect(fetchPendingEdits).toHaveBeenLastCalledWith(
+        expect.objectContaining({ status: 'all' }),
+      ),
+    );
+  });
+
+  it('shows a deep-linked edit whatever its status', async () => {
+    fetchPendingEdits.mockResolvedValue({ pendingEdits: [] });
+
+    render(
+      <MemoryRouter initialEntries={['/review?id=963']}>
+        <ReviewPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() =>
+      expect(fetchPendingEdits).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 963, status: 'all' }),
+      ),
+    );
+  });
+
+  it('flags a deep-linked edit that is no longer pending', async () => {
+    fetchPendingEdits.mockResolvedValue({
+      pendingEdits: [{ ...makeEdit(), status: 'approved' }],
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/review?id=42']}>
+        <ReviewPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'review.linkedEditDecided',
+    );
+  });
 });
