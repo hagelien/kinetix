@@ -2312,6 +2312,8 @@
     "showMine": "Vis mine endringer",
     "loading": "Laster…",
     "noMatch": "Ingen endringer passer til gjeldende filtre.",
+    "linkedEditDecided": "Denne endringen venter ikke lenger på gjennomgang (status: {{status}}). En innsigelse som fortsatt står åpen mot den, er trolig utdatert.",
+    "linkedEditDecidedDisputesLink": "Lukk den under Administrasjon → Innsigelser.",
     "parameter": "Parameter",
     "newPage": "Ny side",
     "pageEdit": "Sideendring",
