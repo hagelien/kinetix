@@ -34,6 +34,8 @@ export default withErrorHandling(async function handler(req, res): Promise<void>
     return;
   }
   json(res, 200, result, {
-    headers: publicCacheHeaders({ sMaxAge: 60, staleWhileRevalidate: 300 }),
+    // No stale window: a corrected or withdrawn value must not keep drawing curves past the
+    // minute this cache is trusted for.
+    headers: publicCacheHeaders({ sMaxAge: 60, staleWhileRevalidate: 0 }),
   });
 });

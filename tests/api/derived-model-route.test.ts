@@ -49,6 +49,8 @@ describe('GET /api/derived-model', () => {
     expect(state.status).toBe(200);
     expect(JSON.parse(state.body!).status).toBe('not-modelable');
     expect(String(state.headers['cache-control'])).toContain('s-maxage=60');
+    // A stale window would let a corrected value keep serving long past the documented bound.
+    expect(String(state.headers['cache-control'])).toContain('stale-while-revalidate=0');
   });
 
   it('answers 404 for a slug the catalogue does not hold', async () => {
