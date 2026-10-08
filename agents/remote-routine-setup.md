@@ -140,7 +140,7 @@ Because the runner clones from the default branch at each run, any edit to `agen
 
 ## 6. Second Routine — the paper fact extractor
 
-`agents/paper-fact-extractor.md` drains the editor-filled fact-extraction queue: it claims one uploaded paper per run, reads it in full, and files its facts as `wiki_fact` pending edits on the monographs and wiki pages they belong to.
+`agents/paper-fact-extractor.md` drains the editor-filled fact-extraction queue: it claims one uploaded paper per run, reads it in full, and files its facts as `wiki_fact` pending edits on the monographs and wiki pages they belong to and its drug parameter values as `param_entry` pending edits on the parameters they belong to.
 
 It is a **separate Routine on the same environment**, not a sixth action inside the maintainer cycle. The two have different clocks: the maintainer walks a backlog that is always there, while the extraction queue is editor-driven and bursty — a reading list someone deliberately handed the agent, which should drain promptly rather than wait behind an unrelated parameter verification. Folding it in would also mean one run does two full-text reads, and the paper read is the expensive part of both.
 
@@ -156,7 +156,7 @@ An empty queue costs one API call and one log row, so an over-frequent schedule 
 
 Running it under a **distinct agent identity** (its own `kxat_…` token) is optional but preferred: the identity is what the queue records as the claim holder, so a separate one makes it obvious in the queue view which routine is holding a job, and lets you pause extraction without pausing the maintainer.
 
-Same kill switches as §4 — pause the Routine, revoke its token, or suspend the agent — plus a narrower one: an editor can cancel any single job from `/paper-extraction`. Cancelling a job that is mid-extraction guarantees the run's result is never recorded and that no later run claims the paper; the run itself stops at its next per-fact claim check, so a fact filed in the seconds before cancellation still lands in the review queue for a human to reject.
+Same kill switches as §4 — pause the Routine, revoke its token, or suspend the agent — plus a narrower one: an editor can cancel any single job from `/paper-extraction`. Cancelling a job that is mid-extraction guarantees the run's result is never recorded and that no later run claims the paper; the run itself stops at its next per-item claim check, so a fact or value filed in the seconds before cancellation still lands in the review queue for a human to reject.
 
 ## 7. Tiered model deployment (cost + integrity)
 
