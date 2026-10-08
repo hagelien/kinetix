@@ -3162,7 +3162,33 @@
     "relative": "Relative",
     "unavailable": "Unavailable",
     "logScale": "log scale",
-    "addedToast": "Added {{drug}} to your basket"
+    "addedToast": "Added {{drug}} to your basket",
+    "pd": {
+      "title": "Pharmacodynamics",
+      "body": "Receptor profile for the drugs in the basket. Each cell shows the strongest reported affinity or potency (Ki, else EC50, else IC50) — darker means stronger. Select receptors to compare the drugs side by side.",
+      "targetDrugCount_one": "{{count}} drug in the basket acts here",
+      "targetDrugCount_other": "{{count}} drugs in the basket act here",
+      "matrixLegend": "Molar values are converted to nM. Darker shading = lower concentration = stronger binding or potency. – = no recorded mechanism.",
+      "noMeasurement": "No value",
+      "noTargets": "None of the drugs in the basket have recorded receptor mechanisms yet.",
+      "relativeTo": "Ratios relative to {{drug}}: above 1x means stronger (Ki/EC50/IC50) or higher (Emax).",
+      "relativeHint": "Relative to the reference drug",
+      "mechanism": "Mechanism",
+      "species": "Assay species",
+      "noMechanism": "No mechanism at this receptor",
+      "noMeasurements": "No quantitative measurements recorded at this receptor.",
+      "tier": {
+        "primary": "primary",
+        "secondary": "secondary",
+        "tertiary": "tertiary"
+      },
+      "metric": {
+        "affinity": "Affinity",
+        "potency": "Potency",
+        "efficacy": "Efficacy",
+        "selectivityRatio": "Selectivity"
+      }
+    }
   },
   "paramEdit": {
     "editTitle": "Edit {{label}}",
