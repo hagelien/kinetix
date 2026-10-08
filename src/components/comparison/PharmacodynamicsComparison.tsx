@@ -55,7 +55,7 @@ function useReceptorTargets(drugIds: number[]) {
     Record<number, DrugReceptorTargetSummary[]>
   >({});
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     const ids = signature
@@ -68,7 +68,7 @@ function useReceptorTargets(drugIds: number[]) {
     }
     let cancelled = false;
     setLoading(true);
-    setError(null);
+    setFailed(false);
     Promise.all(ids.map((id) => fetchDrugById(id)))
       .then((results) => {
         if (cancelled) return;
@@ -80,8 +80,11 @@ function useReceptorTargets(drugIds: number[]) {
       })
       .catch((err) => {
         if (!cancelled) {
+          // The raw message is API/browser prose (often English); log it and
+          // show a localized notice instead.
+          console.error('Failed to load receptor mechanisms', err);
           setByDrug({});
-          setError(err instanceof Error ? err.message : String(err));
+          setFailed(true);
         }
       })
       .finally(() => {
@@ -92,7 +95,7 @@ function useReceptorTargets(drugIds: number[]) {
     };
   }, [signature]);
 
-  return { byDrug, loading, error };
+  return { byDrug, loading, failed };
 }
 
 function TargetPicker({
@@ -473,7 +476,7 @@ export function PharmacodynamicsComparison({
   drugName: (drugId: number) => string;
 }) {
   const { t } = useTranslation();
-  const { byDrug, loading, error } = useReceptorTargets(drugIds);
+  const { byDrug, loading, failed } = useReceptorTargets(drugIds);
   const drugs = useMemo<PdDrugInput[]>(
     () =>
       drugIds
@@ -497,8 +500,10 @@ export function PharmacodynamicsComparison({
           <p className="mt-3 text-sm text-muted-foreground">
             {t('common.loading')}
           </p>
-        ) : error ? (
-          <p className="mt-3 text-sm text-destructive">{error}</p>
+        ) : failed ? (
+          <p className="mt-3 text-sm text-destructive">
+            {t('comparison.pd.loadError')}
+          </p>
         ) : targets.length === 0 ? (
           <p className="mt-3 text-sm text-muted-foreground">
             {t('comparison.pd.noTargets')}

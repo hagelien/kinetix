@@ -3187,7 +3187,8 @@
         "potency": "Potens",
         "efficacy": "Effekt",
         "selectivityRatio": "Selektivitet"
-      }
+      },
+      "loadError": "Kunne ikke laste reseptormekanismene. Prøv å laste siden på nytt."
     }
   },
   "paramEdit": {
