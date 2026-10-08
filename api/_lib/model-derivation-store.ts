@@ -77,6 +77,7 @@ import {
   CAUTIOUS_DEFAULT_ROLES,
   applyKaInference,
   canonicalUnitFor,
+  DERIVED_MODEL_MATRIX,
   derivedDefinitionMetadata,
   inferVdScaling,
   isRouteAssemblyParameter,
@@ -108,6 +109,21 @@ const isRouteId = (value: string | null): value is RouteId =>
 const DRUG_LEVEL_EXCLUDED_ROLE_IDS: ReadonlySet<DrugParameterId> = new Set<DrugParameterId>([
   'bioavailability',
 ]);
+
+/**
+ * Concentration-scale structural roles: their value depends on the matrix it was measured in, and
+ * the saturable model consumes them directly, so they must be on the derived model's own matrix
+ * (`DERIVED_MODEL_MATRIX`). The drug-level cache cannot supply that — it pools these
+ * (`matrixRelevant`) normalized to whole blood — so they are pooled here from the drug's plasma and
+ * serum entries alone. An entry from another matrix, or with none recorded, is left out rather than
+ * converted: missing stays missing.
+ */
+const MATRIX_BASIS_ROLE_IDS: ReadonlySet<DrugParameterId> = new Set<DrugParameterId>(['vmax', 'km']);
+
+/** Matrices that report the same concentration as the derived model's matrix (plasma). */
+const DERIVED_MODEL_MATRICES: ReadonlySet<string> = new Set<string>(
+  DERIVED_MODEL_MATRIX === 'plasma' ? ['plasma', 'serum'] : [DERIVED_MODEL_MATRIX],
+);
 
 /**
  * Drug-level parameters that only an EXTRAVASCULAR route can produce, and so evidence that one was
@@ -410,6 +426,8 @@ async function readDrugLevelSources(
   for (const row of rows) {
     const p = row.parameter;
     if (!isDrugParameterId(p) || (p !== 'tmax' && parameterRoleFor(p) === null)) continue;
+    // Read from their entries, not the cache — see `MATRIX_BASIS_ROLE_IDS`.
+    if (MATRIX_BASIS_ROLE_IDS.has(p)) continue;
     const range = asNumericRange(row.value);
     if (!range) continue;
     if (!isAggregateCacheValue(row.value)) {
@@ -593,7 +611,7 @@ export async function readDrugRouteAssemblyInputs(
       }
       continue;
     }
-    if (parameterRoleFor(p) === null) continue;
+    if (parameterRoleFor(p) === null || MATRIX_BASIS_ROLE_IDS.has(p)) continue;
     if (parameterIsRouteScoped(p) || DRUG_LEVEL_EXCLUDED_ROLE_IDS.has(p)) {
       if (p === 'bioavailability') {
         const fRange = asNumericRange(row.value);
@@ -626,6 +644,24 @@ export async function readDrugRouteAssemblyInputs(
       unit,
       ...reportedBounds(range),
       source: drugLevelSource(p),
+    });
+  }
+
+  // Concentration-scale roles, pooled from the entries measured in the derived model's own matrix.
+  for (const parameter of MATRIX_BASIS_ROLE_IDS) {
+    const targetUnit = canonicalUnitFor(parameter);
+    if (targetUnit === null) continue;
+    const entries = (await loadEntryValuesForParameter(drugId, parameter)).filter(
+      (entry) => entry.matrix !== null && DERIVED_MODEL_MATRICES.has(entry.matrix),
+    );
+    const summary = aggregateEntries(entries, { targetUnit, matrixRelevant: false });
+    if (!summary || summary.representative === null) continue;
+    drugLevelValues.push({
+      parameter,
+      value: summary.representative,
+      unit: targetUnit,
+      ...(summary.min !== null && summary.max !== null ? { low: summary.min, high: summary.max } : {}),
+      source: sourceOfEntries(entries),
     });
   }
 

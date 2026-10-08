@@ -350,8 +350,8 @@ it has no effect on what you emit.
 | pharmacokinetics      | `proteinBinding` (needs min & max)                                                                           | fraction   | `fraction`                                                                            | 0 – 1         |
 | pharmacokinetics      | `bloodPlasmaRatio`                                                                                           | ratio      | `ratio`                                                                               | 0 – 100       |
 | pharmacokinetics      | `clearance`                                                                                                  | range ³    | `L/h` (also `L/min`, `mL/min`, `L/h/kg`, `mL/min/kg`)                                 | 0 – 100 000   |
-| pharmacokinetics      | `vmax` (saturable elimination only)                                                                          | range      | `mg/L/h` (also `µg/mL/h`, `mg/dL/h`, `g/L/h`, `mg/L/min`)                             | 0.0001 – 100 000 |
-| pharmacokinetics      | `km` (saturable elimination only)                                                                            | range      | `mg/L` (also `µg/mL`, `mg/dL`, `µg/L`, `ng/mL`)                                       | 0.000001 – 1 000 000 |
+| pharmacokinetics      | `vmax` (saturable elimination only)                                                                          | range ⁴    | `mg/L/h` (also `µg/mL/h`, `mg/dL/h`, `g/L/h`, `mg/L/min`)                             | 0.0001 – 100 000 |
+| pharmacokinetics      | `km` (saturable elimination only)                                                                            | range ⁴    | `mg/L` (also `µg/mL`, `mg/dL`, `µg/L`, `ng/mL`)                                       | 0.000001 – 1 000 000 |
 | dose & exposure       | `therapeuticDose`, `maxRecommendedDose`, `nonMedicalDose`, `overdoseDose`, `fatalDose`                       | range ³    | `mg` (also `g`, `µg`, `mg/kg`, `mg/day`, `mg/kg/day`)                                 | 0 – 1 000 000 |
 | interpretive conc.    | `therapeuticConcentration`, `supratherapeuticConcentration`, `impairmentConcentration`, `toxicConcentration` | range ¹    | `mg/L` (also `µg/mL`, `ng/mL`, `µg/L`, `ng/L`, `mg/dL`, `mmol/L`, `µmol/L`, `nmol/L`) | 0 – 1 000 000 |
 | analytics & detection | `bloodDetectionWindow`, `oralFluidDetectionWindow`, `urineDetectionWindow`                                    | range      | `h`                                                                                   | 0 – 8 760     |
@@ -370,6 +370,11 @@ with the interpretive concentrations.
 urine and in whole blood are different quantities with no blood:plasma
 conversion between them. One matrix per value, named in `note`, or
 `not_finalized`.
+
+⁴ Matrix-relevant, not scenario-relevant: Vmax and Km are concentrations, so
+the value means nothing without the matrix it was measured in. Name the matrix
+(serum / plasma / whole blood) in `note`; Kinetix models only plasma and serum
+values, and never converts a whole-blood figure into them.
 
 ³ The weight-normalized units (`L/h/kg`, `mL/min/kg`, `mg/kg`, `mg/kg/day`) are
 a **separate family from their absolute counterpart** — Kinetix never

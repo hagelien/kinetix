@@ -74,12 +74,20 @@ async function insertNumeric(
   userId: number,
   parameter: string,
   route: string | null,
-  over: { low?: number; high?: number; median?: number; unit?: string; qualifier?: string } = {},
+  over: {
+    low?: number;
+    high?: number;
+    median?: number;
+    unit?: string;
+    qualifier?: string;
+    matrix?: string;
+  } = {},
 ): Promise<void> {
   await db.insert(parameterEntries).values({
     drugId,
     parameter,
     ...(over.qualifier ? { qualifier: over.qualifier } : {}),
+    ...(over.matrix ? { matrix: over.matrix } : {}),
     low: String(over.low ?? 1),
     high: over.high != null ? String(over.high) : null,
     median: over.median != null ? String(over.median) : null,
@@ -1558,8 +1566,8 @@ describe('saturable (Michaelis–Menten) elimination', () => {
     const drugId = await seedDrug(db);
     const userId = await seedUser(db);
     await seedSaturableDrug(drugId, userId);
-    await setDrugLevelParameter(drugId, userId, 'vmax', { median: 1.5, unit: 'mg/dL/h' });
-    await setDrugLevelParameter(drugId, userId, 'km', { median: 12, unit: 'mg/L' });
+    await insertNumeric(drugId, userId, 'vmax', null, { low: 1.5, median: 1.5, unit: 'mg/dL/h', matrix: 'plasma' });
+    await insertNumeric(drugId, userId, 'km', null, { low: 12, median: 12, unit: 'mg/L', matrix: 'serum' });
 
     const assembly = await readDrugModelDefinition(drugId);
     expect(assembly.outcome).toBe('assembled');
@@ -1569,6 +1577,29 @@ describe('saturable (Michaelis–Menten) elimination', () => {
     if (oral.family !== 'michaelis-menten') throw new Error('expected michaelis-menten');
     expect(oral.vmaxMgPerLPerHour).toEqual({ kind: 'fixed', value: 15 });
     expect(oral.kmMgPerL).toEqual({ kind: 'fixed', value: 12 });
+  });
+
+  it('uses only plasma or serum Vmax and Km, never a whole-blood or matrix-less value', async () => {
+    // The derived model is a plasma model and consumes these concentrations directly, so a
+    // whole-blood figure — or the drug-level cache, which pools them normalized to whole blood —
+    // would put the curve on the wrong concentration scale.
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db);
+    await seedSaturableDrug(drugId, userId);
+    await insertNumeric(drugId, userId, 'vmax', null, { median: 20, unit: 'mg/L/h', matrix: 'whole_blood' });
+    await insertNumeric(drugId, userId, 'vmax', null, { median: 30, unit: 'mg/L/h' });
+    await insertNumeric(drugId, userId, 'km', null, { median: 12, unit: 'mg/L', matrix: 'plasma' });
+    await setDrugLevelParameter(drugId, userId, 'vmax', { median: 20, unit: 'mg/L/h' });
+
+    const assembly = await readDrugModelDefinition(drugId);
+    expect(assembly.outcome).toBe('not-modelable');
+    expect(assembly.routeOutcomes).toEqual([
+      expect.objectContaining({ route: 'oral', outcome: 'incomplete', missing: ['vmax'] }),
+    ]);
+
+    await insertNumeric(drugId, userId, 'vmax', null, { median: 10, unit: 'mg/L/h', matrix: 'plasma' });
+    const [oral] = await readDrugRouteAssemblyInputs(drugId);
+    expect(oral!.values.vmax).toBe(10);
   });
 
   it('runs no curve at all without Vmax and Km — never a first-order stand-in', async () => {
@@ -1591,8 +1622,8 @@ describe('saturable (Michaelis–Menten) elimination', () => {
     await insertAxis(drugId, userId, 'absorptionModel', 'first-order', 'oral');
     await setDrugLevelParameter(drugId, userId, 'halfLife', { median: 4, unit: 'h' });
     await setDrugLevelParameter(drugId, userId, 'volumeOfDistribution', { median: 0.6, unit: 'L/kg' });
-    await setDrugLevelParameter(drugId, userId, 'vmax', { median: 15, unit: 'mg/L/h' });
-    await setDrugLevelParameter(drugId, userId, 'km', { median: 12, unit: 'mg/L' });
+    await insertNumeric(drugId, userId, 'vmax', null, { median: 15, unit: 'mg/L/h', matrix: 'plasma' });
+    await insertNumeric(drugId, userId, 'km', null, { median: 12, unit: 'mg/L', matrix: 'plasma' });
     await insertNumeric(drugId, userId, 'bioavailability', 'oral', { median: 0.9, unit: 'fraction' });
     await insertNumeric(drugId, userId, 'tmax', 'oral', { median: 1, unit: 'h' });
 

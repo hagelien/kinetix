@@ -945,6 +945,9 @@ export const DRUG_PARAMETERS: Record<DrugParameterId, ParameterSpec> = {
     bounds: { min: 0.0001, max: 100_000 },
     requiresMinMax: false,
     forensic: false,
+    // A concentration scale: the value means nothing without the matrix it was measured in
+    // (the auto-built model uses plasma/serum entries only).
+    matrixRelevant: true,
     summarizable: true,
     zod: rangeSchema({ min: 0.0001, max: 100_000, allowedUnits: VMAX_UNITS, requiresMinMax: false }),
     format: rangeFormatter,
@@ -961,6 +964,9 @@ export const DRUG_PARAMETERS: Record<DrugParameterId, ParameterSpec> = {
     bounds: { min: 0.000001, max: 1_000_000 },
     requiresMinMax: false,
     forensic: false,
+    // A concentration scale: the value means nothing without the matrix it was measured in
+    // (the auto-built model uses plasma/serum entries only).
+    matrixRelevant: true,
     summarizable: true,
     zod: rangeSchema({ min: 0.000001, max: 1_000_000, allowedUnits: KM_UNITS, requiresMinMax: false }),
     format: rangeFormatter,
