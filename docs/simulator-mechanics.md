@@ -96,7 +96,12 @@ grade and the coverage report that names every gap and every assumed route.
 
 ### Step 1 — Resolve the model
 
-The analyte id is looked up in the registry. Failure here is terminal for the run. If the
+The analyte id is looked up in the registry. **A drug picked from the catalogue is tried
+under its catalogue slug first, then under an id formed from its English name.** A
+catalogue-derived model is keyed by the slug, which often differs from the English name
+(paracetamol's is `paracetamol-acetaminophen`), while the reviewed models are keyed by the
+name-derived id (`ethanol`, `ghb`). The first id the build resolves is the one that runs. Failure
+here is terminal for the run. If the
 model exists, the scenario's route must be one the model declares — a model reviewed only
 for sublingual dosing refuses an oral scenario rather than reusing the sublingual
 parameters. The dose basis (parent drug, active moiety, salt, free base) must likewise be
