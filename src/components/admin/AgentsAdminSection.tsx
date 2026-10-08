@@ -83,11 +83,15 @@ export function AgentsAdminSection(): JSX.Element {
         />
       )}
 
-      {loading ? (
+      {/* Only the first load replaces the list. A refetch after a save keeps
+          the rows mounted: unmounting them would drop an open form and the
+          error a failed save just set, so the save would look like it did
+          nothing at all. */}
+      {loading && !agents ? (
         <p className="text-sm text-muted-foreground">
           {t('admin.agents.loading', { defaultValue: 'Loading agents…' })}
         </p>
-      ) : error ? (
+      ) : error && !agents ? (
         <p className="text-sm text-destructive">{error}</p>
       ) : agents && agents.length === 0 ? (
         <p className="text-sm text-muted-foreground">
@@ -95,6 +99,9 @@ export function AgentsAdminSection(): JSX.Element {
         </p>
       ) : (
         <ul className="space-y-3">
+          {error && (
+            <li className="text-sm text-destructive">{error}</li>
+          )}
           {agents?.map((agent) => (
             <AgentEditRow
               key={agent.id}
@@ -552,6 +559,7 @@ function AgentEditRow({
           }) as string,
         );
       }
+      const modelFamily = form.modelFamily.trim().toLowerCase();
       const applyFields = () =>
         patchAgent(agent.id, {
           name: form.name.trim(),
@@ -563,8 +571,10 @@ function AgentEditRow({
           hooksEnabled: form.hooksEnabled,
           selfReviewEnabled: form.selfReviewEnabled,
           adjudicator: form.adjudicator,
-          ...(form.modelFamily.trim() !== (agent.modelFamily ?? '')
-            ? { modelFamily: form.modelFamily.trim() || null }
+          // The server only accepts lowercase families, so "Claude" is saved
+          // as "claude" rather than rejected.
+          ...(modelFamily !== (agent.modelFamily ?? '')
+            ? { modelFamily: modelFamily || null }
             : {}),
           // Only when changed against the stored value. A changed value is
           // either '' (clear) or one of the offered tiers; the unrecognised

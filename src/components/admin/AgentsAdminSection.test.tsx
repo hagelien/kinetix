@@ -369,4 +369,32 @@ describe('AgentsAdminSection T3 adjudicator grant', () => {
     await waitFor(() => expect(patchAgent).toHaveBeenCalled());
     expect(firstPatch()[1]).toMatchObject({ modelFamily: null });
   });
+
+  it('saves a capitalised model family in the lowercase form the server accepts', async () => {
+    fetchAdminAgents.mockResolvedValue({ agents: [agentRow()] });
+    render(<AgentsAdminSection />);
+
+    fireEvent.click(await screen.findByText('Edit'));
+    fireEvent.change(screen.getByLabelText('Model family'), { target: { value: ' Claude ' } });
+    fireEvent.click(screen.getByText('Save'));
+
+    await waitFor(() => expect(patchAgent).toHaveBeenCalled());
+    expect(firstPatch()[1]).toMatchObject({ modelFamily: 'claude' });
+  });
+});
+
+describe('AgentsAdminSection failed save', () => {
+  it('keeps the form open and shows the error after the refetch', async () => {
+    fetchAdminAgents.mockResolvedValue({ agents: [agentRow()] });
+    patchAgent.mockRejectedValue(new Error('Slug already in use'));
+    render(<AgentsAdminSection />);
+
+    fireEvent.click(await screen.findByText('Edit'));
+    fireEvent.click(screen.getByText('Save'));
+
+    expect(await screen.findByText('Slug already in use')).toBeInTheDocument();
+    await waitFor(() => expect(fetchAdminAgents).toHaveBeenCalledTimes(2));
+    expect(screen.getByText('Slug already in use')).toBeInTheDocument();
+    expect(screen.getByText('Save')).toBeInTheDocument();
+  });
 });
