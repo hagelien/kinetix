@@ -7,10 +7,12 @@ vi.mock('../../api/_lib/email.js', () => ({ sendEmail: sendEmailMock }));
 import {
   disputes,
   drugParameterDiscussions,
+  drugParameterRevisions,
   notifications,
   pendingEdits,
   users,
   wikiPages,
+  wikiRevisions,
 } from '../../db/schema.js';
 import { deliverNotificationEmails } from '../../api/_lib/notificationEmails.js';
 import type { NotificationSettings } from '../../src/lib/emailNotificationPrefs.js';
@@ -535,6 +537,55 @@ describe('deliverNotificationEmails over real SQL', () => {
     // Already sent this period: a later run the same day sends nothing.
     await notify(daily, 'author');
     expect((await deliverNotificationEmails(APP, new Date(NOW.getTime() + 3_600_000))).emailsSent).toBe(0);
+  });
+
+  it('says in a summary what each stamped contribution was about', async () => {
+    const daily = await user(
+      'stamped',
+      { emailOnFeedback: true, emailFrequency: 'daily', emailLocale: 'nb' },
+      new Date('2026-09-29T06:05:00Z'),
+    );
+    const drug = await seedDrug(db, { names: { nb: 'Paracetamol', en: 'Acetaminophen' } });
+    const [rev] = await db
+      .insert(drugParameterRevisions)
+      .values({ drugId: drug, parameter: 'halfLife', editSummary: 'Rettet intervallet', createdBy: daily } as never)
+      .returning({ id: drugParameterRevisions.id });
+    const [page] = await db
+      .insert(wikiPages)
+      .values({
+        slug: 'cyp3a4',
+        title: 'CYP3A4',
+        status: 'published',
+        createdBy: daily,
+        updatedBy: daily,
+      } as never)
+      .returning({ id: wikiPages.id });
+    const [wikiRev] = await db
+      .insert(wikiRevisions)
+      .values({ pageId: page!.id, content: {}, editSummary: 'La til hemmere', createdBy: daily } as never)
+      .returning({ id: wikiRevisions.id });
+    for (const [targetType, targetId] of [
+      ['drug_parameter_revision', rev!.id],
+      ['wiki_revision', wikiRev!.id],
+    ] as const) {
+      await db.insert(notifications).values({
+        userId: daily,
+        type: 'contribution_endorsed',
+        title: 'Your contribution received an approval stamp',
+        url: '/wiki',
+        audience: 'author',
+        targetType,
+        targetId,
+        createdAt: new Date(NOW.getTime() - 60_000),
+      });
+    }
+
+    await deliverNotificationEmails(APP, NOW);
+
+    const { text, html } = sendEmailMock.mock.calls[0]![0];
+    expect(text).toContain('Paracetamol · Halveringstid: Rettet intervallet');
+    expect(text).toContain('CYP3A4: La til hemmere');
+    expect(html).toContain('Paracetamol · Halveringstid: Rettet intervallet');
   });
 
   it('holds a weekly summary until Monday', async () => {
