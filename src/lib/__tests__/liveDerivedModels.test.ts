@@ -51,6 +51,13 @@ describe('refreshLiveDerivedModel', () => {
     expect(core.resolveModel('alprazolam')).toBeUndefined();
   });
 
+  it('withdraws a model whose drug is no longer in the catalogue', async () => {
+    const { refreshLiveDerivedModel, core } = await load();
+    expect(core.resolveModel('alprazolam')).toBeDefined();
+    await refreshLiveDerivedModel('alprazolam', answer({ error: 'No drug with that slug' }, 404), 0);
+    expect(core.resolveModel('alprazolam')).toBeUndefined();
+  });
+
   it('keeps the committed model when the server cannot answer', async () => {
     const { refreshLiveDerivedModel, core } = await load();
     const before = core.resolveModel('alprazolam');

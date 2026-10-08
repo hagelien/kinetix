@@ -71,8 +71,10 @@ async function fetchAndInstall(slug: string, fetchImpl: typeof fetch, now: numbe
     const res = await fetchImpl(`/api/derived-model?slug=${encodeURIComponent(slug)}`, {
       signal: controller.signal,
     });
-    // Not in the catalogue: nothing to lay over, and nothing the snapshot could hold either.
+    // No longer in the catalogue (deleted or renamed): withdraw whatever the snapshot, or an
+    // earlier live answer, still holds for the slug, exactly as for a drug that builds no model.
     if (res.status === 404) {
+      installLiveDerivedEntry({ analyte: slug, definition: null, grade: null });
       fetchedAt.set(slug, now);
       return;
     }
