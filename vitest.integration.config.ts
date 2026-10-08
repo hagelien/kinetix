@@ -51,6 +51,7 @@ const MOCKED = [
   'tests/integration/agent-verifications-queue-revisit-abstained.test.ts',
   'tests/integration/agent-verifications-queue-target-id.test.ts',
   'tests/integration/agent-verifications-own-verdict-visibility.test.ts',
+  'tests/integration/citation-merge-route.test.ts',
   'tests/integration/cmax-authoring.test.ts',
   'tests/integration/conversation-ingestion-rollback.test.ts',
   'tests/integration/drug-delete-parameter-entries.test.ts',
