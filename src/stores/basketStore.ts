@@ -30,6 +30,11 @@ interface BasketState {
   items: BasketItem[];
   /** Parameters the comparison page renders the basket drugs against. */
   comparisonParameterIds: DrugParameterId[];
+  /**
+   * Receptor targets (bio-entity ids) the comparison page lines the basket
+   * drugs up at — the pharmacodynamic counterpart of the parameter list.
+   */
+  comparisonTargetIds: number[];
   /** Reference drug for comparison ratios. */
   referenceDrugId: number | null;
   addItem: (item: Omit<BasketItem, 'addedAt'>) => void;
@@ -39,6 +44,7 @@ interface BasketState {
   /** Add a parameter to the comparison view (no-op if already present). */
   addComparisonParameter: (parameterId: DrugParameterId) => void;
   toggleComparisonParameter: (parameterId: DrugParameterId) => void;
+  toggleComparisonTarget: (targetId: number) => void;
 }
 
 const BASKET_STORAGE_KEY = 'kinetix.basket';
@@ -131,6 +137,7 @@ export const useBasketStore = create<BasketState>()(
     (set) => ({
       items: legacy.items,
       comparisonParameterIds: legacy.comparisonParameterIds,
+      comparisonTargetIds: [],
       referenceDrugId: legacy.referenceDrugId,
       addItem: (item) =>
         set((state) => {
@@ -188,6 +195,17 @@ export const useBasketStore = create<BasketState>()(
                     id === parameterId ||
                     state.comparisonParameterIds.includes(id),
                 ),
+          };
+        }),
+      toggleComparisonTarget: (targetId) =>
+        set((state) => {
+          const current = Array.isArray(state.comparisonTargetIds)
+            ? state.comparisonTargetIds
+            : [];
+          return {
+            comparisonTargetIds: current.includes(targetId)
+              ? current.filter((id) => id !== targetId)
+              : [...current, targetId],
           };
         }),
     }),

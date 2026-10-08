@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Scale, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DrugSearchDropdown } from '@/components/DrugSearchDropdown';
+import { PharmacodynamicsComparison } from '@/components/comparison/PharmacodynamicsComparison';
 import { fetchDrugsByIds, type DrugRow } from '@/lib/drugApi';
 import {
   buildParameterComparison,
@@ -264,6 +265,10 @@ export function ComparisonPage() {
   const parameterIds = useBasketStore((state) => state.comparisonParameterIds);
   const toggleComparisonParameter = useBasketStore(
     (state) => state.toggleComparisonParameter,
+  );
+  const targetIds = useBasketStore((state) => state.comparisonTargetIds);
+  const toggleComparisonTarget = useBasketStore(
+    (state) => state.toggleComparisonTarget,
   );
   const [rows, setRows] = useState<Record<number, DrugRow>>({});
   const [loading, setLoading] = useState(false);
@@ -601,6 +606,14 @@ export function ComparisonPage() {
             );
           })}
         </div>
+
+        <PharmacodynamicsComparison
+          drugIds={drugIds}
+          referenceDrugId={effectiveReferenceDrugId}
+          selectedTargetIds={targetIds ?? []}
+          onToggleTarget={toggleComparisonTarget}
+          drugName={drugName}
+        />
       </div>
     </main>
   );
