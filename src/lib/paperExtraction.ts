@@ -4,7 +4,7 @@
  * An editor/admin uploads a full-text paper and enqueues it; a scheduled agent
  * claims one job per run, reads the stored PDF, and files the paper's atomic
  * facts as `wiki_fact` pending edits on the monographs and wiki pages they
- * belong to.
+ * belong to, and its drug parameter values as `param_entry` pending edits.
  *
  * ```
  *                    claim                 complete
