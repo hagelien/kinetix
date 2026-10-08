@@ -100,6 +100,9 @@ export function CitationMergeAdminSection() {
     setSearchError(null);
     if (!query.trim()) {
       setResults((prev) => (prev.length > 0 ? [] : prev));
+      // The previous run's cleanup aborted any in-flight request, and its
+      // `finally` skips `setSearching` for aborted requests.
+      setSearching(false);
       return;
     }
     const controller = new AbortController();
