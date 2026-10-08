@@ -13,6 +13,7 @@ import { PermissionsAdminSection } from '@/components/admin/PermissionsAdminSect
 import { SiteSettingsAdminSection } from '@/components/admin/SiteSettingsAdminSection';
 import { NavVisibilityAdminSection } from '@/components/admin/NavVisibilityAdminSection';
 import { DrugMergeAdminSection } from '@/components/admin/DrugMergeAdminSection';
+import { CitationMergeAdminSection } from '@/components/admin/CitationMergeAdminSection';
 import { DisputesAdminSection } from '@/components/admin/DisputesAdminSection';
 import { useCan } from '@/lib/usePermissions';
 import { showToast } from '@/lib/toast';
@@ -540,6 +541,7 @@ function AdminContent() {
   const canManageSettings = useCan('admin.settings.manage');
   const canManageNavVisibility = useCan('admin.navVisibility.manage');
   const canMergeDrugs = useCan('drug.merge');
+  const canMergeCitations = useCan('citation.merge');
   const canReadDisputeQueue = useCan('dispute.queue.read');
   const allowed: Record<AdminPane, boolean> = {
     users: canManageUsers || canManageAllowlist,
@@ -550,7 +552,7 @@ function AdminContent() {
     settings: canManageSettings,
     navVisibility: canManageNavVisibility,
     seed: canSeedDrugs,
-    merge: canMergeDrugs,
+    merge: canMergeDrugs || canMergeCitations,
     ingest: canIngestConversations,
     disputes: canReadDisputeQueue,
   };
@@ -636,7 +638,12 @@ function AdminContent() {
           <NavVisibilityAdminSection />
         )}
         {activePane === 'seed' && canSeedDrugs && <ResearchImportAdminSection />}
-        {activePane === 'merge' && canMergeDrugs && <DrugMergeAdminSection />}
+        {activePane === 'merge' && (
+          <>
+            {canMergeDrugs && <DrugMergeAdminSection />}
+            {canMergeCitations && <CitationMergeAdminSection />}
+          </>
+        )}
         {activePane === 'ingest' && canIngestConversations && (
           <ConversationIngestionAdminSection />
         )}

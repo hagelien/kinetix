@@ -594,6 +594,17 @@ export const CAPABILITY_LIST = [
     enforcedAt: ['POST /api/drug-merge'],
   },
   {
+    // Folding citation rows an admin has judged to be one paper. The loser
+    // rows are deleted and their reviews, PDFs, PDF requests, parameter
+    // provenance and wiki references move to the survivor — destructive and
+    // not undoable from the UI, so it sits with `drug.merge`.
+    id: 'citation.merge',
+    group: 'registry',
+    defaultTier: 'admin',
+    floorTier: 'editor',
+    enforcedAt: ['GET|POST /api/citation-merge'],
+  },
+  {
     id: 'wiki.page.submit',
     group: 'registry',
     defaultTier: 'admin',

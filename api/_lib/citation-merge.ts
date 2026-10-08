@@ -146,6 +146,18 @@ const REFERENCE_ID_ARRAY_TABLES = [
   pendingEdits,
 ] as const;
 
+/**
+ * A merge refused because two of the citations carry admissions of one
+ * reference dataset that cannot be folded together. Its own class so the admin
+ * route can answer with a 409 the operator can act on rather than a 500.
+ */
+export class CitationCohortConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CitationCohortConflictError';
+  }
+}
+
 export interface CitationMergeStats {
   winnerId: number;
   loserId: number;
@@ -690,7 +702,7 @@ function assertFoldableAtlas(
   populated: ReadonlySet<number>,
 ): void {
   if (!populated.has(kept.id) || !populated.has(folded.id)) return;
-  throw new Error(
+  throw new CitationCohortConflictError(
     `Citation merge would fold reference cohort ${folded.id} into ${kept.id}, but both have ` +
       `reference cases or aggregates imported under them. Folding deletes one transcription ` +
       `of the dataset and a merge cannot choose between them — withdraw the admission that ` +
@@ -712,7 +724,7 @@ function assertFoldableAtlas(
  */
 function assertFoldable(kept: ReferenceCohortRow, folded: ReferenceCohortRow): void {
   if (kept.sourceDatasetUrl === folded.sourceDatasetUrl) return;
-  throw new Error(
+  throw new CitationCohortConflictError(
     `Citation merge would fold reference cohort ${folded.id} into ${kept.id}, but they were ` +
       `admitted from different dataset URLs (${kept.sourceDatasetUrl ?? 'none'} and ` +
       `${folded.sourceDatasetUrl ?? 'none'}). Both are import-verification baselines, so one ` +
