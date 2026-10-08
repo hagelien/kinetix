@@ -1,5 +1,5 @@
 import { and, eq, or, sql } from 'drizzle-orm';
-import { citations } from '../../db/schema.js';
+import { citationFreetextAliases, citations } from '../../db/schema.js';
 import {
   addressableHandles,
   canonicalCitationHandle,
@@ -116,9 +116,16 @@ export function handleMatch(handles: ReadonlyArray<CitationHandle>) {
           ? sql`lower(${citations.identifier}) = ${h.identifier.toLowerCase()}`
           : eq(citations.identifier, h.identifier),
       );
-      // `freetext` is never an alt id: it identifies nothing to cross-reference,
-      // so there is no stored copy of it to find.
-      if (h.type === 'freetext') return [own];
+      // `freetext` is never an alt id: it identifies nothing to cross-reference.
+      // What it can be is a spelling a merge folded into another row (0143),
+      // which must find that row rather than mint the duplicate again. The
+      // subquery is served by the alias table's unique index on `identifier`.
+      if (h.type === 'freetext') {
+        return [
+          own,
+          sql`${citations.id} IN (SELECT ${citationFreetextAliases.citationId} FROM ${citationFreetextAliases} WHERE ${citationFreetextAliases.identifier} = ${h.identifier})`,
+        ];
+      }
       const alt =
         h.type === 'doi'
           ? sql`lower(${citations.metadata} -> 'altIds' ->> 'doi') = ${h.identifier.toLowerCase()}`

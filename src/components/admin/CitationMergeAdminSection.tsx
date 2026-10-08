@@ -90,11 +90,15 @@ export function CitationMergeAdminSection() {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  // Kept as the error rather than its message, so the search effect does not
+  // depend on `t` and re-run whenever the translation function changes.
+  const [searchError, setSearchError] = useState<unknown>(null);
   const [searchNonce, setSearchNonce] = useState(0);
 
   useEffect(() => {
+    setSearchError(null);
     if (!query.trim()) {
-      setResults([]);
+      setResults((prev) => (prev.length > 0 ? [] : prev));
       return;
     }
     const controller = new AbortController();
@@ -103,7 +107,7 @@ export function CitationMergeAdminSection() {
       searchCitationsForMerge(query, controller.signal)
         .then((rows) => setResults(rows))
         .catch((err) => {
-          if (!controller.signal.aborted) setErrorMsg(messageForError(err, t));
+          if (!controller.signal.aborted) setSearchError(err);
         })
         .finally(() => {
           if (!controller.signal.aborted) setSearching(false);
@@ -113,7 +117,7 @@ export function CitationMergeAdminSection() {
       controller.abort();
       clearTimeout(handle);
     };
-  }, [query, searchNonce, t]);
+  }, [query, searchNonce]);
 
   const selectedRows = useMemo(() => [...selected.values()], [selected]);
 
@@ -219,6 +223,9 @@ export function CitationMergeAdminSection() {
         )}
       </div>
 
+      {searchError != null && (
+        <p className="mt-3 text-sm text-red-600">{messageForError(searchError, t)}</p>
+      )}
       {errorMsg && <p className="mt-3 text-sm text-red-600">{errorMsg}</p>}
 
       {selectedRows.length > 0 && (

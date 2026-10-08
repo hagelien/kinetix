@@ -1186,6 +1186,28 @@ export const citations = pgTable(
   ],
 );
 
+/**
+ * Free-text spellings a merge folded into another citation (migration 0143).
+ * `metadata.altIds` keeps a merged-away PMID/DOI/URL findable; this does the
+ * same for free text, so `resolveCitation` answers a deleted spelling with the
+ * surviving row instead of recreating the duplicate.
+ */
+export const citationFreetextAliases = pgTable(
+  'citation_freetext_aliases',
+  {
+    id: serial('id').primaryKey(),
+    citationId: integer('citation_id')
+      .references(() => citations.id, { onDelete: 'cascade' })
+      .notNull(),
+    identifier: text('identifier').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex('citation_freetext_aliases_identifier_idx').on(t.identifier),
+    index('citation_freetext_aliases_citation_idx').on(t.citationId),
+  ],
+);
+
 // ─── Paper reviews (agent-generated quality reviews of cited papers) ─────────
 // One current review per citation; re-reviews replace the row (upsert on
 // citation_id). Review prose is Norwegian (bokmål) markdown.
