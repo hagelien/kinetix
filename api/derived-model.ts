@@ -12,13 +12,9 @@
  * app; this endpoint only reports what the data builds. Edge-cached for a minute, so a burst of runs
  * costs one build and a curator's edit is visible within about a minute.
  */
-import { z } from 'zod';
 import { error, json, publicCacheHeaders, withErrorHandling } from './_lib/response.js';
 import { readLiveDerivedModel } from './_lib/model-derivation-store.js';
-
-const querySchema = z.object({
-  slug: z.string().trim().min(1).max(200),
-});
+import { derivedModelQuerySchema } from './_lib/schemas.js';
 
 export default withErrorHandling(async function handler(req, res): Promise<void> {
   if (req.method !== 'GET') {
@@ -27,7 +23,7 @@ export default withErrorHandling(async function handler(req, res): Promise<void>
     return;
   }
   const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
-  const parsed = querySchema.safeParse({ slug: url.searchParams.get('slug') ?? '' });
+  const parsed = derivedModelQuerySchema.safeParse({ slug: url.searchParams.get('slug') ?? '' });
   if (!parsed.success) {
     error(res, 400, 'A drug slug is required', 'invalid_slug');
     return;
