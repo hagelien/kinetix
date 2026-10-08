@@ -62,6 +62,7 @@ import {
   findModel,
   registeredAnalytes,
   requiredParametersFor,
+  supportedAnalyteIds,
   REGISTRY_VERSION,
   ROUTE_IDS,
   type DrugDefinitionAssembly,
@@ -979,6 +980,100 @@ export interface NotModelableCatalogEntry {
   }>;
 }
 
+/** One catalog drug's place in the derived tier: an assembled model with its grade facts, or a
+ *  coverage-report entry naming why it has no curve. Pure, so the catalog-wide snapshot and the live
+ *  per-drug read cannot disagree about what a drug's data builds. */
+export type CatalogDrugOutcome =
+  | { status: 'assembled'; definition: DrugModelDefinition; grade: DerivedModelGrade | null }
+  | { status: 'not-modelable'; entry: NotModelableCatalogEntry };
+
+function catalogDrugOutcome(
+  row: { slug: string; names: Record<string, string> },
+  assemblyInputs: RouteAssemblyInput[],
+): CatalogDrugOutcome {
+  const assembly = assembleDrugDefinition(
+    derivedDefinitionMetadata({
+      slug: row.slug,
+      displayName: pickDisplayName(row.names, row.slug),
+    }),
+    assemblyInputs,
+  );
+  if (assembly.outcome === 'assembled') {
+    // Record the grade facts for the routes that actually assembled — the ones a consumer can
+    // resolve and therefore must be able to disclose. The route's derivation and its inferred
+    // roles are already in hand here; re-deriving them at render time would mean re-reading the
+    // catalog a second time for facts this build already holds.
+    const assembledRoutes = new Set(
+      assembly.routeOutcomes
+        .filter((route) => route.outcome === 'assembled')
+        .map((route) => route.route),
+    );
+    const routes = assemblyInputs
+      .filter((input) => assembledRoutes.has(input.route) && input.derived.family !== undefined)
+      .map((input) => ({
+        route: input.route,
+        structure: input.derived.structure,
+        axisProvenance: input.derived.axisProvenance,
+        family: input.derived.family!,
+        // The route itself was a disclosed assumption when the catalog named none — recorded
+        // so the render-time grade counts it exactly as it counts a defaulted axis.
+        ...(input.routeProvenance && input.routeProvenance !== 'asserted'
+          ? { routeProvenance: input.routeProvenance }
+          : {}),
+        // No `missingParameters`: this route assembled, so nothing required is absent. The
+        // derivation's own set is computed before the ka inference runs and would still name a
+        // parameter the inference went on to supply.
+        ...(input.inferredParameters?.length
+          ? { inferredParameters: [...input.inferredParameters].sort() }
+          : {}),
+        // The declared model the route runs in simplified form, so the grade counts the gap and
+        // the disclosure can say which model the evidence actually describes.
+        ...(input.simplifiedFrom ? { simplifiedFrom: { ...input.simplifiedFrom } } : {}),
+        // Inputs that ran on a cautious default rather than a catalog value: graded against
+        // completeness and stated at the curve.
+        ...(input.defaultedParameters?.length
+          ? { defaultedParameters: [...input.defaultedParameters].sort() }
+          : {}),
+        // Where each value came from, so the grade can judge provenance input by input.
+        inputSources: input.inputSources ?? {},
+      }));
+    return {
+      status: 'assembled',
+      definition: assembly.definition,
+      grade: routes.length > 0 ? { analyte: assembly.definition.analyte, routes } : null,
+    };
+  }
+  return {
+    status: 'not-modelable',
+    entry: {
+        slug: row.slug,
+        reason: assembly.reason,
+        routes: assembly.routeOutcomes
+          .filter(
+            (route): route is typeof route & { outcome: 'incomplete' | 'unsupported' } =>
+              route.outcome !== 'assembled',
+          )
+          .map((route) => ({
+            route: route.route,
+            outcome: route.outcome,
+            ...(route.missing ? { missing: [...route.missing].sort() } : {}),
+            ...(route.reason ? { reason: route.reason } : {}),
+            ...(route.inferred?.length ? { inferred: [...route.inferred].sort() } : {}),
+            ...(route.inferenceDeclined ? { inferenceDeclined: route.inferenceDeclined } : {}),
+            ...(route.simplifiedFrom ? { simplifiedFrom: { ...route.simplifiedFrom } } : {}),
+            // A defaulted input is still ABSENT from the catalog; a curator reading "missing vd"
+            // must also see that F was only defaulted, not found.
+            ...(route.defaulted?.length ? { defaulted: [...route.defaulted].sort() } : {}),
+            // An attributed route that did NOT assemble is reported as attributed too: a curator
+            // reading "oral, missing F" needs to know whether the catalog said "oral".
+            ...(route.routeProvenance && route.routeProvenance !== 'asserted'
+              ? { routeProvenance: route.routeProvenance }
+              : {}),
+          })),
+    },
+  };
+}
+
 /**
  * Build the derived registry snapshot from the WHOLE catalog (CV-4c-2b): enumerate every drug
  * deterministically, assemble each drug's `DrugModelDefinition` (`readDrugModelDefinition`), and merge
@@ -1111,83 +1206,12 @@ export async function readDerivedRegistrySnapshot(): Promise<DerivedRegistryBuil
         derivations.length === 0
           ? []
           : await readDrugRouteAssemblyInputs(row.id, derivations);
-      const assembly = assembleDrugDefinition(
-        derivedDefinitionMetadata({
-          slug: row.slug,
-          displayName: pickDisplayName(row.names, row.slug),
-        }),
-        assemblyInputs,
-      );
-      if (assembly.outcome === 'assembled') {
-        derived.push(assembly.definition);
-        // Record the grade facts for the routes that actually assembled — the ones a consumer can
-        // resolve and therefore must be able to disclose. The route's derivation and its inferred
-        // roles are already in hand here; re-deriving them at render time would mean re-reading the
-        // catalog, which the offline pin exists to avoid.
-        const assembledRoutes = new Set(
-          assembly.routeOutcomes
-            .filter((route) => route.outcome === 'assembled')
-            .map((route) => route.route),
-        );
-        const routes = assemblyInputs
-          .filter((input) => assembledRoutes.has(input.route) && input.derived.family !== undefined)
-          .map((input) => ({
-            route: input.route,
-            structure: input.derived.structure,
-            axisProvenance: input.derived.axisProvenance,
-            family: input.derived.family!,
-            // The route itself was a disclosed assumption when the catalog named none — recorded
-            // so the render-time grade counts it exactly as it counts a defaulted axis.
-            ...(input.routeProvenance && input.routeProvenance !== 'asserted'
-              ? { routeProvenance: input.routeProvenance }
-              : {}),
-            // No `missingParameters`: this route assembled, so nothing required is absent. The
-            // derivation's own set is computed before the ka inference runs and would still name a
-            // parameter the inference went on to supply.
-            ...(input.inferredParameters?.length
-              ? { inferredParameters: [...input.inferredParameters].sort() }
-              : {}),
-            // The declared model the route runs in simplified form, so the grade counts the gap and
-            // the disclosure can say which model the evidence actually describes.
-            ...(input.simplifiedFrom ? { simplifiedFrom: { ...input.simplifiedFrom } } : {}),
-            // Inputs that ran on a cautious default rather than a catalog value: graded against
-            // completeness and stated at the curve.
-            ...(input.defaultedParameters?.length
-              ? { defaultedParameters: [...input.defaultedParameters].sort() }
-              : {}),
-            // Where each value came from, so the grade can judge provenance input by input.
-            inputSources: input.inputSources ?? {},
-          }));
-        if (routes.length > 0) {
-          derivedGrades.push({ analyte: assembly.definition.analyte, routes });
-        }
+      const outcome = catalogDrugOutcome(row, assemblyInputs);
+      if (outcome.status === 'assembled') {
+        derived.push(outcome.definition);
+        if (outcome.grade) derivedGrades.push(outcome.grade);
       } else {
-        notModelable.push({
-          slug: row.slug,
-          reason: assembly.reason,
-          routes: assembly.routeOutcomes
-            .filter(
-              (route): route is typeof route & { outcome: 'incomplete' | 'unsupported' } =>
-                route.outcome !== 'assembled',
-            )
-            .map((route) => ({
-              route: route.route,
-              outcome: route.outcome,
-              ...(route.missing ? { missing: [...route.missing].sort() } : {}),
-              ...(route.reason ? { reason: route.reason } : {}),
-              ...(route.inferred?.length ? { inferred: [...route.inferred].sort() } : {}),
-              ...(route.inferenceDeclined ? { inferenceDeclined: route.inferenceDeclined } : {}),
-              ...(route.simplifiedFrom ? { simplifiedFrom: { ...route.simplifiedFrom } } : {}),
-              // A defaulted input is still ABSENT from the catalog; a curator reading "missing vd"
-              // must also see that F was only defaulted, not found.
-              ...(route.defaulted?.length ? { defaulted: [...route.defaulted].sort() } : {}),
-              // An attributed route that did NOT assemble is reported as attributed too: a curator
-              // reading "oral, missing F" needs to know whether the catalog said "oral".
-              ...(route.routeProvenance && route.routeProvenance !== 'asserted'
-                ? { routeProvenance: route.routeProvenance }
-                : {}),
-            })),
-        });
+        notModelable.push(outcome.entry);
       }
     }
 
@@ -1203,5 +1227,41 @@ export async function readDerivedRegistrySnapshot(): Promise<DerivedRegistryBuil
       notModelable,
       derivedGrades: derivedGrades.filter((grade) => !superseded.has(grade.analyte)),
     };
+  });
+}
+
+/** What the live per-drug read found for one catalogue slug. */
+export type LiveDerivedModelRead =
+  | { status: 'not-found' }
+  | { status: 'reviewed' }
+  | CatalogDrugOutcome;
+
+/**
+ * Build ONE drug's derived model from the catalogue as it stands right now — the live counterpart of
+ * the snapshot builder above, for the app to resolve a catalogue drug without waiting for a
+ * regenerated artifact. Same derivation, same assembly, same grade facts (`catalogDrugOutcome`), so a
+ * drug builds identically here and in the committed snapshot given the same rows.
+ *
+ * A slug the reviewed tier claims (as an analyte or an alias) answers `reviewed` without reading the
+ * catalogue: an override always wins, so a live derivation for it would be dropped by the merge
+ * anyway, and serving one would invite a client to display it.
+ *
+ * The reads run in one `REPEATABLE READ` transaction, so a catalogue edit committing mid-read cannot
+ * pair one state of the drug's declarations with another state of its values.
+ */
+export async function readLiveDerivedModel(slug: string): Promise<LiveDerivedModelRead> {
+  if (supportedAnalyteIds().includes(slug)) return { status: 'reviewed' };
+  return runInPoolTransaction(async () => {
+    await getDb().execute(sql`SET TRANSACTION ISOLATION LEVEL REPEATABLE READ`);
+    const [row] = await getDb()
+      .select({ id: drugs.id, slug: drugs.slug, names: drugs.names })
+      .from(drugs)
+      .where(eq(drugs.slug, slug))
+      .limit(1);
+    if (!row) return { status: 'not-found' };
+    const derivations = await deriveDrugModelsByRoute(row.id);
+    const assemblyInputs =
+      derivations.length === 0 ? [] : await readDrugRouteAssemblyInputs(row.id, derivations);
+    return catalogDrugOutcome(row, assemblyInputs);
   });
 }

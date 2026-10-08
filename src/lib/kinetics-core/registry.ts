@@ -45,6 +45,7 @@ import {
   loadGeneratedRegistry,
 } from './generated-registry-loader.js';
 import { buildRegistrySnapshot, type RegistrySnapshot } from './registry-snapshot.js';
+import { liveDerivedGeneration } from './live-derived.js';
 
 export const REGISTRY_VERSION = '0.9.0';
 
@@ -700,10 +701,15 @@ export function derivedRegistryRolloutEnabled(): boolean {
 
 let RESOLVABLE_SNAPSHOT: RegistrySnapshot | null = null;
 let RESOLVABLE_BY_ANALYTE: Map<string, DrugModelDefinition> | null = null;
+// The live overlay generation the memo was built at: a newly fetched live answer invalidates it.
+let RESOLVABLE_GENERATION = -1;
 
 function resolvableSnapshot(): RegistrySnapshot {
-  if (RESOLVABLE_SNAPSHOT === null) {
+  const generation = liveDerivedGeneration();
+  if (RESOLVABLE_SNAPSHOT === null || RESOLVABLE_GENERATION !== generation) {
     RESOLVABLE_SNAPSHOT = loadOfflineRegistry().snapshot;
+    RESOLVABLE_BY_ANALYTE = null;
+    RESOLVABLE_GENERATION = generation;
   }
   return RESOLVABLE_SNAPSHOT;
 }
@@ -733,9 +739,11 @@ export function resolvedRegistryRelease(): { version: string; checksum: string }
 }
 
 function resolvableByAnalyte(): Map<string, DrugModelDefinition> {
+  // Read the release first: it is what notices a stale memo and clears the index below.
+  const release = resolvableRelease();
   if (RESOLVABLE_BY_ANALYTE === null) {
     const map = new Map<string, DrugModelDefinition>();
-    for (const d of resolvableRelease()) {
+    for (const d of release) {
       for (const key of [d.analyte, ...(d.aliases ?? [])]) map.set(key, d);
     }
     RESOLVABLE_BY_ANALYTE = map;

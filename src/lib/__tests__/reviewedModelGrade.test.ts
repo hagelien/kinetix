@@ -239,6 +239,24 @@ describe('gradeResult — derived tier', () => {
     expect(graded?.policy.hardStops[0]?.reason).toMatch(/no committed grade/);
   });
 
+  it('keeps a held derived result hidden once its model is withdrawn from the catalogue', () => {
+    // A live refresh can withdraw a derived model while a curve it produced is still on
+    // screen. Its id then resolves nothing, and `null` would let the curve render to everyone.
+    vi.mocked(core.resolvableAnalyteIds).mockReturnValue([]);
+    for (const modelId of ['withdrawn-drug-derived-v1+live.0a1b2c3d']) {
+      // A superseded live build: the id names a build that is no longer held.
+      expect(gradeResult(result({ modelId }), { role: null, displayMatrix: 'plasma' })?.disposition).toBe('hidden');
+    }
+    const graded = gradeResult(result({ modelId: 'withdrawn-drug-derived-v1' }), {
+      role: null,
+      displayMatrix: 'plasma',
+    });
+    expect(graded?.disposition).toBe('hidden');
+    expect(graded?.admittedBy).toBe('withheld');
+    // A reviewed id that no longer resolves is still "not governed", as before.
+    expect(gradeResult(result({ modelId: 'retired-one-comp-v1' }), { role: null, displayMatrix: 'plasma' })).toBeNull();
+  });
+
   it('grades the route the run actually used', () => {
     gradeResult(result({ modelId: 'derived-drug-derived-v1', route: 'insufflation' }), {
       role: 'admin',

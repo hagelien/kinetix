@@ -13,6 +13,7 @@ import {
   runComponent,
   runEthanolComponent,
 } from '@/lib/modelingRun';
+import type { ModelingRunDeps } from '@/lib/modelingRun';
 import type { DrugSimResult } from '@/types/simulator';
 import { estimateBacCurve } from '@/lib/ethanolEngine';
 import type {
@@ -20,7 +21,11 @@ import type {
   SimEvent,
 } from '@/types/simulator';
 import type { DrugComponent } from '@/types';
-import { simulateScenario } from '@/lib/kinetics-core';
+import {
+  clearLiveDerivedEntries,
+  installLiveDerivedEntry,
+  simulateScenario,
+} from '@/lib/kinetics-core';
 
 function baseConfig(overrides: Partial<DrugSimConfig> = {}): DrugSimConfig {
   return {
@@ -1195,6 +1200,27 @@ describe('question modes the core path had stopped answering', () => {
       { id: 'm', type: 'measurement', t: 4, value: 0.05, unit: 'mg/L' },
       { id: 'q', type: 'query', t: 4, solveFor: 'dose' },
     ];
+
+    it('pins the live catalogue answers for the whole calculation', async () => {
+      // A back-calculation runs a probe and a final simulation. A live refresh between them
+      // would infer the dose from one model build and draw the curve from another.
+      clearLiveDerivedEntries();
+      const first = { analyte: 'pinned-drug', definition: null, grade: null };
+      installLiveDerivedEntry(first);
+      const seen: unknown[] = [];
+      const pinnedRun: ModelingRunDeps['runMonteCarlo'] = async (config) => {
+        seen.push(config.liveDerived);
+        // Something else refreshes the catalogue mid-run.
+        installLiveDerivedEntry({ analyte: 'other-drug', definition: null, grade: null });
+        return simulateScenario(config.scenario);
+      };
+      await runComponent(baseConfig({ events, drugName: 'Amphetamine', route: 'oral' }), undefined, {
+        runMonteCarlo: pinnedRun,
+      });
+      expect(seen.length).toBeGreaterThan(1);
+      for (const live of seen) expect(live).toEqual([first]);
+      clearLiveDerivedEntries();
+    });
 
     it('runs and reports a dose', async () => {
       const result = await run(events);

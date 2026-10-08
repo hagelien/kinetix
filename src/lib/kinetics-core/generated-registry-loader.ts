@@ -3,6 +3,7 @@ import { findDerivedRouteGrade } from './derived-grade.js';
 import type { DrugModelDefinition, RouteId } from './types.js';
 import { buildRegistrySnapshot, type RegistrySnapshot } from './registry-snapshot.js';
 import { GENERATED_REGISTRY_ARTIFACT } from './generated-registry.js';
+import { liveDerivedEntries, liveDerivedEntry, type LiveDerivedEntry } from './live-derived.js';
 
 export interface GeneratedRegistryArtifact {
   formatVersion: 1;
@@ -66,10 +67,18 @@ export function generatedRegistryCoverageReport(): GeneratedRegistryArtifact['no
   return GENERATED_REGISTRY_ARTIFACT.notModelable;
 }
 
-/** Rebuild through the precedence primitive: committed derived data can never replace an override. */
+/**
+ * Rebuild through the precedence primitive: committed derived data can never replace an override.
+ *
+ * Live answers (`live-derived.ts`) are laid over the committed derived tier after its checksum is
+ * verified: a live definition replaces or adds its analyte's entry, a live "no model" removes it. The
+ * merged release is re-checksummed and versioned `<version>+live`, so a run manifest names the
+ * release it actually resolved through and never claims the committed one for a live curve.
+ */
 export function loadGeneratedRegistry(
   reviewedOverrides: readonly DrugModelDefinition[],
   artifact: GeneratedRegistryArtifact = GENERATED_REGISTRY_ARTIFACT,
+  live: readonly LiveDerivedEntry[] = liveDerivedEntries(),
 ): OfflineRegistryRelease {
   const snapshot = buildRegistrySnapshot(
     reviewedOverrides,
@@ -81,13 +90,24 @@ export function loadGeneratedRegistry(
       `Generated registry checksum mismatch: committed ${artifact.checksum}, computed ${snapshot.checksum}`,
     );
   }
-  return { snapshot, notModelable: artifact.notModelable };
+  if (live.length === 0) return { snapshot, notModelable: artifact.notModelable };
+
+  const liveAnalytes = new Set(live.map((entry) => entry.analyte));
+  const derived = [
+    ...artifact.derivedDefinitions.filter((definition) => !liveAnalytes.has(definition.analyte)),
+    ...live.flatMap((entry) => (entry.definition ? [entry.definition] : [])),
+  ];
+  const builtLive = new Set(live.filter((entry) => entry.definition).map((entry) => entry.analyte));
+  return {
+    snapshot: buildRegistrySnapshot(reviewedOverrides, derived, `${artifact.registryVersion}+live`),
+    notModelable: artifact.notModelable.filter((entry) => !builtLive.has(entry.slug)),
+  };
 }
 
 /**
- * The committed grade facts for one derived model's route, or `undefined` when the artifact has
- * none — a reviewed override (which carries its own reviewed-tier assessment), or an analyte/route
- * the derived tier does not cover. A caller that resolves a DERIVED model and gets `undefined` here
+ * The grade facts for one derived model's route (live when the app holds a live answer for the
+ * analyte, committed otherwise), or `undefined` when there are none: a reviewed override (which
+ * carries its own reviewed-tier assessment), or an analyte/route the derived tier does not cover. A caller that resolves a DERIVED model and gets `undefined` here
  * must not render a curve: it would be an ungraded catalog curve.
  */
 export function derivedRouteGrade(
@@ -95,13 +115,20 @@ export function derivedRouteGrade(
   route: RouteId,
   artifact: GeneratedRegistryArtifact = GENERATED_REGISTRY_ARTIFACT,
 ): DerivedRouteGrade | undefined {
+  // A live answer supersedes the committed grade facts, exactly as its definition supersedes the
+  // committed model — a curve and its grade must describe the same build.
+  const live = artifact === GENERATED_REGISTRY_ARTIFACT ? liveDerivedEntry(analyte) : undefined;
+  if (live) return live.grade ? findDerivedRouteGrade([live.grade], analyte, route) : undefined;
   return findDerivedRouteGrade(artifact.derivedGrades, analyte, route);
 }
 
-/** Whether the committed artifact claims this analyte as a DERIVED (not reviewed) model. */
+/** Whether the derived tier — the committed artifact, or a live answer laid over it — claims this
+ *  analyte as a DERIVED (not reviewed) model. */
 export function isDerivedAnalyte(
   analyte: string,
   artifact: GeneratedRegistryArtifact = GENERATED_REGISTRY_ARTIFACT,
 ): boolean {
+  const live = artifact === GENERATED_REGISTRY_ARTIFACT ? liveDerivedEntry(analyte) : undefined;
+  if (live) return live.definition !== null;
   return artifact.derivedDefinitions.some((definition) => definition.analyte === analyte);
 }

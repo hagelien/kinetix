@@ -40,6 +40,7 @@ import {
   type UserClass,
 } from '@/lib/kinetics-core';
 import { routeIdFor } from '@/lib/forwardCoreAdapter';
+import { isDerivedModelId } from '@/lib/modelDerivation';
 import { matrixConversionApplies, type ChartMatrix } from '@/lib/matrixDisplay';
 import { tierForRole } from '@/lib/permissions';
 import type { DrugSimResult } from '@/types/simulator';
@@ -174,9 +175,12 @@ export function gradeResult(
 
   // Resolve by the MODEL ID the run recorded, not by analyte: a saved case
   // pinned to a superseded model must not be graded as whatever currently
-  // occupies its analyte. An id that no longer resolves grades nothing.
+  // occupies its analyte. An id that no longer resolves grades nothing —
+  // except a DERIVED one: derived models are built live and can be withdrawn
+  // while a result they produced is still held, and that result must stay
+  // withheld rather than fall through to "not governed", which renders.
   const model = modelById(modelId);
-  if (!model) return null;
+  if (!model) return isDerivedModelId(modelId) ? ungradeableDerived() : null;
 
   const nativeMatrix = result.assumptions.nativeMatrix ?? model.matrix;
   // Every other evidence flag is left unset deliberately: unset means "not on
@@ -194,15 +198,7 @@ export function gradeResult(
       // A derived curve with no committed grade cannot be disclosed, so it cannot
       // be shown. Reported as an explicit hidden disposition rather than `null`,
       // which the caller reads as "not governed" and would render.
-      return {
-        policy: UNGRADEABLE_DERIVED,
-        disposition: 'hidden',
-        admittedBy: 'withheld',
-        acknowledgementVersion: acknowledgementVersionFor(
-          UNGRADEABLE_DERIVED.hardStops,
-          UNGRADEABLE_DERIVED.grade,
-        ),
-      };
+      return ungradeableDerived();
     }
     const assessments = assessDerivedModel(model, route, { matrixBridgedWithoutValidation });
     const structureSimplifications = (['disposition', 'elimination', 'absorption'] as const).flatMap(
@@ -324,6 +320,19 @@ const UNGRADEABLE_DERIVED: GradePolicyResult = {
     },
   ],
 };
+
+/** The hidden disposition for a derived curve that has no grade to disclose it by. */
+function ungradeableDerived(): ResultGrade {
+  return {
+    policy: UNGRADEABLE_DERIVED,
+    disposition: 'hidden',
+    admittedBy: 'withheld',
+    acknowledgementVersion: acknowledgementVersionFor(
+      UNGRADEABLE_DERIVED.hardStops,
+      UNGRADEABLE_DERIVED.grade,
+    ),
+  };
+}
 
 /** The resolvable model carrying this id — reviewed or derived — or undefined. */
 function modelById(modelId: string): DrugModelDefinition | undefined {

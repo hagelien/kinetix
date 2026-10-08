@@ -126,6 +126,13 @@ export type { DerivedModelEvidence } from "./derived-model-grade.js";
 export { resolveModel, resolvableAnalyteIds, resolvedRegistryRelease } from "./registry.js";
 export { derivedRouteGrade, isDerivedAnalyte } from "./generated-registry-loader.js";
 export {
+  installLiveDerivedEntry,
+  liveDerivedEntry,
+  liveDerivedEntries,
+  clearLiveDerivedEntries,
+} from "./live-derived.js";
+export type { LiveDerivedEntry } from "./live-derived.js";
+export {
   GRADE_DIMENSIONS,
   evaluateGradePolicy,
   renderDisposition,

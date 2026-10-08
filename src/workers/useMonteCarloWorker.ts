@@ -2,7 +2,15 @@ import { useEffect, useRef, useCallback } from 'react';
 import * as Comlink from 'comlink';
 import type { MonteCarloWorkerApi } from './montecarlo.worker';
 import type { CanonicalSimulationConfig } from '@/types/simulator';
-import type { CanonicalResult } from '@/lib/kinetics-core';
+import { liveDerivedEntries, type CanonicalResult } from '@/lib/kinetics-core';
+
+/** Carry the main thread's live catalogue answers with a run (see `CanonicalSimulationConfig`),
+ *  unless the caller already pinned the answers its run must use. */
+export function withLiveDerived(config: CanonicalSimulationConfig): CanonicalSimulationConfig {
+  if (config.liveDerived) return config;
+  const live = liveDerivedEntries();
+  return live.length === 0 ? config : { ...config, liveDerived: live };
+}
 
 export function useMonteCarloWorker() {
   const workerRef = useRef<Worker | null>(null);
@@ -26,7 +34,7 @@ export function useMonteCarloWorker() {
   const runSimulation = useCallback(
     async (config: CanonicalSimulationConfig): Promise<CanonicalResult> => {
       if (!apiRef.current) throw new Error('Worker not initialized');
-      return apiRef.current.runSimulation(config);
+      return apiRef.current.runSimulation(withLiveDerived(config));
     },
     [],
   );
@@ -36,7 +44,7 @@ export function useMonteCarloWorker() {
       configs: CanonicalSimulationConfig[],
     ): Promise<CanonicalResult[]> => {
       if (!apiRef.current) throw new Error('Worker not initialized');
-      return apiRef.current.runMultipleSimulations(configs);
+      return apiRef.current.runMultipleSimulations(configs.map(withLiveDerived));
     },
     [],
   );
