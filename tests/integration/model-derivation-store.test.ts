@@ -1672,6 +1672,22 @@ describe('saturable (Michaelis–Menten) elimination', () => {
     expect(oral!.inputSources?.km).toEqual({ basis: 'cited', citationIds: [used] });
   });
 
+  it('does not read Vmax or Km for a drug whose elimination is first-order', async () => {
+    // The snapshot reads every drug; only a saturable one can use these, so no other pays for them.
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db);
+    await insertAxis(drugId, userId, 'eliminationModel', 'first-order');
+    await insertAxis(drugId, userId, 'absorptionModel', 'first-order', 'oral');
+    await setDrugLevelParameter(drugId, userId, 'halfLife', { median: 4, unit: 'h' });
+    await setDrugLevelParameter(drugId, userId, 'volumeOfDistribution', { median: 0.6, unit: 'L/kg' });
+    await insertNumeric(drugId, userId, 'vmax', null, { low: 15, median: 15, unit: 'mg/L/h', matrix: 'plasma' });
+    await insertNumeric(drugId, userId, 'km', null, { low: 12, median: 12, unit: 'mg/L', matrix: 'plasma' });
+
+    const [oral] = await readDrugRouteAssemblyInputs(drugId);
+    expect(oral!.values.vmax).toBeUndefined();
+    expect(oral!.values.km).toBeUndefined();
+  });
+
   it('runs no curve at all without Vmax and Km — never a first-order stand-in', async () => {
     const drugId = await seedDrug(db);
     const userId = await seedUser(db);
