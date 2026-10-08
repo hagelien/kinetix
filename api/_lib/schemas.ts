@@ -2395,3 +2395,20 @@ export const drugMergeBodySchema = z.discriminatedUnion('action', [
   drugMergePreviewSchema,
   drugMergeApplySchema,
 ]);
+
+// ─── Citation merge (Admin → Merge) ──────────────────────────────────────────
+// Fold citation rows an admin has identified as one paper into a single row.
+// See api/citation-merge.ts; the fold itself is api/_lib/citation-merge.ts.
+
+/** A paper split more ways than this is better handled by the backfill CLI. */
+export const MAX_CITATION_MERGE_GROUP = 20;
+
+const citationMergeIdSchema = z.number().int().positive().max(2147483647);
+
+export const citationMergeApplySchema = z.object({
+  survivorId: citationMergeIdSchema,
+  mergeIds: z
+    .array(citationMergeIdSchema)
+    .min(1)
+    .max(MAX_CITATION_MERGE_GROUP - 1),
+});

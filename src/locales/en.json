@@ -1576,7 +1576,7 @@
       "permissions": "Permissions",
       "settings": "Settings",
       "navVisibility": "Menu visibility",
-      "merge": "Merge drugs",
+      "merge": "Merge",
       "disputes": "Disputes"
     },
     "disputesQueue": {
@@ -1972,6 +1972,7 @@
         "drug_update": "Edit drug metadata",
         "drug_delete": "Delete a drug",
         "drug_merge": "Merge two drugs",
+        "citation_merge": "Merge duplicate citations",
         "wiki_page_submit": "Create or edit a whole wiki page",
         "wiki_page_delete": "Delete a wiki page",
         "bioEntity_delete": "Delete a bio-entity",
@@ -2099,6 +2100,45 @@
         "revisionHistory": "the loser monograph is empty now but has revisions with meaningful content in them (paragraph prose, images, headings, tables, lists or other structural nodes). `wiki_revisions` cascades on the page delete, so a merge would destroy editorial history that blanking the page did not. Move the content onto the survivor, or accept the loss deliberately by clearing the history first, then merge.",
         "ambiguousSimulatorKey": "the {{role}} saved-simulator key \"{{key}}\" names two substances — one drug carries it as its PubChem CID and another CID-less drug carries it as its internal id. Rewriting saved cases by that string would sweep up the other drug's cases too. Correct the CID collision on the drugs first, then merge.",
         "parameterEntryAmbiguousOrigin": "a loser observation for {{parameter}} states no study context and would be dropped as a duplicate, but its origin (\"{{loserOrigin}}\") is stronger than at least one of the {{winnerRowCount}} winner rows sharing this identity under different contexts — and which one it verifies cannot be determined without a context to match against. Dropping it silently would lose that provenance. Reconcile on the drugs first (add a context to the loser observation, or file it under a distinct citation), then merge."
+      }
+    },
+    "citationMerge": {
+      "title": "Merge citations",
+      "description": "Fold several citation rows that are really the same paper — for example the same article cited with slightly different spellings — into one. Everything attached to the removed rows (claims and parameter values citing them, paper reviews, stored PDFs, PDF upload requests and wiki references) moves to the one you keep, and the duplicates are deleted. This cannot be undone.",
+      "searchLabel": "Find citations",
+      "searchPlaceholder": "Search by title, author, year, PMID or DOI…",
+      "searching": "Searching…",
+      "noResults": "No citations match.",
+      "usage_one": "{{count}} use",
+      "usage_other": "{{count}} uses",
+      "reviewFull": "Review: read in full",
+      "reviewAbstract": "Review: abstract only",
+      "hasPdf": "PDF stored",
+      "pdfRequest": "PDF request: {{status}}",
+      "selectedTitle": "Selected ({{count}})",
+      "survivorHelp": "Choose the citation to keep. Only rows with the strongest identifier in the selection (PMID, then DOI, then URL, then free text) can be kept. You can search again to add more spellings.",
+      "keepThis": "Keep this citation",
+      "kept": "Keep",
+      "mergedInto": "Merge into the kept citation",
+      "remove": "Remove",
+      "pickMore": "Select at least two citations to merge.",
+      "performMerge_one": "Merge {{count}} citation",
+      "performMerge_other": "Merge {{count}} citations",
+      "confirmPrompt_one": "Delete {{count}} citation and move everything onto #{{survivor}}?",
+      "confirmPrompt_other": "Delete {{count}} citations and move everything onto #{{survivor}}?",
+      "confirmMerge": "Yes, merge",
+      "merging": "Merging…",
+      "merged_one": "Merged {{count}} citation into #{{survivor}}.",
+      "merged_other": "Merged {{count}} citations into #{{survivor}}.",
+      "deferred": "Some citations were not merged because another merge into the same paper was running: {{ids}}. Try them again.",
+      "errors": {
+        "generic": "The merge failed. Try again, and reload the page if it keeps failing.",
+        "not_found": "Some of these citations no longer exist — they may already have been merged. Search again.",
+        "weaker_survivor": "Keep the citation with the strongest identifier (PMID, then DOI, then URL).",
+        "nothing_to_merge": "Select at least one citation besides the one being kept.",
+        "extraction_in_flight": "A paper extraction run is reading one of the citations being merged away. Wait for it to finish, or cancel it on the paper extraction page, then merge.",
+        "cohort_conflict": "These citations carry two separate imports of the same reference dataset that cannot be combined automatically. Withdraw the import that should not stand, then merge.",
+        "agent_refused": "Citation merges must be made by a person, not an agent."
       }
     }
   },

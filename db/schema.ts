@@ -1186,6 +1186,34 @@ export const citations = pgTable(
   ],
 );
 
+/**
+ * Handles a merge folded into another citation (migrations 0143, 0144). One
+ * row per handle the deleted citation answered to — its own and its alt ids.
+ * `metadata.altIds` holds one handle per type and none for free text, so
+ * without this a second merged-away URL, or any merged-away spelling, would
+ * resolve to nothing on the next write and recreate the duplicate. DOIs are
+ * stored lower-case (`aliasIdentifier`).
+ */
+export const citationIdentifierAliases = pgTable(
+  'citation_identifier_aliases',
+  {
+    id: serial('id').primaryKey(),
+    citationId: integer('citation_id')
+      .references(() => citations.id, { onDelete: 'cascade' })
+      .notNull(),
+    type: varchar('type', { length: 10 }).notNull(), // 'freetext' | 'url' | 'pmid' | 'doi'
+    identifier: text('identifier').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex('citation_identifier_aliases_type_identifier_idx').on(
+      t.type,
+      t.identifier,
+    ),
+    index('citation_identifier_aliases_citation_idx').on(t.citationId),
+  ],
+);
+
 // ─── Paper reviews (agent-generated quality reviews of cited papers) ─────────
 // One current review per citation; re-reviews replace the row (upsert on
 // citation_id). Review prose is Norwegian (bokmål) markdown.

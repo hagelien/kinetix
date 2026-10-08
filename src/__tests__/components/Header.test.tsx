@@ -205,6 +205,16 @@ describe('Header', () => {
     expect(screen.getByLabelText('nav.admin')).toBeTruthy();
   });
 
+  it('shows the header admin link to an editor delegated only citation.merge (Codex P1, review comment 4215789774)', () => {
+    useAuthStore.setState({
+      permissionOverrides: { 'citation.merge': 'editor' },
+    });
+
+    renderHeader('/wiki');
+
+    expect(screen.getByLabelText('nav.admin')).toBeTruthy();
+  });
+
   it('withholds every admin-configurable nav item until the hidden-item list has settled (Codex, round 3)', () => {
     // Simulates the race the finding describes: the auth check resolved
     // (isAuthenticated is already true, per setEditorUser()) but the
