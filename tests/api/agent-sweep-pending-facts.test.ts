@@ -198,6 +198,7 @@ describe("GET /api/agent-sweep?mode=pending_parameters", () => {
     expect(JSON.parse(state.body)).toEqual({
       pendingParameters: rows,
       pendingParameterEntries: rows,
+      pendingParameterEntriesTruncated: false,
     });
     // One query per lane; both are scoped to the numeric drug id.
     expect(sqlSpy).toHaveBeenCalledTimes(2);
@@ -234,12 +235,66 @@ describe("GET /api/agent-sweep?mode=pending_parameters", () => {
     expect(JSON.parse(state.body)).toEqual({
       pendingParameters: [],
       pendingParameterEntries: entries,
+      pendingParameterEntriesTruncated: false,
     });
     const entrySql = sqlSpy.mock.calls
       .map(([strings]) => (strings as TemplateStringsArray).join("?"))
       .find((text) => text.includes("'param_entry'"));
     expect(entrySql).toContain("'create'");
     expect(entrySql).toContain("status = 'pending'");
+  });
+
+  it("signals truncation and caps the entry lane at the limit", async () => {
+    const many = Array.from({ length: 201 }, (_, i) => ({
+      id: i + 1,
+      parameter: "halfLife",
+    }));
+    const sqlSpy = vi
+      .fn()
+      .mockImplementation((strings: TemplateStringsArray) =>
+        Promise.resolve(strings.join("?").includes("'param_entry'") ? many : []),
+      );
+    getNeonClientMock.mockReturnValue(sqlSpy);
+    const { res, state } = createResponse();
+    await handler(
+      createRequest("/api/agent-sweep?mode=pending_parameters&targetId=42"),
+      res,
+    );
+    const body = JSON.parse(state.body);
+    expect(body.pendingParameterEntriesTruncated).toBe(true);
+    expect(body.pendingParameterEntries).toHaveLength(200);
+  });
+
+  it("passes the parameter and citation filters to the entry query", async () => {
+    const sqlSpy = vi.fn().mockResolvedValue([]);
+    getNeonClientMock.mockReturnValue(sqlSpy);
+    const { res } = createResponse();
+    await handler(
+      createRequest(
+        "/api/agent-sweep?mode=pending_parameters&targetId=42&parameter=halfLife&citationId=11",
+      ),
+      res,
+    );
+    const entryCall = sqlSpy.mock.calls.find(([strings]) =>
+      (strings as TemplateStringsArray).join("?").includes("'param_entry'"),
+    );
+    expect(entryCall!.slice(1)).toEqual(
+      expect.arrayContaining([42, "halfLife", 11]),
+    );
+  });
+
+  it("rejects a malformed citationId", async () => {
+    const sqlSpy = vi.fn();
+    getNeonClientMock.mockReturnValue(sqlSpy);
+    const { res, state } = createResponse();
+    await handler(
+      createRequest(
+        "/api/agent-sweep?mode=pending_parameters&targetId=42&citationId=x",
+      ),
+      res,
+    );
+    expect(state.statusCode).toBe(400);
+    expect(sqlSpy).not.toHaveBeenCalled();
   });
 
   it("requires an active agent token", async () => {

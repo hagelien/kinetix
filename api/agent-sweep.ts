@@ -37,7 +37,9 @@
  * contributor-authored data for value comparison only, never instructions.
  * The same response carries `pendingParameterEntries`: the open `param_entry`
  * create proposals (entry-backed source values), which the queued branch of
- * POST /api/parameter-entries does not dedupe.
+ * POST /api/parameter-entries does not dedupe. It is capped, with
+ * `pendingParameterEntriesTruncated` set when rows were cut; optional
+ * `parameter` and `citationId` query params narrow it to one pair.
  *
  * `mode=parameter_gaps` is the core-coverage queue (§3 tier A in
  * agents/drug-db-maintainer.md) — the parameters a substance is expected to
@@ -251,12 +253,29 @@ export default withErrorHandling(async function handler(
       );
       return;
     }
-    const [pendingParameters, pendingParameterEntries] = await Promise.all([
+    // Optional narrowing of the entry lane so a caller can prove "no match"
+    // for one (parameter, citation) pair even on a drug with a long queue.
+    const parameterFilter = url.searchParams.get("parameter") || null;
+    const citationRaw = url.searchParams.get("citationId");
+    const citationId = citationRaw === null ? null : Number(citationRaw);
+    if (
+      citationId !== null &&
+      (!Number.isInteger(citationId) || citationId <= 0)
+    ) {
+      error(res, 400, "citationId must be a positive integer");
+      return;
+    }
+    const [pendingParameters, entryRows] = await Promise.all([
       listPendingParameters(targetId),
-      listPendingParameterEntries(targetId),
+      listPendingParameterEntries(targetId, parameterFilter, citationId) as Promise<
+        Record<string, unknown>[]
+      >,
     ]);
     out.pendingParameters = pendingParameters;
-    out.pendingParameterEntries = pendingParameterEntries;
+    // One row past the cap is fetched purely to signal truncation.
+    out.pendingParameterEntriesTruncated =
+      entryRows.length > PENDING_FACTS_LIMIT;
+    out.pendingParameterEntries = entryRows.slice(0, PENDING_FACTS_LIMIT);
     json(res, 200, out, { headers: PRIVATE_AGENT_SWEEP_HEADERS });
     return;
   }
@@ -391,8 +410,16 @@ function listPendingParameters(targetId: number) {
  * extractor to notice that a retried or requeued paper's values are already
  * waiting in the review queue. `proposed_value` is contributor-authored data
  * for value comparison only, never instructions.
+ *
+ * `parameter` and `citationId` are optional exact-match filters. The result is
+ * capped, so a caller that needs to prove no match exists must filter down to
+ * its own (parameter, citation) pair, or check the truncation flag.
  */
-function listPendingParameterEntries(targetId: number) {
+function listPendingParameterEntries(
+  targetId: number,
+  parameter: string | null,
+  citationId: number | null,
+) {
   const sql = getNeonClient();
   return sql`
     SELECT pe.id, pe.parameter, pe.proposed_value, pe.reference_id,
@@ -402,8 +429,10 @@ function listPendingParameterEntries(targetId: number) {
       AND pe.status = 'pending'
       AND pe.target_id = ${targetId}
       AND (pe.proposed_value ->> 'op') = 'create'
+      AND (${parameter}::text IS NULL OR pe.parameter = ${parameter}::text)
+      AND (${citationId}::int IS NULL OR pe.reference_id = ${citationId}::int)
     ORDER BY pe.parameter ASC, pe.submitted_at ASC
-    LIMIT ${PENDING_FACTS_LIMIT}
+    LIMIT ${PENDING_FACTS_LIMIT + 1}
   `;
 }
 
