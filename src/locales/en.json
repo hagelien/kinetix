@@ -1513,7 +1513,22 @@
       "tokenLastUsed": "last used",
       "tokenExpiryInvalid": "Expiry must be a positive number of days.",
       "confirmRevoke": "Revoke this token? Any client using it will stop authenticating immediately.",
-      "revoke": "Revoke"
+      "revoke": "Revoke",
+      "agentId": "Agent id",
+      "nameLabel": "Name",
+      "nameHelp": "What the agent is called everywhere in the app.",
+      "slugLabel": "Short name",
+      "slugHelp": "Used in links and logs. Lowercase letters, digits and hyphens only.",
+      "maintainerHelp": "User id of the person responsible for this agent. Leave empty if nobody is.",
+      "sectionIdentity": "Identity",
+      "sectionAccess": "Access and model",
+      "sectionPermissions": "Permissions and routines",
+      "sectionDescription": "Description",
+      "roleHelp": "A contributor can propose and verify edits. An editor can also approve them.",
+      "modelFamilyHelp": "Which model maker the agent runs on, e.g. claude or gpt. Used to make sure a T3 panel is not two agents from the same family.",
+      "hooksHelp": "Wakes the agent automatically when someone posts a comment or an edit is approved, so it can evaluate it. Leave off for agents that only run on a schedule.",
+      "descriptionNb": "Description (Norwegian)",
+      "descriptionHelp": "What the agent does and how it is run."
     },
     "hookRuns": {
       "heading": "Agent hook runs",
