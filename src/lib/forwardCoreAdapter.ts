@@ -64,6 +64,20 @@ const ROUTE_ID: Record<RouteType, RouteId> = {
   other: 'other',
 };
 
+/**
+ * The kinetics-core analyte id to run a drug under: the first candidate the rendering release
+ * resolves, else the last candidate (so an unresolvable drug still reports a meaningful id in
+ * its "not in the registry" reason). Callers pass the drug's catalog slug first — a
+ * catalog-derived model is keyed by it, and it often differs from the English display name
+ * (`paracetamol-acetaminophen`, `metadon`) — then the name-derived id the reviewed models use
+ * (`ethanol`, `ghb`).
+ */
+export function coreAnalyteFor(candidates: readonly (string | undefined)[]): string {
+  const present = candidates.filter((c): c is string => typeof c === 'string' && c.length > 0);
+  const resolvable = new Set(resolvableAnalyteIds());
+  return present.find((c) => resolvable.has(c)) ?? present[present.length - 1] ?? '';
+}
+
 /** The core `RouteId` a Kinetix route maps to. Exported so the grade path can look up a
  *  route-keyed record for the same route the run used, rather than re-deriving the map. */
 export function routeIdFor(route: RouteType): RouteId {
