@@ -109,4 +109,13 @@ describe('PharmacodynamicsComparison', () => {
     expect(container.querySelectorAll('.rounded-full.border-2')).toHaveLength(0);
     expect(within(card).queryByText(/\dx$/)).toBeNull();
   });
+
+  it('shows a localized notice, not the raw error, when loading fails', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    fetchDrugById.mockRejectedValue(new Error('Drug not found'));
+    render(<Harness />);
+    expect(await screen.findByText('comparison.pd.loadError')).toBeTruthy();
+    expect(screen.queryByText('Drug not found')).toBeNull();
+    consoleError.mockRestore();
+  });
 });

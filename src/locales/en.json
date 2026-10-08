@@ -3187,7 +3187,8 @@
         "potency": "Potency",
         "efficacy": "Efficacy",
         "selectivityRatio": "Selectivity"
-      }
+      },
+      "loadError": "Could not load the receptor mechanisms. Try reloading the page."
     }
   },
   "paramEdit": {
