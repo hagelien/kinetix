@@ -43,6 +43,7 @@ import {
   mechanicsVersions,
   splitMechanicsDocument,
 } from '@/lib/simulatorMechanics';
+import { coreAnalyteFor } from '@/lib/forwardCoreAdapter';
 import { DEFAULT_DRAW_COUNT, DEFAULT_SEED } from '@/stores/simulatorStore';
 import {
   applyCautiousDefaults,
@@ -381,6 +382,18 @@ describe('mechanics document — the refusals it promises', () => {
     // release today declares parent/active-moiety only, which is what §3 describes.
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.failure).toBe('unsupported-scenario');
+  });
+});
+
+describe('mechanics document — resolving the model (§3 step 1)', () => {
+  it('tries the catalogue slug before the name-derived id, as step 1 states', () => {
+    expect(doc).toContain(
+      '**A drug picked from the catalogue is tried\nunder its catalogue slug first, then under an id formed from its English name.**',
+    );
+    // A slug the build does not resolve falls through to the name-derived id a reviewed model uses.
+    expect(coreAnalyteFor(['etanol', 'ethanol'])).toBe('ethanol');
+    // A slug the build does resolve wins over the name.
+    expect(coreAnalyteFor(['ethanol', 'not-a-model'])).toBe('ethanol');
   });
 });
 
