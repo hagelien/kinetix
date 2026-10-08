@@ -13,6 +13,7 @@ import { PermissionsAdminSection } from '@/components/admin/PermissionsAdminSect
 import { SiteSettingsAdminSection } from '@/components/admin/SiteSettingsAdminSection';
 import { NavVisibilityAdminSection } from '@/components/admin/NavVisibilityAdminSection';
 import { DrugMergeAdminSection } from '@/components/admin/DrugMergeAdminSection';
+import { CitationMergeAdminSection } from '@/components/admin/CitationMergeAdminSection';
 import { DisputesAdminSection } from '@/components/admin/DisputesAdminSection';
 import { useCan } from '@/lib/usePermissions';
 import { showToast } from '@/lib/toast';
@@ -540,6 +541,7 @@ function AdminContent() {
   const canManageSettings = useCan('admin.settings.manage');
   const canManageNavVisibility = useCan('admin.navVisibility.manage');
   const canMergeDrugs = useCan('drug.merge');
+  const canMergeCitations = useCan('citation.merge');
   const canReadDisputeQueue = useCan('dispute.queue.read');
   const allowed: Record<AdminPane, boolean> = {
     users: canManageUsers || canManageAllowlist,
@@ -550,7 +552,7 @@ function AdminContent() {
     settings: canManageSettings,
     navVisibility: canManageNavVisibility,
     seed: canSeedDrugs,
-    merge: canMergeDrugs,
+    merge: canMergeDrugs || canMergeCitations,
     ingest: canIngestConversations,
     disputes: canReadDisputeQueue,
   };
@@ -636,7 +638,12 @@ function AdminContent() {
           <NavVisibilityAdminSection />
         )}
         {activePane === 'seed' && canSeedDrugs && <ResearchImportAdminSection />}
-        {activePane === 'merge' && canMergeDrugs && <DrugMergeAdminSection />}
+        {activePane === 'merge' && (
+          <>
+            {canMergeDrugs && <DrugMergeAdminSection />}
+            {canMergeCitations && <CitationMergeAdminSection />}
+          </>
+        )}
         {activePane === 'ingest' && canIngestConversations && (
           <ConversationIngestionAdminSection />
         )}
@@ -660,13 +667,14 @@ export function AdminPage() {
     // editor who holds only their own capability, so this follows the same
     // `requiredAnyCapability` pattern as `/wiki/:slug/edit`. `AdminContent`
     // itself still gates each pane (and each section within a pane) on its
-    // own capability, so a caller who only holds `dispute.queue.read` or
-    // `admin.navVisibility.manage` sees just that one tab.
+    // own capability, so a caller who only holds `dispute.queue.read`,
+    // `admin.navVisibility.manage` or `citation.merge` sees just that one tab.
     <AuthGuard
       requiredAnyCapability={[
         'admin.panel.access',
         'dispute.queue.read',
         'admin.navVisibility.manage',
+        'citation.merge',
       ]}
     >
       <AdminContent />

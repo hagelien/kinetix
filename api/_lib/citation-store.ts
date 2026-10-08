@@ -1,7 +1,8 @@
 import { and, eq, or, sql } from 'drizzle-orm';
-import { citations } from '../../db/schema.js';
+import { citationIdentifierAliases, citations } from '../../db/schema.js';
 import {
   addressableHandles,
+  aliasIdentifier,
   canonicalCitationHandle,
   citationHandleRank,
   mergeAltIds,
@@ -116,16 +117,22 @@ export function handleMatch(handles: ReadonlyArray<CitationHandle>) {
           ? sql`lower(${citations.identifier}) = ${h.identifier.toLowerCase()}`
           : eq(citations.identifier, h.identifier),
       );
-      // `freetext` is never an alt id: it identifies nothing to cross-reference,
-      // so there is no stored copy of it to find.
-      if (h.type === 'freetext') return [own];
+      // A handle a merge folded into another row (0143/0144). `altIds` keeps
+      // one handle per type and none for free text, so the second of two
+      // merged-away URLs, or any merged-away spelling, is findable only here.
+      // `= ANY(ARRAY(…))` rather than `IN (…)`: the array is an InitPlan run
+      // once, which the primary-key index can serve inside the BitmapOr, where
+      // an `IN` subplan would force every lookup into a sequential scan.
+      const aliased = sql`${citations.id} = ANY(ARRAY(SELECT ${citationIdentifierAliases.citationId} FROM ${citationIdentifierAliases} WHERE ${citationIdentifierAliases.type} = ${h.type} AND ${citationIdentifierAliases.identifier} = ${aliasIdentifier(h)}))`;
+      // `freetext` is never an alt id: it identifies nothing to cross-reference.
+      if (h.type === 'freetext') return [own, aliased];
       const alt =
         h.type === 'doi'
           ? sql`lower(${citations.metadata} -> 'altIds' ->> 'doi') = ${h.identifier.toLowerCase()}`
           : h.type === 'pmid'
             ? sql`${citations.metadata} -> 'altIds' ->> 'pmid' = ${h.identifier}`
             : sql`${citations.metadata} -> 'altIds' ->> 'url' = ${h.identifier}`;
-      return [own, alt];
+      return [own, alt, aliased];
     }),
   );
 }
