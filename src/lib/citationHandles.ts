@@ -249,6 +249,15 @@ export function addressableHandles(
 }
 
 /**
+ * The form a handle is stored and looked up under in `citation_identifier_aliases`.
+ * DOIs are case-insensitive by specification, so the alias keeps the lower-case
+ * form and the lookup lowers its input the same way — one index, one equality.
+ */
+export function aliasIdentifier(handle: CitationHandle): string {
+  return handle.type === 'doi' ? handle.identifier.toLowerCase() : handle.identifier;
+}
+
+/**
  * What a resolver URL points at. `pmcid` is not a `citations.type` — it is an
  * alt id — but it is a perfectly good identity for comparing two declarations
  * of one article, so it belongs in this answer even though it can never be a

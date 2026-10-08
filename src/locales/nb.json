@@ -2136,6 +2136,7 @@
         "not_found": "Noen av disse kildene finnes ikke lenger — de kan allerede være slått sammen. Søk på nytt.",
         "weaker_survivor": "Behold kilden med den sterkeste identifikatoren (PMID, deretter DOI, deretter URL).",
         "nothing_to_merge": "Velg minst én kilde i tillegg til den som beholdes.",
+        "extraction_in_flight": "En faktauttrekkskjøring leser en av kildene som slås sammen. Vent til den er ferdig, eller avbryt den på siden for faktauttrekk, og slå deretter sammen.",
         "cohort_conflict": "Disse kildene har to separate importer av samme referansedatasett som ikke kan slås sammen automatisk. Trekk tilbake importen som ikke skal stå, og slå deretter sammen.",
         "agent_refused": "Sammenslåing av kilder må gjøres av en person, ikke en agent."
       }

@@ -1187,24 +1187,30 @@ export const citations = pgTable(
 );
 
 /**
- * Free-text spellings a merge folded into another citation (migration 0143).
- * `metadata.altIds` keeps a merged-away PMID/DOI/URL findable; this does the
- * same for free text, so `resolveCitation` answers a deleted spelling with the
- * surviving row instead of recreating the duplicate.
+ * Handles a merge folded into another citation (migrations 0143, 0144). One
+ * row per handle the deleted citation answered to — its own and its alt ids.
+ * `metadata.altIds` holds one handle per type and none for free text, so
+ * without this a second merged-away URL, or any merged-away spelling, would
+ * resolve to nothing on the next write and recreate the duplicate. DOIs are
+ * stored lower-case (`aliasIdentifier`).
  */
-export const citationFreetextAliases = pgTable(
-  'citation_freetext_aliases',
+export const citationIdentifierAliases = pgTable(
+  'citation_identifier_aliases',
   {
     id: serial('id').primaryKey(),
     citationId: integer('citation_id')
       .references(() => citations.id, { onDelete: 'cascade' })
       .notNull(),
+    type: varchar('type', { length: 10 }).notNull(), // 'freetext' | 'url' | 'pmid' | 'doi'
     identifier: text('identifier').notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
   (t) => [
-    uniqueIndex('citation_freetext_aliases_identifier_idx').on(t.identifier),
-    index('citation_freetext_aliases_citation_idx').on(t.citationId),
+    uniqueIndex('citation_identifier_aliases_type_identifier_idx').on(
+      t.type,
+      t.identifier,
+    ),
+    index('citation_identifier_aliases_citation_idx').on(t.citationId),
   ],
 );
 

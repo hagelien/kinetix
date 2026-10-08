@@ -37,6 +37,7 @@ export type CitationMergeErrorCode =
   | 'weaker_survivor'
   | 'nothing_to_merge'
   | 'cohort_conflict'
+  | 'extraction_in_flight'
   | 'agent_refused';
 
 export class CitationMergeError extends Error {

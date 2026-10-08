@@ -1,7 +1,7 @@
 import { and, eq, inArray, or, sql } from 'drizzle-orm';
 import {
   bioEntityFunctions,
-  citationFreetextAliases,
+  citationIdentifierAliases,
   citationPdfs,
   citations,
   drugEliminationRoutes,
@@ -12,6 +12,7 @@ import {
   drugParameterRevisions,
   drugReceptorTargets,
   learningUnits,
+  paperExtractionJobs,
   paperReviewRevisions,
   paperReviews,
   parameterEntries,
@@ -25,9 +26,12 @@ import {
   wikiRevisions,
 } from '../../db/schema.js';
 import {
+  aliasIdentifier,
   mergeAltIds,
+  normalizeAltIds,
   rewriteCitationIdsInJson,
   type CitationAltIds,
+  type CitationHandleType,
 } from '../../src/lib/citationHandles.js';
 import { normalizeReferenceMetadata } from './reference-metadata.js';
 import {
@@ -511,6 +515,66 @@ async function repointUniquePerCitation(
     .set({ citationId: winnerId })
     .where(eq(table.citationId, loserId))
     .returning({ id: table.id });
+  return moved.length;
+}
+
+/**
+ * Repoint the paper fact-extraction queue at the surviving citation.
+ *
+ * `paper_extraction_jobs.citation_id` is `ON DELETE CASCADE`, so leaving a job
+ * behind does not fail the merge — it deletes the job: a queued paper silently
+ * drops out of the queue, a run mid-extraction loses its ticket, and a settled
+ * job takes its result summary and the ids of the edits it filed with it.
+ *
+ * Settled jobs (`completed` / `failed` / `cancelled`) all move: they are the
+ * paper's extraction history. An open one (`queued` / `claimed`) moves too,
+ * unless the winner already has an open job of its own — the partial unique
+ * index allows one open job per paper, and two would be two runs filing the
+ * same facts. The loser's is then cancelled with a reason naming the winner,
+ * and moved, so it stays visible on the queue page instead of vanishing.
+ * Cancelling a claimed job is the queue's ordinary kill switch: the run stops at
+ * its next claim check.
+ */
+async function repointExtractionJobs(
+  db: Db,
+  winnerId: number,
+  loserId: number,
+): Promise<number> {
+  const openStatuses = ['queued', 'claimed'];
+  const [winnerOpen] = await db
+    .select({ id: paperExtractionJobs.id })
+    .from(paperExtractionJobs)
+    .where(
+      and(
+        eq(paperExtractionJobs.citationId, winnerId),
+        inArray(paperExtractionJobs.status, openStatuses),
+      ),
+    )
+    .limit(1);
+  if (winnerOpen) {
+    await db
+      .update(paperExtractionJobs)
+      .set({
+        status: 'cancelled',
+        claimedBy: null,
+        claimedAt: null,
+        claimToken: null,
+        completedAt: null,
+        lastError: `citation_merged: folded into citation ${winnerId}, which already has open extraction job ${winnerOpen.id}`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(paperExtractionJobs.citationId, loserId),
+          inArray(paperExtractionJobs.status, openStatuses),
+        ),
+      );
+  }
+  const moved = await db
+    .update(paperExtractionJobs)
+    .set({ citationId: winnerId })
+    .where(eq(paperExtractionJobs.citationId, loserId))
+    .returning({ id: paperExtractionJobs.id });
   return moved.length;
 }
 
@@ -1246,6 +1310,7 @@ export async function mergeCitations(
     loserId,
   );
   stats.rowsRepointed += await repointInboxItems(db, winnerId, loserId);
+  stats.rowsRepointed += await repointExtractionJobs(db, winnerId, loserId);
 
   stats.rowsRepointed += await repointReferenceIdArrays(db, winnerId, loserId);
   stats.jsonDocumentsRewritten = await rewriteJsonDocuments(
@@ -1307,20 +1372,34 @@ export async function mergeCitations(
     })
     .where(eq(citations.id, winnerId));
 
-  // The same, for free text: `altIds` has no slot for it, so without an alias
-  // the next write citing the loser's wording would match nothing and recreate
-  // the row this merge deletes. The loser's own aliases move first — the
-  // cascade below would otherwise take them with it.
+  // `altIds` holds one handle per type and is fill-only, and it has no slot for
+  // free text at all. So every handle the loser answered to — its own and each
+  // of its alt ids — is also recorded as an alias of the winner: without that,
+  // the second of two merged-away URLs (or any free-text spelling) matches
+  // nothing on the next write and recreates the row this merge deletes. The
+  // loser's own aliases move first — the cascade below would otherwise take
+  // them with it.
   await db
-    .update(citationFreetextAliases)
+    .update(citationIdentifierAliases)
     .set({ citationId: winnerId })
-    .where(eq(citationFreetextAliases.citationId, loserId));
-  if (loser.type === 'freetext') {
+    .where(eq(citationIdentifierAliases.citationId, loserId));
+  const loserAltIds = normalizeAltIds(loserMetadata?.altIds);
+  const loserHandles: Array<{ type: CitationHandleType; identifier: string }> = [
+    { type: loser.type as CitationHandleType, identifier: loser.identifier },
+    ...(['pmid', 'doi', 'url'] as const).flatMap((key) =>
+      loserAltIds[key] ? [{ type: key, identifier: loserAltIds[key]! }] : [],
+    ),
+  ];
+  for (const handle of loserHandles) {
     await db
-      .insert(citationFreetextAliases)
-      .values({ citationId: winnerId, identifier: loser.identifier })
+      .insert(citationIdentifierAliases)
+      .values({
+        citationId: winnerId,
+        type: handle.type,
+        identifier: aliasIdentifier(handle),
+      })
       .onConflictDoUpdate({
-        target: citationFreetextAliases.identifier,
+        target: [citationIdentifierAliases.type, citationIdentifierAliases.identifier],
         set: { citationId: winnerId },
       });
   }
