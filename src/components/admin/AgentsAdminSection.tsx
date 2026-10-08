@@ -14,7 +14,7 @@
  * a suspended agent's tokens are inert regardless of revocation since
  * auth reads the live (demoted) role from the DB.
  */
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -83,11 +83,15 @@ export function AgentsAdminSection(): JSX.Element {
         />
       )}
 
-      {loading ? (
+      {/* Only the first load replaces the list. A refetch after a save keeps
+          the rows mounted: unmounting them would drop an open form and the
+          error a failed save just set, so the save would look like it did
+          nothing at all. */}
+      {loading && !agents ? (
         <p className="text-sm text-muted-foreground">
           {t('admin.agents.loading', { defaultValue: 'Loading agents…' })}
         </p>
-      ) : error ? (
+      ) : error && !agents ? (
         <p className="text-sm text-destructive">{error}</p>
       ) : agents && agents.length === 0 ? (
         <p className="text-sm text-muted-foreground">
@@ -95,6 +99,9 @@ export function AgentsAdminSection(): JSX.Element {
         </p>
       ) : (
         <ul className="space-y-3">
+          {error && (
+            <li className="text-sm text-destructive">{error}</li>
+          )}
           {agents?.map((agent) => (
             <AgentEditRow
               key={agent.id}
@@ -120,7 +127,6 @@ function CreateAgentForm({
     email: '',
     username: '',
     name: '',
-    nameEn: '',
     slug: '',
     description: '',
     descriptionEn: '',
@@ -151,7 +157,6 @@ function CreateAgentForm({
         email: form.email.trim(),
         username: form.username.trim(),
         name: form.name.trim(),
-        nameEn: form.nameEn.trim() || undefined,
         slug: form.slug.trim() || undefined,
         description: form.description.trim() || undefined,
         descriptionEn: form.descriptionEn.trim() || undefined,
@@ -202,21 +207,12 @@ function CreateAgentForm({
         </label>
         <label className="block text-sm">
           <span className="mb-1 block text-xs text-muted-foreground">
-            {t('admin.agents.name', { defaultValue: 'Name (Norwegian)' })}
+            {t('admin.agents.nameLabel', { defaultValue: 'Name' })}
           </span>
           <Input
             required
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
-          />
-        </label>
-        <label className="block text-sm">
-          <span className="mb-1 block text-xs text-muted-foreground">
-            {t('admin.agents.nameEn', { defaultValue: 'Name (English)' })}
-          </span>
-          <Input
-            value={form.nameEn}
-            onChange={(e) => setForm({ ...form, nameEn: e.target.value })}
           />
         </label>
         <label className="block text-sm">
@@ -362,18 +358,27 @@ function ModelTierSelect({
   onChange,
   disabled,
   unrecognised,
+  boldLabel,
 }: {
   value: TierChoice;
   onChange: (next: TierChoice) => void;
   disabled?: boolean;
   /** A stored tier outside {@link MODEL_TIERS}, offered so it stays selectable. */
   unrecognised?: string | null;
+  /** Match the edit form's {@link FormField} labels rather than the create form's. */
+  boldLabel?: boolean;
 }): JSX.Element {
   const { t } = useTranslation();
   const tierLabel = tierLabels(t);
   return (
     <label className="block text-sm">
-      <span className="mb-1 block text-xs text-muted-foreground">
+      <span
+        className={
+          boldLabel
+            ? 'mb-1 block font-medium'
+            : 'mb-1 block text-xs text-muted-foreground'
+        }
+      >
         {t('admin.agents.modelTier', { defaultValue: 'Model tier' })}
       </span>
       <select
@@ -454,6 +459,81 @@ function ModelTierBadge({ tier }: { tier: string | null }): JSX.Element {
   );
 }
 
+/** A titled group of fields in the edit form. */
+function FormSection({
+  title,
+  single,
+  children,
+}: {
+  title: ReactNode;
+  /** One field per row, for wide inputs like the descriptions. */
+  single?: boolean;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <fieldset className="space-y-3">
+      <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {title}
+      </legend>
+      <div className={single ? 'space-y-3' : 'grid gap-x-4 gap-y-3 sm:grid-cols-2'}>
+        {children}
+      </div>
+    </fieldset>
+  );
+}
+
+/**
+ * A labelled input with its explanation underneath. The help text sits outside
+ * the <label> so the control's accessible name is just the label.
+ */
+function FormField({
+  label,
+  help,
+  children,
+}: {
+  label: ReactNode;
+  help?: ReactNode;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <div className="text-sm">
+      <label className="block">
+        <span className="mb-1 block font-medium">{label}</span>
+        {children}
+      </label>
+      {help && <p className="mt-1 text-xs text-muted-foreground">{help}</p>}
+    </div>
+  );
+}
+
+/** A checkbox with its label and an explanation underneath. */
+function CheckboxField({
+  checked,
+  onChange,
+  label,
+  help,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  label: ReactNode;
+  help: ReactNode;
+}): JSX.Element {
+  return (
+    <div className="text-sm">
+      <label className="flex items-center gap-2 font-medium">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+          className="h-4 w-4 rounded border-input"
+        />
+        <span>{label}</span>
+      </label>
+      <p className="mt-1 pl-6 text-xs text-muted-foreground">{help}</p>
+    </div>
+  );
+}
+
 /**
  * The role the edit form should show. While suspended the live role is
  * `authenticated` and the intended one lives in preSuspensionRole; anything
@@ -480,7 +560,6 @@ function effectiveAgentRole(agent: AgentAdminRow): 'contributor' | 'editor' {
 function agentDraft(agent: AgentAdminRow) {
   return {
     name: agent.name,
-    nameEn: agent.nameEn ?? '',
     slug: agent.slug,
     description: agent.description ?? '',
     descriptionEn: agent.descriptionEn ?? '',
@@ -552,10 +631,10 @@ function AgentEditRow({
           }) as string,
         );
       }
+      const modelFamily = form.modelFamily.trim().toLowerCase();
       const applyFields = () =>
         patchAgent(agent.id, {
           name: form.name.trim(),
-          nameEn: form.nameEn.trim() || null,
           slug: form.slug.trim(),
           description: form.description.trim() || null,
           descriptionEn: form.descriptionEn.trim() || null,
@@ -563,8 +642,10 @@ function AgentEditRow({
           hooksEnabled: form.hooksEnabled,
           selfReviewEnabled: form.selfReviewEnabled,
           adjudicator: form.adjudicator,
-          ...(form.modelFamily.trim() !== (agent.modelFamily ?? '')
-            ? { modelFamily: form.modelFamily.trim() || null }
+          // The server only accepts lowercase families, so "Claude" is saved
+          // as "claude" rather than rejected.
+          ...(modelFamily !== (agent.modelFamily ?? '')
+            ? { modelFamily: modelFamily || null }
             : {}),
           // Only when changed against the stored value. A changed value is
           // either '' (clear) or one of the offered tiers; the unrecognised
@@ -706,6 +787,9 @@ function AgentEditRow({
             <ModelTierBadge tier={agent.modelTier} />
           </div>
           <div className="mt-1 text-xs text-muted-foreground">
+            {t('admin.agents.agentId', { defaultValue: 'Agent id' })}:{' '}
+            <span className="font-mono">{agent.id}</span>
+            {' · '}
             {t('admin.agents.userId', { defaultValue: 'User id' })}:{' '}
             <span className="font-mono">{agent.userId}</span>
             {' · '}
@@ -822,43 +906,73 @@ function AgentEditRow({
       )}
 
       {editing && (
-        <div className="mt-3 space-y-2">
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Input
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder={t('admin.agents.name', {
-                defaultValue: 'Name',
+        <div className="mt-4 space-y-5">
+          <FormSection
+            title={t('admin.agents.sectionIdentity', {
+              defaultValue: 'Identity',
+            })}
+          >
+            <FormField
+              label={t('admin.agents.nameLabel', { defaultValue: 'Name' })}
+              help={t('admin.agents.nameHelp', {
+                defaultValue: 'What the agent is called everywhere in the app.',
               })}
-            />
-            <Input
-              value={form.nameEn}
-              onChange={(e) => setForm({ ...form, nameEn: e.target.value })}
-              placeholder={t('admin.agents.nameEn', {
-                defaultValue: 'Name (English)',
+            >
+              <Input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
+            </FormField>
+            <FormField
+              label={t('admin.agents.slugLabel', { defaultValue: 'Short name' })}
+              help={t('admin.agents.slugHelp', {
+                defaultValue:
+                  'Used in links and logs. Lowercase letters, digits and hyphens only.',
               })}
-            />
-            <Input
-              value={form.slug}
-              onChange={(e) => setForm({ ...form, slug: e.target.value })}
-              placeholder={t('admin.agents.slugPlaceholder', {
-                defaultValue: 'slug',
-              })}
-            />
-            <Input
-              type="number"
-              value={form.maintainerUserId}
-              onChange={(e) =>
-                setForm({ ...form, maintainerUserId: e.target.value })
-              }
-              placeholder={t('admin.agents.maintainerUserId', {
+            >
+              <Input
+                value={form.slug}
+                onChange={(e) => setForm({ ...form, slug: e.target.value })}
+              />
+            </FormField>
+            <FormField
+              label={t('admin.agents.maintainerUserId', {
                 defaultValue: 'Maintainer user id',
               })}
-            />
-            <label className="block text-sm">
-              <span className="mb-1 block text-xs text-muted-foreground">
-                {t('admin.agents.role', { defaultValue: 'Role' })}
-              </span>
+              help={t('admin.agents.maintainerHelp', {
+                defaultValue:
+                  'User id of the person responsible for this agent. Leave empty if nobody is.',
+              })}
+            >
+              <Input
+                type="number"
+                value={form.maintainerUserId}
+                onChange={(e) =>
+                  setForm({ ...form, maintainerUserId: e.target.value })
+                }
+              />
+            </FormField>
+          </FormSection>
+
+          <FormSection
+            title={t('admin.agents.sectionAccess', {
+              defaultValue: 'Access and model',
+            })}
+          >
+            <FormField
+              label={t('admin.agents.role', { defaultValue: 'Role' })}
+              help={
+                status === 'suspended'
+                  ? t('admin.agents.roleWhileSuspended', {
+                      defaultValue:
+                        'Agent is suspended — the role change applies when it is reactivated.',
+                    })
+                  : t('admin.agents.roleHelp', {
+                      defaultValue:
+                        'A contributor can propose and verify edits. An editor can also approve them.',
+                    })
+              }
+            >
               <select
                 value={form.role}
                 disabled={status === 'deactivated'}
@@ -873,76 +987,24 @@ function AgentEditRow({
                 <option value="contributor">{t('admin.contributor')}</option>
                 <option value="editor">{t('admin.editor')}</option>
               </select>
-            </label>
+            </FormField>
             <ModelTierSelect
               value={form.modelTier}
               onChange={(modelTier) => setForm({ ...form, modelTier })}
               disabled={status === 'deactivated'}
               unrecognised={unrecognisedTier}
+              boldLabel
             />
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={form.hooksEnabled}
-                onChange={(e) =>
-                  setForm({ ...form, hooksEnabled: e.target.checked })
-                }
-                className="h-4 w-4 rounded border-input"
-              />
-              <span>
-                {t('admin.agents.hooksEnabled', {
-                  defaultValue: 'Enable hook routine',
-                })}
-              </span>
-            </label>
-            <label className="flex items-start gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={form.selfReviewEnabled}
-                onChange={(e) =>
-                  setForm({ ...form, selfReviewEnabled: e.target.checked })
-                }
-                className="mt-0.5 h-4 w-4 rounded border-input"
-              />
-              <span>
-                {t('admin.agents.selfReviewEnabled', {
-                  defaultValue: 'Allow reviewing its own work',
-                })}
-                <span className="mt-0.5 block text-xs text-muted-foreground">
-                  {t('admin.agents.selfReviewHelp', {
-                    defaultValue:
-                      'The agent sees its own submissions in the review queue and may verify them. Off by default, so its work waits for a second reader. It still cannot review a person’s edits.',
-                  })}
-                </span>
-              </span>
-            </label>
-            <label className="flex items-start gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={form.adjudicator}
-                onChange={(e) =>
-                  setForm({ ...form, adjudicator: e.target.checked })
-                }
-                className="mt-0.5 h-4 w-4 rounded border-input"
-              />
-              <span>
-                {t('admin.agents.adjudicator', {
-                  defaultValue: 'T3 adjudicator',
-                })}
-                <span className="mt-0.5 block text-xs text-muted-foreground">
-                  {t('admin.agents.adjudicatorHelp', {
-                    defaultValue:
-                      'May sit on the two-agent panel that settles a disagreement surviving the expert review. Needs the Flagship tier too. It never closes a dispute a person raised.',
-                  })}
-                </span>
-              </span>
-            </label>
-            <label className="block text-sm">
-              <span className="mb-1 block">
-                {t('admin.agents.modelFamily', { defaultValue: 'Model family' })}
-              </span>
-              <input
-                type="text"
+            <FormField
+              label={t('admin.agents.modelFamily', {
+                defaultValue: 'Model family',
+              })}
+              help={t('admin.agents.modelFamilyHelp', {
+                defaultValue:
+                  'Which model maker the agent runs on, e.g. claude or gpt. Used to make sure a T3 panel is not two agents from the same family.',
+              })}
+            >
+              <Input
                 value={form.modelFamily}
                 onChange={(e) =>
                   setForm({ ...form, modelFamily: e.target.value })
@@ -952,44 +1014,94 @@ function AgentEditRow({
                     defaultValue: 'e.g. claude',
                   }) as string
                 }
-                className="block w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
               />
-            </label>
-          </div>
-          {status === 'suspended' && (
-            <p className="text-xs text-muted-foreground">
-              {t('admin.agents.roleWhileSuspended', {
-                defaultValue:
-                  'Agent is suspended — the role change applies when it is reactivated.',
+            </FormField>
+          </FormSection>
+
+          <FormSection
+            title={t('admin.agents.sectionPermissions', {
+              defaultValue: 'Permissions and routines',
+            })}
+          >
+            <CheckboxField
+              checked={form.hooksEnabled}
+              onChange={(hooksEnabled) => setForm({ ...form, hooksEnabled })}
+              label={t('admin.agents.hooksEnabled', {
+                defaultValue: 'Enable hook routine',
               })}
-            </p>
-          )}
-          <textarea
-            value={form.description}
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
-            rows={2}
-            className="block w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
-            placeholder={t('admin.agents.description', {
+              help={t('admin.agents.hooksHelp', {
+                defaultValue:
+                  'Wakes the agent automatically when someone posts a comment or an edit is approved, so it can evaluate it. Leave off for agents that only run on a schedule.',
+              })}
+            />
+            <CheckboxField
+              checked={form.selfReviewEnabled}
+              onChange={(selfReviewEnabled) =>
+                setForm({ ...form, selfReviewEnabled })
+              }
+              label={t('admin.agents.selfReviewEnabled', {
+                defaultValue: 'Allow reviewing its own work',
+              })}
+              help={t('admin.agents.selfReviewHelp', {
+                defaultValue:
+                  'The agent sees its own submissions in the review queue and may verify them. Off by default, so its work waits for a second reader. It still cannot review a person’s edits.',
+              })}
+            />
+            <CheckboxField
+              checked={form.adjudicator}
+              onChange={(adjudicator) => setForm({ ...form, adjudicator })}
+              label={t('admin.agents.adjudicator', {
+                defaultValue: 'T3 adjudicator',
+              })}
+              help={t('admin.agents.adjudicatorHelp', {
+                defaultValue:
+                  'May sit on the two-agent panel that settles a disagreement surviving the expert review. Needs the Flagship tier too. It never closes a dispute a person raised.',
+              })}
+            />
+          </FormSection>
+
+          <FormSection
+            title={t('admin.agents.sectionDescription', {
               defaultValue: 'Description',
             })}
-          />
-          <textarea
-            value={form.descriptionEn}
-            onChange={(e) =>
-              setForm({ ...form, descriptionEn: e.target.value })
-            }
-            rows={2}
-            className="block w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
-            placeholder={t('admin.agents.descriptionEn', {
-              defaultValue: 'Description (English)',
-            })}
-          />
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={closeEditor}
+            single
+          >
+            <FormField
+              label={t('admin.agents.descriptionNb', {
+                defaultValue: 'Description (Norwegian)',
+              })}
+              help={t('admin.agents.descriptionHelp', {
+                defaultValue:
+                  'What the agent does and how it is run.',
+              })}
             >
+              <textarea
+                value={form.description}
+                onChange={(e) =>
+                  setForm({ ...form, description: e.target.value })
+                }
+                rows={2}
+                className="block w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
+              />
+            </FormField>
+            <FormField
+              label={t('admin.agents.descriptionEn', {
+                defaultValue: 'Description (English)',
+              })}
+            >
+              <textarea
+                value={form.descriptionEn}
+                onChange={(e) =>
+                  setForm({ ...form, descriptionEn: e.target.value })
+                }
+                rows={2}
+                className="block w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
+              />
+            </FormField>
+          </FormSection>
+
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={closeEditor}>
               {t('admin.agents.cancel', { defaultValue: 'Cancel' })}
             </Button>
             <Button size="sm" onClick={handleSave} disabled={submitting}>
