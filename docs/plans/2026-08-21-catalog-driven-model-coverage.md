@@ -790,6 +790,13 @@ drugs). A DB edit changes the next snapshot, never a curve already pinned.
     4. Extending §5.2 to the derived track is now a live question: 2 and 3 are closed, and the
        models that reach C would be eligible under its four conditions. Until the owner extends it,
        a derived C renders to editors and admins only.
+    5. **Nightly refresh (LANDED, 2026-10-08).** `.github/workflows/derived-registry-refresh.yml`
+       rebuilds the artifact from the live catalog every night, validates it with the kinetics-core
+       suite and the provenance gate, and opens (or updates) one pull request whose body summarises
+       the change — models gained and lost, grade moves. The Codex gate merges it like any other
+       pull request. The snapshot stays the unit of reproducibility; only the manual step is gone.
+       It needs a `REGISTRY_REFRESH_TOKEN` secret, because GitHub starts no workflows for a pull
+       request opened with the built-in token.
 
 ## 8. Risks & non-goals
 
