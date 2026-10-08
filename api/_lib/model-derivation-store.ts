@@ -34,6 +34,7 @@ import { and, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import { drugs, drugParameters, paperReviews, parameterEntries } from '../../db/schema.js';
 import { getDb, runInPoolTransaction } from './db.js';
 import {
+  getRangeSpec,
   isDrugParameterId,
   parameterIsRouteScoped,
   type DrugParameterId,
@@ -657,7 +658,14 @@ export async function readDrugRouteAssemblyInputs(
     const entries = (await loadEntryValuesForParameter(drugId, parameter)).filter(
       (entry) => entry.matrix !== null && DERIVED_MODEL_MATRICES.has(entry.matrix),
     );
-    const summary = aggregateEntries(entries, { targetUnit, molecularWeight, matrixRelevant: false });
+    // The registry bounds keep an impossible arithmetic endpoint (a mean − SD below zero) out of
+    // the spread, as the drug-level aggregate does, instead of letting it void the whole range.
+    const summary = aggregateEntries(entries, {
+      targetUnit,
+      molecularWeight,
+      matrixRelevant: false,
+      valueBounds: getRangeSpec(parameter).bounds,
+    });
     if (!summary || summary.representative === null) continue;
     drugLevelValues.push({
       parameter,
