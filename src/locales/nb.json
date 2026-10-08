@@ -1513,7 +1513,22 @@
       "tokenLastUsed": "sist brukt",
       "tokenExpiryInvalid": "Utløp må være et positivt antall dager.",
       "confirmRevoke": "Tilbakekalle dette tokenet? Klienter som bruker det slutter å autentisere umiddelbart.",
-      "revoke": "Tilbakekall"
+      "revoke": "Tilbakekall",
+      "agentId": "Agent-id",
+      "nameLabel": "Navn",
+      "nameHelp": "Hva agenten heter overalt i appen.",
+      "slugLabel": "Kortnavn",
+      "slugHelp": "Brukes i lenker og logger. Bare små bokstaver, tall og bindestrek.",
+      "maintainerHelp": "Bruker-id til personen som har ansvar for agenten. La stå tomt hvis ingen har det.",
+      "sectionIdentity": "Identitet",
+      "sectionAccess": "Tilgang og modell",
+      "sectionPermissions": "Rettigheter og rutiner",
+      "sectionDescription": "Beskrivelse",
+      "roleHelp": "En bidragsyter kan foreslå og verifisere endringer. En redaktør kan også godkjenne dem.",
+      "modelFamilyHelp": "Hvilken modellprodusent agenten kjører på, f.eks. claude eller gpt. Brukes for å sikre at et T3-panel ikke består av to agenter fra samme familie.",
+      "hooksHelp": "Vekker agenten automatisk når noen skriver en kommentar eller en endring godkjennes, slik at den kan vurdere den. La stå av for agenter som bare kjører på timeplan.",
+      "descriptionNb": "Beskrivelse (norsk)",
+      "descriptionHelp": "Hva agenten gjør og hvordan den kjøres."
     },
     "hookRuns": {
       "heading": "Hook-kjøringer for agenter",

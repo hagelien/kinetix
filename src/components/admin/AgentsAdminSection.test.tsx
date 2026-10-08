@@ -311,13 +311,13 @@ describe('AgentsAdminSection model tier', () => {
     render(<AgentsAdminSection />);
 
     fireEvent.click(await screen.findByText('Edit'));
-    const name = screen.getByPlaceholderText('Name') as HTMLInputElement;
+    const name = screen.getByLabelText('Name') as HTMLInputElement;
     fireEvent.change(name, { target: { value: 'Renamed mid-thought' } });
     fireEvent.click(screen.getAllByText('Cancel')[0]!); // the row's Edit toggle
 
     fireEvent.click(screen.getByText('Edit'));
     expect(
-      (screen.getByPlaceholderText('Name') as HTMLInputElement).value,
+      (screen.getByLabelText('Name') as HTMLInputElement).value,
     ).toBe('Kinetix Agent');
   });
 
@@ -396,5 +396,29 @@ describe('AgentsAdminSection failed save', () => {
     await waitFor(() => expect(fetchAdminAgents).toHaveBeenCalledTimes(2));
     expect(screen.getByText('Slug already in use')).toBeInTheDocument();
     expect(screen.getByText('Save')).toBeInTheDocument();
+  });
+});
+
+describe('AgentsAdminSection row and form', () => {
+  it('shows the agent id next to the user and maintainer ids', async () => {
+    fetchAdminAgents.mockResolvedValue({ agents: [agentRow({ id: 7, userId: 42 })] });
+    render(<AgentsAdminSection />);
+
+    expect(await screen.findByText(/Agent id/)).toBeInTheDocument();
+    expect(screen.getByText('7')).toBeInTheDocument();
+  });
+
+  it('has one name field and no longer sends an English name', async () => {
+    fetchAdminAgents.mockResolvedValue({ agents: [agentRow()] });
+    render(<AgentsAdminSection />);
+
+    fireEvent.click(await screen.findByText('Edit'));
+    expect(screen.queryByLabelText(/Name \(English\)/)).toBeNull();
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Renamed' } });
+    fireEvent.click(screen.getByText('Save'));
+
+    await waitFor(() => expect(patchAgent).toHaveBeenCalled());
+    expect(firstPatch()[1]).toMatchObject({ name: 'Renamed' });
+    expect(firstPatch()[1]).not.toHaveProperty('nameEn');
   });
 });
