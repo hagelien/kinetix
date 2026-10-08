@@ -20,7 +20,7 @@
  * Driven by the Vercel cron against `api/notification-emails.ts` every ten
  * minutes; `npm run notifications:email` runs the same thing by hand.
  */
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import { getDb, inTransaction } from './db.js';
 import { sendEmail } from './email.js';
 import { claimOverdueDisputesForEscalation } from './disputes.js';
@@ -30,9 +30,11 @@ import {
   reclassifyTargetAuthorNotices,
   unreadableNotificationIds,
 } from './notifications.js';
+import { PARAMETER_LABELS } from './parameterLabels.js';
 import { callerCan } from './permissions-store.js';
 import { CAP } from '../../src/lib/permissions.js';
 import { DISPUTE_OVERDUE_THRESHOLD_MS } from '../../src/lib/disputeAge.js';
+import { resolveDrugName } from '../../src/lib/drugNames.js';
 import {
   digestDue,
   digestPeriodStart,
@@ -49,6 +51,21 @@ const IMMEDIATE_BATCH = 5;
 /** Rows one summary carries at most; a larger backlog continues next period. */
 const DIGEST_BATCH = 200;
 const BODY_EXCERPT = 300;
+const ABOUT_DETAIL_EXCERPT = 160;
+
+/**
+ * What a notice is about, read from its target when the email is built: the
+ * page, drug parameter, paper or learning unit, and a short detail (the edit
+ * summary, the comment text). Lets a summary line say "Paracetamol ·
+ * Half-life: corrected the range" instead of only "your contribution got a
+ * stamp". Every part is optional; a deleted target yields nothing.
+ */
+export interface NotificationAbout {
+  title: string | null;
+  drugNames: Record<string, string> | null;
+  parameter: string | null;
+  detail: string | null;
+}
 
 export interface NotificationRowForEmail {
   id: number;
@@ -58,6 +75,7 @@ export interface NotificationRowForEmail {
   url: string | null;
   audience: NotificationAudience;
   createdAt: Date;
+  about?: NotificationAbout | null;
 }
 
 interface Recipient {
@@ -176,6 +194,38 @@ function excerpt(body: string | null): string | null {
   return t.length <= BODY_EXCERPT ? t : `${t.slice(0, BODY_EXCERPT).trimEnd()}…`;
 }
 
+function shorten(text: string, max: number): string {
+  const t = text.replace(/\s+/g, ' ').trim();
+  return t.length <= max ? t : `${t.slice(0, max).trimEnd()}…`;
+}
+
+/**
+ * One line naming what a notice is about, e.g. `Paracetamol · Half-life:
+ * corrected the range`; null when nothing is known. The detail is left out
+ * when the notice body already says the same (a comment notice carries the
+ * comment itself).
+ */
+export function aboutLine(
+  row: Pick<NotificationRowForEmail, 'about' | 'bodyMd'>,
+  locale: EmailLocale,
+): string | null {
+  const a = row.about;
+  if (!a) return null;
+  const drug = a.drugNames ? resolveDrugName(a.drugNames, locale) : '';
+  const parameter =
+    a.parameter && !a.parameter.startsWith('fact:')
+      ? (PARAMETER_LABELS[locale][a.parameter] ?? a.parameter)
+      : '';
+  const where = [a.title?.trim(), drug, parameter].filter(Boolean).join(' · ');
+  const detail = a.detail?.trim();
+  const showDetail =
+    detail && !detail.startsWith('auto:') && detail !== row.bodyMd?.trim()
+      ? shorten(detail, ABOUT_DETAIL_EXCERPT)
+      : '';
+  if (where && showDetail) return `${where}: ${showDetail}`;
+  return where || showDetail || null;
+}
+
 function absolute(appUrl: string, path: string | null): string {
   const base = appUrl.replace(/\/$/, '');
   if (!path) return base;
@@ -203,18 +253,20 @@ export function buildEventEmail(
 ): { subject: string; html: string; text: string } {
   const c = COPY[locale];
   const title = notificationTitle(row, locale);
+  const about = aboutLine(row, locale);
   const body = excerpt(row.bodyMd);
   const link = absolute(appUrl, row.url);
   const html = shell(
     appUrl,
     locale,
     title,
-    `${body ? `<p style="color: #333; line-height: 1.5; white-space: pre-wrap;">${escapeHtml(body)}</p>` : ''}
+    `${about ? `<p style="color: #555; margin: 0 0 12px;">${escapeHtml(about)}</p>` : ''}
+      ${body ? `<p style="color: #333; line-height: 1.5; white-space: pre-wrap;">${escapeHtml(body)}</p>` : ''}
       <p style="margin: 24px 0;">
         <a href="${link}" style="display: inline-block; padding: 10px 20px; background: #0f172a; color: #fff; border-radius: 6px; text-decoration: none;">${escapeHtml(c.open)}</a>
       </p>`,
   );
-  const text = `${title}\n\n${body ? `${body}\n\n` : ''}${c.open}: ${link}\n\n${c.settings}: ${absolute(appUrl, '/preferences')}\n`;
+  const text = `${title}\n\n${about ? `${about}\n\n` : ''}${body ? `${body}\n\n` : ''}${c.open}: ${link}\n\n${c.settings}: ${absolute(appUrl, '/preferences')}\n`;
   return { subject: title, html, text };
 }
 
@@ -245,12 +297,14 @@ export function buildSummaryEmail(args: {
     .filter((s) => s.rows.length > 0 || (s.audience === 'reviewer' && args.backlog));
 
   const itemHtml = (r: NotificationRowForEmail) => {
+    const about = aboutLine(r, args.locale);
     const body = excerpt(r.bodyMd);
-    return `<li style="margin-bottom: 12px;"><a href="${absolute(args.appUrl, r.url)}">${escapeHtml(notificationTitle(r, args.locale))}</a>${body ? `<br><span style="color: #555;">${escapeHtml(body)}</span>` : ''}</li>`;
+    return `<li style="margin-bottom: 12px;"><a href="${absolute(args.appUrl, r.url)}">${escapeHtml(notificationTitle(r, args.locale))}</a>${about ? `<br><span style="color: #555;">${escapeHtml(about)}</span>` : ''}${body ? `<br><span style="color: #555;">${escapeHtml(body)}</span>` : ''}</li>`;
   };
   const itemText = (r: NotificationRowForEmail) => {
+    const about = aboutLine(r, args.locale);
     const body = excerpt(r.bodyMd);
-    return `- ${notificationTitle(r, args.locale)}${body ? ` — ${body}` : ''}\n  ${absolute(args.appUrl, r.url)}`;
+    return `- ${notificationTitle(r, args.locale)}${about ? ` (${about})` : ''}${body ? ` — ${body}` : ''}\n  ${absolute(args.appUrl, r.url)}`;
   };
   const backlogLine =
     args.backlog && args.backlog.open > 0
@@ -375,7 +429,17 @@ function toRow(r: {
   url: string | null;
   audience: string;
   created_at: Date | string;
+  about_title?: string | null;
+  about_drug_names?: Record<string, string> | null;
+  about_parameter?: string | null;
+  about_detail?: string | null;
 }): NotificationRowForEmail {
+  const about: NotificationAbout = {
+    title: r.about_title ?? null,
+    drugNames: r.about_drug_names ?? null,
+    parameter: r.about_parameter ?? null,
+    detail: r.about_detail ?? null,
+  };
   return {
     id: r.id,
     type: r.type,
@@ -384,7 +448,71 @@ function toRow(r: {
     url: r.url,
     audience: r.audience === 'author' ? 'author' : 'reviewer',
     createdAt: new Date(r.created_at),
+    about: Object.values(about).some((v) => v != null) ? about : null,
   };
+}
+
+/**
+ * The {@link NotificationAbout} columns for a notification whose
+ * `target_type` / `target_id` are in scope, as correlated subqueries for a
+ * RETURNING list. Pending edits name the page, drug or paper they target;
+ * other targets are read from their own row.
+ */
+function aboutColumnsSql(targetType: SQL, targetId: SQL): SQL {
+  const pe = sql`(SELECT * FROM pending_edits WHERE id = ${targetId})`;
+  const title = sql`CASE ${targetType}
+    WHEN 'wiki_revision' THEN (
+      SELECT p.title FROM wiki_revisions r JOIN wiki_pages p ON p.id = r.page_id
+      WHERE r.id = ${targetId})
+    WHEN 'learning_unit_revision' THEN (
+      SELECT u.title FROM learning_unit_revisions r JOIN learning_units u ON u.id = r.unit_id
+      WHERE r.id = ${targetId})
+    WHEN 'paper_review' THEN (
+      SELECT c.metadata->>'title' FROM paper_reviews pr JOIN citations c ON c.id = pr.citation_id
+      WHERE pr.id = ${targetId})
+    WHEN 'drug_discussion' THEN (
+      SELECT p.title FROM drug_parameter_discussions d JOIN wiki_pages p ON p.id = d.wiki_page_id
+      WHERE d.id = ${targetId})
+    WHEN 'pending_edit' THEN (
+      SELECT CASE
+        WHEN e.edit_type IN ('wiki_page', 'wiki_fact', 'wiki_section')
+          THEN (SELECT title FROM wiki_pages WHERE id = e.target_id)
+        WHEN e.edit_type = 'wiki_new' THEN e.proposed_meta->>'title'
+        WHEN e.edit_type = 'learning_unit'
+          THEN (SELECT title FROM learning_units WHERE id = e.target_id)
+        WHEN e.edit_type = 'paper_review'
+          THEN (SELECT metadata->>'title' FROM citations WHERE id = e.target_id)
+      END FROM ${pe} e)
+  END`;
+  const drugNames = sql`CASE ${targetType}
+    WHEN 'drug_parameter_revision' THEN (
+      SELECT dr.names FROM drug_parameter_revisions r JOIN drugs dr ON dr.id = r.drug_id
+      WHERE r.id = ${targetId})
+    WHEN 'drug_discussion' THEN (
+      SELECT dr.names FROM drug_parameter_discussions d JOIN drugs dr ON dr.id = d.drug_id
+      WHERE d.id = ${targetId})
+    WHEN 'pending_edit' THEN (
+      SELECT dr.names FROM ${pe} e JOIN drugs dr ON dr.id = e.target_id
+      WHERE e.edit_type = 'parameter')
+  END`;
+  const parameter = sql`CASE ${targetType}
+    WHEN 'drug_parameter_revision' THEN (
+      SELECT parameter FROM drug_parameter_revisions WHERE id = ${targetId})
+    WHEN 'drug_discussion' THEN (
+      SELECT parameter FROM drug_parameter_discussions WHERE id = ${targetId})
+    WHEN 'pending_edit' THEN (SELECT e.parameter FROM ${pe} e WHERE e.edit_type = 'parameter')
+  END`;
+  const detail = sql`CASE ${targetType}
+    WHEN 'wiki_revision' THEN (SELECT edit_summary FROM wiki_revisions WHERE id = ${targetId})
+    WHEN 'learning_unit_revision' THEN (
+      SELECT edit_summary FROM learning_unit_revisions WHERE id = ${targetId})
+    WHEN 'drug_parameter_revision' THEN (
+      SELECT edit_summary FROM drug_parameter_revisions WHERE id = ${targetId})
+    WHEN 'drug_discussion' THEN (SELECT body FROM drug_parameter_discussions WHERE id = ${targetId})
+    WHEN 'pending_edit' THEN (SELECT e.fact_statement FROM ${pe} e)
+  END`;
+  return sql`${title} AS about_title, ${drugNames} AS about_drug_names,
+    ${parameter} AS about_parameter, ${detail} AS about_detail`;
 }
 
 /**
@@ -427,7 +555,8 @@ async function claimRows(
       LIMIT ${limit}
     )
       AND ${claimable}
-    RETURNING id, type, title, body_md, url, audience, created_at
+    RETURNING id, type, title, body_md, url, audience, created_at,
+      ${aboutColumnsSql(sql`notifications.target_type`, sql`notifications.target_id`)}
   `);
   return result.rows
     .map(toRow)
