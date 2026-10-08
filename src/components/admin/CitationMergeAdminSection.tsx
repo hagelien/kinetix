@@ -17,6 +17,7 @@ const KNOWN_ERROR_CODES = new Set([
   'weaker_survivor',
   'nothing_to_merge',
   'cohort_conflict',
+  'extraction_in_flight',
   'agent_refused',
 ]);
 

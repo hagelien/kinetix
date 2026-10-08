@@ -26,7 +26,7 @@
  * one paper, and that judgment is a person's to make.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { json, error, withErrorHandling } from './_lib/response.js';
 import { getDb, runInPoolTransaction } from './_lib/db.js';
 import { getUserFromRequest } from './_lib/auth.js';
@@ -38,6 +38,7 @@ import { isActiveAgentUser } from './_lib/agent-verifications.js';
 import {
   citationPdfs,
   citations,
+  paperExtractionJobs,
   paperReviews,
   pdfRequests,
 } from '../db/schema.js';
@@ -181,6 +182,29 @@ async function handleApply(
       'Keep the citation with the strongest identifier (PMID, then DOI, then URL).',
       'weaker_survivor',
     );
+    return;
+  }
+
+  // A run mid-extraction on a citation about to be folded away is reading the
+  // paper under an id this merge deletes: every fact it files afterwards cites
+  // a row that no longer exists, and the PDF it is reading may not be the one
+  // the survivor keeps. The merge moves queued and settled jobs on its own; a
+  // claimed one waits for its run to finish, or for an editor to cancel it.
+  const [inFlight] = await db
+    .select({ id: paperExtractionJobs.id, citationId: paperExtractionJobs.citationId })
+    .from(paperExtractionJobs)
+    .where(
+      and(
+        inArray(paperExtractionJobs.citationId, mergeIds),
+        eq(paperExtractionJobs.status, 'claimed'),
+      ),
+    )
+    .limit(1);
+  if (inFlight) {
+    json(res, 409, {
+      error: `Citation ${inFlight.citationId} has paper extraction job ${inFlight.id} in progress; wait for it to finish or cancel it, then merge.`,
+      code: 'extraction_in_flight',
+    });
     return;
   }
 

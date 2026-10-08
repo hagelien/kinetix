@@ -19,7 +19,13 @@ vi.mock('../../api/_lib/auth.js', () => ({
 
 import handler from '../../api/citation-merge.js';
 import { resolveCitation } from '../../api/_lib/citation-store.js';
-import { agents, citationFreetextAliases, citations, pdfRequests } from '../../db/schema.js';
+import {
+  agents,
+  citationIdentifierAliases,
+  citations,
+  paperExtractionJobs,
+  pdfRequests,
+} from '../../db/schema.js';
 import {
   resetIntegrationDb,
   setupIntegrationDb,
@@ -185,9 +191,116 @@ describe('POST /api/citation-merge', () => {
     const res = await call('POST', '/api/citation-merge', { survivorId: pmid, mergeIds: [a, b] });
     expect(res.status).toBe(200);
 
-    const aliases = await db.select().from(citationFreetextAliases);
+    const aliases = await db.select().from(citationIdentifierAliases);
     expect(aliases.map((alias) => alias.citationId)).toEqual([pmid, pmid, pmid]);
     expect(aliases.map((alias) => alias.identifier)).toContain(bRow!.identifier);
+  });
+
+  it('keeps every merged-away URL resolvable, not just the one altIds has room for (Codex P1, review comment 4216786856)', async () => {
+    const pmid = await seedCitation('pmid', '22835221', 'Therapeutic and toxic blood concentrations');
+    const urls = [
+      'https://ccforum.biomedcentral.com/articles/10.1186/cc11441',
+      'https://pubmed.ncbi.nlm.nih.gov/22835221/',
+      'https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3580721/',
+    ];
+    const urlIds: number[] = [];
+    for (const url of urls) urlIds.push(await seedCitation('url', url, 'Therapeutic and toxic'));
+    const res = await call('POST', '/api/citation-merge', { survivorId: pmid, mergeIds: urlIds });
+    expect(res.status).toBe(200);
+
+    for (const url of urls) {
+      const again = await resolveCitation(db, { type: 'url', identifier: url }, adminId);
+      expect(again).toMatchObject({ id: pmid, created: false });
+    }
+    const rows = await db.select({ id: citations.id }).from(citations);
+    expect(rows.map((row) => row.id)).toEqual([pmid]);
+  });
+
+  it('keeps a loser’s alt ids resolvable when the survivor already holds that type', async () => {
+    const pmid = await seedCitation('pmid', '22835221', 'Therapeutic and toxic blood concentrations');
+    await db
+      .update(citations)
+      .set({ metadata: { title: 'Therapeutic', altIds: { doi: '10.1186/cc11441' } } })
+      .where(eq(citations.id, pmid));
+    const [loser] = await db
+      .insert(citations)
+      .values({
+        type: 'url',
+        identifier: 'https://example.org/schulz-2012',
+        metadata: { title: 'Therapeutic', altIds: { doi: '10.1186/CC11441-ERRATUM' } },
+        createdBy: adminId,
+      })
+      .returning({ id: citations.id });
+    const res = await call('POST', '/api/citation-merge', { survivorId: pmid, mergeIds: [loser!.id] });
+    expect(res.status).toBe(200);
+
+    // Case-insensitive, as DOIs are everywhere else in the resolver.
+    const again = await resolveCitation(
+      db,
+      { type: 'doi', identifier: '10.1186/cc11441-erratum' },
+      adminId,
+    );
+    expect(again).toMatchObject({ id: pmid, created: false });
+  });
+
+  it('moves the losers’ extraction jobs to the kept row (Codex P1, review comment 4216786848)', async () => {
+    const [a, b, c] = await seedSchulzSpellings();
+    const [queued] = await db
+      .insert(paperExtractionJobs)
+      .values({ citationId: b, status: 'queued', requestedBy: adminId })
+      .returning({ id: paperExtractionJobs.id });
+    const [done] = await db
+      .insert(paperExtractionJobs)
+      .values({ citationId: c, status: 'completed', requestedBy: adminId, resultSummary: 'Ferdig.' })
+      .returning({ id: paperExtractionJobs.id });
+
+    const res = await call('POST', '/api/citation-merge', { survivorId: a, mergeIds: [b, c] });
+    expect(res.status).toBe(200);
+    const jobs = await db
+      .select({ id: paperExtractionJobs.id, citationId: paperExtractionJobs.citationId, status: paperExtractionJobs.status })
+      .from(paperExtractionJobs);
+    expect(jobs.sort((x, y) => x.id - y.id)).toEqual([
+      { id: queued!.id, citationId: a, status: 'queued' },
+      { id: done!.id, citationId: a, status: 'completed' },
+    ]);
+  });
+
+  it('cancels a loser’s open job when the kept row already has one, rather than deleting it', async () => {
+    const [a, b] = await seedSchulzSpellings();
+    const [keep] = await db
+      .insert(paperExtractionJobs)
+      .values({ citationId: a, status: 'queued', requestedBy: adminId })
+      .returning({ id: paperExtractionJobs.id });
+    const [dup] = await db
+      .insert(paperExtractionJobs)
+      .values({ citationId: b, status: 'queued', requestedBy: adminId })
+      .returning({ id: paperExtractionJobs.id });
+
+    const res = await call('POST', '/api/citation-merge', { survivorId: a, mergeIds: [b] });
+    expect(res.status).toBe(200);
+    const [kept] = await db.select().from(paperExtractionJobs).where(eq(paperExtractionJobs.id, keep!.id));
+    const [cancelled] = await db.select().from(paperExtractionJobs).where(eq(paperExtractionJobs.id, dup!.id));
+    expect(kept).toMatchObject({ citationId: a, status: 'queued' });
+    expect(cancelled).toMatchObject({ citationId: a, status: 'cancelled' });
+    expect(cancelled!.lastError).toContain('citation_merged');
+  });
+
+  it('refuses while a run is extracting a citation that would be folded away', async () => {
+    const [a, b] = await seedSchulzSpellings();
+    await db.insert(paperExtractionJobs).values({
+      citationId: b,
+      status: 'claimed',
+      requestedBy: adminId,
+      claimedBy: adminId,
+      claimedAt: new Date(),
+      claimToken: 'tok',
+      attempts: 1,
+    });
+    const res = await call('POST', '/api/citation-merge', { survivorId: a, mergeIds: [b] });
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('extraction_in_flight');
+    const left = await db.select().from(citations).where(eq(citations.id, b));
+    expect(left).toHaveLength(1);
   });
 
   it('keeps the PMID row rather than a free-text one', async () => {

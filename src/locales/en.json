@@ -2136,6 +2136,7 @@
         "not_found": "Some of these citations no longer exist — they may already have been merged. Search again.",
         "weaker_survivor": "Keep the citation with the strongest identifier (PMID, then DOI, then URL).",
         "nothing_to_merge": "Select at least one citation besides the one being kept.",
+        "extraction_in_flight": "A paper extraction run is reading one of the citations being merged away. Wait for it to finish, or cancel it on the paper extraction page, then merge.",
         "cohort_conflict": "These citations carry two separate imports of the same reference dataset that cannot be combined automatically. Withdraw the import that should not stand, then merge.",
         "agent_refused": "Citation merges must be made by a person, not an agent."
       }
