@@ -10,11 +10,28 @@ import console from "node:console";
 import { fileURLToPath, URL } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const tiers = { producer: "mid", reviewer: "flagship" };
+const tiers = {
+  producer: "mid",
+  reviewer: "flagship",
+  "adjudicator-a": "flagship",
+  "adjudicator-b": "flagship",
+};
+// T1 and T2 must both be installed; a T3 panel seat is optional per machine.
+const requiredRoles = ["producer", "reviewer"];
+const isAdjudicator = (role) => role.startsWith("adjudicator-");
+const roleList = Object.keys(tiers).join(" | ");
+const defaultDirectory = path.join(homedir(), ".kinetix", "worker-profiles");
 const helpers = new Set([
   "kinetix-log-verification.ts",
   "kinetix-log-run-usage.ts",
   "rejection-scan.ts",
+]);
+// A T3 seat reads anything but writes only its claim and its opinion
+// (agents/drug-db-adjudication.md §0, §3a): no peer verdicts or content edits.
+const adjudicatorHelpers = new Set(["kinetix-log-run-usage.ts"]);
+const adjudicatorWrites = new Set([
+  "/api/agent-adjudication-queue?action=claim",
+  "/api/agent-adjudication-opinions",
 ]);
 const keys = new Set([
   "version",
@@ -73,12 +90,9 @@ export function validateProfile(profile, role) {
   return profile;
 }
 
-export function loadProfile(
-  role,
-  directory = path.join(homedir(), ".kinetix", "worker-profiles"),
-) {
+export function loadProfile(role, directory = defaultDirectory) {
   if (!Object.hasOwn(tiers, role))
-    throw new Error("Select --profile producer or --profile reviewer.");
+    throw new Error(`Select --profile ${roleList}.`);
   try {
     const file = path.join(directory, `${role}.json`);
     const stat = lstatSync(file);
@@ -143,14 +157,56 @@ export function redact(text, token) {
     .replace(/kxat_[A-Za-z0-9_-]+/g, "[REDACTED]");
 }
 
-export function assertDistinctProfiles(first, second) {
+export function assertDistinctProfiles(...profiles) {
+  for (const key of ["userId", "agentId", "token"]) {
+    if (
+      new Set(profiles.map((profile) => profile[key])).size !== profiles.length
+    )
+      throw new Error(
+        "Worker profiles must use distinct users, agents and tokens. Stopping.",
+      );
+  }
+}
+
+function profilePresent(role, directory) {
+  try {
+    lstatSync(path.join(directory, `${role}.json`));
+    return true;
+  } catch (error) {
+    // Anything but a clean "absent" is treated as present so loadProfile fails closed.
+    return error?.code !== "ENOENT";
+  }
+}
+
+/**
+ * Load the selected profile plus every installed peer and require all of them
+ * to be distinct identities. The T1/T2 pair is always required; an installed
+ * T3 seat is checked too, so no worker can run on another seat's credentials.
+ */
+export function loadProfiles(role, directory = defaultDirectory) {
+  const selected = loadProfile(role, directory);
+  const peers = Object.keys(tiers)
+    .filter(
+      (peer) =>
+        peer !== role &&
+        (requiredRoles.includes(peer) || profilePresent(peer, directory)),
+    )
+    .map((peer) => loadProfile(peer, directory));
+  assertDistinctProfiles(selected, ...peers);
+  return selected;
+}
+
+export function assertRoleCommand(role, kind, args) {
+  if (!isAdjudicator(role)) return;
+  const [first, second] = args;
   if (
-    first.userId === second.userId ||
-    first.agentId === second.agentId ||
-    first.token === second.token
+    (kind === "helper" && !adjudicatorHelpers.has(first)) ||
+    (kind === "api" &&
+      first !== "GET" &&
+      !(first === "POST" && adjudicatorWrites.has(second)))
   ) {
     throw new Error(
-      "Worker profiles must use distinct users, agents and tokens. Stopping.",
+      "An adjudicator profile may only read, claim a case seat, post its opinion and log run usage.",
     );
   }
 }
@@ -269,17 +325,13 @@ function checkIdentity(profile, env) {
 
 export function main(argv = process.argv.slice(2)) {
   if (argv[0] !== "--profile")
-    throw new Error(
-      "Select --profile producer or --profile reviewer on EVERY command.",
-    );
+    throw new Error(`Select --profile ${roleList} on EVERY command.`);
   const role = argv[1];
   let rest = argv.slice(2);
   const dryRun = rest[0] === "--dry-run";
   if (dryRun) rest = rest.slice(1);
   const [kind, ...args] = rest;
-  const profile = loadProfile(role);
-  const peer = loadProfile(role === "producer" ? "reviewer" : "producer");
-  assertDistinctProfiles(profile, peer);
+  const profile = loadProfiles(role);
   const env = workerEnvironment(profile, process.env, dryRun);
   if (kind === "check") {
     if (args.length || dryRun)
@@ -290,6 +342,7 @@ export function main(argv = process.argv.slice(2)) {
     return 0;
   }
   command(kind, args); // Validate arguments before any network request.
+  assertRoleCommand(role, kind, args);
   // Resolve files here and stream bytes. Native Windows -> MSYS argument
   // handling can reinterpret an @C:\\... argument before Bash sees it.
   let input;

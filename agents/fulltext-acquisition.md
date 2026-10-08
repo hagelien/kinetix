@@ -91,7 +91,7 @@ Check the exact citation using the binary-safe downloader
 `scripts/download-citation-pdf.sh <id> <unique-output.pdf>`, which handles the
 authenticated `GET /api/citation-pdf?citationId=<id>` and its approved storage redirect.
 On a profile-based worker, use
-`node scripts/kinetix-worker.mjs --profile <producer|reviewer> pdf <id> <unique-output.pdf>`
+`node scripts/kinetix-worker.mjs --profile <producer|reviewer|adjudicator-a|adjudicator-b> pdf <id> <unique-output.pdf>`
 instead. If that action is not installed, report the missing local capability;
 do not invoke a bare API/extraction helper with fallback credentials. Never pipe
 binary PDF bytes through a wrapper that captures stdout as UTF-8 text. Use a fresh
