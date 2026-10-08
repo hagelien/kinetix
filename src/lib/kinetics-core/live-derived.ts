@@ -7,7 +7,8 @@
  * resolves that drug through the live answer instead of the snapshot:
  *
  *   - a live DEFINITION replaces the snapshot's entry for the analyte, or adds one the snapshot
- *     lacks, and its grade facts replace the snapshot's;
+ *     lacks, and its grade facts replace the snapshot's; its model id is versioned per build
+ *     (`versionedDefinition`), so a curve is only ever graded by the build that produced it;
  *   - a live answer of "no model" (`definition: null`) masks the snapshot's entry, so a drug whose
  *     data was withdrawn stops running on what it used to have.
  *
@@ -19,7 +20,26 @@
  * worker has its own copy of this module.
  */
 import type { DerivedModelGrade } from './derived-grade.js';
+import { hashValue } from './hash.js';
 import type { DrugModelDefinition } from './types.js';
+
+const LIVE_MODEL_ID_TAG = /\+live\.[0-9a-f]+$/;
+
+/**
+ * Give a live definition a model id that names the exact build: `<id>+live.<hash>`, hashed over the
+ * definition and its grade facts. A result records the model id it ran on, and the grade gate looks
+ * the model up by that id; with one stable id per drug, a curve computed before a refresh would be
+ * regraded with the evidence of parameters that did not produce it. With a versioned id the old
+ * curve's model simply stops resolving, and the gate withholds it until it is rerun. Idempotent, so
+ * the worker re-installing an already-versioned entry derives the same id.
+ */
+function versionedDefinition(
+  definition: DrugModelDefinition,
+  grade: DerivedModelGrade | null,
+): DrugModelDefinition {
+  const base = { ...definition, modelId: definition.modelId.replace(LIVE_MODEL_ID_TAG, '') };
+  return { ...base, modelId: `${base.modelId}+live.${hashValue({ definition: base, grade })}` };
+}
 
 export interface LiveDerivedEntry {
   /** The catalogue slug — a derived model's analyte id. */
@@ -50,9 +70,13 @@ export function installLiveDerivedEntry(entry: LiveDerivedEntry): boolean {
       `Live derived entry for "${entry.analyte}" carries a grade for "${entry.grade.analyte}"`,
     );
   }
-  const key = JSON.stringify(entry);
+  const held: LiveDerivedEntry =
+    entry.definition === null
+      ? entry
+      : { ...entry, definition: versionedDefinition(entry.definition, entry.grade) };
+  const key = JSON.stringify(held);
   if (LIVE.get(entry.analyte)?.key === key) return false;
-  LIVE.set(entry.analyte, { entry, key });
+  LIVE.set(entry.analyte, { entry: held, key });
   generation += 1;
   return true;
 }
