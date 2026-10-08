@@ -1644,6 +1644,34 @@ describe('saturable (Michaelis–Menten) elimination', () => {
     expect(oral!.ranges?.km).toEqual({ low: 6, high: 22 });
   });
 
+  it('names only the studies whose Km actually reached the pool as its source', async () => {
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db);
+    await seedSaturableDrug(drugId, userId);
+    const used = await seedAdmissibleCitation(db, { identifier: '2001' });
+    const skipped = await seedAdmissibleCitation(db, { identifier: '2002' });
+    const cite = (parameter: string, median: number, unit: string, citationId: number) =>
+      db.insert(parameterEntries).values({
+        drugId,
+        parameter,
+        low: String(median),
+        median: String(median),
+        unit,
+        matrix: 'plasma',
+        citationId,
+        createdBy: userId,
+        origin: 'contributor',
+      } as never);
+    await cite('vmax', 15, 'mg/L/h', used);
+    await cite('km', 12, 'mg/L', used);
+    // Molar, and the drug has no molecular weight: this study's number cannot reach the pool.
+    await cite('km', 100, 'µmol/L', skipped);
+
+    const [oral] = await readDrugRouteAssemblyInputs(drugId);
+    expect(oral!.values.km).toBe(12);
+    expect(oral!.inputSources?.km).toEqual({ basis: 'cited', citationIds: [used] });
+  });
+
   it('runs no curve at all without Vmax and Km — never a first-order stand-in', async () => {
     const drugId = await seedDrug(db);
     const userId = await seedUser(db);

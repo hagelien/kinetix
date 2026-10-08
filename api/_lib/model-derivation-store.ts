@@ -51,6 +51,7 @@ import {
   dropSupersededGrandfathered,
   isAggregateCacheValue,
   type ParameterEntryValue,
+  type ParameterSummary,
 } from '../../src/lib/parameterEntryAggregation.js';
 import { getDrugParameterMap } from './drugParameterStore.js';
 import { computeParameterSummary, loadEntryValuesForParameter } from './parameter-entries-store.js';
@@ -390,12 +391,18 @@ type SourcedValue = CatalogParameterValue & { source: InputSource };
 const AUTHORED_VALUE: InputSource = { basis: 'uncited', reason: 'authored-value' };
 
 /**
- * The source of a value pooled from `entries`: cited only when every entry the pool draws on names a
- * citation and none is a grandfathered placeholder. Judged over every entry the aggregation
- * considers rather than only those that reached the numeric pool, so an entry the pool happened to
- * skip can make the answer more cautious but never less.
+ * The source of a value pooled from `entries` into `summary`: cited only when every entry the pool
+ * draws on names a citation and none is a grandfathered placeholder. That judgement is made over
+ * every entry the aggregation considers rather than only those that reached the numeric pool, so an
+ * entry the pool happened to skip can make the answer more cautious but never less. The citations
+ * NAMED, though, are only those whose numbers reached the pool (`contributingCitationIds`): a study
+ * whose entry was skipped (censored, or in a unit that could not convert) did not back the value,
+ * and the grade record must not say it did.
  */
-function sourceOfEntries(entries: readonly ParameterEntryValue[]): InputSource {
+function sourceOfEntries(
+  entries: readonly ParameterEntryValue[],
+  summary: Pick<ParameterSummary, 'contributingCitationIds'>,
+): InputSource {
   const considered = dropSupersededGrandfathered(entries);
   if (
     considered.length === 0 ||
@@ -403,7 +410,11 @@ function sourceOfEntries(entries: readonly ParameterEntryValue[]): InputSource {
   ) {
     return { basis: 'uncited', reason: 'uncited-entry' };
   }
-  const citationIds = [...new Set(considered.map((entry) => entry.citationId!))].sort((a, b) => a - b);
+  const contributing = new Set(summary.contributingCitationIds);
+  const citationIds = [...new Set(considered.map((entry) => entry.citationId!))]
+    .filter((id) => contributing.has(id))
+    .sort((a, b) => a - b);
+  if (citationIds.length === 0) return { basis: 'uncited', reason: 'uncited-entry' };
   return { basis: 'cited', citationIds };
 }
 
@@ -446,7 +457,7 @@ async function readDrugLevelSources(
     sources.set(
       parameter,
       cached !== null && current !== null && sameValue(cached, current)
-        ? sourceOfEntries(entries)
+        ? sourceOfEntries(entries, summary!)
         : { basis: 'uncited', reason: 'stale-cache' },
     );
   }
@@ -672,7 +683,7 @@ export async function readDrugRouteAssemblyInputs(
       value: summary.representative,
       unit: targetUnit,
       ...(summary.min !== null && summary.max !== null ? { low: summary.min, high: summary.max } : {}),
-      source: sourceOfEntries(entries),
+      source: sourceOfEntries(entries, summary),
     });
   }
 
@@ -730,7 +741,7 @@ export async function readDrugRouteAssemblyInputs(
       value: summary.representative,
       unit: targetUnit,
       ...(summary.min !== null && summary.max !== null ? { low: summary.min, high: summary.max } : {}),
-      source: sourceOfEntries(entries),
+      source: sourceOfEntries(entries, summary),
     });
   }
 
