@@ -31,6 +31,16 @@ export const LINEAR_UNITS: Record<string, LinearUnitDef> = {
   // Clearance, weight-normalized — base L/h/kg. Same factors, separate family.
   'L/h/kg': { family: 'clearance_per_kg', toBase: 1 },
   'mL/min/kg': { family: 'clearance_per_kg', toBase: 0.06 },
+  // Saturable elimination capacity (Vmax) as a concentration fall per unit time
+  // — base mg/L/h, the engine's own unit. 1 mg/dL = 10 mg/L; 1 µg/mL = 1 mg/L.
+  // Vmax reported as an amount per time (mg/h, mg/kg/day) is deliberately
+  // absent: turning it into a concentration rate needs the volume of
+  // distribution, which is a separate parameter, not a unit factor.
+  'mg/L/h': { family: 'elimination_capacity', toBase: 1 },
+  'µg/mL/h': { family: 'elimination_capacity', toBase: 1 },
+  'mg/dL/h': { family: 'elimination_capacity', toBase: 10 },
+  'g/L/h': { family: 'elimination_capacity', toBase: 1000 },
+  'mg/L/min': { family: 'elimination_capacity', toBase: 60 },
   // Absolute dose mass — base mg. A paper reporting a fatal dose in grams must
   // pool with one reporting milligrams, or it drops out of the aggregate and
   // the parameter keeps showing a stale hand-authored value.

@@ -272,6 +272,14 @@ The two tiers are treated differently, and deliberately so:
   has no distribution phase, so concentrations shortly after a dose are the ones to
   distrust. Only disposition is ever simplified this way — a drug whose elimination is
   cited as saturable (Michaelis–Menten) is never drawn with first-order elimination.
+  **A saturable elimination is built from its own two numbers.** Where a drug's elimination
+  is cited as saturable and the catalogue holds its maximum elimination rate (Vmax) and its
+  Michaelis constant (Km), the curve runs the saturable form, so concentrations climb faster
+  than dose at high doses and fall at a near-constant rate until the level drops below Km.
+  Until both are stored, the drug gets no curve. Its absorption rate must be stored too:
+  under saturable elimination the time to peak depends on the dose, so a recorded Tmax is
+  never solved for an absorption rate. The half-life such a model carries is a label only;
+  it does not move the curve.
   **A missing bioavailability takes a cautious default.** Where the catalogue holds no
   bioavailability for a dosed substance's route, the curve assumes the whole dose is
   absorbed (F = 100 %). Concentration is proportional to F at every time, so this pushes

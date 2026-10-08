@@ -92,6 +92,12 @@ export const DRUG_PARAMETER_IDS = [
   // orally — so it is stored per administration route (`routeScoped`), not as a
   // drug-level value. The catalog's `tmax` cannot supply it (see modelDerivation).
   'ka',
+  // Saturable (Michaelis–Menten) elimination: the maximum elimination rate and
+  // the concentration at which it runs at half that rate. Molecule-level, so
+  // they pool across sources like the half-life; the auto-built model runs the
+  // saturable family only when a drug declares it AND both are present.
+  'vmax',
+  'km',
   'postmortemRedistribution',
   'pmAmRatio',
   // Model structure (CV-1b): the drug's PK model shape, as cited pick-from-a-list
@@ -520,6 +526,14 @@ const DOSE_UNITS = [
 // weight-normalized clearance is reported per minute in mL, never in litres.
 const CLEARANCE_UNITS = ['L/h', 'L/min', 'mL/min', 'L/h/kg', 'mL/min/kg'] as const;
 
+// Saturable elimination. Vmax is the concentration fall per hour at saturation
+// (canonical mg/L/h, the engine's unit); Km the concentration at which
+// elimination runs at half that rate (canonical mg/L). Km is restricted to MASS
+// concentrations: the model is assembled from canonical values with no molecular
+// weight to hand, so a molar Km would be dropped from the model rather than used.
+const VMAX_UNITS = ['mg/L/h', 'µg/mL/h', 'mg/dL/h', 'g/L/h', 'mg/L/min'] as const;
+const KM_UNITS = ['mg/L', 'µg/mL', 'mg/dL', 'µg/L', 'ng/mL'] as const;
+
 // ─── Registry ───────────────────────────────────────────────────────────────
 
 export const DRUG_PARAMETERS: Record<DrugParameterId, ParameterSpec> = {
@@ -916,6 +930,39 @@ export const DRUG_PARAMETERS: Record<DrugParameterId, ParameterSpec> = {
     // bioavailability and the dose quantities.
     requiresAdministration: true,
     zod: rangeSchema({ min: 0.001, max: 100, allowedUnits: ['1/h'], requiresMinMax: false }),
+    format: rangeFormatter,
+  },
+  vmax: {
+    id: 'vmax',
+    label: 'Vmax',
+    longLabel: 'Maximum elimination rate (saturable)',
+    symbol: 'Vmax',
+    kind: 'range',
+    group: 'pharmacokinetics',
+    allowedUnits: VMAX_UNITS,
+    canonicalUnit: 'mg/L/h',
+    // Ethanol's ~150 mg/L/h sits mid-range; the bounds only catch a unit slip.
+    bounds: { min: 0.0001, max: 100_000 },
+    requiresMinMax: false,
+    forensic: false,
+    summarizable: true,
+    zod: rangeSchema({ min: 0.0001, max: 100_000, allowedUnits: VMAX_UNITS, requiresMinMax: false }),
+    format: rangeFormatter,
+  },
+  km: {
+    id: 'km',
+    label: 'Km',
+    longLabel: 'Michaelis constant (saturable elimination)',
+    symbol: 'Km',
+    kind: 'range',
+    group: 'pharmacokinetics',
+    allowedUnits: KM_UNITS,
+    canonicalUnit: 'mg/L',
+    bounds: { min: 0.000001, max: 1_000_000 },
+    requiresMinMax: false,
+    forensic: false,
+    summarizable: true,
+    zod: rangeSchema({ min: 0.000001, max: 1_000_000, allowedUnits: KM_UNITS, requiresMinMax: false }),
     format: rangeFormatter,
   },
   postmortemRedistribution: {

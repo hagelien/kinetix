@@ -220,6 +220,7 @@ export type {
   OneCompartmentClvRouteParams,
   OneCompartmentZeroOrderRouteParams,
   OneCompartmentMixedOrderRouteParams,
+  MichaelisMentenRouteParams,
   RouteModelParams,
   DrugModelDefinition,
   CanonicalSubject,
