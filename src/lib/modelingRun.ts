@@ -60,6 +60,7 @@ import {
   toCanonicalScenario,
 } from '@/lib/forwardCoreAdapter';
 import type { CanonicalResult, CanonicalResultOk } from '@/lib/kinetics-core';
+import { refreshLiveDerivedModel } from '@/lib/liveDerivedModels';
 
 /** The compute engine a component runs on, defaulting to Monte Carlo PK. */
 export function getComponentEngine(config: DrugSimConfig): ComponentEngine {
@@ -1347,6 +1348,9 @@ async function runCoreDoses(
   anchor: number,
   deps: ModelingRunDeps,
 ): Promise<{ ok: true; core: CanonicalResult } | { ok: false; detail: string }> {
+  // Build a catalogue drug's model from the catalogue as it stands now, so a curated value reaches
+  // this run without a regenerated registry; on any failure the committed snapshot is used.
+  await refreshLiveDerivedModel(drugComponent?._slug);
   const build = (draws: number) =>
     toCanonicalScenario({
       analyte: coreAnalyteFor([drugComponent?._slug, analyteId(config, drugComponent)]),
