@@ -1477,3 +1477,67 @@ describe('per-input sources in the grade record', () => {
     expect(oral?.inputSources?.ka).toEqual({ basis: 'uncited', reason: 'uncited-entry' });
   });
 });
+
+describe('reported spreads reach the assembled model', () => {
+  async function insertRanged(
+    drugId: number,
+    userId: number,
+    parameter: string,
+    route: string | null,
+    low: number,
+    median: number,
+    high: number,
+    unit: string,
+  ): Promise<void> {
+    await db.insert(parameterEntries).values({
+      drugId,
+      parameter,
+      low: String(low),
+      median: String(median),
+      high: String(high),
+      unit,
+      route,
+      createdBy: userId,
+      origin: 'contributor',
+    } as never);
+  }
+
+  it('draws t½, Vd, F and the inferred ka across their reported spreads', async () => {
+    const drugId = await seedDrug(db, { slug: 'spread-analyte', names: { en: 'spread-analyte' } });
+    const userId = await seedUser(db);
+    await insertAxis(drugId, userId, 'absorptionModel', 'first-order', 'oral');
+    await setDrugLevelParameter(drugId, userId, 'halfLife', { min: 3, median: 4, max: 6, unit: 'h' });
+    await setDrugLevelParameter(drugId, userId, 'volumeOfDistribution', {
+      min: 0.5,
+      median: 0.7,
+      max: 1.1,
+      unit: 'L/kg',
+    });
+    await insertRanged(drugId, userId, 'bioavailability', 'oral', 0.6, 0.75, 0.85, 'fraction');
+    await insertRanged(drugId, userId, 'tmax', 'oral', 0.5, 1, 2, 'h');
+
+    const build = await readDerivedRegistrySnapshot();
+    const definition = build.snapshot.definitions.find((d) => d.analyte === 'spread-analyte')!;
+    const oral = definition.routes.oral as unknown as Record<string, { kind: string; min?: number; mode?: number; max?: number }>;
+    expect(oral.eliminationHalfLifeHours).toMatchObject({ kind: 'triangular', min: 3, mode: 4, max: 6 });
+    expect(oral.vdLitersPerKg).toMatchObject({ kind: 'triangular', min: 0.5, mode: 0.7, max: 1.1 });
+    expect(oral.bioavailability).toMatchObject({ kind: 'triangular', min: 0.6, max: 0.85 });
+    // The inferred ka spans the rates the reported Tmax spread solves to, around the central rate.
+    expect(oral.kaPerHour!.kind).toBe('triangular');
+    expect(oral.kaPerHour!.min!).toBeLessThan(oral.kaPerHour!.mode!);
+    expect(oral.kaPerHour!.mode!).toBeLessThan(oral.kaPerHour!.max!);
+  });
+
+  it('keeps an input with no reported spread at its median', async () => {
+    const drugId = await seedDrug(db, { slug: 'point-analyte', names: { en: 'point-analyte' } });
+    const userId = await seedUser(db);
+    await insertAxis(drugId, userId, 'absorptionModel', 'bolus', 'iv');
+    await setDrugLevelParameter(drugId, userId, 'halfLife', { median: 4, unit: 'h' });
+    await setDrugLevelParameter(drugId, userId, 'volumeOfDistribution', { min: 0.5, median: 0.7, max: 1.1, unit: 'L/kg' });
+
+    const build = await readDerivedRegistrySnapshot();
+    const iv = build.snapshot.definitions.find((d) => d.analyte === 'point-analyte')!.routes.iv as unknown as Record<string, { kind: string }>;
+    expect(iv.eliminationHalfLifeHours).toEqual({ kind: 'fixed', value: 4 });
+    expect(iv.vdLitersPerKg!.kind).toBe('triangular');
+  });
+});

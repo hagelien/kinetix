@@ -7,13 +7,16 @@
  * (plan §4 / §6): given a `modelable` `DerivedModel` and the numeric values the catalog holds, build
  * the engine's `RouteModelParams` for that family — the shape `simulateScenario` consumes.
  *
- * **The range→ParamSpec policy is `fixed(median)` (founder decision, 2026-08-24).** The DB stores
- * each parameter as a min/median/max range; this slice maps the MEDIAN onto a `fixed` `ParamSpec`,
- * so a derived curve is the deterministic median prediction. The range is NOT yet turned into
- * parameter variability (SC-1B) — CV-3b's grade-band widening already keeps a derived curve from
- * reading as over-confident, and the distribution-shape choice (turning a stored range into a
- * `uniform`/`triangular`/`lognormal` spread) is deferred to its own later slice so no unvalidated
- * distribution assumption is baked into every catalog model here.
+ * **The range→ParamSpec policy is `triangular(low, median, high)` where the catalog holds a spread,
+ * `fixed(median)` where it does not (owner decision, 2026-10-07, superseding the 2026-08-24
+ * `fixed(median)`-only policy).** The DB stores each parameter as a pooled median plus the lowest
+ * and highest values its sources report. A role with such a spread (`opts.ranges`) becomes a
+ * triangular spec over it, peaked at the median: the central value — and so the deterministic and
+ * median curve — is exactly what `fixed(median)` gave, and a Monte-Carlo run draws a band across
+ * the published spread. The band means "the curves the reported values allow", sampled
+ * independently per input: bounds are extrema (`BoundMeaning` `extrema`), not quantiles, so it is a
+ * plausible range and never a confidence or prediction interval. A role with no usable spread stays
+ * `fixed(median)`, and the grade says so.
  *
  * Scope: this pure primitive maps the LINEAR ONE-COMPARTMENT families the catalog derivation
  * actually produces today (`iv-one-compartment`, `one-compartment-first-order`,
@@ -29,7 +32,7 @@
  * canonical unit conversion and the `vdScaling`-from-unit inference are the read adapter's concern
  * (a following slice), which passes `vdScaling` in via `opts`.
  */
-import { fixed } from './param.js';
+import { fixed, triangular } from './param.js';
 import type { DerivedModel } from './derive-model.js';
 import {
   requiredParametersFor,
@@ -38,6 +41,7 @@ import {
 } from './model-structure.js';
 import type {
   IvOneCompartmentRouteParams,
+  ParamSpec,
   ModelFamily,
   OneCompartmentMixedOrderRouteParams,
   OneCompartmentRouteParams,
@@ -53,8 +57,22 @@ import type {
  */
 export type AssemblyValues = Partial<Record<RequiredParam, number>>;
 
+/** The lowest and highest value a role's sources report, in the same canonical unit as its median. */
+export interface AssemblyRange {
+  low: number;
+  high: number;
+}
+
+/** Per-role reported spreads, keyed like `AssemblyValues`. A role absent here has no spread. */
+export type AssemblyRanges = Partial<Record<RequiredParam, AssemblyRange>>;
+
 /** Options that steer assembly beyond the parameter values themselves. */
 export interface AssembleOptions extends StructureRequirementOptions {
+  /**
+   * The reported spread for each role, when the catalog holds one. A usable spread (see
+   * `rangedSpec`) turns that role's `fixed(median)` into `triangular(low, median, high)`.
+   */
+  ranges?: AssemblyRanges;
   /**
    * How the assembled `vdLitersPerKg` scales to the subject. Omitted → the engine's `total-weight`
    * default (the field is left unset, so an assembled model matches a hand-authored one that omits
@@ -111,11 +129,38 @@ function isUsable(role: RequiredParam, value: number | undefined): value is numb
   return true;
 }
 
+/** Roles whose value is a fraction and must stay within [0, 1] at every draw. */
+const FRACTION_ROLES: readonly RequiredParam[] = ['bioavailability', 'firstOrderFraction'];
+
+/**
+ * The spec for one role: `triangular(low, median, high)` when its reported spread is usable, else
+ * `fixed(median)`. Usable means finite, a real interval (`low < high`) containing the median, and
+ * inside the role's possible values at both ends — strictly positive for a rate, half-life, volume
+ * or duration, within [0, 1] for a fraction — so no draw can leave the domain the engine accepts.
+ * A spread failing any of these is dropped rather than clipped: clipping would invent a bound no
+ * source reported.
+ */
+function rangedSpec(role: RequiredParam, median: number, ranges: AssemblyRanges | undefined): ParamSpec {
+  const range = ranges?.[role];
+  if (!range || !rangeIsUsable(role, median, range)) return fixed(median);
+  return triangular(range.low, median, range.high);
+}
+
+/** Whether `range` can be drawn from for `role` around `median` (see `rangedSpec`). */
+export function rangeIsUsable(role: RequiredParam, median: number, range: AssemblyRange): boolean {
+  const { low, high } = range;
+  if (!Number.isFinite(low) || !Number.isFinite(high) || !(low < high)) return false;
+  if (median < low || median > high) return false;
+  if (FRACTION_ROLES.includes(role)) return low >= 0 && high <= 1;
+  return low > 0;
+}
+
 /**
  * Assemble the engine `RouteModelParams` for one route from a derived model and its median values.
  * Pure. Returns `unsupported` when the derivation is not-modelable or its family is not yet mapped;
  * `incomplete` (with the missing roles) when a required value is absent/non-finite; otherwise
- * `assembled` with every value wrapped as `fixed(median)`.
+ * `assembled`, each value wrapped as a triangular spec over its reported spread or as
+ * `fixed(median)` when it has none (see `rangedSpec`).
  */
 export function assembleRouteParams(
   derived: DerivedModel,
@@ -155,12 +200,13 @@ function buildParams(
   values: AssemblyValues,
   opts: AssembleOptions,
 ): RouteModelParams {
+  const spec = (role: RequiredParam): ParamSpec => rangedSpec(role, values[role]!, opts.ranges);
   switch (family) {
     case 'iv-one-compartment': {
       const params: IvOneCompartmentRouteParams = {
         family: 'iv-one-compartment',
-        eliminationHalfLifeHours: fixed(values.eliminationHalfLife!),
-        vdLitersPerKg: fixed(values.vd!),
+        eliminationHalfLifeHours: spec('eliminationHalfLife'),
+        vdLitersPerKg: spec('vd'),
       };
       // The constant-rate IV infusion variant carries a real (non-ParamSpec) duration; a plain bolus
       // omits it. The gate has already ensured it is present for an `iv-infusion` route.
@@ -173,10 +219,10 @@ function buildParams(
     case 'one-compartment-first-order': {
       const params: OneCompartmentRouteParams = {
         family: 'one-compartment-first-order',
-        kaPerHour: fixed(values.ka!),
-        eliminationHalfLifeHours: fixed(values.eliminationHalfLife!),
-        vdLitersPerKg: fixed(values.vd!),
-        bioavailability: fixed(values.bioavailability!),
+        kaPerHour: spec('ka'),
+        eliminationHalfLifeHours: spec('eliminationHalfLife'),
+        vdLitersPerKg: spec('vd'),
+        bioavailability: spec('bioavailability'),
       };
       if (opts.vdScaling) params.vdScaling = opts.vdScaling;
       return params;
@@ -184,10 +230,10 @@ function buildParams(
     case 'one-compartment-zero-order': {
       const params: OneCompartmentZeroOrderRouteParams = {
         family: 'one-compartment-zero-order',
-        zeroOrderDurationHours: fixed(values.zeroOrderDuration!),
-        eliminationHalfLifeHours: fixed(values.eliminationHalfLife!),
-        vdLitersPerKg: fixed(values.vd!),
-        bioavailability: fixed(values.bioavailability!),
+        zeroOrderDurationHours: spec('zeroOrderDuration'),
+        eliminationHalfLifeHours: spec('eliminationHalfLife'),
+        vdLitersPerKg: spec('vd'),
+        bioavailability: spec('bioavailability'),
       };
       if (opts.vdScaling) params.vdScaling = opts.vdScaling;
       return params;
@@ -195,12 +241,12 @@ function buildParams(
     case 'one-compartment-mixed-order': {
       const params: OneCompartmentMixedOrderRouteParams = {
         family: 'one-compartment-mixed-order',
-        firstOrderFraction: fixed(values.firstOrderFraction!),
-        kaPerHour: fixed(values.ka!),
-        zeroOrderDurationHours: fixed(values.zeroOrderDuration!),
-        eliminationHalfLifeHours: fixed(values.eliminationHalfLife!),
-        vdLitersPerKg: fixed(values.vd!),
-        bioavailability: fixed(values.bioavailability!),
+        firstOrderFraction: spec('firstOrderFraction'),
+        kaPerHour: spec('ka'),
+        zeroOrderDurationHours: spec('zeroOrderDuration'),
+        eliminationHalfLifeHours: spec('eliminationHalfLife'),
+        vdLitersPerKg: spec('vd'),
+        bioavailability: spec('bioavailability'),
       };
       if (opts.vdScaling) params.vdScaling = opts.vdScaling;
       return params;
