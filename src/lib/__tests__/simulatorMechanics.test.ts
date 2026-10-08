@@ -44,6 +44,9 @@ import {
   splitMechanicsDocument,
 } from '@/lib/simulatorMechanics';
 import { coreAnalyteFor } from '@/lib/forwardCoreAdapter';
+import { loadGeneratedRegistry } from '@/lib/kinetics-core/generated-registry-loader';
+import { GENERATED_REGISTRY_ARTIFACT } from '@/lib/kinetics-core/generated-registry';
+import { findModel as findReviewedModel, registeredAnalytes as reviewedAnalytes } from '@/lib/kinetics-core';
 import { DEFAULT_DRAW_COUNT, DEFAULT_SEED } from '@/stores/simulatorStore';
 import {
   applyCautiousDefaults,
@@ -394,6 +397,44 @@ describe('mechanics document — resolving the model (§3 step 1)', () => {
     expect(coreAnalyteFor(['etanol', 'ethanol'])).toBe('ethanol');
     // A slug the build does resolve wins over the name.
     expect(coreAnalyteFor(['ethanol', 'not-a-model'])).toBe('ethanol');
+  });
+});
+
+describe('mechanics document — live derived tier (§2)', () => {
+  const reviewed = reviewedAnalytes().map((analyte) => findReviewedModel(analyte)!);
+  const committed = GENERATED_REGISTRY_ARTIFACT.derivedDefinitions[0]!;
+
+  it('builds the derived tier live and stamps a +live release, as §2 states', () => {
+    expect(doc).toContain(
+      '**The derived tier is built live from the catalogue; the reviewed tier stays pinned.**',
+    );
+    expect(doc).toContain('versioned `<version>+live`');
+    const replaced = { ...committed, displayName: 'live answer' };
+    const release = loadGeneratedRegistry(reviewed, GENERATED_REGISTRY_ARTIFACT, [
+      { analyte: committed.analyte, definition: replaced, grade: null },
+    ]);
+    expect(release.snapshot.version).toBe(`${GENERATED_REGISTRY_ARTIFACT.registryVersion}+live`);
+    expect(release.snapshot.checksum).not.toBe(GENERATED_REGISTRY_ARTIFACT.checksum);
+    expect(
+      release.snapshot.definitions.find((d) => d.analyte === committed.analyte)?.displayName,
+    ).toBe('live answer');
+  });
+
+  it('withdraws a drug whose data no longer builds a model, as §2 states', () => {
+    expect(doc).toContain('stops resolving, rather than running on what it used to have');
+    const release = loadGeneratedRegistry(reviewed, GENERATED_REGISTRY_ARTIFACT, [
+      { analyte: committed.analyte, definition: null, grade: null },
+    ]);
+    expect(release.snapshot.definitions.some((d) => d.analyte === committed.analyte)).toBe(false);
+  });
+
+  it('never lets a live answer displace a reviewed model, as §2 states', () => {
+    expect(doc).toContain('a live answer can never displace one');
+    const ethanol = findReviewedModel('ethanol')!;
+    const release = loadGeneratedRegistry(reviewed, GENERATED_REGISTRY_ARTIFACT, [
+      { analyte: 'ethanol', definition: { ...committed, analyte: 'ethanol' }, grade: null },
+    ]);
+    expect(release.snapshot.definitions.find((d) => d.analyte === 'ethanol')).toEqual(ethanol);
   });
 });
 

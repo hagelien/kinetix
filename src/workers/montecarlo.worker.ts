@@ -1,5 +1,5 @@
 import * as Comlink from 'comlink';
-import { simulateScenario } from '@/lib/kinetics-core';
+import { installLiveDerivedEntry, simulateScenario } from '@/lib/kinetics-core';
 import type { CanonicalSimulationConfig } from '@/types/simulator';
 
 /**
@@ -8,6 +8,8 @@ import type { CanonicalSimulationConfig } from '@/types/simulator';
  * kinetics-core; the worker owns no alternative implementation.
  */
 function runSimulation(config: CanonicalSimulationConfig) {
+  // Resolve through the same live catalogue answers the main thread resolved and will grade by.
+  for (const entry of config.liveDerived ?? []) installLiveDerivedEntry(entry);
   return simulateScenario(config.scenario);
 }
 
