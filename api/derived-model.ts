@@ -15,11 +15,29 @@
 import { error, json, publicCacheHeaders, withErrorHandling } from './_lib/response.js';
 import { readLiveDerivedModel } from './_lib/model-derivation-store.js';
 import { derivedModelQuerySchema } from './_lib/schemas.js';
+import { consumeRateLimit, getClientAddressKey } from './_lib/rate-limit.js';
+
+// Per client, before any database work: each request that misses the edge cache (and every unknown
+// slug does) opens a pool and a transaction. A real session asks once per drug per minute, so this
+// leaves ample room for a case with many drugs.
+const DERIVED_MODEL_IP_LIMIT = 60;
+const DERIVED_MODEL_WINDOW_MS = 60_000;
 
 export default withErrorHandling(async function handler(req, res): Promise<void> {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
     error(res, 405, 'Method not allowed');
+    return;
+  }
+  const ipLimit = consumeRateLimit(
+    'derived-model-ip',
+    getClientAddressKey(req),
+    DERIVED_MODEL_IP_LIMIT,
+    DERIVED_MODEL_WINDOW_MS,
+  );
+  if (ipLimit.limited) {
+    res.setHeader('Retry-After', String(ipLimit.retryAfterSeconds));
+    error(res, 429, 'Too many requests. Please wait before trying again.', 'rate_limited');
     return;
   }
   const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
