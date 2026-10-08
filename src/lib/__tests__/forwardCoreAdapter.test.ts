@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { simulateScenario, type CanonicalResultOk } from '@/lib/kinetics-core';
 import {
   coreResultToMonteCarloResult,
@@ -254,5 +254,49 @@ describe('coreResultToMonteCarloResult', () => {
     const hi = Math.max(at2, at3);
     expect(mc.median).toBeGreaterThanOrEqual(lo);
     expect(mc.median).toBeLessThanOrEqual(hi);
+  });
+});
+
+describe('coreAnalyteFor — which analyte id a drug runs under', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it('falls back to the name-derived id a reviewed model is keyed by', async () => {
+    const { coreAnalyteFor: pick } = await import('../forwardCoreAdapter');
+    // A Norwegian catalog slug the reviewed tier does not know, then the English-derived id.
+    expect(pick(['etanol', 'ethanol'])).toBe('ethanol');
+  });
+
+  it('reports the last candidate when none resolves', async () => {
+    const { coreAnalyteFor: pick } = await import('../forwardCoreAdapter');
+    expect(pick([undefined, 'not-a-model'])).toBe('not-a-model');
+  });
+
+  it('resolves a catalog-derived model through the drug’s slug, not its English name', async () => {
+    // The derived tier is keyed by `drugs.slug`, which often differs from the display name:
+    // paracetamol's slug is `paracetamol-acetaminophen`, so the name-derived `paracetamol`
+    // found no model and the run reported "not in the kinetics-core registry".
+    vi.stubEnv('VITE_DERIVED_REGISTRY_ENABLED', 'true');
+    const { coreAnalyteFor: pick, toCanonicalScenario: build } = await import('../forwardCoreAdapter');
+    // The name-derived id alone is what the run used before, and it resolves nothing.
+    expect(build({
+      analyte: 'paracetamol',
+      route: 'oral',
+      subject: { weightKg: 70 },
+      doses: [{ amountMg: 1000, tHours: 0 }],
+      timeRange: { start: 0, end: 12, steps: 24 },
+    }).ok).toBe(false);
+    const analyte = pick(['paracetamol-acetaminophen', 'paracetamol']);
+    expect(analyte).toBe('paracetamol-acetaminophen');
+    const built = build({
+      analyte,
+      route: 'oral',
+      subject: { weightKg: 70 },
+      doses: [{ amountMg: 1000, tHours: 0 }],
+      timeRange: { start: 0, end: 12, steps: 24 },
+    });
+    expect(built.ok).toBe(true);
   });
 });

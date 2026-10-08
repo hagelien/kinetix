@@ -809,6 +809,7 @@ export function drugRowToComponent(row: DrugRow): DrugComponent {
         aliases,
       }),
     _dbId: row.id,
+    _slug: row.slug,
     _monographSlug: row.monographSlug ?? undefined,
     _popularityScore: row.popularityScore,
   };
@@ -837,5 +838,6 @@ export function drugSearchRowToComponent(row: DrugSearchRow): DrugComponent {
       aliases,
     }),
     _dbId: row.id,
+    _slug: row.slug,
   };
 }
