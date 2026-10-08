@@ -6,6 +6,7 @@ import {
   formatPdValue,
   normalizePdUnit,
   pdHeadline,
+  strengthDirection,
 } from './pdComparison';
 import type { DrugReceptorTargetSummary } from './receptorTargets';
 
@@ -115,10 +116,10 @@ describe('buildPdTargetComparison', () => {
     ]);
     const ki = comparison.metrics[0]!;
     expect(ki.commonUnit).toBe('nM');
-    expect(ki.inverseStrength).toBe(true);
+    expect(ki.direction).toBe('inverse');
     expect(ki.values.map((v) => v.numeric)).toEqual([0.49, 1.2, null]);
     expect(formatPdValue(ki.values[1]!)).toBe('1.2 nM');
-    expect(comparison.metrics[2]!.inverseStrength).toBe(false);
+    expect(comparison.metrics[2]!.direction).toBe('direct');
   });
 
   it('prefers the ranked mechanism when a drug has several at one target', () => {
@@ -140,6 +141,23 @@ describe('buildPdTargetComparison', () => {
       { id: 2, receptorTargets: [mechanism({ potency: { median: 3, unit: 'nM' } })] },
     ]);
     expect(comparison.metrics[0]!.hasUnitMismatch).toBe(true);
+    expect(comparison.metrics[0]!.direction).toBeNull();
+  });
+
+  it('treats molar affinity/potency as lower-is-stronger', () => {
+    const comparison = buildPdTargetComparison(MOR.id, [
+      { id: 1, receptorTargets: [mechanism({ potency: { median: 1, unit: 'nM' } })] },
+      { id: 2, receptorTargets: [mechanism({ potency: { median: 10, unit: 'nM' } })] },
+    ]);
+    expect(comparison.metrics[0]!.direction).toBe('inverse');
+  });
+
+  it('declines a direction for log-scale or free-text units', () => {
+    expect(strengthDirection('potency', 'pEC50')).toBeNull();
+    expect(strengthDirection('ki', 'pKi')).toBeNull();
+    expect(strengthDirection('efficacy', 'fold')).toBeNull();
+    expect(strengthDirection('efficacy', '%')).toBe('direct');
+    expect(strengthDirection('emax', '%')).toBe('direct');
   });
 });
 

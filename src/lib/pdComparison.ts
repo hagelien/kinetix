@@ -31,17 +31,6 @@ export const PD_METRICS = [
 ] as const;
 export type PdMetric = (typeof PD_METRICS)[number];
 
-/**
- * Binding/potency constants where a lower concentration means a stronger
- * drug. The relative column inverts these so ">1x" always reads "stronger
- * than the reference".
- */
-const INVERSE_STRENGTH_METRICS = new Set<PdMetric>(['ki', 'ec50', 'ic50']);
-
-export function isInverseStrengthMetric(metric: PdMetric): boolean {
-  return INVERSE_STRENGTH_METRICS.has(metric);
-}
-
 /** Molar concentration units, as a factor to nmol/L (written "nM"). */
 const MOLAR_TO_NM: Record<string, number> = {
   fm: 1e-6,
@@ -59,6 +48,37 @@ const MOLAR_TO_NM: Record<string, number> = {
 };
 
 export const MOLAR_DISPLAY_UNIT = 'nM';
+
+/**
+ * Which way "stronger" points for a metric in a given (normalised) unit:
+ * - `inverse` — a concentration, where lower means stronger (Ki/EC50/IC50,
+ *   and affinity/potency when they are recorded as a molar value);
+ * - `direct` — higher means more (Emax, efficacy in %, selectivity fold);
+ * - `null` — the direction is ambiguous (pKi/pEC50 logs, free-text units), so
+ *   no ratio is computed rather than one that may point the wrong way.
+ */
+export type StrengthDirection = 'inverse' | 'direct' | null;
+
+export function strengthDirection(
+  metric: PdMetric,
+  unit: string,
+): StrengthDirection {
+  const molar = unit === MOLAR_DISPLAY_UNIT;
+  switch (metric) {
+    case 'ki':
+    case 'ec50':
+    case 'ic50':
+    case 'affinity':
+    case 'potency':
+      return molar ? 'inverse' : null;
+    case 'emax':
+      return molar ? null : 'direct';
+    case 'efficacy':
+      return unit === '%' ? 'direct' : null;
+    case 'selectivityRatio':
+      return molar ? null : 'direct';
+  }
+}
 
 /**
  * Normalise a free-text measurement unit so values from different sources
@@ -144,7 +164,11 @@ export interface PdMetricComparison {
   values: PdValue[];
   commonUnit: string | null;
   hasUnitMismatch: boolean;
-  inverseStrength: boolean;
+  /**
+   * Direction of strength in the common unit; `null` when the units differ or
+   * the direction is ambiguous — callers must not compute ratios then.
+   */
+  direction: StrengthDirection;
 }
 
 export interface PdTargetComparison {
@@ -219,12 +243,14 @@ export function buildPdTargetComparison(
     const populated = values.filter((value) => value.numeric !== null);
     if (!populated.length) continue;
     const units = [...new Set(populated.map((value) => value.unit))];
+    const commonUnit = units.length === 1 ? units[0]! : null;
     metrics.push({
       metric,
       values,
-      commonUnit: units.length === 1 ? units[0]! : null,
+      commonUnit,
       hasUnitMismatch: units.length > 1,
-      inverseStrength: isInverseStrengthMetric(metric),
+      direction:
+        commonUnit === null ? null : strengthDirection(metric, commonUnit),
     });
   }
 

@@ -86,4 +86,27 @@ describe('PharmacodynamicsComparison', () => {
     expect(within(card).getByText('10x')).toBeTruthy();
     expect(within(card).getByText('1x')).toBeTruthy();
   });
+
+  it('draws no shared axis or ratio for values in incompatible units', async () => {
+    fetchDrugById.mockImplementation(async (id: number) => ({
+      drug: {
+        id,
+        receptorTargets: [
+          mechanism(id, {
+            potency:
+              id === 1
+                ? { median: 8.1, unit: 'pEC50' }
+                : { median: 3, unit: 'nM' },
+          }),
+        ],
+      },
+    }));
+    const { container } = render(<Harness />);
+    fireEvent.click(await screen.findByRole('button', { name: /OPRM1/ }));
+    const card = (await screen.findByText('comparison.pd.relativeTo'))
+      .closest('section') as HTMLElement;
+    expect(within(card).getByText('comparison.unitMismatch')).toBeTruthy();
+    expect(container.querySelectorAll('.rounded-full.border-2')).toHaveLength(0);
+    expect(within(card).queryByText(/\dx$/)).toBeNull();
+  });
 });
