@@ -34,7 +34,9 @@ stdout is text), or invoke the bare authenticated download/extraction scripts.
 ## Private configuration
 
 The fixed location is the local account's `~/.kinetix/worker-profiles/`, outside
-the repository. Files are `producer.json` and `reviewer.json`. There is no default
+the repository. Files are `producer.json` and `reviewer.json`, plus optional
+`adjudicator-a.json` and `adjudicator-b.json` for the two T3 panel seats
+([drug-db-adjudication.md](drug-db-adjudication.md)). There is no default
 profile and no fallback to process/shared credentials. A profile is plain JSON:
 
 ```json
@@ -68,6 +70,18 @@ both files and rejects any shared user id, agent id or token before contacting
 the API. A missing or invalid counterpart also stops the command: repair the
 profile pair before resuming work, rather than allowing an unverified peer.
 
+An installed adjudicator seat joins that check on every invocation, for every
+role: a T3 seat must never share the T2 reviewer's identity, because a blind T2
+verifier must never be able to read a case file. So an invalid or duplicated
+`adjudicator-*.json` stops the producer and reviewer too — run its `check` as
+soon as you install it. An absent seat file is simply not checked. Each seat is
+its own Kinetix agent with the **T3 adjudicator** grant, the `flagship` tier and
+a model family (`agents/adding-a-new-agent.md`); its profile has role
+`adjudicator-a` or `adjudicator-b` and tier `flagship`. The wrapper limits a
+seat to reads, `POST /api/agent-adjudication-queue?action=claim`,
+`POST /api/agent-adjudication-opinions`, stored PDFs and
+`helper kinetix-log-run-usage.ts`; any other write or helper is refused.
+
 On Unix, protect the directory with mode `0700` and each file with `0600`. The
 wrapper refuses group/world-readable files and symbolic-link profile files.
 On Windows, use a protected NTFS ACL: owner/SYSTEM/Administrators full control;
@@ -92,7 +106,10 @@ tiers are `mid` and `flagship` respectively.
 Keep the producer's existing hourly schedule, Terra/high, and exactly-one-cycle
 prompt from `agents/drug-db-maintainer.md`. A separate Sol/high reviewer can run
 every eight hours at minute 40 using `agents/drug-db-escalation.md`. It must not run the
-producer cycle. Give both prompts the wrapper substitutions above and require
+producer cycle. The T3 seats, when provisioned, are two further schedules (one
+per seat, ideally different model families, `xhigh`/`max`) using
+`agents/drug-db-adjudication.md`; cases are rare, so daily is enough. A seat
+must not run the producer or T2 cycle. Give all prompts the wrapper substitutions above and require
 `check` before work. On any configuration or identity failure, stop and report
 the failure; never switch profiles, read another token or fall back to `.env`.
 
