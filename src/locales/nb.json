@@ -2756,6 +2756,14 @@
       "label": "ka",
       "longLabel": "Absorpsjonshastighetskonstant"
     },
+    "vmax": {
+      "label": "Vmax",
+      "longLabel": "Maksimal eliminasjonshastighet (metningsbar)"
+    },
+    "km": {
+      "label": "Km",
+      "longLabel": "Michaelis-konstant (metningsbar eliminasjon)"
+    },
     "postmortemRedistribution": {
       "label": "C/P",
       "longLabel": "C/P (sentral-perifer konsentrasjonsratio)"

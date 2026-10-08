@@ -18,12 +18,13 @@
  * plausible range and never a confidence or prediction interval. A role with no usable spread stays
  * `fixed(median)`, and the grade says so.
  *
- * Scope: this pure primitive maps the LINEAR ONE-COMPARTMENT families the catalog derivation
- * actually produces today (`iv-one-compartment`, `one-compartment-first-order`,
- * `one-compartment-zero-order`, `one-compartment-mixed-order`). Families that need inputs the
- * catalog cannot yet supply — the CL/V structural identifiability basis, two-compartment
- * micro-constants, Michaelis–Menten Vmax/Km in canonical units, or the parent→metabolite link and
- * molar masses — return `unsupported` until those inputs land, rather than assembling from data the
+ * Scope: this pure primitive maps the ONE-COMPARTMENT families the catalog derivation actually
+ * produces today — the linear `iv-one-compartment`, `one-compartment-first-order`,
+ * `one-compartment-zero-order` and `one-compartment-mixed-order`, and the saturable
+ * `michaelis-menten` family (its Vmax and Km have molecule-level catalog parameters, canonical
+ * mg/L/h and mg/L). Families that need inputs the catalog cannot yet supply — the CL/V structural
+ * identifiability basis, two-compartment micro-constants, or the parent→metabolite link and molar
+ * masses — return `unsupported` until those inputs land, rather than assembling from data the
  * catalog does not have. "Missing stays missing" holds here too: an incomplete family is reported,
  * never filled with a guessed value.
  *
@@ -41,6 +42,7 @@ import {
 } from './model-structure.js';
 import type {
   IvOneCompartmentRouteParams,
+  MichaelisMentenRouteParams,
   ParamSpec,
   ModelFamily,
   OneCompartmentMixedOrderRouteParams,
@@ -96,13 +98,15 @@ type AssembledFamily =
   | 'iv-one-compartment'
   | 'one-compartment-first-order'
   | 'one-compartment-zero-order'
-  | 'one-compartment-mixed-order';
+  | 'one-compartment-mixed-order'
+  | 'michaelis-menten';
 
 const ASSEMBLED_FAMILIES: readonly AssembledFamily[] = [
   'iv-one-compartment',
   'one-compartment-first-order',
   'one-compartment-zero-order',
   'one-compartment-mixed-order',
+  'michaelis-menten',
 ];
 
 function isAssembledFamily(family: ModelFamily): family is AssembledFamily {
@@ -244,6 +248,20 @@ function buildParams(
         firstOrderFraction: spec('firstOrderFraction'),
         kaPerHour: spec('ka'),
         zeroOrderDurationHours: spec('zeroOrderDuration'),
+        eliminationHalfLifeHours: spec('eliminationHalfLife'),
+        vdLitersPerKg: spec('vd'),
+        bioavailability: spec('bioavailability'),
+      };
+      if (opts.vdScaling) params.vdScaling = opts.vdScaling;
+      return params;
+    }
+    case 'michaelis-menten': {
+      // The half-life is the family's nominal display value only; Vmax and Km drive elimination.
+      const params: MichaelisMentenRouteParams = {
+        family: 'michaelis-menten',
+        kaPerHour: spec('ka'),
+        vmaxMgPerLPerHour: spec('vmax'),
+        kmMgPerL: spec('km'),
         eliminationHalfLifeHours: spec('eliminationHalfLife'),
         vdLitersPerKg: spec('vd'),
         bioavailability: spec('bioavailability'),

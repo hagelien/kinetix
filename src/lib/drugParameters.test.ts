@@ -401,6 +401,8 @@ describe('multi-value parameter flags', () => {
     'logP',
     'logD',
     'clearance',
+    'vmax',
+    'km',
     'postmortemRedistribution',
     'pmAmRatio',
     'therapeuticDose',

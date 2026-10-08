@@ -34,6 +34,7 @@ import { and, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import { drugs, drugParameters, paperReviews, parameterEntries } from '../../db/schema.js';
 import { getDb, runInPoolTransaction } from './db.js';
 import {
+  getRangeSpec,
   isDrugParameterId,
   parameterIsRouteScoped,
   type DrugParameterId,
@@ -50,6 +51,7 @@ import {
   dropSupersededGrandfathered,
   isAggregateCacheValue,
   type ParameterEntryValue,
+  type ParameterSummary,
 } from '../../src/lib/parameterEntryAggregation.js';
 import { getDrugParameterMap } from './drugParameterStore.js';
 import { computeParameterSummary, loadEntryValuesForParameter } from './parameter-entries-store.js';
@@ -77,6 +79,7 @@ import {
   CAUTIOUS_DEFAULT_ROLES,
   applyKaInference,
   canonicalUnitFor,
+  DERIVED_MODEL_MATRIX,
   derivedDefinitionMetadata,
   inferVdScaling,
   isRouteAssemblyParameter,
@@ -108,6 +111,21 @@ const isRouteId = (value: string | null): value is RouteId =>
 const DRUG_LEVEL_EXCLUDED_ROLE_IDS: ReadonlySet<DrugParameterId> = new Set<DrugParameterId>([
   'bioavailability',
 ]);
+
+/**
+ * Concentration-scale structural roles: their value depends on the matrix it was measured in, and
+ * the saturable model consumes them directly, so they must be on the derived model's own matrix
+ * (`DERIVED_MODEL_MATRIX`). The drug-level cache cannot supply that — it pools these
+ * (`matrixRelevant`) normalized to whole blood — so they are pooled here from the drug's plasma and
+ * serum entries alone. An entry from another matrix, or with none recorded, is left out rather than
+ * converted: missing stays missing.
+ */
+const MATRIX_BASIS_ROLE_IDS: ReadonlySet<DrugParameterId> = new Set<DrugParameterId>(['vmax', 'km']);
+
+/** Matrices that report the same concentration as the derived model's matrix (plasma). */
+const DERIVED_MODEL_MATRICES: ReadonlySet<string> = new Set<string>(
+  DERIVED_MODEL_MATRIX === 'plasma' ? ['plasma', 'serum'] : [DERIVED_MODEL_MATRIX],
+);
 
 /**
  * Drug-level parameters that only an EXTRAVASCULAR route can produce, and so evidence that one was
@@ -373,12 +391,18 @@ type SourcedValue = CatalogParameterValue & { source: InputSource };
 const AUTHORED_VALUE: InputSource = { basis: 'uncited', reason: 'authored-value' };
 
 /**
- * The source of a value pooled from `entries`: cited only when every entry the pool draws on names a
- * citation and none is a grandfathered placeholder. Judged over every entry the aggregation
- * considers rather than only those that reached the numeric pool, so an entry the pool happened to
- * skip can make the answer more cautious but never less.
+ * The source of a value pooled from `entries` into `summary`: cited only when every entry the pool
+ * draws on names a citation and none is a grandfathered placeholder. That judgement is made over
+ * every entry the aggregation considers rather than only those that reached the numeric pool, so an
+ * entry the pool happened to skip can make the answer more cautious but never less. The citations
+ * NAMED, though, are only those whose numbers reached the pool (`contributingCitationIds`): a study
+ * whose entry was skipped (censored, or in a unit that could not convert) did not back the value,
+ * and the grade record must not say it did.
  */
-function sourceOfEntries(entries: readonly ParameterEntryValue[]): InputSource {
+function sourceOfEntries(
+  entries: readonly ParameterEntryValue[],
+  summary: Pick<ParameterSummary, 'contributingCitationIds'>,
+): InputSource {
   const considered = dropSupersededGrandfathered(entries);
   if (
     considered.length === 0 ||
@@ -386,7 +410,11 @@ function sourceOfEntries(entries: readonly ParameterEntryValue[]): InputSource {
   ) {
     return { basis: 'uncited', reason: 'uncited-entry' };
   }
-  const citationIds = [...new Set(considered.map((entry) => entry.citationId!))].sort((a, b) => a - b);
+  const contributing = new Set(summary.contributingCitationIds);
+  const citationIds = [...new Set(considered.map((entry) => entry.citationId!))]
+    .filter((id) => contributing.has(id))
+    .sort((a, b) => a - b);
+  if (citationIds.length === 0) return { basis: 'uncited', reason: 'uncited-entry' };
   return { basis: 'cited', citationIds };
 }
 
@@ -410,6 +438,8 @@ async function readDrugLevelSources(
   for (const row of rows) {
     const p = row.parameter;
     if (!isDrugParameterId(p) || (p !== 'tmax' && parameterRoleFor(p) === null)) continue;
+    // Read from their entries, not the cache — see `MATRIX_BASIS_ROLE_IDS`.
+    if (MATRIX_BASIS_ROLE_IDS.has(p)) continue;
     const range = asNumericRange(row.value);
     if (!range) continue;
     if (!isAggregateCacheValue(row.value)) {
@@ -427,7 +457,7 @@ async function readDrugLevelSources(
     sources.set(
       parameter,
       cached !== null && current !== null && sameValue(cached, current)
-        ? sourceOfEntries(entries)
+        ? sourceOfEntries(entries, summary!)
         : { basis: 'uncited', reason: 'stale-cache' },
     );
   }
@@ -593,7 +623,7 @@ export async function readDrugRouteAssemblyInputs(
       }
       continue;
     }
-    if (parameterRoleFor(p) === null) continue;
+    if (parameterRoleFor(p) === null || MATRIX_BASIS_ROLE_IDS.has(p)) continue;
     if (parameterIsRouteScoped(p) || DRUG_LEVEL_EXCLUDED_ROLE_IDS.has(p)) {
       if (p === 'bioavailability') {
         const fRange = asNumericRange(row.value);
@@ -626,6 +656,40 @@ export async function readDrugRouteAssemblyInputs(
       unit,
       ...reportedBounds(range),
       source: drugLevelSource(p),
+    });
+  }
+
+  // Concentration-scale roles, pooled from the entries measured in the derived model's own matrix.
+  // A molar entry converts with the drug's molecular weight; with none recorded it stays out. Read
+  // only for a drug that declares saturable elimination — no other family consumes Vmax or Km, and
+  // the catalog-wide snapshot calls this once per drug, so an unconditional read would add two
+  // round trips to every one of them.
+  const mwRaw = drugLevelRows.find((row) => row.parameter === 'molecularWeight')?.value;
+  const molecularWeight = typeof mwRaw === 'number' && mwRaw > 0 ? mwRaw : null;
+  const usesSaturableElimination = derivations.some(
+    (derived) => derived.structure.elimination === 'michaelis-menten',
+  );
+  for (const parameter of usesSaturableElimination ? MATRIX_BASIS_ROLE_IDS : []) {
+    const targetUnit = canonicalUnitFor(parameter);
+    if (targetUnit === null) continue;
+    const entries = (await loadEntryValuesForParameter(drugId, parameter)).filter(
+      (entry) => entry.matrix !== null && DERIVED_MODEL_MATRICES.has(entry.matrix),
+    );
+    // The registry bounds keep an impossible arithmetic endpoint (a mean − SD below zero) out of
+    // the spread, as the drug-level aggregate does, instead of letting it void the whole range.
+    const summary = aggregateEntries(entries, {
+      targetUnit,
+      molecularWeight,
+      matrixRelevant: false,
+      valueBounds: getRangeSpec(parameter).bounds,
+    });
+    if (!summary || summary.representative === null) continue;
+    drugLevelValues.push({
+      parameter,
+      value: summary.representative,
+      unit: targetUnit,
+      ...(summary.min !== null && summary.max !== null ? { low: summary.min, high: summary.max } : {}),
+      source: sourceOfEntries(entries, summary),
     });
   }
 
@@ -683,7 +747,7 @@ export async function readDrugRouteAssemblyInputs(
       value: summary.representative,
       unit: targetUnit,
       ...(summary.min !== null && summary.max !== null ? { low: summary.min, high: summary.max } : {}),
-      source: sourceOfEntries(entries),
+      source: sourceOfEntries(entries, summary),
     });
   }
 
