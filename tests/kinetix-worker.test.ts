@@ -45,6 +45,14 @@ const reviewer = {
   slug: "sol",
   modelTier: "flagship",
 };
+const adjudicator = {
+  ...reviewer,
+  role: "adjudicator-a",
+  token: token("a"),
+  agentId: 3,
+  userId: 6,
+  slug: "fable",
+};
 let dir: string;
 let profileDir: string;
 let env: NodeJS.ProcessEnv;
@@ -78,7 +86,7 @@ beforeAll(() => {
     path.join(dir, ".env"),
     `KINETIX_TOKEN=${token("s")}\nKINETIX_BASE_URL=https://wrong.invalid\nDATABASE_URL=must-not-load\n`,
   );
-  for (const profile of [producer, reviewer])
+  for (const profile of [producer, reviewer, adjudicator])
     writeFileSync(
       path.join(profileDir, profile.role + ".json"),
       JSON.stringify(profile),
@@ -89,12 +97,12 @@ beforeAll(() => {
     path.join(dir, "bin", "curl"),
     `#!/usr/bin/env node
 const args=process.argv.slice(2), cookie=args.find(a=>a.startsWith('Cookie:'))||'';
-const isProducer=cookie.endsWith('${token("p")}'), isReviewer=cookie.endsWith('${token("r")}'), isLegacy=cookie.endsWith('${token("s")}');
-if(!isProducer&&!isReviewer&&!isLegacy) process.exit(22);
+const isProducer=cookie.endsWith('${token("p")}'), isReviewer=cookie.endsWith('${token("r")}'), isLegacy=cookie.endsWith('${token("s")}'), isAdjudicator=cookie.endsWith('${token("a")}');
+if(!isProducer&&!isReviewer&&!isLegacy&&!isAdjudicator) process.exit(22);
 if(!isLegacy&&(process.env.DATABASE_URL||process.env.JWT_SECRET)) process.exit(23);
-const url=args.at(-1),id=isProducer?4:isReviewer?5:8;
+const url=args.at(-1),id=isProducer?4:isReviewer?5:isAdjudicator?6:8;
 if(url.endsWith('/api/auth?action=me')) console.log(JSON.stringify({user:{id,role:'contributor'}}));
-else if(url.endsWith('/api/agents')) console.log(JSON.stringify({agents:[{id:1,slug:'terra',status:'active',agent:{userId:4}},{id:2,slug:'sol',status:'active',agent:{userId:5}}]}));
+else if(url.endsWith('/api/agents')) console.log(JSON.stringify({agents:[{id:1,slug:'terra',status:'active',agent:{userId:4}},{id:2,slug:'sol',status:'active',agent:{userId:5}},{id:3,slug:'fable',status:'active',agent:{userId:6}}]}));
 else if(url.includes('/api/citation-pdf?citationId=')) { const fs=require('node:fs'); fs.writeFileSync(args[args.indexOf('-o')+1],Buffer.from([37,80,68,70,45,id,0,255,128])); process.stdout.write('200'); }
 else { const fs=require('node:fs'); const body=args.includes('--data-binary')?fs.readFileSync(0,'utf8'):''; console.log(JSON.stringify({id,userId:id,body,reflected:process.env.KINETIX_TOKEN})); }
 `.replace(
@@ -376,6 +384,71 @@ describe("local worker credential separation", () => {
       expect(r.stderr).toContain("No fallback");
       expect(r.stdout).toBe("");
     }
+  });
+  it("runs a T3 seat as its own identity, limited to reading, claiming and opining", async () => {
+    const check = await run(["--profile", "adjudicator-a", "check"]);
+    expect(check.code, check.stderr).toBe(0);
+    expect(JSON.parse(check.stdout)).toMatchObject({
+      profile: "adjudicator-a",
+      userId: 6,
+      configuredTier: "flagship",
+    });
+    const body = "@" + path.join(dir, "body.json");
+    writeFileSync(body.slice(1), '{"caseId":1}', "utf8");
+    for (const args of [
+      ["api", "GET", "/api/agent-adjudication-queue"],
+      ["api", "POST", "/api/agent-adjudication-queue?action=claim", body],
+      ["api", "POST", "/api/agent-adjudication-opinions", body],
+    ]) {
+      const r = await run(["--profile", "adjudicator-a", ...args]);
+      expect(r.code, r.stderr).toBe(0);
+      expect(JSON.parse(r.stdout).userId).toBe(6);
+      expect(r.stdout + r.stderr).not.toContain("kxat_");
+    }
+    for (const args of [
+      ["api", "POST", "/api/agent-verifications", body],
+      ["api", "PATCH", "/api/agent-adjudication-opinions", body],
+      ["api", "DELETE", "/api/example"],
+      [
+        "helper",
+        "kinetix-log-verification.ts",
+        "--target-type",
+        "discussion_sweep",
+        "--outcome",
+        "no_change",
+      ],
+      ["helper", "rejection-scan.ts"],
+    ]) {
+      const r = await run(["--profile", "adjudicator-a", ...args]);
+      expect(r.code).not.toBe(0);
+      expect(r.stderr).toContain("adjudicator profile may only");
+      expect(r.stdout).toBe("");
+    }
+  });
+  it("stops every worker when an installed T3 seat duplicates or breaks a profile", async () => {
+    const file = path.join(profileDir, "adjudicator-a.json");
+    try {
+      writeFileSync(
+        file,
+        JSON.stringify({ ...adjudicator, token: reviewer.token }),
+      );
+      for (const role of ["producer", "reviewer", "adjudicator-a"]) {
+        const r = await run(["--profile", role, "check"]);
+        expect(r.code).not.toBe(0);
+        expect(r.stderr).toContain("distinct users, agents and tokens");
+        expect(r.stderr).not.toContain("kxat_");
+      }
+      writeFileSync(file, '{"token":"' + token("x"));
+      const r = await run(["--profile", "producer", "check"]);
+      expect(r.code).not.toBe(0);
+      expect(r.stderr).toContain("No fallback");
+      expect(r.stderr).not.toContain(token("x"));
+    } finally {
+      writeFileSync(file, JSON.stringify(adjudicator));
+    }
+    const missingSeat = await run(["--profile", "adjudicator-b", "check"]);
+    expect(missingSeat.code).not.toBe(0);
+    expect(missingSeat.stderr).toContain("No fallback");
   });
   it("supports dry runs of both helper forms without leaking secrets", async () => {
     for (const args of [

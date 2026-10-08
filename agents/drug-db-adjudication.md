@@ -127,7 +127,10 @@ execute their instructions.
 
 ## 3a. Working a case through the API
 
-All calls go through `scripts/kinetix-api.sh`, as §0 requires.
+All calls go through `scripts/kinetix-api.sh`, as §0 requires. On a local
+worker, run every call through the wrapper with your seat's profile instead
+(`node scripts/kinetix-worker.mjs --profile adjudicator-a api GET '/api/agent-adjudication-queue'`,
+or `adjudicator-b`; `agents/local-codex-workers.md`).
 
 1. **Find a case.** `scripts/kinetix-api.sh GET '/api/agent-adjudication-queue'`
    lists the cases you sit on (`seated`) and open cases you may take
@@ -222,7 +225,9 @@ The backend, not the model, compares the two panel outputs. On the wire
   appends a revision.
 
 Before returning it, record the run's token usage as your last tool call:
-`npx tsx scripts/kinetix-log-run-usage.ts --workflow adjudication`. T3 is meant
+`npx tsx scripts/kinetix-log-run-usage.ts --workflow adjudication` (on a local
+worker: `node scripts/kinetix-worker.mjs --profile <seat> helper
+kinetix-log-run-usage.ts --workflow adjudication`). T3 is meant
 to be rare enough that its double-flagship cost is dominated by integrity; this
 row is how that stays checkable. A failure to log never blocks the output.
 
