@@ -129,7 +129,7 @@ export async function disputeQueueReaderRoles(): Promise<string[]> {
 
 /**
  * Compute the recipient set for a dispute event and insert one row each.
- * Recipients = target author ∪ everyone whose role may read the dispute
+ * Recipients = target author (when human) ∪ everyone whose role may read the dispute
  * queue ({@link disputeQueueReaderRoles}), minus the actor (and any null ids),
  * de-duplicated. A single bulk insert; no-op when the set is empty.
  */
@@ -179,6 +179,9 @@ export async function fanOutDisputeNotification(args: {
         SELECT ${args.targetAuthorUserId}::int AS author_user_id
       ) author
       WHERE author_user_id IS NOT NULL
+        -- An agent-submitted target has an agent's backing user as author;
+        -- it reads the feed, not the inbox.
+        AND NOT EXISTS (SELECT 1 FROM agents a WHERE a.user_id = author.author_user_id)
       UNION
       SELECT u.id AS user_id
       FROM users u
