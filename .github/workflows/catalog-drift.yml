@@ -28,12 +28,13 @@ name: catalog-drift
 # accident, when an unrelated edit to that workflow file triggered it.
 #
 # Both artifacts rot from the same cause and are refreshed by the same kind of
-# command, so they share one weekly alarm rather than two. The registry is now
-# rebuilt nightly by `derived-registry-refresh.yml`, which opens a pull request
-# for it; a failure here means that pull request is still open (stuck on review
-# or CI) or the job could not run. Fix it by landing that pull request, or run
-# `npm run kinetics:registry` by hand; review the regenerated file as data,
-# because it is a snapshot of what the catalog currently says.
+# command, so they share one weekly report rather than two. The registry half
+# is a WARNING, not a failure: the app builds a catalogue drug's model live from
+# the database when it runs it (`/api/derived-model`), so the committed artifact
+# is only the fallback used when the server cannot be reached, and nothing
+# user-facing waits on it. Refresh it with `npm run kinetics:registry` when
+# convenient; review the regenerated file as data, because it is a snapshot of
+# what the catalog currently says.
 on:
   schedule:
     # Mondays 06:00 UTC — one report a week, at the start of the working week.
@@ -91,10 +92,13 @@ jobs:
       # `always()` so a stale fixture does not hide a stale registry. These are
       # two independent artifacts with two different remedies, and a week where
       # both have drifted should say so in one report rather than reveal the
-      # second only after the first is fixed. The job still fails if either
-      # check does.
-      - name: Derived registry drift check
+      # second only after the first is fixed. Only the fixture check fails the
+      # job; the registry check warns (see the header).
+      - name: Derived registry drift check (warning only)
         if: always() && steps.guard.outputs.configured == 'true'
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: npm run kinetics:registry:check
+        run: |
+          if ! npm run kinetics:registry:check; then
+            echo "::warning::The committed fallback registry is behind the catalogue. The app builds models live, so nothing user-facing is affected; run npm run kinetics:registry to refresh the fallback."
+          fi

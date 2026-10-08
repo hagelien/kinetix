@@ -32,39 +32,42 @@ Everything in sections 2–9 concerns the **forward PK engine** (`pk-montecarlo`
 what "the simulator" normally means. Section 10 covers ethanol, section 11 the inverse
 (back-calculation) engine, and section 12 the metabolite-pattern module.
 
-**The simulator is a population-typical predictor with a pinned parameter set** — reviewed
-where a reviewer authored it, catalogue-derived and graded where the derived tier is switched
-on for the build (§2). It is not a patient-specific model, not a fitted model, and it does not
+**The simulator is a population-typical predictor with a fixed parameter set per run** — reviewed
+and pinned where a reviewer authored it, catalogue-derived, built live and graded where the derived
+tier is switched on for the build (§2). It is not a patient-specific model, not a fitted model, and it does not
 learn from the case in front of it. It takes no measured concentration as input and cannot be conditioned on one.
 If you have a measurement and want to reason backwards from it, you want the inverse
 engine (§11), not this one.
 
 ---
 
-## 2. The premise that governs everything else: parameters are pinned, not looked up
+## 2. The premise that governs everything else: models are resolved, not improvised
 
-A forward run does **not** read the drug catalogue. It resolves the analyte against a
-**pinned, checksummed registry** of model definitions, and runs whatever that registry holds.
+A forward run does **not** pick numbers out of the drug catalogue on the fly. It resolves the
+analyte against a **checksummed registry** of model definitions, and runs whatever that registry
+holds. The reviewed tier of that registry is pinned; the derived tier is built from the catalogue
+at run time (below), by the same fixed derivation every time.
 
 This is a deliberate trade, and it is the single most important thing to understand about
 the simulator:
 
-- **What it buys.** A curve is reproducible. The same scenario, on any machine, in any
+- **What it buys.** A reviewed curve is reproducible. The same scenario, on any machine, in any
   release pinned to the same registry checksum, produces the same curve. An enrichment
   pass, a corrected half-life, or an agent's edit to the drug catalogue cannot silently
-  move a curve someone has already relied on in a case.
-- **What it costs.** A drug that is in the Kinetix catalogue but not in the release this build
-  resolves **cannot be simulated at all**. There is no reading of catalogue half-life and Vd at
-  run time. The run stops with an explicit "no model for this analyte" rather than producing a
-  plausible-looking curve from numbers nobody pinned.
+  move a reviewed curve someone has already relied on in a case. A derived curve follows the
+  catalogue instead, and every run says which release it came from.
+- **What it costs.** A drug that has no model in the release this run resolves — no reviewed
+  model, and catalogue data that does not build a derived one — **cannot be simulated at all**.
+  There is no ad-hoc reading of catalogue half-life and Vd. The run stops with an explicit
+  "no model for this analyte" rather than producing a plausible-looking curve from numbers no
+  derivation accepted.
 
 **Two tiers, and the registry knows which is which.** The release always carries the **reviewed**
 tier: hand-authored, cited, cross-checked. Where the derived tier is switched on for the build
 (`VITE_DERIVED_REGISTRY_ENABLED` — the release block above reports whether it is), the release
-*also* carries **catalogue-derived** definitions: composed automatically from the stored
-declarations, then pinned into a committed, checksummed artifact like everything else, so
-reproducibility is unchanged. What is different is that nobody reviewed them. They are never
-merged into one undifferentiated set:
+*also* carries **catalogue-derived** definitions, composed automatically from the stored
+declarations. What is different is that nobody reviewed them. They are never merged into one
+undifferentiated set:
 
 - each row below carries its validation status, and `literature-derived` marks a derived model;
 - a derived model discloses which of its inputs — structural axes, and possibly the
@@ -74,6 +77,28 @@ merged into one undifferentiated set:
   with its limitations, and to nobody else.
 
 Read the table as "what this build can resolve", not "what has been reviewed".
+
+**The derived tier is built live from the catalogue; the reviewed tier stays pinned.** Before a
+catalogue drug is run, the app asks the server to build that drug's model from the catalogue as it
+stands at that moment, and resolves the drug through that answer rather than through the committed
+derived artifact. A value a curator adds or corrects therefore reaches the next run of that drug
+within about two minutes, with no regenerated file and no release. The answer is built by the same
+derivation and graded by the same facts as the committed artifact. A drug whose data no longer builds
+a model stops resolving, rather than running on what it used to have. The committed artifact is only
+the fallback, used when the server cannot be reached. This changes the reproducibility promise above,
+but only for derived curves:
+
+- a derived curve can move when its catalogue data changes, so the same scenario run a week apart
+  can give a different derived curve;
+- the run manifest still names the release it actually resolved through: a release holding a live
+  answer is versioned `<version>+live` and checksummed over what it actually contains, so a
+  manifest never claims the committed release for a live curve;
+- the live answer is fetched once per calculation and held for all of it, so a back-calculation's
+  probe and final simulations always run on the same build;
+- each live build carries its own model id (`<id>+live.<hash>`), so a curve on screen is only ever
+  graded by the build that produced it; once a newer build replaces it, the older curve is withheld
+  until it is rerun, rather than shown under evidence that did not produce it;
+- reviewed models are untouched: they are never fetched, and a live answer can never displace one.
 
 The reviewed tier is therefore small on purpose. The set of analytes this build resolves, and each
 one's routes, native matrix and validation status, are listed below — read straight from the

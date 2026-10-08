@@ -492,11 +492,21 @@ export const DERIVED_MODEL_SUPPORTED_BASES: readonly DoseBasis[] = ['active-moie
  * analyte identities (e.g. psilocin↔psilocybin) are a REVIEWED crosswalk, an override-tier concern,
  * not something derived from the catalog labels here.
  */
+/** The suffix every derived model id carries, and the test for one. A derived model can stop
+ *  resolving (its catalogue data withdrawn) while a result it produced is still on screen; the
+ *  grade gate needs to recognise that result as derived from its id alone, to keep it withheld. */
+export const DERIVED_MODEL_ID_SUFFIX = '-derived-v1';
+
+export function isDerivedModelId(modelId: string): boolean {
+  // A live build carries a `+live.<hash>` tag after the id (kinetics-core `live-derived.ts`).
+  return /-derived-v\d+(\+live\.[0-9a-f]+)?$/.test(modelId);
+}
+
 export function derivedDefinitionMetadata(identity: DerivedDrugIdentity): DrugDefinitionMetadata {
   return {
     analyte: identity.slug,
     displayName: identity.displayName,
-    modelId: `${identity.slug}-derived-v1`,
+    modelId: `${identity.slug}${DERIVED_MODEL_ID_SUFFIX}`,
     matrix: DERIVED_MODEL_MATRIX,
     validationStatus: DERIVED_MODEL_VALIDATION_STATUS,
     supportedBases: [...DERIVED_MODEL_SUPPORTED_BASES],

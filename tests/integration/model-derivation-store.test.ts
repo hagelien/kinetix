@@ -1,11 +1,13 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { drugParameters, parameterEntries } from '../../db/schema.js';
+import { and, eq } from 'drizzle-orm';
+import { drugParameters, drugs, parameterEntries } from '../../db/schema.js';
 import {
   deriveDrugModelsByRoute,
   readDrugModelInputsByRoute,
   readDrugRouteAssemblyInputs,
   readDrugModelDefinition,
   readDerivedRegistrySnapshot,
+  readLiveDerivedModel,
 } from '../../api/_lib/model-derivation-store.js';
 import {
   assembleDrugDefinition,
@@ -1719,3 +1721,66 @@ describe('saturable (Michaelis–Menten) elimination', () => {
     expect(oral!.inferenceDeclined).toMatch(/saturable elimination/);
   });
 });
+
+/**
+ * The live per-drug read the app resolves a catalogue drug through. It must build exactly what the
+ * catalogue-wide snapshot builds for the same rows — the two are one derivation, read two ways.
+ */
+describe('live per-drug derived model read', () => {
+  async function seedOralDrug(slug: string): Promise<void> {
+    const drugId = await seedDrug(db, { slug, names: { en: slug } });
+    const userId = await seedUser(db);
+    await setDrugLevelParameter(drugId, userId, 'halfLife', { median: 5.2, unit: 'h' });
+    await setDrugLevelParameter(drugId, userId, 'volumeOfDistribution', { median: 1.3, unit: 'L/kg' });
+    await setDrugLevelParameter(drugId, userId, 'bioavailability', { median: 0.8, unit: 'fraction' });
+    await setDrugLevelParameter(drugId, userId, 'tmax', { median: 1.5, unit: 'h' });
+  }
+
+  it('builds the same model and grade facts as the catalogue snapshot', async () => {
+    await seedOralDrug('live-analyte');
+    const live = await readLiveDerivedModel('live-analyte');
+    const build = await readDerivedRegistrySnapshot();
+
+    expect(live.status).toBe('assembled');
+    if (live.status !== 'assembled') return;
+    expect(live.definition).toEqual(build.snapshot.definitions.find((d) => d.analyte === 'live-analyte'));
+    expect(live.grade).toEqual(build.derivedGrades.find((g) => g.analyte === 'live-analyte'));
+  });
+
+  it('reports a drug whose data builds no curve, with the same coverage entry', async () => {
+    const drugId = await seedDrug(db, { slug: 'live-incomplete', names: { en: 'live-incomplete' } });
+    const userId = await seedUser(db);
+    await setDrugLevelParameter(drugId, userId, 'halfLife', { median: 4, unit: 'h' });
+    await setDrugLevelParameter(drugId, userId, 'tmax', { median: 1, unit: 'h' });
+
+    const live = await readLiveDerivedModel('live-incomplete');
+    const build = await readDerivedRegistrySnapshot();
+    expect(live).toEqual({
+      status: 'not-modelable',
+      entry: build.notModelable.find((e) => e.slug === 'live-incomplete'),
+    });
+  });
+
+  it('reflects a curated value on the very next read', async () => {
+    await seedOralDrug('live-edited');
+    const before = await readLiveDerivedModel('live-edited');
+    await db.update(drugParameters).set({ value: { median: 8, unit: 'h' } as never }).where(
+      and(eq(drugParameters.parameter, 'halfLife'), eq(drugParameters.drugId, (await drugIdFor('live-edited')))),
+    );
+    const after = await readLiveDerivedModel('live-edited');
+    if (before.status !== 'assembled' || after.status !== 'assembled') throw new Error('expected models');
+    expect(after.definition).not.toEqual(before.definition);
+  });
+
+  it('answers reviewed for a slug the reviewed tier claims, and not-found for an unknown one', async () => {
+    expect(await readLiveDerivedModel('ethanol')).toEqual({ status: 'reviewed' });
+    expect(await readLiveDerivedModel('psilocin')).toEqual({ status: 'reviewed' });
+    expect(await readLiveDerivedModel('no-such-drug')).toEqual({ status: 'not-found' });
+  });
+});
+
+async function drugIdFor(slug: string): Promise<number> {
+  const [row] = await db.select({ id: drugs.id }).from(drugs).where(eq(drugs.slug, slug));
+  if (!row) throw new Error(`no drug ${slug}`);
+  return row.id;
+}

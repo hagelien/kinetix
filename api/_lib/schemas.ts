@@ -2412,3 +2412,8 @@ export const citationMergeApplySchema = z.object({
     .min(1)
     .max(MAX_CITATION_MERGE_GROUP - 1),
 });
+
+/** `GET /api/derived-model?slug=` — the catalogue slug whose model to build live. */
+export const derivedModelQuerySchema = z.object({
+  slug: z.string().trim().min(1).max(200),
+});

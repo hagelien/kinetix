@@ -796,7 +796,15 @@ drugs). A DB edit changes the next snapshot, never a curve already pinned.
        the change — models gained and lost, grade moves. The Codex gate merges it like any other
        pull request. The snapshot stays the unit of reproducibility; only the manual step is gone.
        It needs a `REGISTRY_REFRESH_TOKEN` secret, because GitHub starts no workflows for a pull
-       request opened with the built-in token.
+       request opened with the built-in token. **Superseded for the app by live builds
+       (2026-10-08, owner decision):** before a catalogue drug runs, the app fetches its model as
+       the catalogue builds it now (`GET /api/derived-model?slug=`, `readLiveDerivedModel`) and
+       lays it over the committed tier (`live-derived.ts`), so a curated value reaches the next
+       run without a pull request or a deploy. The owner accepted the cost: a derived curve is no
+       longer pinned and can move when its data changes; the manifest records a `+live` release.
+       The committed artifact remains the fallback when the server cannot be reached, and the
+       reviewed tier stays pinned. The nightly workflow was removed with it, and the weekly
+       registry drift check in `catalog-drift.yml` now warns instead of failing.
     6. **Saturable elimination (LANDED, 2026-10-08).** A curator recording a cited
        Michaelis–Menten elimination used to remove the drug's curve: the family composed, but the
        catalog had nowhere to store Vmax or Km and the assembler did not map it (the 2026-10-08

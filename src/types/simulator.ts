@@ -452,6 +452,12 @@ export interface MonteCarloConfig {
 export interface CanonicalSimulationConfig {
   drugConfigId: string;
   scenario: import('@/lib/kinetics-core').CanonicalScenario;
+  /**
+   * The live catalogue answers the main thread holds, carried to the worker with the run: a worker
+   * has its own copy of the registry, so a model fetched live on the main thread would otherwise be
+   * unknown where the curve is computed.
+   */
+  liveDerived?: import('@/lib/kinetics-core').LiveDerivedEntry[];
 }
 
 export interface MonteCarloResult {
