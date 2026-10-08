@@ -59,7 +59,11 @@ import {
   routeIdFor,
   toCanonicalScenario,
 } from '@/lib/forwardCoreAdapter';
-import type { CanonicalResult, CanonicalResultOk } from '@/lib/kinetics-core';
+import {
+  liveDerivedEntries,
+  type CanonicalResult,
+  type CanonicalResultOk,
+} from '@/lib/kinetics-core';
 import { refreshLiveDerivedModel } from '@/lib/liveDerivedModels';
 
 /** The compute engine a component runs on, defaulting to Monte Carlo PK. */
@@ -1116,7 +1120,17 @@ export async function runComponent(
   drugComponent: DrugComponent | undefined,
   deps: ModelingRunDeps,
 ): Promise<DrugSimResult> {
-  const result = await runComponentEngine(config, drugComponent, deps);
+  // Build a catalogue drug's model from the catalogue as it stands now, so a curated value reaches
+  // this run without a regenerated registry; on any failure the committed snapshot is used. Fetched
+  // ONCE per component and pinned: a back-calculation runs a probe and a final simulation, and a
+  // refresh between them would infer the dose from one build and draw the curve from another.
+  await refreshLiveDerivedModel(drugComponent?._slug);
+  const pinned = liveDerivedEntries();
+  const pinnedDeps: ModelingRunDeps = {
+    ...deps,
+    runMonteCarlo: (simulation) => deps.runMonteCarlo({ ...simulation, liveDerived: pinned }),
+  };
+  const result = await runComponentEngine(config, drugComponent, pinnedDeps);
   // Stamp the inputs this result was computed from so the UI can detect when a
   // later edit leaves the curve out of date, and attach a reproducibility
   // manifest recording exactly which engine/model/seed produced it.
@@ -1348,9 +1362,6 @@ async function runCoreDoses(
   anchor: number,
   deps: ModelingRunDeps,
 ): Promise<{ ok: true; core: CanonicalResult } | { ok: false; detail: string }> {
-  // Build a catalogue drug's model from the catalogue as it stands now, so a curated value reaches
-  // this run without a regenerated registry; on any failure the committed snapshot is used.
-  await refreshLiveDerivedModel(drugComponent?._slug);
   const build = (draws: number) =>
     toCanonicalScenario({
       analyte: coreAnalyteFor([drugComponent?._slug, analyteId(config, drugComponent)]),
