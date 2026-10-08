@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { disputes, notifications } from '../../db/schema.js';
+import { agents, disputes, notifications } from '../../db/schema.js';
 import { fanOutDisputeNotification } from '../../api/_lib/notifications.js';
 import {
   resetIntegrationDb,
@@ -82,5 +82,44 @@ describe('notification fan-out over real SQL', () => {
     expect(rows.map((row) => row.userId).sort()).toEqual(
       [authorId, editorId, adminId].sort(),
     );
+  });
+
+  it('does not notify the target author when that author backs an agent', async () => {
+    const actorId = await seedUser(db, {
+      email: 'actor@example.com',
+      username: 'actor',
+      role: 'contributor',
+    });
+    const agentUserId = await seedUser(db, {
+      email: 'agent@example.com',
+      username: 'agent',
+      role: 'contributor',
+    });
+    await db.insert(agents).values({
+      userId: agentUserId,
+      name: 'agent',
+      slug: 'agent',
+      status: 'active',
+    });
+    const editorId = await seedUser(db, {
+      email: 'editor@example.com',
+      username: 'editor',
+      role: 'editor',
+    });
+
+    const result = await fanOutDisputeNotification({
+      type: 'adjudication_handoff',
+      disputeId: null,
+      targetType: 'pending_edit',
+      targetId: 102,
+      actorUserId: 0,
+      targetAuthorUserId: agentUserId,
+      title: 'Handoff',
+      url: '/review',
+    });
+
+    expect(result).toEqual({ recipients: 1 });
+    const rows = await db.select({ userId: notifications.userId }).from(notifications);
+    expect(rows.map((row) => row.userId)).toEqual([editorId]);
   });
 });
