@@ -93,6 +93,8 @@ but only for derived curves:
 - the run manifest still names the release it actually resolved through: a release holding a live
   answer is versioned `<version>+live` and checksummed over what it actually contains, so a
   manifest never claims the committed release for a live curve;
+- the live answer is fetched once per calculation and held for all of it, so a back-calculation's
+  probe and final simulations always run on the same build;
 - each live build carries its own model id (`<id>+live.<hash>`), so a curve on screen is only ever
   graded by the build that produced it; once a newer build replaces it, the older curve is withheld
   until it is rerun, rather than shown under evidence that did not produce it;

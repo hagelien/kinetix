@@ -410,6 +410,7 @@ describe('mechanics document — live derived tier (§2)', () => {
     );
     expect(doc).toContain('versioned `<version>+live`');
     expect(doc).toContain('each live build carries its own model id (`<id>+live.<hash>`)');
+    expect(doc).toContain('fetched once per calculation and held for all of it');
     const replaced = { ...committed, displayName: 'live answer' };
     const release = loadGeneratedRegistry(reviewed, GENERATED_REGISTRY_ARTIFACT, [
       { analyte: committed.analyte, definition: replaced, grade: null },
