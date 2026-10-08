@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  aboutLine,
   buildEventEmail,
   buildSummaryEmail,
   notificationTitle,
@@ -32,6 +33,45 @@ describe('notificationTitle', () => {
     expect(notificationTitle(row({ type: 'something_new', title: 'Raw' }), 'nb')).toBe(
       'Raw',
     );
+  });
+});
+
+describe('aboutLine', () => {
+  const about = {
+    title: null,
+    drugNames: { nb: 'Paracetamol', en: 'Acetaminophen' },
+    parameter: 'halfLife',
+    detail: 'Corrected the range',
+  };
+
+  it('names the drug in the reader\'s language, the parameter and the edit summary', () => {
+    expect(aboutLine(row({ about }), 'en')).toBe('Acetaminophen · Half-life: Corrected the range');
+    expect(aboutLine(row({ about }), 'nb')).toBe('Paracetamol · Halveringstid: Corrected the range');
+  });
+
+  it('leaves out a detail the body already shows, and automatic summaries', () => {
+    expect(aboutLine(row({ about, bodyMd: 'Corrected the range' }), 'en')).toBe(
+      'Acetaminophen · Half-life',
+    );
+    expect(aboutLine(row({ about: { ...about, detail: 'auto:recompute' } }), 'en')).toBe(
+      'Acetaminophen · Half-life',
+    );
+  });
+
+  it('is null when nothing is known about the target', () => {
+    expect(aboutLine(row({}), 'en')).toBeNull();
+  });
+
+  it('appears under each item of a summary', () => {
+    const email = buildSummaryEmail({
+      rows: [row({ type: 'contribution_endorsed', about: { ...about, drugNames: null, parameter: null, title: 'CYP3A4' } })],
+      frequency: 'daily',
+      appUrl: 'https://kinetix.no',
+      locale: 'en',
+      backlog: null,
+    });
+    expect(email.text).toContain('Your contribution received an approval stamp (CYP3A4: Corrected the range)');
+    expect(email.html).toContain('CYP3A4: Corrected the range');
   });
 });
 
