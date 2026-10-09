@@ -1,9 +1,9 @@
 /**
- * Forensisk toksikologi's urine detection times.
+ * The laboratory's urine detection times.
  *
  *   GET /api/lab-detection-times — the whole table, once.
  *
- * Read access is gated to admins + members of the `lab` group
+ * Read access is gated to admins + members of a group granted it in the database
  * (`canAccessLabDetectionTimes`). There is no write path: the table is a
  * transcription of an approved, versioned, restricted controlled document. It
  * lives in the `lab_detection_guidelines` table, loaded by an operator from

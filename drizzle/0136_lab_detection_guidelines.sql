@@ -1,4 +1,4 @@
--- Restricted reference tables served behind a gate (today the Lab urine
+-- Restricted reference tables served behind a gate (today the laboratory urine
 -- detection-time guideline behind /api/lab-detection-times).
 --
 -- Schema only. The contents are a restricted internal document and are loaded

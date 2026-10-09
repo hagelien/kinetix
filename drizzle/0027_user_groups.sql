@@ -25,6 +25,6 @@ INSERT INTO "user_groups" ("slug", "name", "description")
 VALUES (
   'lab',
   'Lab',
-  'Access to Lab-specific analytical methods.'
+  'Access to internal laboratory data (granted features are set in user_groups.grants).'
 )
 ON CONFLICT ("slug") DO NOTHING;

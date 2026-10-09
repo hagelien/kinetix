@@ -53,6 +53,7 @@ export interface AuthGroup {
   id: number;
   slug: string;
   name: string;
+  grants?: string[];
 }
 
 export interface AuthContext {
@@ -180,6 +181,7 @@ export async function getUserFromRequest(
         id: userGroups.id,
         slug: userGroups.slug,
         name: userGroups.name,
+        grants: userGroups.grants,
       })
       .from(userGroupMembers)
       .innerJoin(userGroups, eq(userGroups.id, userGroupMembers.groupId))
@@ -252,6 +254,7 @@ async function resolveAgentTokenContext(
         id: userGroups.id,
         slug: userGroups.slug,
         name: userGroups.name,
+        grants: userGroups.grants,
       })
       .from(userGroupMembers)
       .innerJoin(userGroups, eq(userGroups.id, userGroupMembers.groupId))

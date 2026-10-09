@@ -1326,7 +1326,7 @@ describe('conversation ingestion — consent held to what was shown', () => {
       createdBy: userId,
       updatedBy: userId,
     });
-    await db.insert(wikiCategories).values({ name: 'Forensisk toksikologi', slug: 'lab' });
+    await db.insert(wikiCategories).values({ name: 'Forensisk toksikologi', slug: 'forensisk-toksikologi' });
 
     const doc = parse(
       bundle({

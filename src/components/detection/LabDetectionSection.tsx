@@ -39,7 +39,7 @@ interface Props {
 }
 
 /**
- * Lab's own urine detection times, for members of the Lab group.
+ * The laboratory's own urine detection times, for members of a granted group.
  *
  * Deliberately a section of its own, below the pooled windows and framed
  * differently: the pooled cards answer "what does the literature say", this one
