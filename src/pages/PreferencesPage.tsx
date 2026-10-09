@@ -15,7 +15,7 @@ import {
 } from '@/stores/authStore';
 import { useCan } from '@/lib/usePermissions';
 import {
-  EMAIL_FREQUENCIES,
+  SELECTABLE_EMAIL_FREQUENCIES,
   resolveEmailPrefs,
   type EmailFrequency,
 } from '@/lib/emailNotificationPrefs';
@@ -518,7 +518,7 @@ function PreferencesContent() {
                 {t('preferences.emailFrequencyLabel')}
               </legend>
               <div className="flex flex-col gap-1">
-                {EMAIL_FREQUENCIES.map((f) => (
+                {SELECTABLE_EMAIL_FREQUENCIES.map((f) => (
                   <label key={f} className="flex items-center gap-2 text-sm">
                     <input
                       type="radio"
