@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { PriorityFlagsAdminSection } from '@/components/admin/PriorityFlagsAdminSection';
 import { ResearchImportAdminSection } from '@/components/admin/ResearchImportAdminSection';
 import { ConversationIngestionAdminSection } from '@/components/admin/ConversationIngestionAdminSection';
+import { WikiArticleImportSection } from '@/components/admin/WikiArticleImportSection';
 import { AgentFocusSection } from '@/components/admin/AgentFocusSection';
 import { AgentsAdminSection } from '@/components/admin/AgentsAdminSection';
 import { AgentHookRunsPanel } from '@/components/admin/AgentHookRunsPanel';
@@ -645,7 +646,7 @@ function AdminContent() {
           </>
         )}
         {activePane === 'ingest' && canIngestConversations && (
-          <ConversationIngestionAdminSection />
+          <><WikiArticleImportSection /><ConversationIngestionAdminSection /></>
         )}
         {activePane === 'disputes' && canReadDisputeQueue && (
           <DisputesAdminSection />
