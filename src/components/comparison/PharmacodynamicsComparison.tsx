@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { fetchDrugById } from "@/lib/drugApi";
-import { formatRatio, relativeRatio } from "@/lib/comparison";
+import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { fetchDrugById } from '@/lib/drugApi';
+import { formatRatio, relativeRatio } from '@/lib/comparison';
 import {
   affinityStrength,
   buildPdTargetComparison,
@@ -12,19 +12,19 @@ import {
   type PdMetric,
   type PdMetricComparison,
   type PdTarget,
-} from "@/lib/pdComparison";
-import { formatInteractionLabel } from "@/lib/receptorInteractions";
+} from '@/lib/pdComparison';
+import { formatInteractionLabel } from '@/lib/receptorInteractions';
 import type {
   DrugReceptorTargetSummary,
   MechanismTier,
-} from "@/lib/receptorTargets";
+} from '@/lib/receptorTargets';
 
 /** Conventional, language-neutral notation for the per-target measurements. */
 const METRIC_SYMBOLS: Partial<Record<PdMetric, string>> = {
-  ki: "Ki",
-  ec50: "EC50",
-  ic50: "IC50",
-  emax: "Emax",
+  ki: 'Ki',
+  ec50: 'EC50',
+  ic50: 'IC50',
+  emax: 'Emax',
 };
 
 function useMetricLabel() {
@@ -35,8 +35,8 @@ function useMetricLabel() {
 
 function targetLabel(target: PdTarget, language: string): string {
   const name =
-    language.startsWith("en") && target.nameEn ? target.nameEn : target.name;
-  return name && name !== target.symbol ? name : "";
+    language.startsWith('en') && target.nameEn ? target.nameEn : target.name;
+  return name && name !== target.symbol ? name : '';
 }
 
 function pct(value: number, min: number, max: number): number {
@@ -50,7 +50,7 @@ function pct(value: number, min: number, max: number): number {
  * which is CDN-cached and shared with the monograph.
  */
 function useReceptorTargets(drugIds: number[]) {
-  const signature = drugIds.join(",");
+  const signature = drugIds.join(',');
   const [byDrug, setByDrug] = useState<
     Record<number, DrugReceptorTargetSummary[]>
   >({});
@@ -59,7 +59,7 @@ function useReceptorTargets(drugIds: number[]) {
 
   useEffect(() => {
     const ids = signature
-      .split(",")
+      .split(',')
       .filter(Boolean)
       .map((id) => Number(id));
     if (!ids.length) {
@@ -78,7 +78,7 @@ function useReceptorTargets(drugIds: number[]) {
         let firstError: unknown;
         let rejected = 0;
         for (const result of results) {
-          if (result.status === "fulfilled") {
+          if (result.status === 'fulfilled') {
             const { drug } = result.value;
             loaded[drug.id] = drug.receptorTargets ?? [];
           } else {
@@ -89,8 +89,8 @@ function useReceptorTargets(drugIds: number[]) {
         setByDrug(loaded);
         if (rejected > 0) {
           // The raw message is API/browser prose (often English); log it and
-          // show a localized notice instead — only when nothing loaded.
-          console.error("Failed to load receptor mechanisms", firstError);
+          // show a localized notice instead, only when nothing loaded.
+          console.error('Failed to load receptor mechanisms', firstError);
           setFailed(rejected === results.length);
         }
       })
@@ -126,13 +126,13 @@ function TargetPicker({
             type="button"
             onClick={() => onToggle(target.id)}
             aria-pressed={active}
-            title={t("comparison.pd.targetDrugCount", {
+            title={t('comparison.pd.targetDrugCount', {
               count: target.drugCount,
             })}
             className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
               active
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                ? 'border-primary bg-primary text-primary-foreground'
+                : 'border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground'
             }`}
           >
             {target.symbol}
@@ -165,7 +165,7 @@ function ReceptorProfileMatrix({
       <table className="min-w-full border-separate border-spacing-1 text-xs">
         <thead>
           <tr className="text-left text-muted-foreground">
-            <th className="py-1 pr-2 font-medium">{t("comparison.drug")}</th>
+            <th className="py-1 pr-2 font-medium">{t('comparison.drug')}</th>
             {targets.map((target) => (
               <th
                 key={target.id}
@@ -210,14 +210,14 @@ function ReceptorProfileMatrix({
                     style={{
                       backgroundColor:
                         strength === null
-                          ? "hsl(var(--primary) / 0.06)"
+                          ? 'hsl(var(--primary) / 0.06)'
                           : `hsl(var(--primary) / ${(0.08 + strength * 0.4).toFixed(2)})`,
                     }}
                   >
                     <div className="font-medium tabular-nums">
                       {headline
                         ? `${metricLabel(headline.metric)} ${headline.formatted}`
-                        : t("comparison.pd.noMeasurement")}
+                        : t('comparison.pd.noMeasurement')}
                     </div>
                     <div className="truncate text-[11px] text-muted-foreground">
                       {interaction}
@@ -230,7 +230,7 @@ function ReceptorProfileMatrix({
         </tbody>
       </table>
       <p className="mt-2 text-[11px] text-muted-foreground">
-        {t("comparison.pd.matrixLegend")}
+        {t('comparison.pd.matrixLegend')}
       </p>
     </div>
   );
@@ -248,7 +248,7 @@ function MetricPlot({
   const { t } = useTranslation();
   const metricLabel = useMetricLabel();
   const { values, direction, hasUnitMismatch } = comparison;
-  const inverseStrength = direction === "inverse";
+  const inverseStrength = direction === 'inverse';
   const reference =
     values.find((value) => value.drugId === referenceDrugId) ?? null;
   const populated = values.filter((value) => value.numeric !== null);
@@ -264,24 +264,22 @@ function MetricPlot({
   return (
     <div className="rounded-md border border-border p-3">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h4 className="text-sm font-medium">
-          {metricLabel(comparison.metric)}
-        </h4>
+        <h4 className="text-sm font-medium">{metricLabel(comparison.metric)}</h4>
         <span className="text-[11px] text-muted-foreground">
           {[
             comparison.commonUnit
-              ? t("comparison.unit", { unit: comparison.commonUnit })
+              ? t('comparison.unit', { unit: comparison.commonUnit })
               : null,
-            inverseStrength ? t("comparison.inverseStrength") : null,
-            useLog ? t("comparison.logScale") : null,
+            inverseStrength ? t('comparison.inverseStrength') : null,
+            useLog ? t('comparison.logScale') : null,
           ]
             .filter(Boolean)
-            .join(" · ")}
+            .join(' · ')}
         </span>
       </div>
       {hasUnitMismatch ? (
         <p className="mb-2 text-xs text-amber-800 dark:text-amber-200">
-          {t("comparison.unitMismatch")}
+          {t('comparison.unitMismatch')}
         </p>
       ) : null}
       <div className="space-y-2">
@@ -296,8 +294,7 @@ function MetricPlot({
                 );
           // Values in different units have no shared axis: list them only.
           const numeric = hasUnitMismatch ? null : value.numeric;
-          const dot =
-            numeric === null ? null : pct(project(numeric), axisMin, axisMax);
+          const dot = numeric === null ? null : pct(project(numeric), axisMin, axisMax);
           const start =
             numeric === null
               ? 0
@@ -316,7 +313,7 @@ function MetricPlot({
               </span>
               {dot === null ? (
                 <span className="text-muted-foreground">
-                  {value.numeric === null ? t("comparison.unavailable") : ""}
+                  {value.numeric === null ? t('comparison.unavailable') : ''}
                 </span>
               ) : (
                 <div className="relative h-5">
@@ -335,13 +332,13 @@ function MetricPlot({
                 </div>
               )}
               <span className="text-right tabular-nums text-muted-foreground">
-                {formatPdValue(value) || "-"}
+                {formatPdValue(value) || '-'}
               </span>
               <span
                 className="text-right tabular-nums"
-                title={t("comparison.pd.relativeHint")}
+                title={t('comparison.pd.relativeHint')}
               >
-                {formatRatio(ratio) || "-"}
+                {formatRatio(ratio) || '-'}
               </span>
             </div>
           );
@@ -356,14 +353,14 @@ function tierLabel(
   t: (key: string) => string,
 ): string {
   switch (tier) {
-    case "primary":
-      return t("comparison.pd.tier.primary");
-    case "secondary":
-      return t("comparison.pd.tier.secondary");
-    case "tertiary":
-      return t("comparison.pd.tier.tertiary");
+    case 'primary':
+      return t('comparison.pd.tier.primary');
+    case 'secondary':
+      return t('comparison.pd.tier.secondary');
+    case 'tertiary':
+      return t('comparison.pd.tier.tertiary');
     default:
-      return "";
+      return '';
   }
 }
 
@@ -397,8 +394,8 @@ function TargetComparisonCard({
           ) : null}
         </h3>
         <p className="text-xs text-muted-foreground">
-          {t("comparison.pd.relativeTo", {
-            drug: referenceDrugId !== null ? drugName(referenceDrugId) : "-",
+          {t('comparison.pd.relativeTo', {
+            drug: referenceDrugId !== null ? drugName(referenceDrugId) : '-',
           })}
         </p>
       </div>
@@ -407,12 +404,12 @@ function TargetComparisonCard({
         <table className="min-w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-xs text-muted-foreground">
-              <th className="py-2 pr-4 font-medium">{t("comparison.drug")}</th>
+              <th className="py-2 pr-4 font-medium">{t('comparison.drug')}</th>
               <th className="py-2 pr-4 font-medium">
-                {t("comparison.pd.mechanism")}
+                {t('comparison.pd.mechanism')}
               </th>
               <th className="py-2 pr-4 font-medium">
-                {t("comparison.pd.species")}
+                {t('comparison.pd.species')}
               </th>
             </tr>
           </thead>
@@ -431,10 +428,10 @@ function TargetComparisonCard({
                               tierLabel(m.tier, t),
                             ]
                               .filter(Boolean)
-                              .join(" · "),
+                              .join(' · '),
                           )
-                          .join("; ")
-                      : t("comparison.pd.noMechanism")}
+                          .join('; ')
+                      : t('comparison.pd.noMechanism')}
                   </td>
                   <td className="py-2 pr-4 text-muted-foreground">
                     {[
@@ -443,7 +440,7 @@ function TargetComparisonCard({
                           .map((m) => m.assaySpecies)
                           .filter((s): s is string => Boolean(s)),
                       ),
-                    ].join("; ") || "-"}
+                    ].join('; ') || '-'}
                   </td>
                 </tr>
               );
@@ -465,7 +462,7 @@ function TargetComparisonCard({
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">
-          {t("comparison.pd.noMeasurements")}
+          {t('comparison.pd.noMeasurements')}
         </p>
       )}
     </section>
@@ -502,21 +499,21 @@ export function PharmacodynamicsComparison({
   return (
     <div className="space-y-4">
       <section className="rounded-lg border border-border bg-card p-4">
-        <h2 className="text-sm font-semibold">{t("comparison.pd.title")}</h2>
+        <h2 className="text-sm font-semibold">{t('comparison.pd.title')}</h2>
         <p className="mt-1 text-xs text-muted-foreground">
-          {t("comparison.pd.body")}
+          {t('comparison.pd.body')}
         </p>
         {loading ? (
           <p className="mt-3 text-sm text-muted-foreground">
-            {t("common.loading")}
+            {t('common.loading')}
           </p>
         ) : failed ? (
           <p className="mt-3 text-sm text-destructive">
-            {t("comparison.pd.loadError")}
+            {t('comparison.pd.loadError')}
           </p>
         ) : targets.length === 0 ? (
           <p className="mt-3 text-sm text-muted-foreground">
-            {t("comparison.pd.noTargets")}
+            {t('comparison.pd.noTargets')}
           </p>
         ) : (
           <>
