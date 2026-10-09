@@ -111,7 +111,7 @@ function mockDb(opts: {
   const execute = vi.fn().mockResolvedValue({ rows: opts.modelRows ?? [] });
 
   getDbMock.mockReturnValue({ select, execute });
-  return { whereCalls };
+  return { whereCalls, execute };
 }
 
 describe("GET /api/agents — WHERE clauses use IN (…), not = ANY((…))", () => {
@@ -256,5 +256,36 @@ describe("GET /api/agents — WHERE clauses use IN (…), not = ANY((…))", () 
       modelFamily: null,
       recentModel: null,
     });
+  });
+
+  it("orders re-recorded verdicts by updated_at when picking the recent model", async () => {
+    const { execute } = mockDb({
+      agentRows: [
+        {
+          id: 1,
+          agentUserId: 21,
+          maintainerUserId: null,
+          name: "A",
+          nameEn: "A",
+          slug: "a",
+          description: "",
+          modelTier: "mid",
+          adjudicator: false,
+          modelFamily: null,
+          modelFamilySource: null,
+          createdAt: new Date(),
+        },
+      ],
+      userRows: [],
+      statsRows: [],
+      modelRows: [],
+    } as never);
+
+    const { res } = createResponse();
+    await handler(createGetRequest(), res);
+
+    const queryText = JSON.stringify(execute.mock.calls[0][0].queryChunks);
+    expect(queryText).toContain("updated_at AS reported_at");
+    expect(queryText).toContain("ORDER BY agent_id, reported_at DESC");
   });
 });
