@@ -206,7 +206,12 @@ export function DrugMonographSidebar({
     if (linkView !== 'history' && linkView !== 'discussion') return;
     const focus = Number(linkFocus);
     setDialog({
-      kind: linkView,
+      // A source-value parameter's discussion lives at the bottom of its
+      // sources dialog, so a comment link opens that instead.
+      kind:
+        linkView === 'discussion' && parameterIsSummarizable(linkParam)
+          ? 'sources'
+          : linkView,
       parameter: linkParam,
       focusId: Number.isInteger(focus) && focus > 0 ? focus : undefined,
     });
@@ -627,7 +632,6 @@ export function DrugMonographSidebar({
         (item): item is { index: number; row: CitationRow } => item !== null,
       );
     const refIndices = refItems.map((item) => item.index);
-    const commentCount = indicators.comments[pid] ?? 0;
     const hasValue = value != null;
     const activeFlag = activeFlagByParam.get(pid);
     // The pooled aggregate, when this parameter is entry-backed. Its presence
@@ -807,15 +811,19 @@ export function DrugMonographSidebar({
             >
               <History className="h-3 w-3" />
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setDialog({ kind: 'discussion', parameter: pid })}
-              className="h-5 w-5 p-0"
-              title={t('sidebar.discussionParam')}
-            >
-              <MessageSquare className="h-3 w-3" />
-            </Button>
+            {/* A source-value parameter's discussion sits at the bottom of
+                its sources dialog, opened by the action above. */}
+            {opensSources ? null : (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setDialog({ kind: 'discussion', parameter: pid })}
+                className="h-5 w-5 p-0"
+                title={t('sidebar.discussionParam')}
+              >
+                <MessageSquare className="h-3 w-3" />
+              </Button>
+            )}
           </div>
         </div>
         {activeFlag ? (
@@ -851,13 +859,9 @@ export function DrugMonographSidebar({
           )}
           {hasValue ? (
             <ParameterBadges
-              commentCount={commentCount}
               refCount={paramRefIds.length}
               refIndices={opensSources ? undefined : refIndices}
               references={opensSources ? undefined : refItems}
-              onCommentClick={() =>
-                setDialog({ kind: 'discussion', parameter: pid })
-              }
             />
           ) : null}
         </dd>
@@ -1712,7 +1716,9 @@ export function DrugMonographSidebar({
           canEdit={canSubmitParameterEntry}
           isAdmin={canDirectWrite}
           onMutated={loadDrug}
-          onClose={() => setDialog(null)}
+          verification={verificationLevels[dialog.parameter]}
+          focusCommentId={dialog.focusId}
+          onClose={closeLinkedDialog}
         />
       )}
 

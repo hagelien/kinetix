@@ -3913,6 +3913,7 @@
     "dialogAriaLabel": "Kildeverdier for {{parameter}} i {{drug}}",
     "dialogEmpty": "Ingen kildeverdier er registrert for denne parameteren ennå.",
     "routeSection": "Kilder for administrasjon: {{route}}",
+    "discussionHeading": "Diskusjon",
     "editor": {
       "add": "Legg til kildeverdi",
       "edit": "Rediger",
