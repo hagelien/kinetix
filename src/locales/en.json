@@ -3281,6 +3281,9 @@
     "errorPageTypeUnsupported": "Section editing is only available on topic pages."
   },
   "wikiFact": {
+    "pendingAdd": "In review",
+    "pendingReplace": "Change in review",
+    "pendingRemove": "Removal in review",
     "addFact": "Add fact",
     "addToSection": "+ Add fact to {{section}}",
     "convertProse": "Convert prose to facts ({{count}})",

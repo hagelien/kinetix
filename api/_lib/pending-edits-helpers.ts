@@ -380,6 +380,46 @@ function factConflictKey(
   return null;
 }
 
+/**
+ * Which pending wiki_fact / wiki_section edits on the same page an approved
+ * wiki_section op makes stale. Kept narrow on purpose: section ops move a
+ * heading together with its body, and facts anchor on the sectionId, so
+ * most section changes leave other pending work untouched.
+ *
+ * - wiki_fact: stale only when it targets a section that was just removed.
+ * - wiki_section on the same sectionId: stale after a rename or remove of
+ *   that section (a second rename would silently overwrite the first; any
+ *   op on a removed section can no longer apply).
+ * - wiki_section add/reorder: carry a position computed against the old
+ *   heading list, so they are stale after any approved add/reorder/remove.
+ */
+export function wikiSectionSiblingConflictIds(
+  approved: { operation: unknown; sectionId: string | null },
+  siblings: Array<{
+    id: number;
+    editType: string;
+    sectionId: string | null;
+    operation: string | null;
+  }>,
+): number[] {
+  const op = approved.operation;
+  const sid = approved.sectionId;
+  const shiftsPositions = op === 'add' || op === 'reorder' || op === 'remove';
+  return siblings
+    .filter((s) => {
+      const sameSection = sid !== null && s.sectionId === sid;
+      if (s.editType === 'wiki_fact') {
+        return op === 'remove' && sameSection;
+      }
+      if (s.editType !== 'wiki_section') return false;
+      if (sameSection && (op === 'edit' || op === 'remove')) return true;
+      return (
+        shiftsPositions && (s.operation === 'add' || s.operation === 'reorder')
+      );
+    })
+    .map((s) => s.id);
+}
+
 function buildConflictMarker(
   approvedEditId: number,
   reviewerId: number,
@@ -495,20 +535,53 @@ async function markConflictingPendingEdits(
   }
 
   if (edit.editType === 'wiki_section' && edit.targetId) {
-    // Section CRUD reshapes the heading list, so any pending edit
-    // anchored on a sectionId on the same page may now be stale:
-    // - wiki_section: a remove/reorder/rename may have invalidated
-    //   another pending op's anchor or position.
-    // - wiki_fact: facts anchor on sectionId; a removed or moved
-    //   section breaks the splice.
-    // - wiki_page: would overwrite the section change with the
-    //   pre-section snapshot.
+    // A pending wiki_page edit carries a whole-page snapshot that would
+    // overwrite the section change, so it is always stale.
     await flagConflictingPending(
-      ['wiki_page', 'wiki_fact', 'wiki_section'],
+      ['wiki_page'],
       edit.targetId,
       edit.id,
       reviewerId,
     );
+
+    // Section ops move heading + body as one unit and facts anchor on the
+    // sectionId (re-validated against the live page at approval), so a
+    // rename / add / reorder leaves every pending fact on the page valid.
+    // Only the narrower collisions below are flagged.
+    const siblings = await db
+      .select({
+        id: pendingEdits.id,
+        editType: pendingEdits.editType,
+        sectionId: pendingEdits.sectionId,
+        operation: sql<string | null>`(${pendingEdits.proposedValue}->>'operation')`,
+      })
+      .from(pendingEdits)
+      .where(
+        and(
+          inArray(pendingEdits.editType, ['wiki_fact', 'wiki_section']),
+          eq(pendingEdits.targetId, edit.targetId),
+          eq(pendingEdits.status, 'pending'),
+          ne(pendingEdits.id, edit.id),
+        ),
+      );
+    const conflictIds = wikiSectionSiblingConflictIds(
+      {
+        operation: (edit.proposedValue as { operation?: unknown } | null)
+          ?.operation,
+        sectionId: edit.sectionId,
+      },
+      siblings,
+    );
+    if (conflictIds.length > 0) {
+      const marker = buildConflictMarker(edit.id, reviewerId);
+      await db
+        .update(pendingEdits)
+        .set({
+          proposedMeta:
+            sql`CASE WHEN jsonb_typeof(${pendingEdits.proposedMeta}) = 'object' THEN ${pendingEdits.proposedMeta} ELSE '{}'::jsonb END || ${marker}::jsonb` as never,
+        })
+        .where(inArray(pendingEdits.id, conflictIds));
+    }
     return;
   }
 
