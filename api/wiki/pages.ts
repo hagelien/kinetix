@@ -7,7 +7,7 @@
  *   DELETE — Delete page (?slug=, admin role)
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { eq, ne, desc, and, sql, type SQL } from 'drizzle-orm';
+import { eq, ne, desc, and, inArray, sql, type SQL } from 'drizzle-orm';
 import {
   json,
   error,
@@ -1486,6 +1486,9 @@ async function handleUpdate(
 
 // ─── DELETE: delete page ────────────────────────────────────────────────────
 
+/** Pending-edit types whose `target_id` is a `wiki_pages.id`. */
+const WIKI_SCOPED_EDIT_TYPES = ['wiki_page', 'wiki_section', 'wiki_fact'];
+
 async function handleDelete(
   req: IncomingMessage,
   res: ServerResponse,
@@ -1510,7 +1513,13 @@ async function handleDelete(
     // remove content the read and update paths answer 404 for. Resolve the
     // page first and apply the same visibility rule.
     const [page] = await db
-      .select({ id: wikiPages.id, status: wikiPages.status })
+      .select({
+        id: wikiPages.id,
+        status: wikiPages.status,
+        pageType: wikiPages.pageType,
+        drugCid: wikiPages.drugCid,
+        entityId: wikiPages.entityId,
+      })
       .from(wikiPages)
       .where(eq(wikiPages.slug, slug))
       .limit(1);
@@ -1542,10 +1551,65 @@ async function handleDelete(
       }
     }
 
-    const [deleted] = await db
-      .delete(wikiPages)
-      .where(eq(wikiPages.id, page.id))
-      .returning({ id: wikiPages.id });
+    // A drug or bio-entity monograph belongs to its record while that record
+    // exists: every drug and every bio entity owns one (ensureDrugMonograph /
+    // ensureEntityMonograph), so deleting the page alone would leave the
+    // record without it and its curated text gone. Deleting the drug takes
+    // its monograph with it. A monograph whose record is already gone (a bio
+    // entity's delete sets entity_id to null) is an ordinary orphan and may
+    // be removed here.
+    const ownedByRecord =
+      (page.pageType === 'drug_monograph' &&
+        page.drugCid != null &&
+        (await resolveOwningDrugIdForMonograph(db, page.drugCid)) != null) ||
+      (page.pageType === 'entity_monograph' && page.entityId != null);
+    if (ownedByRecord) {
+      error(
+        res,
+        409,
+        'A monograph belongs to its substance or bio entity and cannot be deleted on its own.',
+        'monograph_owned_by_record',
+      );
+      return;
+    }
+
+    // The page's facts live in its content, and its revisions, categories and
+    // fact discussions cascade on their foreign keys. Three things point at
+    // the page by a plain integer instead and are cleaned up here, in the
+    // same transaction, so nothing is left dangling:
+    //   - wiki-scoped pending edits (target_id = page id), which would sit in
+    //     the review queue against a page that can no longer take them — the
+    //     same teardown the drug delete and drug merge do;
+    //   - sub-pages (parent_id), which move up to the top level;
+    //   - the admin's agent-focus page selection (page_ids).
+    const deleted = await inTransaction(async () => {
+      const tx = getDb();
+      await tx
+        .delete(pendingEdits)
+        .where(
+          and(
+            eq(pendingEdits.targetId, page.id),
+            inArray(pendingEdits.editType, WIKI_SCOPED_EDIT_TYPES),
+          ),
+        );
+      await tx
+        .update(wikiPages)
+        .set({ parentId: null })
+        .where(eq(wikiPages.parentId, page.id));
+      await tx.execute(sql`
+        UPDATE agent_focus_config
+        SET page_ids = (
+          SELECT COALESCE(jsonb_agg(elem), '[]'::jsonb)
+          FROM jsonb_array_elements(page_ids) elem
+          WHERE (elem #>> '{}')::int <> ${page.id}
+        )
+        WHERE page_ids @> ${JSON.stringify([page.id])}::jsonb`);
+      const [row] = await tx
+        .delete(wikiPages)
+        .where(eq(wikiPages.id, page.id))
+        .returning({ id: wikiPages.id });
+      return row;
+    });
 
     if (!deleted) {
       error(res, 404, 'Page not found');

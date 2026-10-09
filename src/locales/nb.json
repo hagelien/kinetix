@@ -2603,6 +2603,10 @@
     "pageNotFoundDesc": "Wikisiden «{{slug}}» finnes ikke.",
     "backToWiki": "Tilbake til Wiki",
     "edit": "Rediger",
+    "deletePage": "Slett side",
+    "deletingPage": "Sletter…",
+    "deletePageConfirm": "Slette siden «{{title}}» permanent? Alle faktaene på siden, versjonshistorikken, faktadiskusjonene og ventende forslag slettes sammen med den. Undersider beholdes og flyttes til toppnivå. Dette kan ikke angres.",
+    "deletePageError": "Kunne ikke slette siden.",
     "drugMonograph": "Legemiddelmonografi",
     "seedPrompt": {
       "copy": "Kopier forskningsprompt",
