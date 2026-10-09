@@ -9,8 +9,11 @@
 -- an admin decision kept in the database.
 --
 -- The existing group keeps exactly the access it had: it is found by the md5
--- of its slug (so the slug itself is not written here), plus the neutral `lab`
--- slug that 0027 now seeds on a fresh database.
+-- of its slug, so the slug itself is not written here. Nothing else is
+-- granted: a group matched by any other slug (including one an admin created
+-- by hand) could be unrelated, and the material behind these grants must not
+-- reach it by accident. A fresh database therefore starts with no group
+-- granted anything; an admin sets `grants` on the group that should have it.
 --
 -- Every statement is separated by a statement-breakpoint marker: the production
 -- migrator sends each chunk as one prepared statement.
@@ -22,5 +25,4 @@ ALTER TABLE "user_groups"
 UPDATE "user_groups"
 SET "grants" = '["methods.read","pmConcentrations.read","refsDetectionTimes.read","patternProfile.view"]'::jsonb,
     "updated_at" = now()
-WHERE md5("slug") = 'c5945d0e3394cb647791fb58615f7f56'
-   OR "slug" = 'lab';
+WHERE md5("slug") = 'c5945d0e3394cb647791fb58615f7f56';

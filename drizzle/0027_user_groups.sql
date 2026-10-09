@@ -25,6 +25,6 @@ INSERT INTO "user_groups" ("slug", "name", "description")
 VALUES (
   'lab',
   'Lab',
-  'Access to internal laboratory data (granted features are set in user_groups.grants).'
+  'Feature access group. What it unlocks is set in user_groups.grants (0145).'
 )
 ON CONFLICT ("slug") DO NOTHING;
