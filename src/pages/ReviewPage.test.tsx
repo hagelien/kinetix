@@ -14,8 +14,14 @@ vi.mock('react-i18next', () => ({
 
 // Reviewer viewer (admin, id 1) so the pending edit below — submitted by a
 // different user — is approvable.
-const authState = {
+const authState: {
+  user: { id: number; role: string; username: string; displayName: null };
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  permissionOverrides: Record<string, string>;
+} = {
   user: { id: 1, role: 'admin', username: 'mod', displayName: null },
+  permissionOverrides: {},
   isAuthenticated: true,
   isLoading: false,
 };
@@ -76,7 +82,10 @@ function makeEdit(): PendingEditRow {
 }
 
 describe('ReviewPage', () => {
-  afterEach(() => vi.clearAllMocks());
+  afterEach(() => {
+    vi.clearAllMocks();
+    authState.permissionOverrides = {};
+  });
 
   it('refreshes in place after a review without tearing the list down', async () => {
     const edit = makeEdit();
@@ -195,5 +204,38 @@ describe('ReviewPage', () => {
     expect(await screen.findByRole('status')).toHaveTextContent(
       'review.linkedEditDecided',
     );
+  });
+
+  it('offers the dispute-queue link only to a viewer who can resolve disputes', async () => {
+    fetchPendingEdits.mockResolvedValue({
+      pendingEdits: [{ ...makeEdit(), status: 'approved' }],
+    });
+    // Editor keeps dispute.queue.read but loses dispute.resolve.
+    authState.permissionOverrides = { 'dispute.resolve': 'admin' };
+    authState.user = { ...authState.user, role: 'editor' };
+
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/review?id=42']}>
+        <ReviewPage />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'review.linkedEditDecided',
+    );
+    expect(
+      screen.queryByText('review.linkedEditDecidedDisputesLink'),
+    ).toBeNull();
+    unmount();
+
+    authState.permissionOverrides = {};
+    render(
+      <MemoryRouter initialEntries={['/review?id=42']}>
+        <ReviewPage />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByText('review.linkedEditDecidedDisputesLink'),
+    ).toBeTruthy();
+    authState.user = { ...authState.user, role: 'admin' };
   });
 });

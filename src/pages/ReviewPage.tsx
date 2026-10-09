@@ -41,6 +41,7 @@ export function ReviewPage() {
   const canFulfilPdfs = useCan('citation.pdf.access');
   const canDropPdfsInBulk = useCan('pdfInbox.upload');
   const canReadDisputeQueue = useCan('dispute.queue.read');
+  const canResolveDisputes = useCan('dispute.resolve');
   const typeFilter = (searchParams.get('type') as TypeFilter | null) ?? 'all';
   const editId = searchParams.get('id');
   // A deep link to one edit (`?id=`, e.g. from a dispute notification) shows
@@ -270,7 +271,7 @@ export function ReviewPage() {
                     defaultValue: decidedLinkedEdit.status,
                   }),
                 })}{' '}
-                {canReadDisputeQueue ? (
+                {canReadDisputeQueue && canResolveDisputes ? (
                   <Link to="/admin?pane=disputes" className="underline">
                     {t('review.linkedEditDecidedDisputesLink')}
                   </Link>
