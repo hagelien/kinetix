@@ -1,10 +1,10 @@
-# Rettstoks's own detection times (the REFS guideline)
+# The laboratory's own detection times (the REFS guideline)
 
 The detection-times module (`/detection-times`) answers "how long can this be
 found" from the literature: three `*DetectionWindow` parameters, pooled from
 cited source values, visible to every reader.
 
-That is not the number a Rettstoks case is interpreted against. The section has
+That is not the number a laboratory case is interpreted against. The section has
 its own approved, restricted urine-interpretation guideline whose table states,
 for urine, the band the section has agreed to use at *its own* cut-offs and for
 *its own* case categories. This feature puts that table in front of the people
@@ -48,7 +48,7 @@ never rendered in the same grid:
 ## The gate
 
 `refsDetectionTimes.read` — admin by default, floored at `authenticated`, and
-also granted by membership in the `rettstoks` group. Same shape as
+also granted by membership in a group granted it in the database. Same shape as
 `methods.read` and `pmConcentrations.read`.
 
 An ungated caller gets `200 { rows: [], gated: true }` — the same answer

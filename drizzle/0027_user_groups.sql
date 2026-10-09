@@ -23,8 +23,8 @@ CREATE INDEX IF NOT EXISTS "user_group_members_user_idx"
 
 INSERT INTO "user_groups" ("slug", "name", "description")
 VALUES (
-  'rettstoks',
-  'Rettstoks',
-  'Access to Rettstoks-specific analytical methods.'
+  'lab',
+  'Lab',
+  'Access to internal laboratory data (granted features are set in user_groups.grants).'
 )
 ON CONFLICT ("slug") DO NOTHING;

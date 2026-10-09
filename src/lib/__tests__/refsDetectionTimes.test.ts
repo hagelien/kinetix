@@ -1,5 +1,5 @@
 /**
- * Matching a Kinetix substance to a row of Rettstoks's guideline.
+ * Matching a Kinetix substance to a row of the laboratory's guideline.
  *
  * The whole feature rests on this: a member looking up a substance is told what
  * the guideline states for it, and a wrong match would put one substance's

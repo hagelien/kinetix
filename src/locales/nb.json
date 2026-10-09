@@ -103,11 +103,11 @@
     "caveatDerived": "Tidsuttrykkene («siste døgnet», «siste par ukene») er avledet av den samlede øvre grensen for vinduet. De er en lesehjelp, ikke en verdi en kilde har oppgitt.",
     "allSubstances": "Påvisningstider for alle stoffer",
     "pooledTitle": "Samlet litteratur (tilgjengelig for alle)",
-    "pooledHint": "Vinduene under er samlet fra publiserte kildeverdier med hver sin referanse, ved kildenes egne påvisningsgrenser. De er ikke Rettstoks sine påvisningstider — de står i egen seksjon lenger ned.",
+    "pooledHint": "Vinduene under er samlet fra publiserte kildeverdier med hver sin referanse, ved kildenes egne påvisningsgrenser. De er ikke laboratoriets egne påvisningstider — de står i egen seksjon lenger ned.",
     "refs": {
-      "title": "Påvisningstider ved Rettstoksikologi (REFS)",
+      "title": "Laboratoriets egne påvisningstider (REFS)",
       "badge": "Kun rettsstoffgruppen",
-      "intro": "Dette er tidene som gjelder for Rettstoks, hentet fra seksjonens egen godkjente retningslinje for fortolkning av urinanalyser. De gjelder urin, ved Rettstoks sine påvisningsgrenser og sakskategorier, og skal ikke blandes med de samlede litteraturvinduene over.",
+      "intro": "Dette er tidene som gjelder for laboratoriet, hentet fra laboratoriets egen godkjente retningslinje for fortolkning av urinanalyser. De gjelder urin, ved laboratoriets påvisningsgrenser og sakskategorier, og skal ikke blandes med de samlede litteraturvinduene over.",
       "metabolites": "Metabolitter: {{names}}",
       "viaMetabolite": "{{metabolite}} er ført opp som metabolitt av {{parent}} i retningslinjen — påvisningstiden gjelder denne raden.",
       "viaShort": "{{text}} (som metabolitt av {{parent}})",
@@ -1812,7 +1812,7 @@
     "editor": "redaktør",
     "adminRole": "administrator",
     "groups": "Brukergrupper",
-    "groupsDescription": "Administrer grupper for funksjonstilgang. Medlemskap i Rettstoks Ã¥pner interne analysemetoder.",
+    "groupsDescription": "Administrer grupper for funksjonstilgang. Hva hver gruppe åpner, tildeles i databasen.",
     "groupNamePlaceholder": "Gruppenavn",
     "groupSlugPlaceholder": "slug",
     "groupDescriptionPlaceholder": "Beskrivelse",
@@ -1989,7 +1989,7 @@
         "admin_conversationIngestion_run": "Importere en samtalepakke",
         "admin_settings_manage": "Endre policybrytere for hele nettstedet",
         "admin_navVisibility_manage": "Skjule menylenker for vanlige brukere",
-        "refsDetectionTimes_read": "Lese Rettstoks sine påvisningstider (REFS-retningslinjen)"
+        "refsDetectionTimes_read": "Lese laboratoriets egne påvisningstider (REFS-retningslinjen)"
       },
       "errorUnknownCapability": "«{{capability}}» er ikke en rettighet denne versjonen kjenner. Last siden på nytt og prøv igjen.",
       "errorLockedCapability": "«{{capability}}» kan ikke delegeres — den forblir hos administratorer.",
@@ -1998,7 +1998,7 @@
     },
     "drugMerge": {
       "title": "Slå sammen legemidler",
-      "description": "Slå sammen to katalogoppføringer for samme stoff til én. Oppføringen med en skrevet monografi beholdes; den andres data — parametere, kildeoppføringer, metodemedlemskap (rettstoks), metabolitt- og forløperlenker, og atlasrader — flyttes over, lenker til siden som fjernes oppdateres, og duplikatet slettes.",
+      "description": "Slå sammen to katalogoppføringer for samme stoff til én. Oppføringen med en skrevet monografi beholdes; den andres data — parametere, kildeoppføringer, metodemedlemskap, metabolitt- og forløperlenker, og atlasrader — flyttes over, lenker til siden som fjernes oppdateres, og duplikatet slettes.",
       "drugA": "Første legemiddel",
       "drugB": "Andre legemiddel",
       "searchPlaceholder": "Søk på navn, alias eller CID…",
@@ -2050,7 +2050,7 @@
       },
       "profileNoteHelp": "Bare notatteksten velges her — sitater fra begge oppføringene beholdes alltid på den gjenværende profilen.",
       "dataConflictsTitle": "Kan ikke slå sammen — motstridende validerte data",
-      "dataConflictsHelp": "De to oppføringene har rader med samme identitetsnøkkel men ulike validerte data (rettstoksfigurer, kohortstatistikk, pKa-målinger, eller metabolske forbindelser med egen dokumentasjon). En sammenslåing kan ikke velge mellom to uavhengige målinger stille. Løs dette på legemidlene først — fjern eller korriger den ene — og slå deretter sammen.",
+      "dataConflictsHelp": "De to oppføringene har rader med samme identitetsnøkkel men ulike validerte data (forensiske figurer, kohortstatistikk, pKa-målinger, eller metabolske forbindelser med egen dokumentasjon). En sammenslåing kan ikke velge mellom to uavhengige målinger stille. Løs dette på legemidlene først — fjern eller korriger den ene — og slå deretter sammen.",
       "classMismatchTitle": "Kan ikke slå sammen — stoffklassene er forskjellige",
       "classMismatchHelp": "De to oppføringene er uenige om hva dette stoffet ER — den som beholdes er «{{winner}}», den som fjernes er «{{loser}}». Stoffklasse bestemmer hvilke parametere som er definert i det hele tatt (biotilgjengelighet og doseranger er udefinert for ikke-administrerte klasser), så den kan ikke velges stille. Løs klassifiseringen på legemidlene først, og slå deretter sammen.",
       "errors": {
@@ -2717,7 +2717,7 @@
       },
       "methods": {
         "label": "Bare komponenter i utvalgte metoder",
-        "description": "Begrens agentene til alle legemiddelkomponentene i de analysemetodene du velger nedenfor. Synlig bare for agenter som jobber med innhold – brukere trenger ikke å være medlemmer av rettstoks-gruppen."
+        "description": "Begrens agentene til alle legemiddelkomponentene i de analysemetodene du velger nedenfor. Synlig bare for agenter som jobber med innhold – brukere trenger ikke å være medlemmer av en gruppe med metodetilgang."
       }
     },
     "skipWikiContent": {
@@ -4512,16 +4512,16 @@
     }
   },
   "forensicConc": {
-    "title": "Rettstoksikologiske dødskonsentrasjoner",
-    "toggle": "Vis rettstoksikologiske obduksjonsbånd",
-    "notAThreshold": "Dette er konsentrasjoner MÅLT ved obduksjon i hver rettstoksikologiske kategori — ikke terskler. Et bånd viser spennet av publiserte funn; det betyr ikke at en konsentrasjon inni båndet er (eller ikke er) dødelig.",
+    "title": "Forensisk-toksikologiske dødskonsentrasjoner",
+    "toggle": "Vis forensisk-toksikologiske obduksjonsbånd",
+    "notAThreshold": "Dette er konsentrasjoner MÅLT ved obduksjon i hver forensisk-toksikologiske kategori — ikke terskler. Et bånd viser spennet av publiserte funn; det betyr ikke at en konsentrasjon inni båndet er (eller ikke er) dødelig.",
     "offScale": "På en lineær akse klippes et bånd langt over kurven ved øvre kant — bytt til logaritmisk akse for å se hele utstrekningen.",
-    "noData": "Ingen rettstoksikologiske kildeverdier for dette stoffet",
+    "noData": "Ingen forensisk-toksikologiske kildeverdier for dette stoffet",
     "showIndividual": "Vis enkeltreferanser",
     "evidenceSummary": "n = {{n}} fordelt på {{refs}} referanse(r)",
     "bandLabel": "{{category}} (n = {{n}}, {{refs}} ref)",
     "individualLabel": "{{source}} (n = {{n}})",
-    "conversionUnavailable": "Rettstoksikologiske data finnes, men vises ikke (kan ikke konverteres til grafens enhet):",
+    "conversionUnavailable": "Forensisk-toksikologiske data finnes, men vises ikke (kan ikke konverteres til grafens enhet):",
     "category": {
       "postmortem_non_intox": "Ikke-forgiftningsdødsfall",
       "postmortem_mono_intox": "Dødelig — monointoks",

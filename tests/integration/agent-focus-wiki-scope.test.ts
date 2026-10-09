@@ -200,7 +200,7 @@ describe('wikiContentFocusRefusal', () => {
       .values({ methodId: method!.id, drugId: component });
 
     const converted = await seedPage(author, {
-      slug: 'kokain-i-rettstoksikologi',
+      slug: 'kokain-i-forensisk-toksikologi',
       pageType: 'topic',
       drugCid: component,
     });

@@ -55,7 +55,7 @@ vi.mock('@/data', () => ({
   loadComponents: vi.fn(),
   loadMethods: vi.fn().mockResolvedValue([]),
   // The auth store clears the methods cache whenever a sign-in changes who may
-  // read them — which the Rettstoks member below does.
+  // read them — which the granted member below does.
   clearMethodsCache: vi.fn(),
 }));
 
@@ -403,7 +403,7 @@ describe('DrugTable columns', () => {
           enabledConcentrationUnits: ['µmol/L'],
           notificationSettings: null,
           favoriteParameters: [],
-          groups: [{ id: 1, slug: 'rettstoks', name: 'Rettstoks' }],
+          groups: [{ id: 1, slug: 'lab', name: 'Lab', grants: ['methods.read', 'pmConcentrations.read', 'refsDetectionTimes.read', 'patternProfile.view'] }],
         },
         isAuthenticated: true,
         isLoading: false,
@@ -429,7 +429,7 @@ describe('DrugTable columns', () => {
   });
 
   it('does not leave a REFS cell behind when the reader may not see the column', async () => {
-    // The column set is persisted per BROWSER: a Rettstoks member who enables
+    // The column set is persisted per BROWSER: a granted member who enables
     // the REFS column leaves its id in local storage for whoever signs in
     // next. Filtering the header alone left an extra cell in every row and
     // shifted the whole table one column out of step with its own headings.
@@ -482,7 +482,7 @@ describe('DrugTable columns', () => {
           enabledConcentrationUnits: ['µmol/L'],
           notificationSettings: null,
           favoriteParameters: [],
-          groups: [{ id: 1, slug: 'rettstoks', name: 'Rettstoks' }],
+          groups: [{ id: 1, slug: 'lab', name: 'Lab', grants: ['methods.read', 'pmConcentrations.read', 'refsDetectionTimes.read', 'patternProfile.view'] }],
         },
         isAuthenticated: true,
         isLoading: false,
@@ -546,7 +546,7 @@ describe('DrugTable columns', () => {
           enabledConcentrationUnits: ['µmol/L'],
           notificationSettings: null,
           favoriteParameters: [],
-          groups: [{ id: 1, slug: 'rettstoks', name: 'Rettstoks' }],
+          groups: [{ id: 1, slug: 'lab', name: 'Lab', grants: ['methods.read', 'pmConcentrations.read', 'refsDetectionTimes.read', 'patternProfile.view'] }],
         },
         isAuthenticated: true,
         isLoading: false,

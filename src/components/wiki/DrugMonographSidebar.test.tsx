@@ -680,7 +680,7 @@ describe('DrugMonographSidebar', () => {
         },
       ],
     });
-    // A plain contributor is not in the rettstoks group and is not admin, so
+    // A plain contributor is not in a granted group and is not admin, so
     // analytical-method figures must not be requested or shown.
     setUser([], 'contributor');
     renderSidebar();

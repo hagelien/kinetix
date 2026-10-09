@@ -98,6 +98,17 @@ export const RETIRED_MIGRATION_HASHES: Readonly<
   '0100_pm_concentration_distributions': [
     '83b87968b789171f772d1a4da6368d78647a7bd0d23faf84c218e9cac1345dca',
   ],
+  // Removed an internal group name. 0027's seed now inserts a neutral group,
+  // which only a fresh database sees; 0145 carries the change for this one.
+  '0027_user_groups': [
+    '1384d2d72909836547785cd84544a7016e7fb154c01a0ae0968954fe41f8bc43',
+  ],
+  '0054_agent_focus_methods': [
+    '05a78d69b6b92dd60178216b376f02b6222c52f9b136b20d201745a60ff4d0a2',
+  ],
+  '0136_refs_detection_guidelines': [
+    'f79af36747c32df6ea73e4fe02624e0ababa956fb64619c3b7ef4a74e80cc8d9',
+  ],
 };
 
 /** The fields of a journal entry this decision needs. */

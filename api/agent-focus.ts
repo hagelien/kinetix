@@ -53,7 +53,7 @@ interface FocusMethod {
   name: string;
   /**
    * Resolved drug-component ids for this method. Surfaced so the agent can
-   * scope its work to these components without needing `rettstoks` group
+   * scope its work to these components without needing method-access group
    * access to /api/methods.
    */
   drugIds: number[];
@@ -109,7 +109,7 @@ function toStringArray(value: unknown): string[] {
  * Hydrate stored analytical-method ids with display metadata and their
  * resolved component drug ids, preserving the admin-chosen order. The drug
  * ids let the scheduled maintainer scope to a method's components without
- * `rettstoks` access to /api/methods.
+ * group-granted access to /api/methods.
  */
 async function hydrateMethods(methodIds: number[]): Promise<FocusMethod[]> {
   if (methodIds.length === 0) return [];

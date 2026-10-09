@@ -69,7 +69,7 @@ export function DetectionTimesPage() {
   const canEdit = useCan('edit.parameterEntry.submit');
   const isAdmin = useCan('edit.directWrite');
 
-  // Rettstoks's own guideline table. Members see it as a section of its own,
+  // The laboratory's own guideline table. Members see it as a section of its own,
   // below the pooled windows; nobody else knows it is there.
   const refs = useRefsDetectionTimes();
 
@@ -356,7 +356,7 @@ export function DetectionTimesPage() {
             </div>
           </div>
 
-          {/* Only drawn for a reader who ALSO sees the Rettstoks section. For
+          {/* Only drawn for a reader who ALSO sees the laboratory section. For
               everyone else there is one kind of detection time on this page and
               labelling it would answer a question they have not been given the
               other half of. */}

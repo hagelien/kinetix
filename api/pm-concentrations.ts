@@ -6,7 +6,7 @@
  *   GET ?cids=3016,2997 — the same, addressed by PubChem CID, for callers
  *                         holding catalog components rather than drug rows.
  *
- * Read access is gated to admins + members of the `rettstoks` group
+ * Read access is gated to admins + members of a group granted it in the database
  * (`canAccessPmConcentrations`). There is no write path here on purpose: a
  * cohort is transcribed as a whole from its source table and seeded by
  * `npm run seed:pm-concentrations`, so there is nothing an HTTP caller could

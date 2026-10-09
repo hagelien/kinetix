@@ -184,7 +184,7 @@ export const MONOGRAPH_SECTIONS: readonly MonographSection[] = [
   {
     id: 'forensic',
     order: 9,
-    titleNb: 'Rettstoksikologisk tolkning',
+    titleNb: 'Forensisk tolkning',
     titleEn: 'Forensic interpretation',
     descriptionNb:
       'Tolkning av positive/negative funn, postmortem-spesifikke forhold, tidsestimering og typiske forbehold.',

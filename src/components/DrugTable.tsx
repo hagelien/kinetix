@@ -923,7 +923,7 @@ export function DrugTable({ fullScreen = false }: DrugTableProps = {}) {
     loadInitialVisibleColumns(),
   );
 
-  // Rettstoks's guideline table, for the gated REFS column. `canAccess` is
+  // The laboratory's guideline table, for the gated REFS column. `canAccess` is
   // false for everyone else, and then the column does not exist at all — it is
   // not merely empty, because an empty column reads as "no detection time" for
   // substances the guideline does in fact name.
@@ -993,7 +993,7 @@ export function DrugTable({ fullScreen = false }: DrugTableProps = {}) {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Analytical methods are admin/Rettstoks-gated; avoid a guaranteed
+  // Analytical methods are admin/group-grant-gated; avoid a guaranteed
   // auth-only API miss for everyone else.
   useEffect(() => {
     if (!canLoadMethods) {
@@ -1079,7 +1079,7 @@ export function DrugTable({ fullScreen = false }: DrugTableProps = {}) {
    *
    * `visibleColumns` is the reader's *stored* selection and can name a column
    * this reader may not see: the column set is persisted per browser, so a
-   * Rettstoks member who enables the REFS column leaves its id in local storage
+   * granted member who enables the REFS column leaves its id in local storage
    * for whoever signs in next. Filtering the header alone then left the cell
    * behind in every row and shifted the whole table one column out of step with
    * its own headings. Rows and headings now read the same list, by

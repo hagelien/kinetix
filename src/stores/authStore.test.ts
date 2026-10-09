@@ -216,7 +216,7 @@ describe('auth error code → i18n key mapping (DB-outage UX)', () => {
   });
 });
 
-// #405 follow-up: /api/methods is admin / Rettstoks-gated, so the
+// #405 follow-up: /api/methods is admin/group-grant-gated, so the
 // module-scoped methodsCache must not survive auth-state changes within
 // the same tab — otherwise the next user inherits the previous user's
 // gated/ungated response.
@@ -294,7 +294,7 @@ describe('analytical-methods cache invalidation on auth change', () => {
 
     useAuthStore.setState({
       user: makeUser({
-        groups: [{ id: 1, slug: 'rettstoks', name: 'Rettstoks' }],
+        groups: [{ id: 1, slug: 'lab', name: 'Lab', grants: ['methods.read', 'pmConcentrations.read', 'refsDetectionTimes.read', 'patternProfile.view'] }],
       }),
       isAuthenticated: true,
     });

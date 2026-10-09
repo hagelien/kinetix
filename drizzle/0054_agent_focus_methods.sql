@@ -2,8 +2,8 @@
 --
 -- Lets an admin point the scheduled drug-database maintainer at every drug
 -- component that belongs to a selected set of analytical methods (the
--- `rettstoks` test panels). Stored as analytical_methods.id values; the
--- agent never needs `rettstoks` group membership — GET /api/agent-focus
+-- laboratory's test panels). Stored as analytical_methods.id values; the
+-- agent never needs method-access group membership — GET /api/agent-focus
 -- resolves the component drug ids on its behalf.
 --
 --   mode = 'methods' → restrict work to the components of method_ids.

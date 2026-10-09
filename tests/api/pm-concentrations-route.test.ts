@@ -134,11 +134,11 @@ describe('GET /api/pm-concentrations', () => {
     expect(JSON.parse(state.body).gated).toBe(true);
   });
 
-  it('serves a rettstoks member', async () => {
+  it('serves a granted member', async () => {
     getUserFromRequestMock.mockResolvedValue({
       userId: 7,
       role: 'authenticated',
-      groups: [{ slug: 'rettstoks' }],
+      groups: [{ slug: 'lab', grants: ['methods.read', 'pmConcentrations.read', 'refsDetectionTimes.read', 'patternProfile.view'] }],
     });
     mockQueries([DISTRIBUTION_ROW]);
     const { res, state } = createResponse();

@@ -128,7 +128,7 @@ never propose a new page for a drug that exists.
 | `effects` | Effekter, bivirkninger og komplikasjoner | Effects, adverse effects and complications |
 | `toxicity` | Toksisitet og overdose | Toxicity and overdose |
 | `analytical` | Analytisk toksikologi | Analytical toxicology |
-| `forensic` | Rettstoksikologisk tolkning | Forensic interpretation |
+| `forensic` | Forensisk tolkning | Forensic interpretation |
 
 ## Source types
 

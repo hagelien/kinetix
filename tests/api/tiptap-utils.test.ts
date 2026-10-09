@@ -139,7 +139,7 @@ describe('renderHtml — v2 monograph', () => {
     // the active i18n locale before sanitization.
     expect(html).toContain('Farmakodynamikk</h2>');
     expect(html).toContain('Farmakokinetikk</h2>');
-    expect(html).toContain('Rettstoksikologisk tolkning</h2>');
+    expect(html).toContain('Forensisk tolkning</h2>');
     expect(html).toContain('data-monograph-section-title="pd"');
     expect(html).toContain('data-monograph-section-title="pk"');
   });

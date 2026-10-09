@@ -3019,7 +3019,7 @@ export async function mergeDrugs(
     await db.update(drugMetabolismProfiles).set({ drugId: winnerId }).where(eq(drugMetabolismProfiles.drugId, loserId));
   }
 
-  // 3. Rettstoks method memberships (analytical_method_components, PK
+  // 3. Analytical-method memberships (analytical_method_components, PK
   //    (method_id, drug_id)) and the atlas observations that reference them.
   //
   //    pattern_reference_observations carries a composite FK

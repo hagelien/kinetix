@@ -12,7 +12,7 @@
  *   DELETE ?id=    — Delete a method. Its components (drug rows) are NOT
  *                    deleted — only the membership join rows go away.
  *
- * Read access is gated to admins + members of the `rettstoks` group
+ * Read access is gated to admins + members of a group granted it in the database
  * (`canAccessAnalyticalMethods`). Writes require the `editor` ("redaktør")
  * role or higher.
  */

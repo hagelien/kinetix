@@ -132,7 +132,7 @@ export const CAPABILITY_LIST = [
     defaultTier: 'admin',
     floorTier: 'authenticated',
     enforcedAt: ['GET /api/methods', 'GET /api/drugs?methodId='],
-    alsoGrantedBy: ['group:rettstoks'],
+    alsoGrantedBy: ['group grant (database)'],
   },
   {
     id: 'learn.read',
@@ -154,11 +154,11 @@ export const CAPABILITY_LIST = [
     defaultTier: 'admin',
     floorTier: 'authenticated',
     enforcedAt: ['GET /api/pm-concentrations'],
-    alsoGrantedBy: ['group:rettstoks'],
+    alsoGrantedBy: ['group grant (database)'],
   },
   {
-    // Rettstoksikologi's own urine detection times, transcribed from the
-    // section's approved guideline. Gated like the methods and the postmortem
+    // The laboratory's own urine detection times, transcribed from its
+    // approved guideline. Gated like the methods and the postmortem
     // cohort, and for the same reason: these bands are one laboratory's agreed
     // statement for its own cut-offs, not a pooled literature window, and the
     // guideline they come from is an internal restricted document. `floorTier`
@@ -168,7 +168,7 @@ export const CAPABILITY_LIST = [
     defaultTier: 'admin',
     floorTier: 'authenticated',
     enforcedAt: ['GET /api/refs-detection-times'],
-    alsoGrantedBy: ['group:rettstoks'],
+    alsoGrantedBy: ['group grant (database)'],
   },
   {
     id: 'review.queue.readAll',

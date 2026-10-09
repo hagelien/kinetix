@@ -300,7 +300,7 @@ function printDataset(dataset: PmConcentrationDataset, dryRun: boolean): void {
   console.log(`  rows       : ${dataset.entries.length} analytes`);
   if (!source.published) {
     console.log(
-      '  note       : unpublished material — gated to admins and the rettstoks group',
+      '  note       : unpublished material — gated to admins and granted groups',
     );
   }
 }

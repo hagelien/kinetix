@@ -74,7 +74,7 @@ leave:
   unreachable, so signing back in re-reads the server instead of resurrecting a
   stale answer.
 
-Gated to admins and the `rettstoks` group, via the `pmConcentrations.read`
+Gated to admins and granted groups, via the `pmConcentrations.read`
 capability (`canAccessPmConcentrations`). The capability's `floorTier` is
 `authenticated`, so no admin configuration can put unpublished forensic material
 in front of anonymous visitors. An ungated caller gets
@@ -235,7 +235,7 @@ Afterwards:
    (it prints every one — see "Substances the seeder creates" below).
 2. Confirm the `reviewNote` analyte mappings the seeder prints.
 3. Check the feature is live: open a seeded drug's monograph as an admin or
-   `rettstoks` member and compare its row (N, median, percentiles) with the
+   granted-group member and compare its row (N, median, percentiles) with the
    source table. Nothing appears for anyone else, by design.
 
 ## Adding another cohort

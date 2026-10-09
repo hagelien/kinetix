@@ -51,10 +51,10 @@ No migration is needed: the table stores deviations, not the registry.
 ## Two access paths, not one
 
 Analytical methods (`methods.read`), postmortem concentrations
-(`pmConcentrations.read`), Rettstoks's own detection times
+(`pmConcentrations.read`), the laboratory's own detection times
 (`refsDetectionTimes.read`) and Kinetix Learn (`learn.read`) are reachable
 **either** through the capability **or** through membership in an
-admin-managed feature group (`rettstoks`, `kinetix-learn`). All four
+admin-managed feature group (one granted it in `user_groups.grants`, or `kinetix-learn`). All four
 default to the admin tier, which is exactly the old
 `role === 'admin' || hasGroup(...)` behavior. The admin UI shows the group as
 `alsoGrantedBy` so lowering the tier is visibly not the only way in.

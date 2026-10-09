@@ -10,7 +10,7 @@
 
 **Decisions locked in (from product owner):**
 - **Vertical slice first.** Source Library + unit renderer + assessment ship together and unlock the menu entry. The **Topic Map** (§5.2) is a fast second increment (sketched in "Deferred", not built here).
-- **Gate behind a feature group.** A new admin-managed group `kinetix-learn` controls the menu entry, exactly like `rettstoks` gates analytical methods. Pages remain reachable by direct URL for testing.
+- **Gate behind a feature group.** A new admin-managed group `kinetix-learn` controls the menu entry, exactly like the group-gated analytical methods. Pages remain reachable by direct URL for testing.
 - **Stateless assessment.** Scoring is client-side; nothing is persisted. All attempt/progress/competence tracking lands in **Phase C** with the adaptive engine.
 
 ## Global Constraints
@@ -32,7 +32,7 @@
 | Content/meta schema | `api/_lib/schemas.ts` (`learningUnitContentSchema`, `LearningUnitContent`, `LEARNING_DIFFICULTIES`) | Source of truth for the FE type |
 | Router | `src/router.tsx` | Lazy routes + `withRouteFallback` / `withAuthRequired` |
 | Header menu | `src/components/Header.tsx` (`NAV_ITEMS`, ~line 45) | Conditional-include gating pattern |
-| Feature gating | `src/lib/featureAccess.ts` (`hasGroup`, `canAccessAnalyticalMethods`, `RETTSTOKS_GROUP_SLUG`) | Add `KINETIX_LEARN_GROUP_SLUG` + `canAccessKinetixLearn` |
+| Feature gating | `src/lib/featureAccess.ts` (`hasGroup`, `canAccessAnalyticalMethods`) | Add `KINETIX_LEARN_GROUP_SLUG` + `canAccessKinetixLearn` |
 | Admin-managed groups | `user_groups` / `api/admin.ts?resource=groups` | Admin creates the `kinetix-learn` group at runtime — no migration |
 | API-client lib pattern | `src/lib/drugApi.ts` | `fetch` + decode helpers; mirror for `learnApi.ts` |
 | Page pattern | `src/pages/MethodsPage.tsx`, `src/pages/wiki/WikiHome.tsx` | `useEffect` fetch with `cancelled` flag |

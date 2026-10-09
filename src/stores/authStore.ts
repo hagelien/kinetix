@@ -30,6 +30,8 @@ export interface AuthGroup {
   id: number;
   slug: string;
   name: string;
+  /** Restricted features the group unlocks, set in the database. */
+  grants?: string[];
 }
 
 export interface AuthUser {
@@ -373,7 +375,7 @@ useAuthStore.subscribe((state) => {
     }
   }
   wasAuthLoading = state.isLoading;
-  // /api/methods is admin/Rettstoks-gated, but loadMethods() memoizes the
+  // /api/methods is admin/group-grant-gated, but loadMethods() memoizes the
   // response at module scope. Without invalidating on auth change, a gated
   // (or ungated) result outlives the session — the next user in the same
   // tab sees the previous user's filter set. Drop the data-layer cache and

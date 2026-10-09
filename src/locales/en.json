@@ -103,11 +103,11 @@
     "caveatDerived": "The time bands (“last 24 hours”, “last couple of weeks”) are derived from the pooled upper bound of the window. They are a reading aid, not a value any source reported.",
     "allSubstances": "Detection times for all substances",
     "pooledTitle": "Pooled literature (available to everyone)",
-    "pooledHint": "The windows below are pooled from published source values, each with its own citation, at those sources' own cut-offs. They are not Rettstoks's detection times — those have a section of their own further down.",
+    "pooledHint": "The windows below are pooled from published source values, each with its own citation, at those sources' own cut-offs. They are not the laboratory's own detection times — those have a section of their own further down.",
     "refs": {
-      "title": "Detection times at Rettstoksikologi (REFS)",
-      "badge": "Rettstoks group only",
-      "intro": "These are the times that apply at Rettstoks, taken from the section's own approved guideline for interpreting urine analyses. They apply to urine, at Rettstoks's cut-offs and case categories, and must not be mixed with the pooled literature windows above.",
+      "title": "The laboratory's own detection times (REFS)",
+      "badge": "Restricted group only",
+      "intro": "These are the times that apply at the laboratory, taken from its own approved guideline for interpreting urine analyses. They apply to urine, at the laboratory's cut-offs and case categories, and must not be mixed with the pooled literature windows above.",
       "metabolites": "Metabolites: {{names}}",
       "viaMetabolite": "{{metabolite}} is listed as a metabolite of {{parent}} in the guideline — the detection time belongs to that row.",
       "viaShort": "{{text}} (as a metabolite of {{parent}})",
@@ -1812,7 +1812,7 @@
     "editor": "editor",
     "adminRole": "admin",
     "groups": "User groups",
-    "groupsDescription": "Manage feature access groups. Rettstoks membership unlocks internal analytical methods.",
+    "groupsDescription": "Manage feature access groups. What each group unlocks is granted in the database.",
     "groupNamePlaceholder": "Group name",
     "groupSlugPlaceholder": "slug",
     "groupDescriptionPlaceholder": "Description",
@@ -1989,7 +1989,7 @@
         "admin_conversationIngestion_run": "Ingest a conversation bundle",
         "admin_settings_manage": "Change site-wide policy switches",
         "admin_navVisibility_manage": "Hide menu links from ordinary users",
-        "refsDetectionTimes_read": "Read Rettstoks's detection times (the REFS guideline)"
+        "refsDetectionTimes_read": "Read the laboratory's own detection times (the REFS guideline)"
       },
       "errorUnknownCapability": "\"{{capability}}\" is not a capability this version knows about. Reload the page and try again.",
       "errorLockedCapability": "\"{{capability}}\" cannot be delegated — it stays with administrators.",
@@ -1998,7 +1998,7 @@
     },
     "drugMerge": {
       "title": "Merge drugs",
-      "description": "Fold two catalog entries for the same substance into one. The entry with a written monograph is kept; the other's data — parameters, source entries, analytical-method (rettstoks) memberships, metabolite and precursor links, and reference-atlas rows — is moved onto it, links to the removed page are updated, and the duplicate is deleted.",
+      "description": "Fold two catalog entries for the same substance into one. The entry with a written monograph is kept; the other's data — parameters, source entries, analytical-method memberships, metabolite and precursor links, and reference-atlas rows — is moved onto it, links to the removed page are updated, and the duplicate is deleted.",
       "drugA": "First drug",
       "drugB": "Second drug",
       "searchPlaceholder": "Search by name, alias or CID…",
@@ -2717,7 +2717,7 @@
       },
       "methods": {
         "label": "Only components in selected methods",
-        "description": "Restrict agents to every drug component in the analytical methods you choose below. Visible only to agents working on content — users do not need to be members of the rettstoks group."
+        "description": "Restrict agents to every drug component in the analytical methods you choose below. Visible only to agents working on content — users do not need to be members of a method-access group."
       }
     },
     "skipWikiContent": {
