@@ -13,6 +13,9 @@ import { useDisplayUnits } from '@/components/ui/DrugUnitScope';
 import type { NumericRange } from '@/types';
 import { ParameterForestPlot, type MatrixFrame } from './ParameterForestPlot';
 import { ParameterEntryList } from './ParameterEntryList';
+import { DiscussionThread } from './DiscussionThread';
+import { VerificationSummary } from './VerificationSummary';
+import type { VerificationLevelInfo } from '@/lib/verificationLevel';
 import { ROUTE_LABEL_KEYS, ROUTE_OPTIONS } from '@/lib/routeLabels';
 import type { RouteId } from '@/lib/kinetics-core';
 
@@ -40,6 +43,10 @@ interface Props {
   isAdmin?: boolean;
   /** Reload the drug after a direct write so the plot and pooled value refresh. */
   onMutated?: () => void;
+  /** Verification level of this parameter's live value, shown above the discussion. */
+  verification?: VerificationLevelInfo;
+  /** Comment to scroll to and highlight (a notification's deep link). */
+  focusCommentId?: number;
   onClose: () => void;
 }
 
@@ -50,6 +57,10 @@ interface Props {
  * parameter drowned out the values themselves, so the affordance now lives in
  * the parameter's hover action row and opens here, where the forest plot has
  * room to be read and the sources compared side by side.
+ *
+ * The parameter's discussion thread sits at the bottom, so the debate about a
+ * value is read next to the sources it is about rather than in a separate
+ * dialog behind a comment badge on the value.
  */
 export function ParameterSourcesDialog({
   drugId,
@@ -62,6 +73,8 @@ export function ParameterSourcesDialog({
   canEdit = false,
   isAdmin = false,
   onMutated,
+  verification,
+  focusCommentId,
   onClose,
 }: Props) {
   const { t } = useTranslation();
@@ -188,6 +201,20 @@ export function ParameterSourcesDialog({
           highlightedEntryId={highlightedEntryId}
           onHighlightEntry={setHighlightedEntryId}
         />
+        <section
+          className="mt-6 border-t border-border pt-4"
+          data-testid="parameter-sources-discussion"
+        >
+          <h4 className="mb-2 text-sm font-semibold">
+            {t('parameterEntries.discussionHeading')}
+          </h4>
+          {verification ? <VerificationSummary info={verification} /> : null}
+          <DiscussionThread
+            host={{ drugId }}
+            parameter={parameter}
+            focusCommentId={focusCommentId}
+          />
+        </section>
       </div>
     </ModalOverlay>
   );
