@@ -7,6 +7,21 @@ import { showToast } from '@/lib/toast';
 interface DeleteWikiPageButtonProps {
   slug: string;
   title: string;
+  pageType: string;
+  /** Set on an `entity_monograph` while its bio entity still exists. */
+  entityId: number | null;
+}
+
+/**
+ * A drug or bio-entity monograph belongs to its record — every drug and bio
+ * entity owns one — so it is not deleted on its own; the API refuses it with
+ * `monograph_owned_by_record`. The button is not offered there.
+ */
+function ownedByRecord(pageType: string, entityId: number | null): boolean {
+  return (
+    pageType === 'drug_monograph' ||
+    (pageType === 'entity_monograph' && entityId != null)
+  );
 }
 
 /**
@@ -15,13 +30,18 @@ interface DeleteWikiPageButtonProps {
  * Shown only to callers holding `wiki.page.delete`; there is no undo, so the
  * click asks for confirmation first.
  */
-export function DeleteWikiPageButton({ slug, title }: DeleteWikiPageButtonProps) {
+export function DeleteWikiPageButton({
+  slug,
+  title,
+  pageType,
+  entityId,
+}: DeleteWikiPageButtonProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const canDelete = useCan('wiki.page.delete');
   const [deleting, setDeleting] = useState(false);
 
-  if (!canDelete) return null;
+  if (!canDelete || ownedByRecord(pageType, entityId)) return null;
 
   async function handleClick() {
     if (!window.confirm(t('wiki.deletePageConfirm', { title }))) return;

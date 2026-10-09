@@ -1518,6 +1518,7 @@ async function handleDelete(
         status: wikiPages.status,
         pageType: wikiPages.pageType,
         drugCid: wikiPages.drugCid,
+        entityId: wikiPages.entityId,
       })
       .from(wikiPages)
       .where(eq(wikiPages.slug, slug))
@@ -1550,6 +1551,28 @@ async function handleDelete(
       }
     }
 
+    // A drug or bio-entity monograph belongs to its record while that record
+    // exists: every drug and every bio entity owns one (ensureDrugMonograph /
+    // ensureEntityMonograph), so deleting the page alone would leave the
+    // record without it and its curated text gone. Deleting the drug takes
+    // its monograph with it. A monograph whose record is already gone (a bio
+    // entity's delete sets entity_id to null) is an ordinary orphan and may
+    // be removed here.
+    const ownedByRecord =
+      (page.pageType === 'drug_monograph' &&
+        page.drugCid != null &&
+        (await resolveOwningDrugIdForMonograph(db, page.drugCid)) != null) ||
+      (page.pageType === 'entity_monograph' && page.entityId != null);
+    if (ownedByRecord) {
+      error(
+        res,
+        409,
+        'A monograph belongs to its substance or bio entity and cannot be deleted on its own.',
+        'monograph_owned_by_record',
+      );
+      return;
+    }
+
     // The page's facts live in its content, and its revisions, categories and
     // fact discussions cascade on their foreign keys. Three things point at
     // the page by a plain integer instead and are cleaned up here, in the
@@ -1559,14 +1582,7 @@ async function handleDelete(
     //     same teardown the drug delete and drug merge do;
     //   - sub-pages (parent_id), which move up to the top level;
     //   - the admin's agent-focus page selection (page_ids).
-    // A drug monograph takes the per-drug lock the pending-edit submit path
-    // holds, so a proposal cannot land between the cleanup and the delete.
-    const lockDrugId =
-      page.pageType === 'drug_monograph' && page.drugCid != null
-        ? ((await resolveOwningDrugIdForMonograph(db, page.drugCid)) ??
-          undefined)
-        : undefined;
-    const deleted = await withPageWriteLock(lockDrugId, async () => {
+    const deleted = await inTransaction(async () => {
       const tx = getDb();
       await tx
         .delete(pendingEdits)
