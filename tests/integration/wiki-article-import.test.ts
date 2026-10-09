@@ -95,6 +95,18 @@ beforeEach(async () => {
 });
 
 describe("wiki article imports", () => {
+  it('inserts a new H2 after existing unlisted H3 children and their content', async () => {
+    const child = { type: 'heading', attrs: { sectionId: 'child', level: 3 }, content: [{ type: 'text', text: 'Eksisterende underseksjon' }] };
+    const body = { type: 'paragraph', content: [{ type: 'text', text: 'Bevar underseksjonen.' }] };
+    await db.update(wikiPages).set({ content: { type: 'doc', content: [...content.content, child, body] } }).where(eq(wikiPages.id, pageId));
+    const b = bundle(); b.sections[1]!.level = 2;
+    const plan = await planWikiArticle(b);
+    await applyWikiArticle(b, userId, plan.fingerprint);
+    const [page] = await db.select().from(wikiPages);
+    const sections = extractTopicSections(page!.content as typeof content);
+    expect(sections.map(s => s.sectionId)).toEqual(['existing', 'child', plan.sections[1]!.sectionId]);
+    expect(sections[1]!.bodyContent).toEqual([body]);
+  });
   it("keeps the agent-focus gate before all writes", async () => {
     await db
       .insert(agents)

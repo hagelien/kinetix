@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "kinetix-wiki-import",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Konverter kildebelagte fagartikler til validerte Kinetix-forslag med atomiske fakta, kilder og seksjonsplassering.",
   "author": { "name": "Max Hagelien" },
   "extensions": { "com.openai": { "interface": {
