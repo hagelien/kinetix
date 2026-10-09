@@ -2578,6 +2578,8 @@
     "allPages": "All wiki pages",
     "subpageCount_one": "{{count}} subpage",
     "subpageCount_other": "{{count}} subpages",
+    "moreSubpages_one": "+ {{count}} more subpage",
+    "moreSubpages_other": "+ {{count}} more subpages",
     "searchWiki": "Search Wiki",
     "searchPlaceholder": "Search for drugs, topics, pharmacology...",
     "searching": "Searching...",
