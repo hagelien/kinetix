@@ -102,7 +102,7 @@ export function WikiFactDiff({ edit }: WikiFactDiffProps): JSX.Element {
   // covers what the frozen list cannot know about. `readInFull` is undefined on
   // payloads that do not supply it, and unknown is not a claim of unread.
   //
-  // Scoped to proposals conversation ingestion staged, because that is where
+  // Scoped to proposals conversation or article ingestion staged, where
   // the queue route promises a full-text check: an unreviewed citation on a
   // contributor's fact is ordinary — the reference gate is an agent discipline,
   // not a human one — and flagging every one of those would be a different
@@ -111,7 +111,7 @@ export function WikiFactDiff({ edit }: WikiFactDiffProps): JSX.Element {
     source?: unknown;
     unverifiedReferenceIds?: unknown;
   } | null;
-  const fromConversation = meta?.source === 'conversation-ingestion';
+  const fromIngestion = meta?.source === 'conversation-ingestion' || meta?.source === 'wiki-article-import';
   const stagedUnverified = new Set(
     Array.isArray(meta?.unverifiedReferenceIds)
       ? (meta.unverifiedReferenceIds as unknown[]).filter(
@@ -120,7 +120,7 @@ export function WikiFactDiff({ edit }: WikiFactDiffProps): JSX.Element {
       : [],
   );
   const unreadIds = new Set(
-    fromConversation
+    fromIngestion
       ? refs
           .filter((r) => stagedUnverified.has(r.id) || r.readInFull === false)
           .map((r) => r.id)

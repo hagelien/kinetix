@@ -41,11 +41,33 @@ import {
 } from './_lib/conversationIngestionStore.js';
 import { resolveIngestionCrosswalk } from './_lib/citation-crosswalk.js';
 
+import { wikiArticleSchema } from '../src/lib/wikiArticleImport.js';
+import {
+  applyWikiArticle,
+  planWikiArticle,
+  WikiArticleConflict,
+} from './_lib/wikiArticleImportStore.js';
+
 // A bundle carries a full paper review per source, so it outgrows the default
 // 1 MB body cap on a long conversation. Same headroom as the research importer.
 const MAX_BODY_BYTES = 8 * 1024 * 1024;
 
 export default withErrorHandling(async function handler(req, res): Promise<void> {
+  // Public capability discovery for offline converters; no user or DB data.
+  if (
+    req.method === "GET" &&
+    new URL(req.url ?? "/", "https://kinetix.no").searchParams.get(
+      "action",
+    ) === "formats"
+  ) {
+    json(res, 200, {
+      schemaVersions: [
+        "kinetix-conversation-ingestion-v1",
+        "kinetix-wiki-article-v1",
+      ],
+    });
+    return;
+  }
   if (req.method !== 'POST') {
     error(res, 405, 'Method not allowed');
     return;
@@ -87,9 +109,61 @@ export default withErrorHandling(async function handler(req, res): Promise<void>
     accept?: unknown;
     expectedReviewActions?: unknown;
     expectedFingerprints?: unknown;
+    expectedFingerprint?: unknown;
   } = body !== null && typeof body === 'object' && !Array.isArray(body) ? body : {};
   const document = 'document' in envelope ? envelope.document : body;
   const apply = envelope.action === 'apply';
+
+  if (
+    document &&
+    typeof document === "object" &&
+    "schemaVersion" in document &&
+    document.schemaVersion === "kinetix-wiki-article-v1"
+  ) {
+    const article = wikiArticleSchema.safeParse(document);
+    if (!article.success) {
+      json(res, 400, {
+        ok: false,
+        errors: article.error.issues.map(
+          (i) => `${i.path.join(".")}: ${i.message}`,
+        ),
+      });
+      return;
+    }
+    if (
+      apply &&
+      (typeof envelope.expectedFingerprint !== "string" ||
+        !/^[a-f0-9]{64}$/.test(envelope.expectedFingerprint))
+    ) {
+      error(
+        res,
+        400,
+        "Analyse the article before applying",
+        "article_preview_required",
+      );
+      return;
+    }
+    try {
+      if (apply) {
+        const result = await applyWikiArticle(
+          article.data,
+          auth.userId,
+          envelope.expectedFingerprint as string,
+        );
+        json(res, 200, { ok: true, applied: true, result });
+      } else {
+        json(res, 200, {
+          ok: true,
+          applied: false,
+          plan: await planWikiArticle(article.data),
+        });
+      }
+    } catch (err) {
+      if (!(err instanceof WikiArticleConflict)) throw err;
+      error(res, 409, err.message, "article_conflict");
+    }
+    return;
+  }
 
   const parsed = parseConversationIngestion(document);
   if (!parsed.ok) {

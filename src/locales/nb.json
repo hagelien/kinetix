@@ -2140,6 +2140,19 @@
         "cohort_conflict": "Disse kildene har to separate importer av samme referansedatasett som ikke kan slås sammen automatisk. Trekk tilbake importen som ikke skal stå, og slå deretter sammen.",
         "agent_refused": "Sammenslåing av kilder må gjøres av en person, ikke en agent."
       }
+    },
+    "wikiArticle": {
+      "title": "Artikkel til review-køen",
+      "description": "Lim inn JSON fra Kinetix Wiki Import. Nye overskrifter opprettes ved import. Alle fakta sendes til review-køen; ingen fakta publiseres ved import. Eksisterende kildevurderinger endres ikke.",
+      "input": "Artikkel-JSON",
+      "analyse": "Forhåndsvis artikkel",
+      "counts": "{{factCount}} fakta, {{newSectionCount}} nye seksjoner, {{blockedCount}} utelatte kandidater. Duplikater hoppes over ved import.",
+      "facts": "fakta",
+      "newSection": "ny seksjon",
+      "blocked": "Disse kandidatene importeres ikke",
+      "apply": "Opprett seksjoner og send fakta til review-køen",
+      "result": "{{queued}} fakta sendt til review-køen, {{skipped}} duplikater hoppet over, {{newSections}} seksjoner opprettet.",
+      "failed": "Artikkelen kunne ikke importeres."
     }
   },
   "siteSettings": {
