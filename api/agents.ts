@@ -1,9 +1,10 @@
 /**
  * Agents listing endpoint (#319 P1).
  *
- *   GET /api/agents — list active agents with maintainer info + basic
- *     contribution stats. Authenticated users only (anonymous users are
- *     limited to the drug table per the #310 spec).
+ *   GET /api/agents — list active agents with maintainer info, basic
+ *     contribution stats and the review role they fill (model tier, T3
+ *     adjudicator grant, last reported model). Authenticated users only
+ *     (anonymous users are limited to the drug table per the #310 spec).
  *
  * P1 is read-only; admin CRUD + token-minting flows land in P2.
  */
@@ -40,6 +41,17 @@ interface AgentSummary {
   descriptionEn: string | null;
   status: "active" | "suspended" | "deactivated";
   createdAt: string;
+  /** Server-owned capability tier (`flagship | mid | light`); null = unclassified. */
+  modelTier: string | null;
+  /** The T3 adjudication grant. */
+  adjudicator: boolean;
+  /** Vendor line the identity runs, when recorded. */
+  modelFamily: string | null;
+  /**
+   * Model id most recently self-reported by the agent, from its verdicts or
+   * its logged runs. Display only — never trusted for a gate (the tier is).
+   */
+  recentModel: string | null;
   agent: {
     userId: number;
     username: string;
@@ -93,6 +105,9 @@ export default withErrorHandling(async function handler(
         descriptionEn: agents.descriptionEn,
         status: agents.status,
         createdAt: agents.createdAt,
+        modelTier: agents.modelTier,
+        adjudicator: agents.adjudicator,
+        modelFamily: agents.modelFamily,
         agentUserId: agents.userId,
         maintainerUserId: agents.maintainerUserId,
       })
@@ -165,6 +180,33 @@ export default withErrorHandling(async function handler(
     statsByAgent.set(row.submittedBy, cur);
   }
 
+  // Latest self-reported model per agent, across its verdicts and its logged
+  // runs. Expand the id list into discrete IN (…) params (see api/admin.ts:
+  // a JS array passed to ANY() through db.execute is serialized as a string).
+  const agentIdsList = sql.join(
+    agentRows.map((r) => sql`${r.id}`),
+    sql`, `,
+  );
+  const recentModelRaw = await withDbRetry(() =>
+    db.execute(sql`
+      SELECT DISTINCT ON (agent_id) agent_id, model
+      FROM (
+        SELECT agent_id, model, created_at FROM agent_verifications
+        WHERE model IS NOT NULL AND agent_id IN (${agentIdsList})
+        UNION ALL
+        SELECT agent_id, model, created_at FROM agent_run_usage
+        WHERE model IS NOT NULL AND agent_id IN (${agentIdsList})
+      ) reported
+      ORDER BY agent_id, created_at DESC
+    `),
+  );
+  const recentModelByAgent = new Map<number, string>();
+  for (const r of recentModelRaw.rows as Array<Record<string, unknown>>) {
+    if (typeof r.model === "string" && r.model.trim()) {
+      recentModelByAgent.set(Number(r.agent_id), r.model.trim());
+    }
+  }
+
   const list: AgentSummary[] = agentRows.map((r) => {
     const agentUser = userById.get(r.agentUserId);
     const maintainerUser =
@@ -184,6 +226,10 @@ export default withErrorHandling(async function handler(
       descriptionEn: r.descriptionEn,
       status: r.status as AgentSummary["status"],
       createdAt: r.createdAt.toISOString(),
+      modelTier: r.modelTier ?? null,
+      adjudicator: r.adjudicator,
+      modelFamily: r.modelFamily ?? null,
+      recentModel: recentModelByAgent.get(r.id) ?? null,
       agent: {
         userId: r.agentUserId,
         username: agentUser?.username ?? "",

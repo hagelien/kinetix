@@ -1,0 +1,88 @@
+/*
+ * Agents wiki guide (src/components/wiki/builtin/AgentReviewGuide.tsx).
+ * Tier hues reuse the app's mode accents (--sim / --kine / --etoh) so the
+ * guide reads as part of Kinetix; T4 and the outcome colors are the only
+ * hues added here. Every SVG color resolves through these tokens, so the
+ * diagrams follow the light/dark switch with the rest of the page.
+ */
+.kx-agent-guide {
+  --ag-fg: hsl(var(--foreground));
+  --ag-muted: hsl(var(--muted-foreground));
+  --ag-line: hsl(var(--border));
+  --ag-surface: hsl(var(--card));
+  --ag-band: hsl(var(--muted));
+  --ag-t1: hsl(var(--sim));
+  --ag-t2: hsl(var(--kine));
+  --ag-t3: hsl(30 85% 42%);
+  --ag-t4: hsl(345 62% 46%);
+  --ag-ok: hsl(var(--success));
+  --ag-warn: hsl(16 72% 46%);
+}
+.dark .kx-agent-guide {
+  --ag-t1: hsl(220 80% 68%);
+  --ag-t2: hsl(280 62% 74%);
+  --ag-t3: hsl(34 85% 60%);
+  --ag-t4: hsl(345 75% 70%);
+  --ag-ok: hsl(155 50% 55%);
+  --ag-warn: hsl(18 80% 64%);
+}
+
+.kx-agent-guide .ag-c-t1 { color: var(--ag-t1); }
+.kx-agent-guide .ag-c-t2 { color: var(--ag-t2); }
+.kx-agent-guide .ag-c-t3 { color: var(--ag-t3); }
+.kx-agent-guide .ag-c-t4 { color: var(--ag-t4); }
+
+.kx-agent-guide .ag-fig {
+  overflow-x: auto;
+  border: 1px solid var(--ag-line);
+  border-radius: var(--radius);
+  background: var(--ag-surface);
+  padding: 14px;
+}
+.kx-agent-guide .ag-fig svg {
+  display: block;
+  width: 100%;
+  min-width: 760px;
+  height: auto;
+  color: var(--ag-fg);
+}
+.kx-agent-guide .ag-fig svg.ag-narrow {
+  max-width: 820px;
+  min-width: 620px;
+}
+
+.kx-agent-guide .ag-box { fill: var(--ag-surface); stroke: var(--ag-line); stroke-width: 1.2; }
+.kx-agent-guide .ag-lane { fill: var(--ag-band); }
+.kx-agent-guide .ag-lane2 { fill: var(--ag-surface); }
+.kx-agent-guide .ag-t1 { fill: color-mix(in srgb, var(--ag-t1) 10%, var(--ag-surface)); stroke: var(--ag-t1); stroke-width: 1.5; }
+.kx-agent-guide .ag-t2 { fill: color-mix(in srgb, var(--ag-t2) 10%, var(--ag-surface)); stroke: var(--ag-t2); stroke-width: 1.5; }
+.kx-agent-guide .ag-t3 { fill: color-mix(in srgb, var(--ag-t3) 12%, var(--ag-surface)); stroke: var(--ag-t3); stroke-width: 1.5; }
+.kx-agent-guide .ag-t4 { fill: color-mix(in srgb, var(--ag-t4) 10%, var(--ag-surface)); stroke: var(--ag-t4); stroke-width: 1.5; }
+.kx-agent-guide .ag-ok { fill: color-mix(in srgb, var(--ag-ok) 14%, var(--ag-surface)); stroke: var(--ag-ok); stroke-width: 1.6; }
+.kx-agent-guide .ag-warn { fill: color-mix(in srgb, var(--ag-warn) 10%, var(--ag-surface)); stroke: var(--ag-warn); stroke-width: 1.3; }
+
+.kx-agent-guide .ag-ttl { font-size: 13.5px; font-weight: 700; fill: currentColor; }
+.kx-agent-guide .ag-sub { font-size: 11.5px; fill: var(--ag-muted); }
+.kx-agent-guide .ag-lbl { font-size: 11.5px; fill: currentColor; }
+.kx-agent-guide .ag-hdr { font-size: 11px; letter-spacing: 0.08em; fill: var(--ag-muted); }
+.kx-agent-guide .ag-tierbig { font-size: 26px; font-weight: 800; }
+.kx-agent-guide .ag-f-t1 { fill: var(--ag-t1); }
+.kx-agent-guide .ag-f-t2 { fill: var(--ag-t2); }
+.kx-agent-guide .ag-f-t3 { fill: var(--ag-t3); }
+.kx-agent-guide .ag-f-t4 { fill: var(--ag-t4); }
+.kx-agent-guide .ag-tick { fill: var(--ag-ok); }
+
+.kx-agent-guide .ag-ar { fill: none; stroke-width: 1.4; }
+.kx-agent-guide .ag-ar-fg { stroke: currentColor; }
+.kx-agent-guide .ag-ar-t2 { stroke: var(--ag-t2); stroke-width: 1.6; }
+.kx-agent-guide .ag-ar-t3 { stroke: var(--ag-t3); stroke-width: 1.6; }
+.kx-agent-guide .ag-ar-t4 { stroke: var(--ag-t4); stroke-width: 1.6; }
+.kx-agent-guide .ag-ar-ok { stroke: var(--ag-ok); stroke-width: 1.6; }
+.kx-agent-guide .ag-ar-warn { stroke: var(--ag-warn); }
+.kx-agent-guide .ag-ar-dash { stroke-dasharray: 5 4; }
+.kx-agent-guide .ag-ah-fg { fill: currentColor; }
+.kx-agent-guide .ag-ah-t2 { fill: var(--ag-t2); }
+.kx-agent-guide .ag-ah-t3 { fill: var(--ag-t3); }
+.kx-agent-guide .ag-ah-t4 { fill: var(--ag-t4); }
+.kx-agent-guide .ag-ah-ok { fill: var(--ag-ok); }
+.kx-agent-guide .ag-ah-warn { fill: var(--ag-warn); }

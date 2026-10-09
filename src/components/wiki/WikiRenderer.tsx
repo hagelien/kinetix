@@ -1,10 +1,14 @@
 import {
+  lazy,
+  Suspense,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type ComponentType,
   type CSSProperties,
+  type LazyExoticComponent,
 } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -38,6 +42,11 @@ import { activeLangCode } from "@/lib/useDrugName";
 import { renderTexToHtml } from "@/lib/katexRender";
 import { referenceModulePath, type CitationRow } from "@/lib/referencesApi";
 import { useDisplayUnits } from "@/components/ui/DrugUnitScope";
+import {
+  expandBuiltinBlockMarkers,
+  isBuiltinWikiBlockName,
+  type BuiltinWikiBlockName,
+} from "./builtin/builtinBlocks";
 import "@/styles/wiki-prose.css";
 
 /**
@@ -517,6 +526,20 @@ export function extractFootnoteIds(doc: unknown): number[] {
   return ids;
 }
 
+// Loaded on demand: only the pages that place a `{{kinetix:…}}` marker pay
+// for a block's code.
+const BUILTIN_BLOCK_COMPONENTS: Record<
+  BuiltinWikiBlockName,
+  LazyExoticComponent<ComponentType>
+> = {
+  agents: lazy(() => import("./builtin/AgentReviewGuide")),
+};
+
+interface BuiltinBlockTarget {
+  element: HTMLElement;
+  name: BuiltinWikiBlockName;
+}
+
 export function WikiRenderer({
   contentHtml,
   bibliographyMap,
@@ -608,11 +631,13 @@ export function WikiRenderer({
         return `${p1}${fieldId}${p2}${sectionId}${p3}${escapeHtml(title)}${closing}`;
       },
     );
-    let rendered = renderMathMarkers(
-      annotateConcentrationUnits(
-        sanitizeWikiHtml(processed),
-        molecularWeight,
-        enabledUnits,
+    let rendered = expandBuiltinBlockMarkers(
+      renderMathMarkers(
+        annotateConcentrationUnits(
+          sanitizeWikiHtml(processed),
+          molecularWeight,
+          enabledUnits,
+        ),
       ),
     );
     // Inject the per-fact discussion link *after* sanitization, into a
@@ -715,6 +740,24 @@ export function WikiRenderer({
     };
   }, [html, cancelHide, scheduleHide]);
 
+  // Mount points for built-in blocks are plain nodes inside the
+  // dangerouslySetInnerHTML tree; collect them after each HTML swap and
+  // portal the block components into them.
+  const [blockTargets, setBlockTargets] = useState<BuiltinBlockTarget[]>([]);
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    const found: BuiltinBlockTarget[] = [];
+    for (const element of Array.from(
+      root?.querySelectorAll<HTMLElement>("[data-kx-block]") ?? [],
+    )) {
+      const name = element.dataset.kxBlock;
+      if (isBuiltinWikiBlockName(name)) found.push({ element, name });
+    }
+    setBlockTargets((prev) =>
+      prev.length === 0 && found.length === 0 ? prev : found,
+    );
+  }, [html]);
+
   if (!html) {
     return (
       <p className="text-muted-foreground italic">
@@ -755,6 +798,16 @@ export function WikiRenderer({
         onPointerEnter={cancelHide}
         onPointerLeave={scheduleHide}
       />
+      {blockTargets.map(({ element, name }, index) => {
+        const Block = BUILTIN_BLOCK_COMPONENTS[name];
+        return createPortal(
+          <Suspense fallback={null}>
+            <Block />
+          </Suspense>,
+          element,
+          `${name}-${index}`,
+        );
+      })}
     </>
   );
 }
