@@ -7,7 +7,8 @@ blir forslag, og manglende overskrifter kan opprettes ved eksplisitt adminimport
 
 ## Data og arbeidsflyt
 
-1. ChatGPT atomiserer artikkelen, bevarer kildekoblinger og overskriftshierarki,
+1. ChatGPT bevarer naturlige setninger og korte, sammenhengende avsnitt som
+   vurderingsenheter, med kildekoblinger og overskriftshierarki,
    henter offentlige seksjons-ID-er og validerer JSON. Dekningsrapporten sporer
    tekstblokker og tabellrader, men erstatter ikke semantisk eller faglig kontroll.
 2. Admin → importer samtale → **Artikkel til review-køen** forhåndsviser filen.
@@ -31,6 +32,21 @@ Kildenøkler i JSON er lokale, aldri database-ID-er. Ingen kildeverifisering
 oppgis eller omskrives av importen. Den eksisterende fulltekstporten aktiveres
 via `unverifiedReferenceIds: []`: review-flyten sjekker faktisk gjeldende
 kildevurderinger. Pluginen kan ikke godkjenne ved å sende et statusfelt.
+
+## Lesbar tekst
+
+Et `facts[].statement` kan inneholde flere beslektede, kildebelagte påstander.
+En oppramsing av stoffer, en forklaring med flere faktorer eller en tabellrad
+med styrker og begrensninger trenger ikke deles i egne forslag for hvert ledd.
+Kildegrunnlaget kontrolleres fortsatt for hver empiriske delpåstand, og enhetens
+`sourceKeys` samler kildene som støtter teksten. Del ved temaskifte eller når
+forutsetninger, usikkerhet eller manglende kilder ellers ville bli uklare.
+Det eksisterende formatet og grensen på 2000 tegn gjelder uendret.
+
+En ny konvertering endrer ikke allerede innsendte forslag: importen erstatter
+ingen rader og hopper bare over identisk tekst med identiske kilder i samme
+seksjon. Sammenslåtte avsnitt må derfor ikke omtales som en automatisk opprydding
+av den gamle review-køen.
 
 ## Integritet
 
