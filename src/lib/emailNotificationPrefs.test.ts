@@ -41,31 +41,31 @@ describe('resolveEmailPrefs', () => {
 describe('digestPeriodStart', () => {
   const at = (iso: string) => new Date(iso);
 
-  it('daily: today at 06:00 UTC once past it, yesterday before it', () => {
+  it('daily: today at 03:00 UTC once past it, yesterday before it', () => {
     expect(digestPeriodStart('daily', at('2026-09-30T10:00:00Z'))).toEqual(
-      at('2026-09-30T06:00:00Z'),
+      at('2026-09-30T03:00:00Z'),
     );
-    expect(digestPeriodStart('daily', at('2026-09-30T05:59:00Z'))).toEqual(
-      at('2026-09-29T06:00:00Z'),
+    expect(digestPeriodStart('daily', at('2026-09-30T02:59:00Z'))).toEqual(
+      at('2026-09-29T03:00:00Z'),
     );
   });
 
-  it('weekly: the most recent Monday 06:00 UTC', () => {
+  it('weekly: the most recent Monday 03:00 UTC', () => {
     // 2026-09-28 is a Monday.
     expect(digestPeriodStart('weekly', at('2026-10-01T12:00:00Z'))).toEqual(
-      at('2026-09-28T06:00:00Z'),
+      at('2026-09-28T03:00:00Z'),
     );
-    expect(digestPeriodStart('weekly', at('2026-09-28T05:00:00Z'))).toEqual(
-      at('2026-09-21T06:00:00Z'),
+    expect(digestPeriodStart('weekly', at('2026-09-28T02:00:00Z'))).toEqual(
+      at('2026-09-21T03:00:00Z'),
     );
   });
 
-  it('monthly: the 1st at 06:00 UTC, across a year boundary too', () => {
+  it('monthly: the 1st at 03:00 UTC, across a year boundary too', () => {
     expect(digestPeriodStart('monthly', at('2026-09-15T00:00:00Z'))).toEqual(
-      at('2026-09-01T06:00:00Z'),
+      at('2026-09-01T03:00:00Z'),
     );
-    expect(digestPeriodStart('monthly', at('2027-01-01T05:00:00Z'))).toEqual(
-      at('2026-12-01T06:00:00Z'),
+    expect(digestPeriodStart('monthly', at('2027-01-01T02:00:00Z'))).toEqual(
+      at('2026-12-01T03:00:00Z'),
     );
   });
 });

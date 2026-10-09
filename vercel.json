@@ -75,7 +75,7 @@
     "api/notification-emails.ts": { "maxDuration": 60 }
   },
   "crons": [
-    { "path": "/api/notification-emails", "schedule": "*/10 * * * *" }
+    { "path": "/api/notification-emails", "schedule": "0 3,4 * * *" }
   ],
   "git": {
     "deploymentEnabled": false

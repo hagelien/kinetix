@@ -6,7 +6,7 @@ vi.mock('../../api/_lib/notificationEmails.js', () => ({
   runNotificationEmails: runMock,
 }));
 
-import handler, { cronAuthorized } from '../../api/notification-emails';
+import handler, { cronAuthorized, isOsloRunHour } from '../../api/notification-emails';
 
 function call(method: string, authorization?: string) {
   const req = {
@@ -42,10 +42,22 @@ describe('cronAuthorized', () => {
   });
 });
 
+describe('isOsloRunHour', () => {
+  it('is 05:00 in Norway: 03:00 UTC in summer, 04:00 UTC in winter', () => {
+    expect(isOsloRunHour(new Date('2026-07-01T03:00:00Z'))).toBe(true);
+    expect(isOsloRunHour(new Date('2026-07-01T04:00:00Z'))).toBe(false);
+    expect(isOsloRunHour(new Date('2026-12-01T04:00:00Z'))).toBe(true);
+    expect(isOsloRunHour(new Date('2026-12-01T03:00:00Z'))).toBe(false);
+  });
+});
+
 describe('GET /api/notification-emails', () => {
   const original = process.env.CRON_SECRET;
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    // 05:00 in Oslo (CEST): the run hour.
+    vi.setSystemTime(new Date('2026-10-09T03:00:00Z'));
     process.env.CRON_SECRET = 's3cret';
     runMock.mockResolvedValue({
       escalated: 0,
@@ -55,6 +67,7 @@ describe('GET /api/notification-emails', () => {
     });
   });
   afterEach(() => {
+    vi.useRealTimers();
     if (original === undefined) delete process.env.CRON_SECRET;
     else process.env.CRON_SECRET = original;
   });
@@ -82,6 +95,15 @@ describe('GET /api/notification-emails', () => {
     expect(r.status).toBe(200);
     expect(r.body).toMatchObject({ emailsSent: 2, notificationsEmailed: 3 });
     expect(runMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips the other half of the UTC pair without running delivery', async () => {
+    // 06:00 in Oslo (CEST): the 04:00 UTC firing in summer.
+    vi.setSystemTime(new Date('2026-10-09T04:00:00Z'));
+    const r = await call('GET', 'Bearer s3cret');
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual({ skipped: 'not_run_hour' });
+    expect(runMock).not.toHaveBeenCalled();
   });
 
   it('reports a run with refused emails as 502 so the cron shows it failed', async () => {
