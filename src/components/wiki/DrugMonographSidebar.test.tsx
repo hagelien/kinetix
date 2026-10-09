@@ -219,8 +219,25 @@ describe('DrugMonographSidebar', () => {
         <DrugMonographSidebar drugCid={mockDrugState.pubchemCid} />
       </MemoryRouter>,
     );
+    // A source-value parameter's discussion lives at the bottom of its
+    // sources dialog, so the comment link opens that dialog.
+    const dialog = await screen.findByRole('dialog', {
+      name: /source values for elimination half-life/i,
+    });
     expect(
-      await screen.findByRole('dialog', { name: /half-life — discussion/i }),
+      within(dialog).getByTestId('parameter-sources-discussion'),
+    ).toBeInTheDocument();
+  });
+
+  it('opens the discussion dialog for a parameter without source values', async () => {
+    setUser([]);
+    render(
+      <MemoryRouter initialEntries={['/wiki/x?param=molecularWeight&view=discussion&comment=5']}>
+        <DrugMonographSidebar drugCid={mockDrugState.pubchemCid} />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByRole('dialog', { name: /— discussion/i }),
     ).toBeInTheDocument();
   });
 

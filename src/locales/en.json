@@ -3913,6 +3913,7 @@
     "dialogAriaLabel": "Source values for {{parameter}} in {{drug}}",
     "dialogEmpty": "No source values recorded for this parameter yet.",
     "routeSection": "Sources for {{route}} administration",
+    "discussionHeading": "Discussion",
     "editor": {
       "add": "Add source value",
       "edit": "Edit",

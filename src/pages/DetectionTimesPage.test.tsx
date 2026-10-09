@@ -498,6 +498,10 @@ describe('DetectionTimesPage', () => {
       if (url.includes('ids=')) {
         return { ok: true, json: async () => ({ drugs: [OXAZEPAM_LIST_ROW] }) };
       }
+      // The sources dialog's discussion thread — not a drug read.
+      if (url.includes('/api/drug-discussions')) {
+        return { ok: true, json: async () => ({ discussions: [] }) };
+      }
       // The reload triggered by the delete is held open, so the assertions
       // below run in exactly the window that used to unmount the dialog.
       drugReads += 1;
