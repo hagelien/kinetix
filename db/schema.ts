@@ -115,6 +115,9 @@ export const userGroups = pgTable('user_groups', {
   slug: varchar('slug', { length: 100 }).unique().notNull(),
   name: varchar('name', { length: 200 }).notNull(),
   description: text('description'),
+  // Restricted features this group unlocks (`GROUP_GRANT` in
+  // src/lib/featureAccess.ts). Set in the database, never in code.
+  grants: jsonb('grants').$type<string[]>().notNull().default([]),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -1129,7 +1132,7 @@ export const siteSettings = pgTable('site_settings', {
 
 /**
  * Restricted reference tables that are served behind a gate and never shipped
- * in the source tree — today the Rettstoks urine detection-time guideline
+ * in the source tree — today the laboratory's urine detection-time guideline
  * (`/api/refs-detection-times`). One row per table: `source` is the document's
  * identity (`RefsGuidelineSource`), `rows` the `RefsUrineDetectionRow[]` the
  * route serves. The contents are loaded by an operator from outside the
@@ -2481,8 +2484,8 @@ export const agentFocusConfig = pgTable('agent_focus_config', {
   skipWikiContent: boolean('skip_wiki_content').notNull().default(false),
   // analytical_methods.id list for mode='methods'; empty otherwise. Focuses
   // the agent on every drug component that belongs to one of these methods
-  // (the `rettstoks` test panels). Stored as ids — it never requires the
-  // agent to be a `rettstoks` group member; the resolved component drug ids
+  // (the laboratory's test panels). Stored as ids — it never requires the
+  // agent to belong to a group granted method access; the resolved component drug ids
   // are surfaced to the agent through GET /api/agent-focus.
   methodIds: jsonb('method_ids').notNull().default([]),
   updatedBy: integer('updated_by').references(() => users.id, {

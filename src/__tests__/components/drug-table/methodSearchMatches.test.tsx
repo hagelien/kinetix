@@ -46,7 +46,7 @@ const DRUGS: DrugComponent[] = [
 
 function seedStore(searchQuery: string) {
   act(() => {
-    // Methods are gated to admins / the rettstoks group, and both surfaces
+    // Methods are gated to admins / groups granted it in the database, and both surfaces
     // clear the store's method list for anyone else — so the suggestions
     // only exist for a user who may see methods at all.
     useAuthStore.setState({

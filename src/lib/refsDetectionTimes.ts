@@ -1,10 +1,10 @@
 /**
- * Rettstoksikologi's own urine detection times ("påvisningstider i urin").
+ * The laboratory's own urine detection times ("påvisningstider i urin").
  *
  * The pooled windows in `detectionWindows.ts` are the literature: every number
  * there is an aggregate of cited source values, and every reader of Kinetix
  * gets to see them. This module is the OTHER answer to the same question — the
- * one a Rettstoks case is actually interpreted against: the table in the
+ * one a laboratory case is actually interpreted against: the table in the
  * section's own approved urine-interpretation guideline. It is not a pooled
  * estimate at all: it is the band the section has agreed to state, for the
  * section's own cut-offs, in the section's own case categories.

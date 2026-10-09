@@ -1,5 +1,5 @@
 /**
- * React binding for the Rettstoks guideline table.
+ * React binding for the laboratory guideline table.
  *
  * Both readers of the table — the detection-times page's own section and the
  * substance register's column — go through this hook, so the access check, the

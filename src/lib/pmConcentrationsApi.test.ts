@@ -45,7 +45,7 @@ describe('pmConcentrationsApi cache', () => {
   });
 
   it('does not serve one account\'s gated payload to the next', async () => {
-    // The scenario: a rettstoks member reads the data, signs out, and somebody
+    // The scenario: a granted member reads the data, signs out, and somebody
     // else signs in — all without a page reload, so this module-level cache
     // survives. Keyed on ids alone it would hand over the previous session's
     // unpublished payload for the rest of the TTL.

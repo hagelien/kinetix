@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   KINETIX_LEARN_GROUP_SLUG,
-  RETTSTOKS_GROUP_SLUG,
+  GROUP_GRANT,
   canAccessAnalyticalMethods,
   canAccessKinetixLearn,
   canAccessPatternProfile,
@@ -14,13 +14,28 @@ describe('featureAccess', () => {
     );
   });
 
-  it('allows Rettstoks group members to access analytical methods', () => {
+  it('allows members of a group granted methods.read to access analytical methods', () => {
     expect(
       canAccessAnalyticalMethods({
         role: 'authenticated',
-        groups: [{ slug: RETTSTOKS_GROUP_SLUG }],
+        groups: [{ slug: 'any-group', grants: [GROUP_GRANT.methods] }],
       }),
     ).toBe(true);
+  });
+
+  it('keys on the database grant, not on any group slug', () => {
+    expect(
+      canAccessAnalyticalMethods({
+        role: 'authenticated',
+        groups: [{ slug: 'lab', grants: [] }],
+      }),
+    ).toBe(false);
+    expect(
+      canAccessAnalyticalMethods({
+        role: 'authenticated',
+        groups: [{ slug: 'lab', grants: [GROUP_GRANT.pmConcentrations] }],
+      }),
+    ).toBe(false);
   });
 
   it('denies non-members', () => {
@@ -62,11 +77,11 @@ describe('featureAccess', () => {
       expect(canAccessPatternProfile({ role: 'admin', groups: [] })).toBe(true);
     });
 
-    it('allows Rettstoks group members', () => {
+    it('allows members of a group granted patternProfile.view', () => {
       expect(
         canAccessPatternProfile({
           role: 'authenticated',
-          groups: [{ slug: RETTSTOKS_GROUP_SLUG }],
+          groups: [{ slug: 'any-group', grants: [GROUP_GRANT.patternProfile] }],
         }),
       ).toBe(true);
     });

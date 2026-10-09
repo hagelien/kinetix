@@ -110,7 +110,7 @@ only dispute verdicts no ruling has answered since they were raised.
 ## Feature groups (issue 404)
 
 Admins manage feature-access groups through `api/admin.ts?resource=groups`.
-`rettstoks` is seeded by migration 0027 and gates analytical method data
+A group granted `methods.read` in `user_groups.grants` (migration 0145) unlocks analytical method data
 (`/api/methods` plus `/api/drugs?methodId=`). Unauthenticated users and users
 outside the group must receive no method data.
 

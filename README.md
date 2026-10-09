@@ -87,7 +87,7 @@ Drizzle schema: [`db/schema.ts`](./db/schema.ts). Config: [`drizzle.config.ts`](
 **Identity and access control**
 
 - **`users`** — account + auth state. `email`, `username` (both unique); `role` (`viewer`/`editor`/`admin`, default `viewer`); magic-link fields (`magic_link_hash`, `magic_link_expires`, `magic_link_failed_attempts`); `session_max_days` (default 30); `last_auth_at`, `email_verified_at`. `password_hash` is a legacy nullable column kept during the migration to magic links.
-- **`user_groups`** + **`user_group_members`** — admin-managed feature groups. The seeded `rettstoks` group gates internal analytical method data and method-based drug filtering.
+- **`user_groups`** + **`user_group_members`** — admin-managed feature groups. A group's `grants` column (set in the database) decides whether it unlocks internal analytical method data and method-based drug filtering.
 - **`allowed_email_domains`** — domain allowlist (unique `domain`, `added_by → users.id`).
 - **`allowed_emails`** — per-email allowlist (unique `email`, `added_by → users.id`).
 

@@ -44,11 +44,11 @@ function signInAsAdmin() {
 }
 
 /**
- * Sign in as a member of the Rettstoks group holding nothing else — the
+ * Sign in as a member of a granted group holding nothing else — the
  * audience the guideline section exists for, and the one that proves the gate
  * opens on group membership rather than on role.
  */
-function signInAsRettstoksMember() {
+function signInAsGrantedMember() {
   useAuthStore.setState({
     user: {
       id: 42,
@@ -59,7 +59,7 @@ function signInAsRettstoksMember() {
       enabledConcentrationUnits: ['µmol/L', 'mg/L'],
       notificationSettings: null,
       favoriteParameters: [],
-      groups: [{ id: 1, slug: 'rettstoks', name: 'Rettstoks' }],
+      groups: [{ id: 1, slug: 'lab', name: 'Lab', grants: ['methods.read', 'pmConcentrations.read', 'refsDetectionTimes.read', 'patternProfile.view'] }],
     },
     isAuthenticated: true,
     isLoading: false,
@@ -714,7 +714,7 @@ describe('DetectionTimesPage', () => {
     ).toBeTruthy();
   });
 
-  describe('Rettstoks guideline section', () => {
+  describe('laboratory guideline section', () => {
     it('is not there at all for a reader outside the group', async () => {
       // Not empty, not locked — absent. A visible-but-empty section would tell
       // a reader outside the section that a different answer exists and that
@@ -732,7 +732,7 @@ describe('DetectionTimesPage', () => {
     });
 
     it("shows a member REFS's own band, separately from the pooled windows", async () => {
-      signInAsRettstoksMember();
+      signInAsGrantedMember();
       routeFetch();
       renderPage('/detection-times?drug=7');
 
@@ -758,7 +758,7 @@ describe('DetectionTimesPage', () => {
     });
 
     it('says so when the guideline does not name the substance', async () => {
-      signInAsRettstoksMember();
+      signInAsGrantedMember();
       routeFetch({
         '/api/drugs?id=7': {
           drug: { ...DIAZEPAM, names: { nb: 'Paracetamol', en: 'Paracetamol' } },
@@ -771,7 +771,7 @@ describe('DetectionTimesPage', () => {
     });
 
     it('opens the whole guideline table on request', async () => {
-      signInAsRettstoksMember();
+      signInAsGrantedMember();
       routeFetch();
       renderPage('/detection-times');
 
@@ -805,7 +805,7 @@ describe('DetectionTimesPage', () => {
     });
 
     it("adds REFS's own column for a member", async () => {
-      signInAsRettstoksMember();
+      signInAsGrantedMember();
       routeFetch();
       renderPage('/detection-times?drug=7');
 

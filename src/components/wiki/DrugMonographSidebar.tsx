@@ -1523,7 +1523,7 @@ export function DrugMonographSidebar({
         {groupId === 'analytics_detection' ? renderMethodLimitsRows() : null}
         {/* The postmortem cohort's own table sits with the other postmortem
             quantities, and only here. Renders nothing without the
-            rettstoks/admin gate. */}
+            group-grant/admin gate. */}
         {groupId === 'postmortem' ? (
           <div className="mt-2">
             <DrugPmConcentrations

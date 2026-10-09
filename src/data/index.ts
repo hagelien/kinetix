@@ -144,7 +144,7 @@ export function clearDataCache(): void {
   methodsPromise = null;
 }
 
-// Methods are auth-gated (admin / Rettstoks); the components catalog is not.
+// Methods are auth-gated (admin / group grant); the components catalog is not.
 // Auth-state changes only need to drop the methods cache so a freshly
 // signed-in (or signed-out) user re-fetches /api/methods instead of
 // reusing the previous session's gated/ungated response. The epoch

@@ -107,7 +107,7 @@ async function main() {
         {
           type: 'heading',
           attrs: { level: 2 },
-          content: [{ type: 'text', text: 'Rettstoksikologi' }],
+          content: [{ type: 'text', text: 'Forensisk toksikologi' }],
         },
         { type: 'paragraph', content: [{ type: 'text', text: 'Ikke skrevet ennå.' }] },
         {
@@ -119,7 +119,7 @@ async function main() {
       ],
     };
 
-    const contentPlaintext = `${title} Oversikt ${title} er et stoff i Kinetix-databasen. Farmakokinetikk Farmakodynamikk Ikke skrevet ennå. Rettstoksikologi Ikke skrevet ennå. Kilder Ikke skrevet ennå.`;
+    const contentPlaintext = `${title} Oversikt ${title} er et stoff i Kinetix-databasen. Farmakokinetikk Farmakodynamikk Ikke skrevet ennå. Forensisk toksikologi Ikke skrevet ennå. Kilder Ikke skrevet ennå.`;
 
     try {
       const [page] = await db
@@ -128,7 +128,7 @@ async function main() {
           slug,
           title,
           content,
-          contentHtml: `<h1>${title}</h1><h2>Oversikt</h2><p>${title} er et stoff i Kinetix-databasen.</p><h2>Farmakokinetikk</h2><div class="drug-info-card" data-drug-cid="${comp.pubchemCid}">[Drug Info Card]</div><h2>Farmakodynamikk</h2><p>Ikke skrevet ennå.</p><h2>Rettstoksikologi</h2><p>Ikke skrevet ennå.</p><h2>Kilder</h2><p>Ikke skrevet ennå.</p>`,
+          contentHtml: `<h1>${title}</h1><h2>Oversikt</h2><p>${title} er et stoff i Kinetix-databasen.</p><h2>Farmakokinetikk</h2><div class="drug-info-card" data-drug-cid="${comp.pubchemCid}">[Drug Info Card]</div><h2>Farmakodynamikk</h2><p>Ikke skrevet ennå.</p><h2>Forensisk toksikologi</h2><p>Ikke skrevet ennå.</p><h2>Kilder</h2><p>Ikke skrevet ennå.</p>`,
           contentPlaintext,
           pageType: 'drug_monograph',
           drugCid: comp.pubchemCid,

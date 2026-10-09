@@ -6,11 +6,26 @@ import {
 } from './permissions.js';
 import { ROLES } from './roles.js';
 
-export const RETTSTOKS_GROUP_SLUG = 'rettstoks';
 export const KINETIX_LEARN_GROUP_SLUG = 'kinetix-learn';
+
+/**
+ * Restricted features a feature group can be granted in the database
+ * (`user_groups.grants`). Which group holds which grant is data, set by an
+ * admin, never named in the source tree: the code only asks "does any of this
+ * user's groups carry the grant?".
+ */
+export const GROUP_GRANT = {
+  methods: 'methods.read',
+  pmConcentrations: 'pmConcentrations.read',
+  refsDetectionTimes: 'refsDetectionTimes.read',
+  patternProfile: 'patternProfile.view',
+} as const;
+
+export type GroupGrant = (typeof GROUP_GRANT)[keyof typeof GROUP_GRANT];
 
 export interface FeatureAccessGroup {
   slug: string;
+  grants?: readonly string[] | null;
 }
 
 export interface FeatureAccessUser {
@@ -29,9 +44,21 @@ export function hasGroup(
   );
 }
 
+/** True when any of the user's groups carries `grant` in the database. */
+export function hasGroupGrant(
+  user: FeatureAccessUser | null | undefined,
+  grant: GroupGrant,
+): boolean {
+  return (
+    user?.groups?.some(
+      (group) => typeof group !== 'string' && !!group.grants?.includes(grant),
+    ) ?? false
+  );
+}
+
 /**
- * Analytical method data is reachable two ways: membership in the
- * admin-managed `rettstoks` group, or holding the `methods.read` capability
+ * Analytical method data is reachable two ways: membership in an
+ * admin-managed group granted `methods.read` in the database, or holding the `methods.read` capability
  * — which defaults to the admin tier, so this behaves exactly as before
  * until an admin lowers it in Admin → Permissions.
  */
@@ -40,14 +67,14 @@ export function canAccessAnalyticalMethods(
   overrides: PermissionOverrides = NO_OVERRIDES,
 ): boolean {
   return (
-    hasGroup(user, RETTSTOKS_GROUP_SLUG) ||
+    hasGroupGrant(user, GROUP_GRANT.methods) ||
     can(user?.role, CAP['methods.read'], overrides)
   );
 }
 
 /**
  * Postmortem concentration distributions reach the same audience as the
- * analytical methods: the `rettstoks` group, or whoever holds
+ * analytical methods: a group granted it in the database, or whoever holds
  * `pmConcentrations.read` (admin by default).
  *
  * The shipped cohort is unpublished material, and its percentiles describe
@@ -60,15 +87,15 @@ export function canAccessPmConcentrations(
   overrides: PermissionOverrides = NO_OVERRIDES,
 ): boolean {
   return (
-    hasGroup(user, RETTSTOKS_GROUP_SLUG) ||
+    hasGroupGrant(user, GROUP_GRANT.pmConcentrations) ||
     can(user?.role, CAP['pmConcentrations.read'], overrides)
   );
 }
 
 /**
- * Rettstoksikologi's own urine detection times, from the section's approved,
- * restricted urine-interpretation guideline. Same audience as the analytical
- * methods and the postmortem cohort: the `rettstoks` group, or whoever holds
+ * The laboratory's own urine detection times, from its approved, restricted
+ * urine-interpretation guideline. Same audience as the analytical methods and
+ * the postmortem cohort: a group granted it in the database, or whoever holds
  * `refsDetectionTimes.read` (admin by default).
  *
  * These bands are what one laboratory has agreed to state for its own cut-offs
@@ -84,7 +111,7 @@ export function canAccessRefsDetectionTimes(
   overrides: PermissionOverrides = NO_OVERRIDES,
 ): boolean {
   return (
-    hasGroup(user, RETTSTOKS_GROUP_SLUG) ||
+    hasGroupGrant(user, GROUP_GRANT.refsDetectionTimes) ||
     can(user?.role, CAP['refsDetectionTimes.read'], overrides)
   );
 }
@@ -95,7 +122,7 @@ export function canAccessRefsDetectionTimes(
  * bands without the cohort-provenance and matching gates
  * (docs/plans/2026-08-11-metabolite-ratio-profile.md §10 keeps it out of the
  * primary nav until then). So the nav entry is shown only to the forensic
- * audience — the `rettstoks` group, plus the admin tier — the same containment
+ * audience — a group granted `patternProfile.view`, plus the admin tier — the same containment
  * the postmortem cohort and REFS tables use. The route itself stays reachable
  * by URL, exactly as it was before it was surfaced.
  *
@@ -107,7 +134,10 @@ export function canAccessRefsDetectionTimes(
 export function canAccessPatternProfile(
   user: FeatureAccessUser | null | undefined,
 ): boolean {
-  return hasGroup(user, RETTSTOKS_GROUP_SLUG) || user?.role === ROLES.admin;
+  return (
+    hasGroupGrant(user, GROUP_GRANT.patternProfile) ||
+    user?.role === ROLES.admin
+  );
 }
 
 /**

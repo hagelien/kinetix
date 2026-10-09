@@ -39,7 +39,7 @@ const inFlight = new Map<string, Promise<PmConcentrationsResult>>();
  *
  * This cache holds gated, unpublished forensic data, and Kinetix is a single-
  * page app: signing out and signing in as somebody else replaces the auth
- * store without ever reloading the module. Keyed on ids alone, a rettstoks
+ * store without ever reloading the module. Keyed on ids alone, a granted
  * member's payload would still be served to whoever logged in next, for up to
  * the TTL, without a request the server could refuse.
  *

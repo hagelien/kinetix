@@ -1,9 +1,9 @@
 /**
- * Rettstoksikologi's urine detection times.
+ * The laboratory's urine detection times.
  *
  *   GET /api/refs-detection-times — the whole table, once.
  *
- * Read access is gated to admins + members of the `rettstoks` group
+ * Read access is gated to admins + members of a group granted it in the database
  * (`canAccessRefsDetectionTimes`). There is no write path: the table is a
  * transcription of an approved, versioned, restricted controlled document. It
  * lives in the `refs_detection_guidelines` table, loaded by an operator from

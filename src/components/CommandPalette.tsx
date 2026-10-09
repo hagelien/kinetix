@@ -199,7 +199,7 @@ export function CommandPalette() {
   const methodsLoadEpochRef = useRef(0);
   const context = getContext(location.pathname);
 
-  // Analytical methods are gated to admins + the rettstoks group. Load the
+  // Analytical methods are gated to admins + groups granted it in the database. Load the
   // method list once per eligible session so repeated Ctrl+K opens reuse the
   // data-layer cache instead of issuing a fresh /api/methods request.
   useEffect(() => {

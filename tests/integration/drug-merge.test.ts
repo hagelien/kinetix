@@ -4,7 +4,7 @@
  * Uses MHD's real situation as the fixture: one substance registered twice, one
  * copy carrying the written monograph. The merge must keep the monograph copy,
  * fold every kind of structured reference from the duplicate onto it (parameters
- * with an admin-resolved conflict, source entries, rettstoks method memberships
+ * with an admin-resolved conflict, source entries, analytical-method memberships
  * with a dedupe, metabolite and precursor edges, and a RESTRICT-bound reference
  * atlas row), rewrite links to the deleted page, and delete the duplicate.
  */
@@ -140,7 +140,7 @@ describe('drug merge', () => {
       { drugId: loserId, parameter: 'halfLife', unit: 'h', low: '8', high: '10', median: '9', origin: 'legacy', createdBy: userId },
     ]);
 
-    // Rettstoks method memberships: M1 has both (dedupe), M2 only the loser (move).
+    // Analytical-method memberships: M1 has both (dedupe), M2 only the loser (move).
     const [m1] = await db.insert(analyticalMethods).values({ code: 'M1', name: 'Panel 1' }).returning({ id: analyticalMethods.id });
     const [m2] = await db.insert(analyticalMethods).values({ code: 'M2', name: 'Panel 2' }).returning({ id: analyticalMethods.id });
     await db.insert(analyticalMethodComponents).values([

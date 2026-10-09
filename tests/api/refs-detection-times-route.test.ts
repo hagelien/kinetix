@@ -1,5 +1,5 @@
 /**
- * The gate on Rettstoks's guideline table.
+ * The gate on the laboratory's guideline table.
  *
  * This route is the only thing standing between a restricted controlled
  * document and every reader of Kinetix: the table is kept out of the client
@@ -132,11 +132,11 @@ describe('GET /api/refs-detection-times', () => {
     expect(getDbMock).not.toHaveBeenCalled();
   });
 
-  it('serves a rettstoks member the whole table', async () => {
+  it('serves a granted member the whole table', async () => {
     getUserFromRequestMock.mockResolvedValue({
       userId: 7,
       role: 'authenticated',
-      groups: [{ slug: 'rettstoks' }],
+      groups: [{ slug: 'lab', grants: ['methods.read', 'pmConcentrations.read', 'refsDetectionTimes.read', 'patternProfile.view'] }],
     });
     const { res, state } = createResponse();
 

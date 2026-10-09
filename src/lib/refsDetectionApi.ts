@@ -8,7 +8,7 @@
  *
  * Cached per identity, not globally. Kinetix is a single-page app — signing out
  * and signing in as somebody else replaces the auth store without reloading the
- * module — so a cache keyed on nothing would serve a Rettstoks member's copy of
+ * module — so a cache keyed on nothing would serve a granted member's copy of
  * a restricted guideline to whoever logged in next, without a request the
  * server could refuse. Identity is part of the key, and a change to it clears
  * what the previous identity fetched.

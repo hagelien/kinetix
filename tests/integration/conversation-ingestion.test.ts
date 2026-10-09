@@ -1326,7 +1326,7 @@ describe('conversation ingestion — consent held to what was shown', () => {
       createdBy: userId,
       updatedBy: userId,
     });
-    await db.insert(wikiCategories).values({ name: 'Rettstoksikologi', slug: 'rettstoks' });
+    await db.insert(wikiCategories).values({ name: 'Forensisk toksikologi', slug: 'forensisk-toksikologi' });
 
     const doc = parse(
       bundle({
@@ -1336,7 +1336,7 @@ describe('conversation ingestion — consent held to what was shown', () => {
             titleNb: 'Ny temaside',
             slug: 'ny-temaside',
             parentSlug: 'foreldre',
-            categories: ['Rettstoksikologi', 'Finnes Ikke'],
+            categories: ['Forensisk toksikologi', 'Finnes Ikke'],
             sections: [
               {
                 sectionId: 'bakgrunn',
@@ -1354,7 +1354,7 @@ describe('conversation ingestion — consent held to what was shown', () => {
     expect(plan.items[0]).toMatchObject({
       disposition: 'ready',
       parent: { slug: 'foreldre', title: 'Foreldreside' },
-      categories: { matched: ['Rettstoksikologi'], dropped: ['Finnes Ikke'] },
+      categories: { matched: ['Forensisk toksikologi'], dropped: ['Finnes Ikke'] },
     });
 
     await applyIngestion(doc, { userId, accept: [0] });
