@@ -181,7 +181,8 @@ export default withErrorHandling(async function handler(
   }
 
   // Latest self-reported model per agent, across its verdicts and its logged
-  // runs. Expand the id list into discrete IN (…) params (see api/admin.ts:
+  // runs. A re-recorded verdict keeps its created_at, so verdicts are ordered
+  // by updated_at. Expand the id list into discrete IN (…) params (see api/admin.ts:
   // a JS array passed to ANY() through db.execute is serialized as a string).
   const agentIdsList = sql.join(
     agentRows.map((r) => sql`${r.id}`),
@@ -191,13 +192,13 @@ export default withErrorHandling(async function handler(
     db.execute(sql`
       SELECT DISTINCT ON (agent_id) agent_id, model
       FROM (
-        SELECT agent_id, model, created_at FROM agent_verifications
+        SELECT agent_id, model, updated_at AS reported_at FROM agent_verifications
         WHERE model IS NOT NULL AND agent_id IN (${agentIdsList})
         UNION ALL
-        SELECT agent_id, model, created_at FROM agent_run_usage
+        SELECT agent_id, model, created_at AS reported_at FROM agent_run_usage
         WHERE model IS NOT NULL AND agent_id IN (${agentIdsList})
       ) reported
-      ORDER BY agent_id, created_at DESC
+      ORDER BY agent_id, reported_at DESC
     `),
   );
   const recentModelByAgent = new Map<number, string>();
