@@ -4,6 +4,8 @@
 
 En temaside er et TipTap-dokument. Overskrifter bærer varig `attrs.sectionId`. Et faktum er en `fact`-node med UUID og `referenceIds` til poster i `citations`. Importen oppretter én `pending_edits`-rad per faktum: `editType=wiki_fact`, `factOperation=add`, `targetId=page.id`, `sectionId`, `factStatement`, `referenceIds`, `proposedValue` og `status=pending`. Godkjenning gjøres senere i eksisterende review-flyt. Pluginen skal ikke produsere disse interne feltene.
 
+`facts[].statement` er en lesbar vurderingsenhet: en naturlig setning eller et kort, sammenhengende avsnitt med én eller flere beslektede påstander. Flere setninger er tillatt. Alle empiriske delpåstander skal ha kildegrunnlag; `sourceKeys` samler deres relevante kilder. Formatet krever ikke en egen rad per stoff, faktor, tabellcelle eller minste logiske påstand. Se `writing-units.md`.
+
 Arbeidsutkast:
 ```json
 {
@@ -11,7 +13,7 @@ Arbeidsutkast:
   "sources": [{"key": "S1", "type": "doi", "identifier": "10.1093/jat/bkae097"}],
   "sections": [{
     "key": "bakgrunn", "heading": "Bakgrunn", "level": 2,
-    "facts": [{"key": "F1", "statement": "En selvstendig, kildebelagt påstand.", "sourceKeys": ["S1"], "inputUnits": ["U0001"]}]
+    "facts": [{"key": "F1", "statement": "En lesbar, kildebelagt setning eller et kort sammenhengende avsnitt.", "sourceKeys": ["S1"], "inputUnits": ["U0001"]}]
   }]
 }
 ```
