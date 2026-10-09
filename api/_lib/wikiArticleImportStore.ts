@@ -63,14 +63,18 @@ function prepare(bundle: WikiArticleBundle, page: Page) {
         throw new WikiArticleConflict(`section_order_conflict:${input.key}`);
       previousIndex = index;
     } else {
+      let position = previousIndex + 1;
+      // Preserve the preceding heading's whole subtree, including descendants
+      // omitted from this article. This also protects existing H4+ headings.
+      while (position < current.length && current[position]!.headingLevel > input.level) position += 1;
       const added = applyAddSection(doc, {
         headingText: input.heading,
         headingLevel: input.level,
-        position: previousIndex + 1,
+        position,
       });
       doc = added.doc;
       sectionId = added.sectionId;
-      previousIndex += 1;
+      previousIndex = position;
     }
     if (used.has(sectionId))
       throw new WikiArticleConflict(`duplicate_section:${input.key}`);

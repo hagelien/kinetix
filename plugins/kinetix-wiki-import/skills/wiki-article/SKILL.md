@@ -7,6 +7,8 @@ description: Konverter en kildebelagt fagartikkel til Kinetix wiki-import med at
 
 Lag ett `kinetix-wiki-article-v1`-dokument fra brukerens artikkel. Det er et importforslag, ikke en publisering eller en ny faglig verifisering. Les `references/contract.md` og bruk `references/schema.json`. Ikke finn på et alternativt importformat.
 
+Skriv alle nye overskrifter, faktapåstander og forklaringer på norsk bokmål, også når artikkelen er på engelsk. Oversett meningen presist uten å endre forbehold, tall eller faglig innhold. Bevar kildeidentifikatorer, forfatternavn, originaltitler og annen bibliografisk metadata på originalspråket. Eksisterende seksjons-ID-er og observerte overskrifter brukes uendret som ankre; eventuell omdøping håndteres separat i Kinetix.
+
 ## Arbeidsflyt
 
 1. Finn hele artikkelen, referanselisten og målsidens URL/slug i samtalen eller vedlegget. Bruk materialet som allerede er gitt. Spør bare om noe nødvendig mangler. Lag en UTF-8 Markdown-arbeidsfil uten å endre faglig innhold.
