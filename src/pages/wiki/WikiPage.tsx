@@ -16,6 +16,7 @@ import { DrugMonographSidebar } from '@/components/wiki/DrugMonographSidebar';
 import { DrugMetadataHeader } from '@/components/wiki/DrugMetadataHeader';
 import { DrugAnalyticalMethods } from '@/components/wiki/DrugAnalyticalMethods';
 import { DrugSeedPromptButton } from '@/components/wiki/DrugSeedPromptButton';
+import { DeleteWikiPageButton } from '@/components/wiki/DeleteWikiPageButton';
 import { FactDiscussionPanel } from '@/components/wiki/FactDiscussionPanel';
 import { DrugReferencesList } from '@/components/wiki/DrugReferencesList';
 import { EntityMetabolismDrugs } from '@/components/wiki/EntityMetabolismDrugs';
@@ -549,6 +550,12 @@ export function WikiPage() {
                     {t('wiki.edit')}
                   </Link>
                 )}
+                <DeleteWikiPageButton
+                  slug={page.slug}
+                  title={page.title}
+                  pageType={page.pageType}
+                  entityId={page.entityId}
+                />
               </div>
             </div>
             <div className="flex items-center gap-3 mt-2 text-sm text-muted-foreground">

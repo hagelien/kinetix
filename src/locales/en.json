@@ -2603,6 +2603,10 @@
     "pageNotFoundDesc": "The wiki page \"{{slug}}\" does not exist.",
     "backToWiki": "Back to Wiki",
     "edit": "Edit",
+    "deletePage": "Delete page",
+    "deletingPage": "Deleting…",
+    "deletePageConfirm": "Permanently delete the page \"{{title}}\"? All of its facts, revision history, fact discussions and pending proposals are removed with it. Sub-pages are kept and moved to the top level. This cannot be undone.",
+    "deletePageError": "Could not delete the page.",
     "drugMonograph": "Drug Monograph",
     "seedPrompt": {
       "copy": "Copy seed prompt",
