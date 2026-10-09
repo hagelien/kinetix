@@ -110,6 +110,23 @@ describe('PharmacodynamicsComparison', () => {
     expect(within(card).queryByText(/\dx$/)).toBeNull();
   });
 
+  it('keeps the loaded drugs when one basket drug can no longer be fetched', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    fetchDrugById.mockImplementation(async (id: number) => {
+      if (id === 1) throw new Error('Drug not found');
+      return {
+        drug: {
+          id,
+          receptorTargets: [mechanism(2, { ki: { median: 0.0049, unit: 'µM' } })],
+        },
+      };
+    });
+    render(<Harness />);
+    expect(await screen.findByRole('button', { name: /OPRM1/ })).toBeTruthy();
+    expect(screen.queryByText('comparison.pd.loadError')).toBeNull();
+    consoleError.mockRestore();
+  });
+
   it('shows a localized notice, not the raw error, when loading fails', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     fetchDrugById.mockRejectedValue(new Error('Drug not found'));

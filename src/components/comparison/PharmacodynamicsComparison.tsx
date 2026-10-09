@@ -69,22 +69,29 @@ function useReceptorTargets(drugIds: number[]) {
     let cancelled = false;
     setLoading(true);
     setFailed(false);
-    Promise.all(ids.map((id) => fetchDrugById(id)))
+    // A persisted basket can hold a drug that was since deleted or merged; one
+    // rejected read must not discard the drugs that did load.
+    Promise.allSettled(ids.map((id) => fetchDrugById(id)))
       .then((results) => {
         if (cancelled) return;
-        setByDrug(
-          Object.fromEntries(
-            results.map(({ drug }) => [drug.id, drug.receptorTargets ?? []]),
-          ),
-        );
-      })
-      .catch((err) => {
-        if (!cancelled) {
+        const loaded: Record<number, DrugReceptorTargetSummary[]> = {};
+        let firstError: unknown;
+        let rejected = 0;
+        for (const result of results) {
+          if (result.status === 'fulfilled') {
+            const { drug } = result.value;
+            loaded[drug.id] = drug.receptorTargets ?? [];
+          } else {
+            rejected += 1;
+            firstError ??= result.reason;
+          }
+        }
+        setByDrug(loaded);
+        if (rejected > 0) {
           // The raw message is API/browser prose (often English); log it and
-          // show a localized notice instead.
-          console.error('Failed to load receptor mechanisms', err);
-          setByDrug({});
-          setFailed(true);
+          // show a localized notice instead, only when nothing loaded.
+          console.error('Failed to load receptor mechanisms', firstError);
+          setFailed(rejected === results.length);
         }
       })
       .finally(() => {
