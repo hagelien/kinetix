@@ -196,11 +196,21 @@ export function loadProfiles(role, directory = defaultDirectory) {
   return selected;
 }
 
+// The usage helper keeps the last --workflow it sees, so require exactly one
+// and make it "adjudication": T3 cost rows must not land in another workflow.
+function pinsAdjudicationWorkflow(args) {
+  const values = args.flatMap((arg, i) =>
+    arg === "--workflow" ? [args[i + 1]] : [],
+  );
+  return values.length === 1 && values[0] === "adjudication";
+}
+
 export function assertRoleCommand(role, kind, args) {
   if (!isAdjudicator(role)) return;
   const [first, second] = args;
   if (
-    (kind === "helper" && !adjudicatorHelpers.has(first)) ||
+    (kind === "helper" &&
+      (!adjudicatorHelpers.has(first) || !pinsAdjudicationWorkflow(args))) ||
     (kind === "api" &&
       first !== "GET" &&
       !(first === "POST" && adjudicatorWrites.has(second)))
