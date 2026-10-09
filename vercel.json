@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
-  "buildCommand": "npx tsx scripts/apply-migrations-build.ts && npx tsx scripts/fix-monograph-links-build.ts && npm run build",
+  "buildCommand": "npx tsx scripts/apply-migrations-build.ts && npx tsx scripts/fix-monograph-links-build.ts && npx tsx scripts/ensure-entity-monographs-build.ts && npm run build",
   "outputDirectory": "dist",
   "headers": [
     {

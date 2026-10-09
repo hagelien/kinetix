@@ -205,15 +205,29 @@ function WikiPageCard({ node }: { node: WikiTreeNode }) {
           )}
         </div>
       </div>
-      {node.children.length > 0 && <WikiSubpageList nodes={node.children} />}
+      {node.children.length > 0 && (
+        <WikiSubpageList nodes={node.children} parentSlug={node.slug} />
+      )}
     </article>
   );
 }
 
-function WikiSubpageList({ nodes }: { nodes: WikiTreeNode[] }) {
+// A hub such as "Bioentiteter" can hold hundreds of subpages; the card shows
+// the first few and links to the hub page, which lists them all.
+export const MAX_CARD_SUBPAGES = 8;
+
+function WikiSubpageList({
+  nodes,
+  parentSlug,
+}: {
+  nodes: WikiTreeNode[];
+  parentSlug: string;
+}) {
+  const { t } = useTranslation();
+  const hidden = nodes.length - MAX_CARD_SUBPAGES;
   return (
     <ul className="mt-3 ml-4 space-y-1 border-l-2 border-primary/20 pl-3">
-      {nodes.map((child) => (
+      {nodes.slice(0, MAX_CARD_SUBPAGES).map((child) => (
         <li key={child.id}>
           <Link
             to={`/wiki/${child.slug}`}
@@ -226,10 +240,20 @@ function WikiSubpageList({ nodes }: { nodes: WikiTreeNode[] }) {
             <span>{child.title}</span>
           </Link>
           {child.children.length > 0 && (
-            <WikiSubpageList nodes={child.children} />
+            <WikiSubpageList nodes={child.children} parentSlug={child.slug} />
           )}
         </li>
       ))}
+      {hidden > 0 && (
+        <li>
+          <Link
+            to={`/wiki/${parentSlug}`}
+            className="inline-block rounded-sm py-1 text-sm text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+          >
+            {t("wiki.moreSubpages", { count: hidden })}
+          </Link>
+        </li>
+      )}
     </ul>
   );
 }
