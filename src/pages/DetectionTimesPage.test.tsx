@@ -44,11 +44,11 @@ function signInAsAdmin() {
 }
 
 /**
- * Sign in as a member of the Lab group holding nothing else — the
+ * Sign in as a member of a granted group holding nothing else — the
  * audience the guideline section exists for, and the one that proves the gate
  * opens on group membership rather than on role.
  */
-function signInAsLabMember() {
+function signInAsGrantedMember() {
   useAuthStore.setState({
     user: {
       id: 42,
@@ -59,7 +59,7 @@ function signInAsLabMember() {
       enabledConcentrationUnits: ['µmol/L', 'mg/L'],
       notificationSettings: null,
       favoriteParameters: [],
-      groups: [{ id: 1, slug: 'lab', name: 'Lab' }],
+      groups: [{ id: 1, slug: 'lab', name: 'Lab', grants: ['methods.read', 'pmConcentrations.read', 'labDetectionTimes.read', 'patternProfile.view'] }],
     },
     isAuthenticated: true,
     isLoading: false,
@@ -714,7 +714,7 @@ describe('DetectionTimesPage', () => {
     ).toBeTruthy();
   });
 
-  describe('Lab guideline section', () => {
+  describe('laboratory guideline section', () => {
     it('is not there at all for a reader outside the group', async () => {
       // Not empty, not locked — absent. A visible-but-empty section would tell
       // a reader outside the section that a different answer exists and that
@@ -732,7 +732,7 @@ describe('DetectionTimesPage', () => {
     });
 
     it("shows a member LAB's own band, separately from the pooled windows", async () => {
-      signInAsLabMember();
+      signInAsGrantedMember();
       routeFetch();
       renderPage('/detection-times?drug=7');
 
@@ -758,7 +758,7 @@ describe('DetectionTimesPage', () => {
     });
 
     it('says so when the guideline does not name the substance', async () => {
-      signInAsLabMember();
+      signInAsGrantedMember();
       routeFetch({
         '/api/drugs?id=7': {
           drug: { ...DIAZEPAM, names: { nb: 'Paracetamol', en: 'Paracetamol' } },
@@ -771,7 +771,7 @@ describe('DetectionTimesPage', () => {
     });
 
     it('opens the whole guideline table on request', async () => {
-      signInAsLabMember();
+      signInAsGrantedMember();
       routeFetch();
       renderPage('/detection-times');
 
@@ -805,7 +805,7 @@ describe('DetectionTimesPage', () => {
     });
 
     it("adds LAB's own column for a member", async () => {
-      signInAsLabMember();
+      signInAsGrantedMember();
       routeFetch();
       renderPage('/detection-times?drug=7');
 

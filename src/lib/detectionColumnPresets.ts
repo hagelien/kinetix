@@ -9,7 +9,7 @@
  */
 
 /**
- * Lab's own urine detection time. A gated, non-parameter column of the
+ * The laboratory's own urine detection time. A gated, non-parameter column of the
  * substance register; the id lives here so the register and the presets cannot
  * disagree about how to spell it.
  */
@@ -27,7 +27,7 @@ export const DETECTION_COLUMN_PRESET: readonly string[] = [
   'urineDetectionWindow',
 ];
 
-/** The preset a Lab member gets: the same axis, plus LAB's own band. */
+/** The preset a granted member gets: the same axis, plus LAB's own band. */
 export const LAB_DETECTION_COLUMN_PRESET: readonly string[] = [
   ...DETECTION_COLUMN_PRESET,
   LAB_URINE_COLUMN_ID,
