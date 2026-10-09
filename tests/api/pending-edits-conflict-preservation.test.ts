@@ -438,7 +438,11 @@ describe('/api/pending-edits submitter conflict-marker preservation', () => {
     // No payload change means no rebase: revisesPayload must be false, so a
     // stale edit cannot be made approvable without rebasing.
     const { set } = mockDb(
-      pendingEdit({ proposedMeta: { conflict: { approvedEditId: 41 } } }),
+      pendingEdit({
+        factOperation: 'replace',
+        factTargetAnchor: { factId: 'fact-1' },
+        proposedMeta: { conflict: { approvedEditId: 41 } },
+      }),
     );
     const { res } = createResponse();
 
@@ -461,6 +465,60 @@ describe('/api/pending-edits submitter conflict-marker preservation', () => {
  * marker was announcing — reading and source quote together. Commentary
  * standing in for a rebase.
  */
+// A new fact or a new section has no stale content to rebase: approval
+// re-checks its section anchor against the live page. A plain resubmit is
+// therefore the author's whole answer to a sibling-approval marker.
+describe('/api/pending-edits — resubmitting an additive wiki edit', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getUserFromRequestMock.mockResolvedValue({
+      userId: 12,
+      role: 'contributor',
+    });
+  });
+
+  it('clears the marker on a plain resubmit of a new fact', async () => {
+    const { set } = mockDb(
+      pendingEdit({ proposedMeta: { conflict: { approvedEditId: 41 } } }),
+    );
+    await handler(createPatchRequest({ status: 'pending' }), createResponse().res);
+    expect(revisesPayloadFlag(capturedProposedMeta(set))).toBe(true);
+  });
+
+  it('clears the marker on a plain resubmit of a new section', async () => {
+    const { set } = mockDb(
+      pendingEdit({
+        editType: 'wiki_section',
+        factOperation: null,
+        factStatement: null,
+        proposedValue: {
+          operation: 'add',
+          headingText: 'Farmakologi',
+          headingLevel: 2,
+          position: 2,
+        },
+        proposedMeta: { conflict: { approvedEditId: 41 } },
+      }),
+    );
+    await handler(createPatchRequest({ status: 'pending' }), createResponse().res);
+    expect(revisesPayloadFlag(capturedProposedMeta(set))).toBe(true);
+  });
+
+  it('keeps the marker on a plain resubmit of a section rename', async () => {
+    const { set } = mockDb(
+      pendingEdit({
+        editType: 'wiki_section',
+        factOperation: null,
+        factStatement: null,
+        proposedValue: { operation: 'edit', headingText: 'Nytt navn' },
+        proposedMeta: { conflict: { approvedEditId: 41 } },
+      }),
+    );
+    await handler(createPatchRequest({ status: 'pending' }), createResponse().res);
+    expect(revisesPayloadFlag(capturedProposedMeta(set))).toBe(false);
+  });
+});
+
 describe('/api/pending-edits — only a rebase clears a conflict', () => {
   const conflict = { reason: 'direct_admin_write', id: 'marker-1' };
 
