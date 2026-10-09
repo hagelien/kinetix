@@ -3281,6 +3281,9 @@
     "errorPageTypeUnsupported": "Seksjonsredigering er bare tilgjengelig for emnesider."
   },
   "wikiFact": {
+    "pendingAdd": "Til vurdering",
+    "pendingReplace": "Endring til vurdering",
+    "pendingRemove": "Fjerning til vurdering",
     "addFact": "Legg til fakta",
     "addToSection": "+ Legg til fakta i {{section}}",
     "convertProse": "Gjør om brødtekst til fakta ({{count}})",

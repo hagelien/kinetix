@@ -1,4 +1,4 @@
-import { useMemo, useState, type DragEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -30,7 +30,11 @@ import {
   type ConvertibleProse,
 } from '@/lib/topicProseConversion';
 import type { TipTapDoc } from '@/lib/monographContent';
-import { createPendingEdit } from '@/lib/pendingEditsApi';
+import {
+  createPendingEdit,
+  fetchPendingEdits,
+  type PendingEditRow,
+} from '@/lib/pendingEditsApi';
 import '@/styles/wiki-prose.css';
 
 interface TopicSectionsEditorProps {
@@ -84,7 +88,42 @@ export function TopicSectionsEditor({
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const [reorderError, setReorderError] = useState<string | null>(null);
 
+  // Pending wiki_fact edits on this page, shown greyed out under their
+  // section so an author keeps track of what is already in review.
+  // Non-reviewers only get their own submissions back from the API.
+  const [pendingFacts, setPendingFacts] = useState<PendingEditRow[]>([]);
+  const loadPendingFacts = useCallback(async () => {
+    try {
+      const { pendingEdits } = await fetchPendingEdits({
+        status: 'pending',
+        editType: 'wiki_fact',
+        targetId: pageId,
+      });
+      setPendingFacts(pendingEdits);
+    } catch {
+      // Purely informational; the editor works without it.
+      setPendingFacts([]);
+    }
+  }, [pageId]);
+  useEffect(() => {
+    void loadPendingFacts();
+  }, [loadPendingFacts]);
+  const pendingFactsBySection = useMemo(() => {
+    const map = new Map<string, PendingEditRow[]>();
+    for (const row of pendingFacts) {
+      if (!row.sectionId) continue;
+      const list = map.get(row.sectionId) ?? [];
+      list.push(row);
+      map.set(row.sectionId, list);
+    }
+    // API returns newest first; list oldest first so new adds land last,
+    // matching where an approved add is appended.
+    for (const list of map.values()) list.reverse();
+    return map;
+  }, [pendingFacts]);
+
   const handleSubmitted = () => {
+    void loadPendingFacts();
     onSectionEditSubmitted?.();
   };
 
@@ -218,6 +257,7 @@ export function TopicSectionsEditor({
             section={section}
             pageId={pageId}
             sectionPosition={idx}
+            pendingFacts={pendingFactsBySection.get(section.sectionId) ?? []}
             onSubmitted={handleSubmitted}
             isDragging={dragIndex === idx}
             onDragHandleStart={handleDragStart(idx)}
@@ -271,6 +311,7 @@ interface TopicSectionCardProps {
   section: TopicSection;
   pageId: number;
   sectionPosition: number;
+  pendingFacts: PendingEditRow[];
   onSubmitted: () => void;
   isDragging: boolean;
   onDragHandleStart: (e: DragEvent<HTMLDivElement>) => void;
@@ -281,6 +322,7 @@ function TopicSectionCard({
   section,
   pageId,
   sectionPosition,
+  pendingFacts,
   onSubmitted,
   isDragging,
   onDragHandleStart,
@@ -486,6 +528,10 @@ function TopicSectionCard({
         </div>
       ) : null}
       <EditorContent editor={editor} />
+      <PendingFactList
+        rows={pendingFacts}
+        bodyContent={section.bodyContent}
+      />
       {editingFact ? (
         <EditFactPanel
           key={editingFact.factId}
@@ -579,5 +625,75 @@ function TopicSectionCard({
         </div>
       )}
     </section>
+  );
+}
+
+function nodeText(node: unknown): string {
+  const n = node as { text?: unknown; content?: unknown[] } | null;
+  if (!n) return '';
+  if (typeof n.text === 'string') return n.text;
+  return Array.isArray(n.content) ? n.content.map(nodeText).join(' ') : '';
+}
+
+/**
+ * Greyed-out list of this section's facts that are still in review, so an
+ * author adding several facts in a row can see what is already submitted.
+ */
+function PendingFactList({
+  rows,
+  bodyContent,
+}: {
+  rows: PendingEditRow[];
+  bodyContent: unknown[];
+}): JSX.Element | null {
+  const { t } = useTranslation();
+  // Reorders carry no text worth showing; they only move existing facts.
+  const visible = rows.filter((r) => r.factOperation !== 'reorder');
+  if (visible.length === 0) return null;
+
+  const liveStatement = (factId: string | undefined): string => {
+    if (!factId) return '';
+    const node = bodyContent.find(
+      (n) =>
+        (n as { type?: string; attrs?: { factId?: string } } | null)?.attrs
+          ?.factId === factId,
+    );
+    return nodeText(node).replace(/\s+/g, ' ').trim();
+  };
+
+  return (
+    <ul
+      data-testid="pending-facts"
+      className="space-y-1.5 border-t border-dashed border-border px-4 py-3"
+    >
+      {visible.map((row) => {
+        const statement =
+          row.factStatement?.trim() ||
+          liveStatement(row.factTargetAnchor?.factId);
+        const label =
+          row.factOperation === 'replace'
+            ? t('wikiFact.pendingReplace')
+            : row.factOperation === 'remove'
+              ? t('wikiFact.pendingRemove')
+              : t('wikiFact.pendingAdd');
+        return (
+          <li
+            key={row.id}
+            className="flex items-start gap-2 rounded-md border border-dashed border-border/70 bg-muted/20 px-3 py-2 text-sm text-muted-foreground"
+          >
+            <span className="mt-0.5 shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              {label}
+            </span>
+            <span
+              className={`leading-snug italic ${
+                row.factOperation === 'remove' ? 'line-through' : ''
+              }`}
+            >
+              {statement}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
