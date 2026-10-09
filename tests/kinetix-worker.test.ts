@@ -418,6 +418,16 @@ describe("local worker credential separation", () => {
         "no_change",
       ],
       ["helper", "rejection-scan.ts"],
+      ["helper", "kinetix-log-run-usage.ts"],
+      ["helper", "kinetix-log-run-usage.ts", "--workflow", "producer"],
+      [
+        "helper",
+        "kinetix-log-run-usage.ts",
+        "--workflow",
+        "adjudication",
+        "--workflow",
+        "producer",
+      ],
     ]) {
       const r = await run(["--profile", "adjudicator-a", ...args]);
       expect(r.code).not.toBe(0);
