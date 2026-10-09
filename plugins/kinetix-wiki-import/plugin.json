@@ -1,13 +1,13 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "kinetix-wiki-import",
-  "version": "0.1.1",
-  "description": "Konverter kildebelagte fagartikler til validerte Kinetix-forslag med atomiske fakta, kilder og seksjonsplassering.",
+  "version": "0.1.2",
+  "description": "Konverter kildebelagte fagartikler til validerte Kinetix-forslag med lesbar wiki-tekst, kilder og seksjonsplassering.",
   "author": { "name": "Max Hagelien" },
   "extensions": { "com.openai": { "interface": {
     "displayName": "Kinetix Wiki Import",
     "shortDescription": "Artikkel til Kinetix review-kø",
-    "longDescription": "Gjør fagartikler om til JSON med atomiske fakta, kilder og overskrifter. Validerer struktur og tekstdekning før manuell import. Krever kinetix-wiki-article-v1 i Kinetix. Skriver aldri til Kinetix og hevder ikke at kildeverifisering er utført.",
+    "longDescription": "Gjør fagartikler om til JSON med naturlige setninger, korte sammenhengende avsnitt, kilder og overskrifter. Kontrollerer kildegrunnlaget for hver delpåstand og validerer struktur og tekstdekning før manuell import. Krever kinetix-wiki-article-v1 i Kinetix. Skriver aldri til Kinetix og hevder ikke at kildeverifisering er utført.",
     "developerName": "Max Hagelien",
     "category": "Productivity",
     "capabilities": ["Interactive"],
