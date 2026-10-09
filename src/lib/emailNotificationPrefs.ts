@@ -22,6 +22,17 @@
 export const EMAIL_FREQUENCIES = ['immediate', 'daily', 'weekly', 'monthly'] as const;
 export type EmailFrequency = (typeof EMAIL_FREQUENCIES)[number];
 
+/**
+ * The frequencies the preferences page offers. `immediate` is left out: email
+ * is sent by one run a day, so "one email per event, as it happens" would not
+ * be true. A stored `immediate` is still read and honoured by that daily run.
+ */
+export const SELECTABLE_EMAIL_FREQUENCIES: readonly EmailFrequency[] = [
+  'daily',
+  'weekly',
+  'monthly',
+];
+
 export const EMAIL_LOCALES = ['nb', 'en'] as const;
 export type EmailLocale = (typeof EMAIL_LOCALES)[number];
 
@@ -77,10 +88,11 @@ export function enabledAudiences(prefs: ResolvedEmailPrefs): NotificationAudienc
 }
 
 /**
- * Summaries go out at 06:00 UTC (07:00/08:00 in Norway): daily every day,
- * weekly on Mondays, monthly on the 1st.
+ * Summary periods start at 03:00 UTC, which is at or before the daily
+ * 05:00 Oslo run in summer (03:00 UTC) and winter (04:00 UTC) alike: daily
+ * every day, weekly on Mondays, monthly on the 1st.
  */
-export const DIGEST_HOUR_UTC = 6;
+export const DIGEST_HOUR_UTC = 3;
 
 /**
  * Start of the summary period `now` falls in — the most recent send slot at
