@@ -550,7 +550,12 @@ export function WikiPage() {
                     {t('wiki.edit')}
                   </Link>
                 )}
-                <DeleteWikiPageButton slug={page.slug} title={page.title} />
+                <DeleteWikiPageButton
+                  slug={page.slug}
+                  title={page.title}
+                  pageType={page.pageType}
+                  entityId={page.entityId}
+                />
               </div>
             </div>
             <div className="flex items-center gap-3 mt-2 text-sm text-muted-foreground">
@@ -618,7 +623,6 @@ export function WikiPage() {
                     {t('wiki.edit')}
                   </Link>
                 )}
-                <DeleteWikiPageButton slug={page.slug} title={page.title} />
               </div>
             )}
           </div>

@@ -28,7 +28,7 @@ import {
   teardownIntegrationDb,
   type IntegrationDb,
 } from './setup/harness.js';
-import { seedDrug, seedUser } from './setup/seed.js';
+import { seedBioEntity, seedDrug, seedUser } from './setup/seed.js';
 
 let db: IntegrationDb;
 
@@ -139,27 +139,54 @@ describe('DELETE /api/wiki/pages', () => {
     expect(focus!.pageIds).toEqual([otherId]);
   });
 
-  it('deletes a drug monograph page under the drug lock', async () => {
+  it('refuses a drug monograph while its drug exists', async () => {
     const userId = await seedUser(db);
     const drugId = await seedDrug(db, { slug: 'kokain' });
-    const pageId = await seedPage(userId, {
+    await seedPage(userId, {
       slug: 'kokain',
       title: 'Kokain',
       pageType: 'drug_monograph',
       drugCid: drugId,
     });
-    await db.insert(pendingEdits).values({
-      editType: 'wiki_fact',
-      targetId: pageId,
-      proposedValue: {},
-      submittedBy: userId,
+
+    const state = await callDelete('kokain');
+
+    expect(state.statusCode).toBe(409);
+    expect(JSON.parse(state.body)).toMatchObject({
+      code: 'monograph_owned_by_record',
+    });
+    expect(await db.select().from(wikiPages)).toHaveLength(1);
+  });
+
+  it('deletes a drug monograph whose drug is gone', async () => {
+    const userId = await seedUser(db);
+    await seedPage(userId, {
+      slug: 'kokain',
+      title: 'Kokain',
+      pageType: 'drug_monograph',
+      drugCid: 999_999,
     });
 
     const state = await callDelete('kokain');
 
     expect(state.statusCode).toBe(200);
     expect(await db.select().from(wikiPages)).toHaveLength(0);
-    expect(await db.select().from(pendingEdits)).toHaveLength(0);
+  });
+
+  it('refuses a bio-entity monograph while its entity exists', async () => {
+    const userId = await seedUser(db);
+    const entityId = await seedBioEntity(db);
+    await seedPage(userId, {
+      slug: 'cyp2d6',
+      title: 'CYP2D6',
+      pageType: 'entity_monograph',
+      entityId,
+    });
+
+    const state = await callDelete('cyp2d6');
+
+    expect(state.statusCode).toBe(409);
+    expect(await db.select().from(wikiPages)).toHaveLength(1);
   });
 
   it('refuses a caller without the delete capability', async () => {

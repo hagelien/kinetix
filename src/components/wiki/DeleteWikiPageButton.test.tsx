@@ -13,13 +13,22 @@ vi.mock('@/lib/usePermissions', () => ({ useCan: () => can.value }));
 const showToast = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/toast', () => ({ showToast }));
 
-function renderButton() {
+function renderButton(
+  over: { pageType?: string; entityId?: number | null } = {},
+) {
   return render(
     <MemoryRouter initialEntries={['/wiki/sedativer']}>
       <Routes>
         <Route
           path="/wiki/:slug"
-          element={<DeleteWikiPageButton slug="sedativer" title="Sedativer" />}
+          element={
+            <DeleteWikiPageButton
+              slug="sedativer"
+              title="Sedativer"
+              pageType={over.pageType ?? 'topic'}
+              entityId={over.entityId ?? null}
+            />
+          }
         />
         <Route path="/wiki" element={<p>wiki home</p>} />
       </Routes>
@@ -46,6 +55,21 @@ describe('DeleteWikiPageButton', () => {
     can.value = false;
     renderButton();
     expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  it('is not offered on a monograph that belongs to a drug or bio entity', () => {
+    renderButton({ pageType: 'drug_monograph' });
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  it('is not offered on a bio-entity monograph whose entity still exists', () => {
+    renderButton({ pageType: 'entity_monograph', entityId: 4 });
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  it('is offered on a bio-entity monograph left behind by its deleted entity', () => {
+    renderButton({ pageType: 'entity_monograph', entityId: null });
+    expect(screen.getByRole('button', { name: 'wiki.deletePage' })).toBeTruthy();
   });
 
   it('does nothing when the confirmation is cancelled', () => {
