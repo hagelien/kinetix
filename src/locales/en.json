@@ -2140,6 +2140,19 @@
         "cohort_conflict": "These citations carry two separate imports of the same reference dataset that cannot be combined automatically. Withdraw the import that should not stand, then merge.",
         "agent_refused": "Citation merges must be made by a person, not an agent."
       }
+    },
+    "wikiArticle": {
+      "title": "Article to review queue",
+      "description": "Paste JSON from Kinetix Wiki Import. New headings are created on import. All facts enter the review queue; no facts are published on import. Existing paper reviews are preserved.",
+      "input": "Article JSON",
+      "analyse": "Preview article",
+      "counts": "{{factCount}} facts, {{newSectionCount}} new sections, {{blockedCount}} blocked candidates. Duplicates are skipped on import.",
+      "facts": "facts",
+      "newSection": "new section",
+      "blocked": "These candidates will not be imported",
+      "apply": "Create sections and queue facts for review",
+      "result": "{{queued}} facts queued, {{skipped}} duplicates skipped, {{newSections}} sections created.",
+      "failed": "The article could not be imported."
     }
   },
   "siteSettings": {

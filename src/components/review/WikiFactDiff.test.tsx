@@ -53,6 +53,15 @@ function edit(over: Partial<PendingEditRow> = {}): PendingEditRow {
 }
 
 describe('WikiFactDiff — an unverified claim from conversation ingestion', () => {
+  it('shows the live unread-source warning on article imports with an empty history marker', () => {
+    render(<WikiFactDiff edit={edit({ proposedMeta: { source: 'wiki-article-import', unverifiedReferenceIds: [] } })} />);
+    expect(screen.getByText('review.factUnverifiedSource')).toBeInTheDocument();
+    expect(screen.getAllByText('review.factReferenceNotRead')).toHaveLength(1);
+  });
+  it('does not label verified article references as unread', () => {
+    render(<WikiFactDiff edit={edit({ proposedMeta: { source: 'wiki-article-import', unverifiedReferenceIds: [] }, references: [ref(1, true)] })} />);
+    expect(screen.queryByText('review.factUnverifiedSource')).not.toBeInTheDocument();
+  });
   it('says the claim is unverified and marks the paper nobody read', () => {
     render(
       <WikiFactDiff
