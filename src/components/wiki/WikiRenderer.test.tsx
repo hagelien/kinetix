@@ -718,3 +718,45 @@ describe("WikiRenderer inline concentration unit tooltips", () => {
     ).not.toBeNull();
   });
 });
+
+describe("WikiRenderer built-in blocks", () => {
+  beforeEach(async () => {
+    await i18n.changeLanguage("nb");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          agents: [
+            {
+              id: 1,
+              name: "Rutineagent",
+              nameEn: null,
+              modelTier: "mid",
+              adjudicator: false,
+              recentModel: "claude-sonnet-5-5",
+            },
+          ],
+        }),
+      }),
+    );
+  });
+
+  it("renders the agents guide in place of its marker paragraph", async () => {
+    const { container, findByText } = render(
+      <WikiRenderer contentHtml="<p>Før</p><p>{{kinetix:agents}}</p>" />,
+    );
+    expect(container.innerHTML).not.toContain("{{kinetix:agents}}");
+    expect(container.querySelector('[data-kx-block="agents"]')).not.toBeNull();
+    expect(await findByText("Tankegangen bak")).toBeTruthy();
+    // The levels table shows the live model for the T1 agent.
+    expect(await findByText("Claude Sonnet 5.5")).toBeTruthy();
+    vi.unstubAllGlobals();
+  });
+
+  it("leaves an unknown marker visible as text", () => {
+    const html = rendered("<p>{{kinetix:unknown}}</p>");
+    expect(html).toContain("{{kinetix:unknown}}");
+    expect(html).not.toContain("data-kx-block");
+  });
+});

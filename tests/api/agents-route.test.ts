@@ -71,6 +71,7 @@ function mockDb(opts: {
   agentRows: Array<Record<string, unknown>>;
   userRows: Array<Record<string, unknown>>;
   statsRows: Array<Record<string, unknown>>;
+  modelRows?: Array<Record<string, unknown>>;
 }): MockedDbResult {
   const whereCalls: SQL[] = [];
 
@@ -106,7 +107,10 @@ function mockDb(opts: {
     .mockReturnValueOnce({ from: userFrom })
     .mockReturnValueOnce({ from: statsFrom });
 
-  getDbMock.mockReturnValue({ select });
+  // Latest reported model per agent: one raw db.execute().
+  const execute = vi.fn().mockResolvedValue({ rows: opts.modelRows ?? [] });
+
+  getDbMock.mockReturnValue({ select, execute });
   return { whereCalls };
 }
 
@@ -189,5 +193,68 @@ describe("GET /api/agents — WHERE clauses use IN (…), not = ANY((…))", () 
     expect(state.statusCode).toBe(200);
     expect(state.headers["Cache-Control"]).toBe("no-store");
     expect(JSON.parse(state.body)).toEqual({ agents: [] });
+  });
+
+  it("surfaces each agent's review role and latest reported model", async () => {
+    mockDb({
+      agentRows: [
+        {
+          id: 21,
+          name: "Producer",
+          nameEn: null,
+          slug: "producer",
+          description: null,
+          descriptionEn: null,
+          status: "active",
+          createdAt: new Date("2026-06-01T00:00:00Z"),
+          modelTier: "mid",
+          adjudicator: false,
+          modelFamily: "claude",
+          agentUserId: 30,
+          maintainerUserId: null,
+        },
+        {
+          id: 22,
+          name: "Judge",
+          nameEn: null,
+          slug: "judge",
+          description: null,
+          descriptionEn: null,
+          status: "active",
+          createdAt: new Date("2026-06-02T00:00:00Z"),
+          modelTier: "flagship",
+          adjudicator: true,
+          modelFamily: null,
+          agentUserId: 31,
+          maintainerUserId: null,
+        },
+      ],
+      userRows: [
+        { id: 30, username: "producer", displayName: null },
+        { id: 31, username: "judge", displayName: null },
+      ],
+      statsRows: [],
+      modelRows: [{ agent_id: 21, model: " claude-sonnet-5-5 " }],
+    });
+
+    const { res, state } = createResponse();
+    await handler(createGetRequest(), res);
+
+    expect(state.statusCode).toBe(200);
+    const { agents } = JSON.parse(state.body) as {
+      agents: Array<Record<string, unknown>>;
+    };
+    expect(agents[0]).toMatchObject({
+      modelTier: "mid",
+      adjudicator: false,
+      modelFamily: "claude",
+      recentModel: "claude-sonnet-5-5",
+    });
+    expect(agents[1]).toMatchObject({
+      modelTier: "flagship",
+      adjudicator: true,
+      modelFamily: null,
+      recentModel: null,
+    });
   });
 });
