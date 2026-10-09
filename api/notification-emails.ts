@@ -6,7 +6,10 @@
  *         or their daily / weekly / monthly summary when it is due. See
  *         api/_lib/notificationEmails.ts.
  *
- * Called by the Vercel cron declared in vercel.json (every ten minutes). Vercel
+ * Called by the Vercel cron declared in vercel.json once a day at 05:00 in
+ * Norway. Vercel crons run on UTC, so the cron fires at both 03:00 and 04:00
+ * UTC and the run that does not land on 05:00 Oslo time returns before it
+ * touches the database — one database wake-up a day, summer and winter. Vercel
  * sends `Authorization: Bearer <CRON_SECRET>` when the project has a
  * `CRON_SECRET` environment variable, and that header is the only way in:
  * the endpoint fails closed with 503 while the secret is unset, rather than
@@ -34,6 +37,19 @@ export function cronAuthorized(
   return timingSafeEqual(a, b);
 }
 
+/** The hour in Norway the daily run is for (summaries, escalation). */
+export const RUN_HOUR_OSLO = 5;
+
+/** Whether `now` falls in the Oslo hour the daily run belongs to. */
+export function isOsloRunHour(now: Date): boolean {
+  const hour = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Oslo',
+    hour: 'numeric',
+    hourCycle: 'h23',
+  }).format(now);
+  return Number(hour) === RUN_HOUR_OSLO;
+}
+
 export default withErrorHandling(async function handler(
   req: IncomingMessage,
   res: ServerResponse,
@@ -49,6 +65,13 @@ export default withErrorHandling(async function handler(
   }
   if (!cronAuthorized(req.headers.authorization, secret)) {
     error(res, 401, 'Unauthorized', 'cron_unauthorized');
+    return;
+  }
+
+  if (!isOsloRunHour(new Date())) {
+    // The other half of the 03:00/04:00 UTC pair: not this run's hour in
+    // Norway. Return before any query so the database is left asleep.
+    json(res, 200, { skipped: 'not_run_hour' }, { headers: noStoreHeaders() });
     return;
   }
 

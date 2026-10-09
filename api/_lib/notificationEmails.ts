@@ -9,7 +9,7 @@
  *     `emailOnFeedback`; `reviewer` rows (the review queue) need
  *     `emailAsReviewer`.
  *   - `immediate` users get one email per row; `daily` / `weekly` / `monthly`
- *     users get one summary per period, at the 06:00 UTC slot.
+ *     users get one summary per period, at the 03:00 UTC slot.
  *
  * A run leases each row (`email_claimed_at`, conditional UPDATE) before
  * sending it, so overlapping runs never send the same row concurrently, and
@@ -17,8 +17,10 @@
  * send releases the lease at once; a run that dies mid-send leaves a lease
  * that lapses, and the next run takes the row over.
  *
- * Driven by the Vercel cron against `api/notification-emails.ts` every ten
- * minutes; `npm run notifications:email` runs the same thing by hand.
+ * Driven by the Vercel cron against `api/notification-emails.ts` once a day,
+ * at 05:00 in Norway; `npm run notifications:email` runs the same thing by
+ * hand. Immediate-mode users therefore get at most `IMMEDIATE_BATCH` emails a
+ * day; the preferences page no longer offers that mode.
  */
 import { sql, type SQL } from 'drizzle-orm';
 import { getDb, inTransaction } from './db.js';
@@ -707,7 +709,7 @@ async function trySend(
  * Wall-clock budget for starting new sends in one run. `sendEmail` may take
  * up to 10 s, so a send started just inside the budget still finishes well
  * within the function's `maxDuration` (vercel.json). Work left over when the
- * budget runs out waits for the next run, ten minutes later, and the users it
+ * budget runs out waits for the next run, the next day, and the users it
  * belongs to go first then (least recently served first).
  */
 export const RUN_BUDGET_MS = 40_000;

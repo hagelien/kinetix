@@ -25,7 +25,7 @@ import {
 import { seedDrug, seedUser } from './setup/seed.js';
 
 const APP = 'https://kinetix.no';
-// A Wednesday, after the 06:00 UTC slot.
+// A Wednesday, after the 03:00 UTC slot.
 const NOW = new Date('2026-09-30T08:00:00Z');
 
 let db: IntegrationDb;
