@@ -2575,7 +2575,7 @@
     "allContent": "All wiki content",
     "drugMonographs": "Drug Monographs",
     "topicArticles": "Topic Articles",
-    "toggleSubpages": "Toggle subpages for {{title}}",
+    "allPages": "All wiki pages",
     "subpageCount_one": "{{count}} subpage",
     "subpageCount_other": "{{count}} subpages",
     "searchWiki": "Search Wiki",
