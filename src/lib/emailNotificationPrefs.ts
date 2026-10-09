@@ -88,32 +88,80 @@ export function enabledAudiences(prefs: ResolvedEmailPrefs): NotificationAudienc
 }
 
 /**
- * Summary periods start at 03:00 UTC, which is at or before the daily
- * 05:00 Oslo run in summer (03:00 UTC) and winter (04:00 UTC) alike: daily
+ * Summary periods start at the daily 05:00 Europe/Oslo run — 03:00 UTC in
+ * summer, 04:00 UTC in winter (`vercel.json` fires at both hours; the period
+ * claim lets only the one at 05:00 Oslo send). A fixed UTC hour would sit an
+ * hour before the winter run, so a change made in that hour would be read as
+ * "already sent this period" and postpone the first summary by a day: daily
  * every day, weekly on Mondays, monthly on the 1st.
  */
-export const DIGEST_HOUR_UTC = 3;
+export const DIGEST_TIME_ZONE = 'Europe/Oslo';
+export const DIGEST_HOUR_LOCAL = 5;
+
+const osloFormat = new Intl.DateTimeFormat('en-GB', {
+  timeZone: DIGEST_TIME_ZONE,
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: 'numeric',
+  second: 'numeric',
+  hourCycle: 'h23',
+});
+
+function osloParts(at: Date) {
+  const get: Record<string, number> = {};
+  for (const p of osloFormat.formatToParts(at)) {
+    if (p.type !== 'literal') get[p.type] = Number(p.value);
+  }
+  const n = (k: string) => get[k] ?? 0;
+  return {
+    year: n('year'),
+    month: n('month'),
+    day: n('day'),
+    hour: n('hour'),
+    minute: n('minute'),
+    second: n('second'),
+  };
+}
+
+function osloCalendar(at: Date): { y: number; m: number; d: number } {
+  const p = osloParts(at);
+  return { y: p.year, m: p.month - 1, d: p.day };
+}
+
+/** The instant of 05:00 Oslo on the given Oslo calendar day (day may over/underflow). */
+function digestSlot(y: number, m: number, d: number): Date {
+  const day = new Date(Date.UTC(y, m, d));
+  // DST changes happen at 01:00 UTC, so the offset at 03:00 UTC that day is
+  // the one in force at 05:00 Oslo.
+  const probe = Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), 3);
+  const p = osloParts(new Date(probe));
+  const offsetMs = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - probe;
+  return new Date(
+    Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), DIGEST_HOUR_LOCAL) -
+      offsetMs,
+  );
+}
 
 /**
  * Start of the summary period `now` falls in — the most recent send slot at
  * or before `now`. A summary is due when the last one went out before it.
  */
 export function digestPeriodStart(frequency: Exclude<EmailFrequency, 'immediate'>, now: Date): Date {
-  const slot = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), DIGEST_HOUR_UTC),
-  );
+  const { y, m, d } = osloCalendar(now);
   if (frequency === 'monthly') {
-    slot.setUTCDate(1);
-    if (slot > now) slot.setUTCMonth(slot.getUTCMonth() - 1);
-    return slot;
+    const slot = digestSlot(y, m, 1);
+    return slot > now ? digestSlot(y, m - 1, 1) : slot;
   }
-  if (slot > now) slot.setUTCDate(slot.getUTCDate() - 1);
+  // Calendar day of the most recent slot at or before `now`.
+  const today = digestSlot(y, m, d);
+  const day = new Date(Date.UTC(y, m, d - (today > now ? 1 : 0)));
   if (frequency === 'weekly') {
-    // getUTCDay: 0 = Sunday … 1 = Monday.
-    const sinceMonday = (slot.getUTCDay() + 6) % 7;
-    slot.setUTCDate(slot.getUTCDate() - sinceMonday);
+    // getUTCDay on the calendar date: 0 = Sunday … 1 = Monday.
+    day.setUTCDate(day.getUTCDate() - ((day.getUTCDay() + 6) % 7));
   }
-  return slot;
+  return digestSlot(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate());
 }
 
 /**
