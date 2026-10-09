@@ -715,6 +715,17 @@ function directAdminWriteConflictId(
  * unrelated sibling-approval marker above) — nothing to acknowledge, so a
  * content revision clears it exactly as it always has.
  */
+/** A new wiki fact or a new wiki section (see `resubmitRebasesAdditiveWikiEdit`). */
+function isAdditiveWikiEdit(
+  edit: Pick<typeof pendingEdits.$inferSelect, 'editType' | 'factOperation' | 'proposedValue'>,
+): boolean {
+  if (edit.editType === 'wiki_fact') return edit.factOperation === 'add';
+  if (edit.editType === 'wiki_section') {
+    return isRecord(edit.proposedValue) && edit.proposedValue.operation === 'add';
+  }
+  return false;
+}
+
 function conflictMarkerAcknowledged(
   snapshotProposedMeta: unknown,
   acknowledgedConflictId: string | null | undefined,
@@ -3337,6 +3348,14 @@ async function handlePatch(
       edit.proposedMeta,
       parsed.data.acknowledgedConflictId,
     );
+    // An additive wiki edit — a new fact or a new section — writes nothing an
+    // approved sibling could have changed under it, and its approval re-checks
+    // the section anchor against the live page. There is no stale content to
+    // rebase, so the author resubmitting after seeing the warning is the whole
+    // rebase there is; requiring a content change left these stuck behind a
+    // marker nobody could clear without rewording a correct fact.
+    const resubmitRebasesAdditiveWikiEdit =
+      requestedStatus === 'pending' && isAdditiveWikiEdit(edit);
 
     const nextRevisedAt = payloadActuallyRevised
       ? new Date().toISOString()
@@ -3477,7 +3496,8 @@ async function handlePatch(
               // marker they were shown (#1258) — a revision that happens to
               // land while a marker sits on the row, without the author having
               // been shown and answered that specific one, leaves it in place.
-              contentActuallyRevised && conflictAcknowledged,
+              (contentActuallyRevised || resubmitRebasesAdditiveWikiEdit) &&
+                conflictAcknowledged,
             ) as never,
             referenceId: nextReferenceId,
             // Explicit null clears the array; undefined leaves the column alone.
