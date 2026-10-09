@@ -8,12 +8,16 @@ const {
   planIngestionMock,
   applyIngestionMock,
   resolveIngestionCrosswalkMock,
+  planWikiArticleMock,
+  applyWikiArticleMock,
 } = vi.hoisted(() => ({
   getDbMock: vi.fn(),
   getUserFromRequestMock: vi.fn(),
   planIngestionMock: vi.fn(),
   applyIngestionMock: vi.fn(),
   resolveIngestionCrosswalkMock: vi.fn(),
+  planWikiArticleMock: vi.fn(),
+  applyWikiArticleMock: vi.fn(),
 }));
 
 vi.mock('../../api/_lib/db.js', () => ({ getDb: getDbMock }));
@@ -38,6 +42,18 @@ vi.mock('../../api/_lib/conversationIngestionStore.js', async (importOriginal) =
 vi.mock('../../api/_lib/citation-crosswalk.js', () => ({
   resolveIngestionCrosswalk: resolveIngestionCrosswalkMock,
 }));
+
+vi.mock("../../api/_lib/wikiArticleImportStore.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("../../api/_lib/wikiArticleImportStore.js")
+    >();
+  return {
+    ...actual,
+    planWikiArticle: planWikiArticleMock,
+    applyWikiArticle: applyWikiArticleMock,
+  };
+});
 
 import handler from '../../api/conversation-ingestion.ts';
 
@@ -134,6 +150,75 @@ beforeEach(() => {
 });
 
 describe('POST /api/conversation-ingestion', () => {
+  const article = {
+    schemaVersion: "kinetix-wiki-article-v1",
+    idempotencyKey: "test",
+    articleDigest: "a".repeat(64),
+    createdAt: "2026-10-09T00:00:00Z",
+    page: { slug: "test" },
+    sources: [{ key: "S1", type: "pmid", identifier: "2719903" }],
+    sections: [
+      {
+        key: "s1",
+        heading: "Bakgrunn",
+        level: 2,
+        facts: [{ key: "f1", statement: "Testpåstand.", sourceKeys: ["S1"] }],
+      },
+    ],
+  };
+  it("advertises supported formats without authentication or DB access", async () => {
+    const req = createRequest({}, "GET");
+    req.url += "?action=formats";
+    const { res, state } = createResponse();
+    await handler(req, res);
+    expect(state.statusCode).toBe(200);
+    expect(JSON.parse(state.body).schemaVersions).toContain(
+      "kinetix-wiki-article-v1",
+    );
+    expect(getUserFromRequestMock).not.toHaveBeenCalled();
+    expect(getDbMock).not.toHaveBeenCalled();
+  });
+  it("plans article bundles through the queue-only store", async () => {
+    planWikiArticleMock.mockResolvedValue({
+      fingerprint: "a".repeat(64),
+      factCount: 1,
+    });
+    const { res, state } = createResponse();
+    await handler(createRequest({ document: article }), res);
+    expect(state.statusCode).toBe(200);
+    expect(planWikiArticleMock).toHaveBeenCalledOnce();
+    expect(planIngestionMock).not.toHaveBeenCalled();
+    expect(resolveIngestionCrosswalkMock).not.toHaveBeenCalled();
+  });
+  it("requires a preview fingerprint to queue article facts", async () => {
+    const { res, state } = createResponse();
+    await handler(createRequest({ document: article, action: "apply" }), res);
+    expect(state.statusCode).toBe(400);
+    expect(applyWikiArticleMock).not.toHaveBeenCalled();
+  });
+  it("queues an article with the authenticated actor and snapshot", async () => {
+    applyWikiArticleMock.mockResolvedValue({
+      queued: 1,
+      skipped: 0,
+      newSections: 0,
+    });
+    const { res, state } = createResponse();
+    await handler(
+      createRequest({
+        document: article,
+        action: "apply",
+        expectedFingerprint: "a".repeat(64),
+      }),
+      res,
+    );
+    expect(state.statusCode).toBe(200);
+    expect(applyWikiArticleMock).toHaveBeenCalledWith(
+      article,
+      7,
+      "a".repeat(64),
+    );
+    expect(applyIngestionMock).not.toHaveBeenCalled();
+  });
   it('rejects a non-admin', async () => {
     getUserFromRequestMock.mockResolvedValue({ userId: 2, role: 'contributor' });
     const { res, state } = createResponse();
