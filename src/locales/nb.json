@@ -2578,6 +2578,8 @@
     "allPages": "Alle wikisider",
     "subpageCount_one": "{{count}} underside",
     "subpageCount_other": "{{count}} undersider",
+    "moreSubpages_one": "+ {{count}} underside til",
+    "moreSubpages_other": "+ {{count}} undersider til",
     "searchWiki": "Søk i Wiki",
     "searchPlaceholder": "Søk etter legemidler, emner, farmakologi...",
     "searching": "Søker...",

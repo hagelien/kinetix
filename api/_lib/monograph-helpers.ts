@@ -12,8 +12,13 @@
  * manual "Create monograph" button produced — so the rendered page is identical
  * to a freshly hand-created one: the drug data sidebar shows, with no prose yet.
  */
-import { and, eq, inArray } from 'drizzle-orm';
-import { wikiPages, wikiRevisions, drugs } from '../../db/schema.js';
+import { and, asc, eq, inArray, isNull, or } from 'drizzle-orm';
+import {
+  bioEntities,
+  wikiPages,
+  wikiRevisions,
+  drugs,
+} from '../../db/schema.js';
 import { getDb } from './db.js';
 import { generateSlug } from './slug.js';
 import { renderHtml, extractPlaintext } from './tiptap-utils.js';
@@ -212,19 +217,86 @@ export interface MonographEntity {
   nameEn?: string | null;
 }
 
+/** Slug of the top-level wiki page every entity monograph hangs under. */
+export const ENTITY_HUB_SLUG = 'bioentiteter';
+const ENTITY_HUB_TITLE = 'Bioentiteter';
+
+/**
+ * Ensure the top-level "Bioentiteter" topic page exists and return its id.
+ * Entity monographs are its subpages, so the wiki index lists every entity
+ * under one card instead of one card per entity. Looked up by slug, so a hub
+ * an editor created by hand is reused rather than duplicated. Idempotent.
+ */
+export async function ensureEntityHubPage(
+  db: Db,
+  userId: number,
+): Promise<number> {
+  const findHub = async () => {
+    const [row] = await db
+      .select({ id: wikiPages.id })
+      .from(wikiPages)
+      .where(eq(wikiPages.slug, ENTITY_HUB_SLUG))
+      .limit(1);
+    return row?.id ?? null;
+  };
+
+  const existingId = await findHub();
+  if (existingId != null) return existingId;
+
+  const contentHtml = renderHtml(EMPTY_DOC);
+  const [page] = await db
+    .insert(wikiPages)
+    .values({
+      slug: ENTITY_HUB_SLUG,
+      title: ENTITY_HUB_TITLE,
+      content: EMPTY_DOC as never,
+      contentHtml,
+      contentPlaintext: extractPlaintext(EMPTY_DOC),
+      pageType: 'topic',
+      status: 'published',
+      createdBy: userId,
+      updatedBy: userId,
+    })
+    // A concurrent caller may have created it between the lookup and here.
+    .onConflictDoNothing({ target: wikiPages.slug })
+    .returning({ id: wikiPages.id });
+
+  if (!page) {
+    const racedId = await findHub();
+    if (racedId == null) throw new Error('Failed to create entity hub page');
+    return racedId;
+  }
+
+  await db.insert(wikiRevisions).values({
+    pageId: page.id,
+    content: EMPTY_DOC as never,
+    contentHtml,
+    editSummary: 'Automatisk opprettet samleside for bioentiteter',
+    createdBy: userId,
+  });
+
+  return page.id;
+}
+
 /**
  * Ensure a biological entity (#785) has its own narrative monograph wiki page,
  * creating an empty one if missing. Mirrors {@link ensureDrugMonograph}: an
  * entity monograph is a `wiki_pages` row (`page_type='entity_monograph'`) linked
- * by `entity_id`, reusing the topic-page content model. Idempotent.
+ * by `entity_id`, reusing the topic-page content model. The page is a subpage
+ * of the "Bioentiteter" hub ({@link ensureEntityHubPage}). Idempotent.
  */
 export async function ensureEntityMonograph(
   db: Db,
   entity: MonographEntity,
   userId: number,
 ): Promise<EnsureMonographResult> {
+  const hubId = await ensureEntityHubPage(db, userId);
   const [existing] = await db
-    .select({ id: wikiPages.id, slug: wikiPages.slug })
+    .select({
+      id: wikiPages.id,
+      slug: wikiPages.slug,
+      parentId: wikiPages.parentId,
+    })
     .from(wikiPages)
     .where(
       and(
@@ -233,7 +305,17 @@ export async function ensureEntityMonograph(
       ),
     )
     .limit(1);
-  if (existing) return { page: existing, created: false };
+  if (existing) {
+    // Adopt a stray top-level monograph into the hub. A page an editor has
+    // deliberately placed under some other parent is left where it is.
+    if (existing.parentId == null) {
+      await db
+        .update(wikiPages)
+        .set({ parentId: hubId })
+        .where(and(eq(wikiPages.id, existing.id), isNull(wikiPages.parentId)));
+    }
+    return { page: { id: existing.id, slug: existing.slug }, created: false };
+  }
 
   // Norwegian first, like `ensureDrugMonograph` above and the `name` / `nameEn`
   // convention the catalog itself follows: `name` is the primary display name
@@ -254,6 +336,7 @@ export async function ensureEntityMonograph(
       contentPlaintext,
       pageType: 'entity_monograph',
       entityId: entity.id,
+      parentId: hubId,
       status: 'published',
       createdBy: userId,
       updatedBy: userId,
@@ -271,4 +354,43 @@ export async function ensureEntityMonograph(
   });
 
   return { page, created: true };
+}
+
+/**
+ * Give every bio entity a monograph under the "Bioentiteter" hub. Entity
+ * creation through the API mints one up front, but the seeded catalog and the
+ * import paths (`findOrCreateEntityBySymbol`) do not, so this sweep covers
+ * them. Only entities with no monograph, or a top-level one, are touched, so
+ * a run with nothing to do costs one query. Idempotent.
+ */
+export async function ensureAllEntityMonographs(
+  db: Db,
+  userId: number,
+): Promise<{ created: number; adopted: number }> {
+  const rows = await db
+    .select({
+      id: bioEntities.id,
+      symbol: bioEntities.symbol,
+      name: bioEntities.name,
+      nameEn: bioEntities.nameEn,
+    })
+    .from(bioEntities)
+    .leftJoin(
+      wikiPages,
+      and(
+        eq(wikiPages.pageType, 'entity_monograph'),
+        eq(wikiPages.entityId, bioEntities.id),
+      ),
+    )
+    .where(or(isNull(wikiPages.id), isNull(wikiPages.parentId)))
+    .orderBy(asc(bioEntities.id));
+
+  let created = 0;
+  let adopted = 0;
+  for (const entity of rows) {
+    const result = await ensureEntityMonograph(db, entity, userId);
+    if (result.created) created++;
+    else adopted++;
+  }
+  return { created, adopted };
 }
