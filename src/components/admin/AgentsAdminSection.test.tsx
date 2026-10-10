@@ -399,6 +399,24 @@ describe('AgentsAdminSection failed save', () => {
   });
 });
 
+describe('AgentsAdminSection reload error on an empty list', () => {
+  it('shows the reload error instead of hiding it behind "No agents yet"', async () => {
+    fetchAdminAgents
+      .mockResolvedValueOnce({ agents: [] })
+      .mockRejectedValueOnce(new Error('Reload failed'));
+    render(<AgentsAdminSection />);
+
+    expect(await screen.findByText('No agents yet.')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('New agent'));
+    fireEvent.change(screen.getByLabelText('Username'), {
+      target: { value: 'first-agent' },
+    });
+    fireEvent.submit(screen.getByText('Create agent').closest('form')!);
+
+    expect(await screen.findByText('Reload failed')).toBeInTheDocument();
+  });
+});
+
 describe('AgentsAdminSection row and form', () => {
   it('shows the agent id next to the user and maintainer ids', async () => {
     fetchAdminAgents.mockResolvedValue({ agents: [agentRow({ id: 7, userId: 42 })] });
