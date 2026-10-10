@@ -18,6 +18,7 @@ vi.mock('../../api/_lib/auth.js', () => ({
 import handler from '../../api/wiki/pages.js';
 import {
   agentFocusConfig,
+  disputes,
   pendingEdits,
   wikiPages,
   wikiRevisions,
@@ -137,6 +138,41 @@ describe('DELETE /api/wiki/pages', () => {
     expect(child!.parentId).toBeNull();
     const [focus] = await db.select().from(agentFocusConfig);
     expect(focus!.pageIds).toEqual([otherId]);
+  });
+
+  it('withdraws open disputes on the page revisions and keeps the records', async () => {
+    const userId = await seedUser(db);
+    const pageId = await seedPage(userId);
+    const otherId = await seedPage(userId, { slug: 'opioider', title: 'Opioider' });
+    const [rev] = await db
+      .insert(wikiRevisions)
+      .values({ pageId, content: {}, createdBy: userId })
+      .returning({ id: wikiRevisions.id });
+    const [otherRev] = await db
+      .insert(wikiRevisions)
+      .values({ pageId: otherId, content: {}, createdBy: userId })
+      .returning({ id: wikiRevisions.id });
+    const base = { createdBy: userId, reasonMd: 'The revision misstates the dose range.' };
+    await db.insert(disputes).values([
+      { ...base, targetType: 'wiki_revision', targetId: rev!.id },
+      { ...base, targetType: 'wiki_revision', targetId: otherRev!.id },
+      // Same number, different target space: must be left alone.
+      { ...base, targetType: 'pending_edit', targetId: rev!.id },
+    ]);
+
+    const state = await callDelete('sedativer');
+
+    expect(state.statusCode).toBe(200);
+    const rows = await db.select().from(disputes);
+    expect(rows).toHaveLength(3);
+    const byKey = (type: string, id: number) =>
+      rows.find((r) => r.targetType === type && r.targetId === id)!;
+    const gone = byKey('wiki_revision', rev!.id);
+    expect(gone.status).toBe('resolved');
+    expect(gone.resolution).toBe('withdrawn');
+    expect(gone.resolvedAt).not.toBeNull();
+    expect(byKey('wiki_revision', otherRev!.id).status).toBe('open');
+    expect(byKey('pending_edit', rev!.id).status).toBe('open');
   });
 
   it('refuses a drug monograph while its drug exists', async () => {

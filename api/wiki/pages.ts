@@ -67,6 +67,7 @@ import {
   agents,
   pendingEdits,
   drugs,
+  disputes,
 } from '../../db/schema.js';
 import {
   isActiveAgentUser,
@@ -1581,7 +1582,11 @@ async function handleDelete(
     //     the review queue against a page that can no longer take them — the
     //     same teardown the drug delete and drug merge do;
     //   - sub-pages (parent_id), which move up to the top level;
-    //   - the admin's agent-focus page selection (page_ids).
+    //   - the admin's agent-focus page selection (page_ids);
+    //   - open disputes against the page's revisions (disputes.target_id has
+    //     no foreign key), which would stay in the open-dispute feed against
+    //     a revision that can no longer be opened. They are closed as
+    //     withdrawn, not deleted: the objection stays on record.
     const deleted = await inTransaction(async () => {
       const tx = getDb();
       await tx
@@ -1590,6 +1595,28 @@ async function handleDelete(
           and(
             eq(pendingEdits.targetId, page.id),
             inArray(pendingEdits.editType, WIKI_SCOPED_EDIT_TYPES),
+          ),
+        );
+      await tx
+        .update(disputes)
+        .set({
+          status: 'resolved',
+          resolution: 'withdrawn',
+          resolvedBy: null,
+          resolvedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(disputes.targetType, 'wiki_revision'),
+            eq(disputes.status, 'open'),
+            inArray(
+              disputes.targetId,
+              tx
+                .select({ id: wikiRevisions.id })
+                .from(wikiRevisions)
+                .where(eq(wikiRevisions.pageId, page.id)),
+            ),
           ),
         );
       await tx
