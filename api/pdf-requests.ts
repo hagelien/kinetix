@@ -215,6 +215,11 @@ async function handleGet(
         and(
           eq(pdfRequests.status, 'fulfilled'),
           or(isNull(paperReviews.id), eq(paperReviews.readInFull, false)),
+          // Migrations 0137/0139 cancel open front-page requests but keep
+          // fulfilled ones, and the agent is told never to review that URL.
+          // Without this the oldest such row heads the FIFO every cycle and
+          // starves the genuine fulfilled PDFs behind it.
+          citationCanTakeAPdf,
         ),
       )
       .orderBy(asc(pdfRequests.fulfilledAt))
