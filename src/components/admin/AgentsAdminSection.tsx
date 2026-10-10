@@ -94,9 +94,12 @@ export function AgentsAdminSection(): JSX.Element {
       ) : error && !agents ? (
         <p className="text-sm text-destructive">{error}</p>
       ) : agents && agents.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          {t('admin.agents.empty', { defaultValue: 'No agents yet.' })}
-        </p>
+        <>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <p className="text-sm text-muted-foreground">
+            {t('admin.agents.empty', { defaultValue: 'No agents yet.' })}
+          </p>
+        </>
       ) : (
         <ul className="space-y-3">
           {error && (
