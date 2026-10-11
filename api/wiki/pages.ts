@@ -1584,6 +1584,18 @@ async function handleDelete(
     //   - the admin's agent-focus page selection (page_ids).
     const deleted = await inTransaction(async () => {
       const tx = getDb();
+      // Lock the page row before sweeping its proposals. POST
+      // /api/pending-edits share-locks the same row around its insert for
+      // pages that have no drug lock, so a submission either commits before
+      // this lock (and the sweep below sees it) or waits for the delete and
+      // finds the page gone. Without it a proposal inserted after the sweep
+      // would outlive the page, since pending_edits.target_id has no FK.
+      const [locked] = await tx
+        .select({ id: wikiPages.id })
+        .from(wikiPages)
+        .where(eq(wikiPages.id, page.id))
+        .for('update');
+      if (!locked) return undefined;
       await tx
         .delete(pendingEdits)
         .where(
