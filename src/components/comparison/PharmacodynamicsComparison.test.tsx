@@ -127,6 +127,27 @@ describe('PharmacodynamicsComparison', () => {
     consoleError.mockRestore();
   });
 
+  it('falls back to a loaded drug when the reference drug fails to load', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    fetchDrugById.mockImplementation(async (id: number) => {
+      if (id === 2) throw new Error('Drug not found');
+      return {
+        drug: {
+          id,
+          receptorTargets: [mechanism(1, { ki: { median: 0.49, unit: 'nM' } })],
+        },
+      };
+    });
+    render(<Harness />);
+    fireEvent.click(await screen.findByRole('button', { name: /OPRM1/ }));
+    const card = (await screen.findByText('comparison.pd.relativeTo'))
+      .closest('section') as HTMLElement;
+    // Drug 2 (the chosen reference) is gone, so the loaded drug is the
+    // reference and its own ratio is 1x rather than a dash.
+    expect(within(card).getByText('1x')).toBeTruthy();
+    consoleError.mockRestore();
+  });
+
   it('shows a localized notice, not the raw error, when loading fails', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     fetchDrugById.mockRejectedValue(new Error('Drug not found'));

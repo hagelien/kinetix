@@ -492,6 +492,11 @@ export function PharmacodynamicsComparison({
     [drugIds, byDrug],
   );
   const targets = useMemo(() => collectPdTargets(drugs), [drugs]);
+  // The chosen reference can be a stale basket entry that failed to load; fall
+  // back to a loaded drug so the ratios and their caption stay consistent.
+  const effectiveReferenceId = drugs.some((drug) => drug.id === referenceDrugId)
+    ? referenceDrugId
+    : (drugs[0]?.id ?? null);
   const selectedTargets = selectedTargetIds
     .map((id) => targets.find((target) => target.id === id))
     .filter((target): target is PdTarget => Boolean(target));
@@ -536,7 +541,7 @@ export function PharmacodynamicsComparison({
           key={target.id}
           target={target}
           drugs={drugs}
-          referenceDrugId={referenceDrugId}
+          referenceDrugId={effectiveReferenceId}
           drugName={drugName}
         />
       ))}
