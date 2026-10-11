@@ -3207,7 +3207,8 @@
         "efficacy": "Effekt",
         "selectivityRatio": "Selektivitet"
       },
-      "loadError": "Kunne ikke laste reseptormekanismene. Prøv å laste siden på nytt."
+      "loadError": "Kunne ikke laste reseptormekanismene. Prøv å laste siden på nytt.",
+      "partialLoadError": "Noen legemidler kunne ikke lastes, så sammenligningen kan være ufullstendig. Prøv å laste siden på nytt."
     }
   },
   "paramEdit": {

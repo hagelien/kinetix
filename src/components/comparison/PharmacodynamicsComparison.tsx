@@ -56,6 +56,7 @@ function useReceptorTargets(drugIds: number[]) {
   >({});
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [partial, setPartial] = useState(false);
 
   useEffect(() => {
     const ids = signature
@@ -69,6 +70,7 @@ function useReceptorTargets(drugIds: number[]) {
     let cancelled = false;
     setLoading(true);
     setFailed(false);
+    setPartial(false);
     // A persisted basket can hold a drug that was since deleted or merged; one
     // rejected read must not discard the drugs that did load.
     Promise.allSettled(ids.map((id) => fetchDrugById(id)))
@@ -77,12 +79,18 @@ function useReceptorTargets(drugIds: number[]) {
         const loaded: Record<number, DrugReceptorTargetSummary[]> = {};
         let firstError: unknown;
         let rejected = 0;
+        let unavailable = 0;
         for (const result of results) {
           if (result.status === 'fulfilled') {
             const { drug } = result.value;
             loaded[drug.id] = drug.receptorTargets ?? [];
           } else {
             rejected += 1;
+            // A 404/410 means the drug was deleted or merged away; anything
+            // else (network, 5xx, auth) leaves the matrix incomplete.
+            const status = (result.reason as { status?: unknown } | null)
+              ?.status;
+            if (status !== 404 && status !== 410) unavailable += 1;
             firstError ??= result.reason;
           }
         }
@@ -92,6 +100,7 @@ function useReceptorTargets(drugIds: number[]) {
           // show a localized notice instead, only when nothing loaded.
           console.error('Failed to load receptor mechanisms', firstError);
           setFailed(rejected === results.length);
+          setPartial(unavailable > 0 && rejected < results.length);
         }
       })
       .finally(() => {
@@ -102,7 +111,7 @@ function useReceptorTargets(drugIds: number[]) {
     };
   }, [signature]);
 
-  return { byDrug, loading, failed };
+  return { byDrug, loading, failed, partial };
 }
 
 function TargetPicker({
@@ -483,7 +492,7 @@ export function PharmacodynamicsComparison({
   drugName: (drugId: number) => string;
 }) {
   const { t } = useTranslation();
-  const { byDrug, loading, failed } = useReceptorTargets(drugIds);
+  const { byDrug, loading, failed, partial } = useReceptorTargets(drugIds);
   const drugs = useMemo<PdDrugInput[]>(
     () =>
       drugIds
@@ -517,6 +526,11 @@ export function PharmacodynamicsComparison({
           </p>
         ) : (
           <>
+            {partial && (
+              <p role="alert" className="mt-3 text-sm text-destructive">
+                {t('comparison.pd.partialLoadError')}
+              </p>
+            )}
             <TargetPicker
               targets={targets}
               selected={selectedTargetIds}
