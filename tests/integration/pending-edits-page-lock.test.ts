@@ -15,6 +15,8 @@ const { authMock } = vi.hoisted(() => ({ authMock: vi.fn() }));
 vi.mock('../../api/_lib/auth.js', () => ({ getUserFromRequest: authMock }));
 
 import handler from '../../api/pending-edits.js';
+import { runInPoolTransaction } from '../../api/_lib/db.js';
+import { lockWikiPageShared } from '../../api/_lib/wiki-page-lock.js';
 import { eq } from 'drizzle-orm';
 import { pendingEdits, wikiPages } from '../../db/schema.js';
 import {
@@ -122,5 +124,28 @@ describe('POST /api/pending-edits — topic page proposals take the page row loc
 
     expect(state.statusCode).toBe(404);
     expect(await db.select().from(pendingEdits)).toHaveLength(0);
+  });
+});
+
+describe('lockWikiPageShared', () => {
+  it('reports whether the page row still exists inside a transaction', async () => {
+    const userId = await seedUser(db);
+    const [page] = await db
+      .insert(wikiPages)
+      .values({
+        slug: 'sedativer',
+        title: 'Sedativer',
+        content: {},
+        pageType: 'topic',
+        status: 'published',
+        createdBy: userId,
+        updatedBy: userId,
+      })
+      .returning({ id: wikiPages.id });
+
+    const found = await runInPoolTransaction(() => lockWikiPageShared(page!.id));
+    const missing = await runInPoolTransaction(() => lockWikiPageShared(987654));
+    expect(found).toBe(true);
+    expect(missing).toBe(false);
   });
 });

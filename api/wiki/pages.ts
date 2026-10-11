@@ -37,6 +37,7 @@ import {
   withDrugApplicabilityLock,
 } from '../_lib/parameterApplicabilityStore.js';
 import { inTransaction, runInPoolTransaction } from '../_lib/db.js';
+import { lockWikiPageShared } from '../_lib/wiki-page-lock.js';
 import { resolveOwningDrugIdForMonograph } from '../_lib/monograph-helpers.js';
 
 /**
@@ -1219,13 +1220,10 @@ async function handleUpdate(
     const outcome = await runInPoolTransaction<SubmitOutcome>(async () => {
       if (lockDrugId != null) {
         await lockDrugForEntryApplicability(lockDrugId);
-        const [pageInTx] = await getDb()
-          .select({ id: wikiPages.id })
-          .from(wikiPages)
-          .where(eq(wikiPages.id, page.id))
-          .limit(1);
-        if (!pageInTx) return { kind: 'gone' };
       }
+      // Every page, drug or not: the page delete locks this row before it
+      // sweeps proposals, so an insert after the sweep cannot orphan.
+      if (!(await lockWikiPageShared(page.id))) return { kind: 'gone' };
       const [row] = await getDb()
         .insert(pendingEdits)
         .values({
