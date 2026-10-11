@@ -45,7 +45,10 @@ import {
   updateBioEntity,
 } from './_lib/bioEntityStore.js';
 import { listEntityMetabolismDrugs } from './_lib/metabolismStore.js';
-import { ensureEntityMonograph } from './_lib/monograph-helpers.js';
+import {
+  ensureEntityHubPage,
+  ensureEntityMonograph,
+} from './_lib/monograph-helpers.js';
 
 const FUNCTION_SET: ReadonlySet<string> = new Set(BIO_ENTITY_FUNCTIONS);
 
@@ -269,6 +272,9 @@ async function handleCreate(
   }
 
   try {
+    // Resolve the hub first: it refuses an unusable page, and that must not
+    // happen after the entity is already committed without its monograph.
+    await ensureEntityHubPage(getDb(), actor.userId);
     const entity = await createBioEntity(getDb(), entityInput);
     // Mint an empty monograph up front, mirroring drug creation (#785).
     const { page } = await ensureEntityMonograph(getDb(), entity, actor.userId);
