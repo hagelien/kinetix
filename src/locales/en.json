@@ -3207,7 +3207,8 @@
         "efficacy": "Efficacy",
         "selectivityRatio": "Selectivity"
       },
-      "loadError": "Could not load the receptor mechanisms. Try reloading the page."
+      "loadError": "Could not load the receptor mechanisms. Try reloading the page.",
+      "partialLoadError": "Some drugs could not be loaded, so this comparison may be incomplete. Try reloading the page."
     }
   },
   "paramEdit": {
