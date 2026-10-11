@@ -2729,6 +2729,29 @@ async function handleCreate(
       if (!row) throw new Error('pendingEdits insert returned no row');
       return { kind: 'ok', row };
     });
+  } else if (
+    (parsed.data.editType === 'wiki_page' ||
+      parsed.data.editType === 'wiki_fact' ||
+      parsed.data.editType === 'wiki_section') &&
+    parsed.data.targetId != null
+  ) {
+    // A topic or entity page has no drug lock, but its deletion sweeps the
+    // page's proposals and pending_edits.target_id has no foreign key. Share-lock
+    // the page row around the insert; the delete takes it FOR UPDATE before
+    // sweeping, so the two serialize and no proposal outlives its page.
+    const pageId = parsed.data.targetId;
+    outcome = await runInPoolTransaction<SubmitOutcome>(async () => {
+      const [pageInTx] = await getDb()
+        .select({ id: wikiPages.id })
+        .from(wikiPages)
+        .where(eq(wikiPages.id, pageId))
+        .limit(1)
+        .for('share');
+      if (!pageInTx) return { kind: 'gone' };
+      const [row] = await insertPending();
+      if (!row) throw new Error('pendingEdits insert returned no row');
+      return { kind: 'ok', row };
+    });
   } else {
     const [rowNoLock] = await insertPending();
     outcome = rowNoLock
