@@ -226,6 +226,11 @@ const ENTITY_HUB_TITLE = 'Bioentiteter';
  * Entity monographs are its subpages, so the wiki index lists every entity
  * under one card instead of one card per entity. Looked up by slug, so a hub
  * an editor created by hand is reused rather than duplicated. Idempotent.
+ *
+ * A page already sitting on the slug is only reused when it is a published
+ * topic: the wiki index hides drafts and non-topic pages, so adopting one would
+ * hang every entity monograph under a hub nobody can see. Such a page is
+ * refused (thrown) rather than silently repaired, since it is editor content.
  */
 export async function ensureEntityHubPage(
   db: Db,
@@ -233,11 +238,21 @@ export async function ensureEntityHubPage(
 ): Promise<number> {
   const findHub = async () => {
     const [row] = await db
-      .select({ id: wikiPages.id })
+      .select({
+        id: wikiPages.id,
+        pageType: wikiPages.pageType,
+        status: wikiPages.status,
+      })
       .from(wikiPages)
       .where(eq(wikiPages.slug, ENTITY_HUB_SLUG))
       .limit(1);
-    return row?.id ?? null;
+    if (!row) return null;
+    if (row.pageType !== 'topic' || row.status !== 'published') {
+      throw new Error(
+        `Page "${ENTITY_HUB_SLUG}" cannot serve as the entity hub: it must be a published topic page (found ${row.pageType}, ${row.status})`,
+      );
+    }
+    return row.id;
   };
 
   const existingId = await findHub();
