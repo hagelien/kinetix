@@ -55,6 +55,7 @@ import {
   wikiRevisions,
 } from '../../db/schema.js';
 import { getDb, runInPoolTransaction } from './db.js';
+import { lockWikiPageShared } from './wiki-page-lock.js';
 import { handleMatch, resolveCitation } from './citation-store.js';
 import { recordPaperReview } from './paper-review-store.js';
 import { recordApproval } from './approvals.js';
@@ -2426,6 +2427,9 @@ async function planWikiFactItem(
         return runInPoolTransaction(async () => {
           const tx = getDb();
           await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`);
+          // Serialize with the page delete, which sweeps this page's proposals
+          // under the row lock; nothing is queued against a page that is gone.
+          if (!(await lockWikiPageShared(targetPage!.id))) return null;
           // The identity this row is about to be written with, so both guards
           // test the proposal actually being inserted.
           const identity = {
