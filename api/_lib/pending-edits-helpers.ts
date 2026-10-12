@@ -1307,16 +1307,23 @@ async function applyApprovedParameterEntry(
       );
     }
     // The entry is gone, but the decision notification (and its email, sent
-    // after this transaction commits) still names the drug and parameter it
-    // was about. Keep them on the edit, since the lookup through
-    // parameter_entries no longer finds a row.
-    await getDb()
-      .update(pendingEdits)
-      .set({
-        proposedMeta:
-          sql`CASE WHEN jsonb_typeof(${pendingEdits.proposedMeta}) = 'object' THEN ${pendingEdits.proposedMeta} ELSE '{}'::jsonb END || ${JSON.stringify({ deletedEntry: { drugId: deleted.drugId, parameter: deleted.parameter } })}::jsonb` as never,
-      })
-      .where(eq(pendingEdits.id, edit.id));
+    // after this transaction commits) still names the drug it was about, and
+    // the drug itself may be merged away before the email goes out. Keep a
+    // snapshot of its names on the edit; the parameter is already in
+    // `edit.parameter`.
+    const [drugRow] = await getDb()
+      .select({ names: drugs.names })
+      .from(drugs)
+      .where(eq(drugs.id, deleted.drugId));
+    if (drugRow) {
+      await getDb()
+        .update(pendingEdits)
+        .set({
+          proposedMeta:
+            sql`CASE WHEN jsonb_typeof(${pendingEdits.proposedMeta}) = 'object' THEN ${pendingEdits.proposedMeta} ELSE '{}'::jsonb END || ${JSON.stringify({ deletedEntry: { drugNames: drugRow.names } })}::jsonb` as never,
+        })
+        .where(eq(pendingEdits.id, edit.id));
+    }
     target = deleted;
   }
 
