@@ -609,9 +609,18 @@ describe('deliverNotificationEmails over real SQL', () => {
       // an approved delete: the entry is gone, the apply step left its ids behind
       {
         targetId: 2_000_000_000,
-        parameter: null,
+        parameter: 'halfLife',
+        status: 'approved',
         proposedValue: { op: 'delete' },
-        proposedMeta: { deletedEntry: { drugId: drug, parameter: 'halfLife' } },
+        proposedMeta: { deletedEntry: { drugNames: { nb: 'Paracetamol', en: 'Acetaminophen' } } },
+      },
+      // a rejected proposal with a hostile marker is ignored, not cast
+      {
+        targetId: 2_000_000_001,
+        parameter: null,
+        status: 'rejected',
+        proposedValue: { op: 'delete' },
+        proposedMeta: { deletedEntry: { drugNames: 'invalid', drugId: 'invalid' } },
       },
     ];
     for (const e of edits) {
