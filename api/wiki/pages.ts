@@ -37,6 +37,7 @@ import {
   withDrugApplicabilityLock,
 } from '../_lib/parameterApplicabilityStore.js';
 import { inTransaction, runInPoolTransaction } from '../_lib/db.js';
+import { lockWikiPageShared } from '../_lib/wiki-page-lock.js';
 import { resolveOwningDrugIdForMonograph } from '../_lib/monograph-helpers.js';
 
 /**
@@ -1220,13 +1221,10 @@ async function handleUpdate(
     const outcome = await runInPoolTransaction<SubmitOutcome>(async () => {
       if (lockDrugId != null) {
         await lockDrugForEntryApplicability(lockDrugId);
-        const [pageInTx] = await getDb()
-          .select({ id: wikiPages.id })
-          .from(wikiPages)
-          .where(eq(wikiPages.id, page.id))
-          .limit(1);
-        if (!pageInTx) return { kind: 'gone' };
       }
+      // Every page, drug or not: the page delete locks this row before it
+      // sweeps proposals, so an insert after the sweep cannot orphan.
+      if (!(await lockWikiPageShared(page.id))) return { kind: 'gone' };
       const [row] = await getDb()
         .insert(pendingEdits)
         .values({
@@ -1589,6 +1587,18 @@ async function handleDelete(
     //     withdrawn, not deleted: the objection stays on record.
     const deleted = await inTransaction(async () => {
       const tx = getDb();
+      // Lock the page row before sweeping its proposals. POST
+      // /api/pending-edits share-locks the same row around its insert for
+      // pages that have no drug lock, so a submission either commits before
+      // this lock (and the sweep below sees it) or waits for the delete and
+      // finds the page gone. Without it a proposal inserted after the sweep
+      // would outlive the page, since pending_edits.target_id has no FK.
+      const [locked] = await tx
+        .select({ id: wikiPages.id })
+        .from(wikiPages)
+        .where(eq(wikiPages.id, page.id))
+        .for('update');
+      if (!locked) return undefined;
       await tx
         .delete(pendingEdits)
         .where(

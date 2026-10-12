@@ -1016,6 +1016,24 @@ export async function applyApprovedEdit(
     // entry still belongs to it. See `assertLockedEntryOwner`.
     await assertLockedEntryOwner(db, preflight, lockIds);
 
+    // A page-scoped edit also holds its page row, taken BEFORE the
+    // pending_edits row below. Deleting a page locks the page row FOR UPDATE and
+    // then deletes the page's pending_edits; taking the two in the opposite
+    // order here would form an ABBA cycle and PostgreSQL would abort one side.
+    // A missing page is not an error here: the apply step reports it as before.
+    if (
+      preflight.targetId != null &&
+      (preflight.editType === 'wiki_page' ||
+        preflight.editType === 'wiki_section' ||
+        preflight.editType === 'wiki_fact')
+    ) {
+      await db
+        .select({ id: wikiPages.id })
+        .from(wikiPages)
+        .where(eq(wikiPages.id, preflight.targetId))
+        .for('no key update');
+    }
+
     const [edit] = await db
       .select()
       .from(pendingEdits)
