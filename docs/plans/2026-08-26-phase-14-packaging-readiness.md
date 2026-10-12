@@ -25,7 +25,7 @@ The npm package is:
 assurance-core
 ```
 
-Current package version at this update: `0.3.0`.
+Current package version at this update: `0.5.0`.
 
 Kinetix already declares and installs the package. The duplicate pure-core implementation that originally remained in Kinetix after the repository was first created has been removed.
 

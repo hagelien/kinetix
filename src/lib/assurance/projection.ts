@@ -85,6 +85,13 @@ export type LegacyConsensusHoldReason =
  * about agent dispute *verdicts*; human disputes live in a separate table and
  * are checked by its caller. Modelling them as zero here is what keeps the
  * projection exactly equivalent — the human-dispute check has not moved.
+ *
+ * **`disputesUpheld === 0`.** For the same reason. The legacy path answers an
+ * upheld dispute by returning the edit to its author (`upheld-dispute-return`),
+ * so no pending edit it summarises is still standing on one; the dispute record
+ * that says so lives with the human disputes, which this projection does not
+ * read. Zero is also left out of the input fingerprint, so this field changes
+ * no stored fingerprint.
  */
 export function assuranceFromLegacySummary(
   summary: LegacyVerificationSummary,
@@ -100,6 +107,7 @@ export function assuranceFromLegacySummary(
     humanApprovalCapabilities: [],
     disputingAssessors: summary.disputeCount,
     disputesOpen: 0,
+    disputesUpheld: 0,
     abstentions: summary.abstainCount,
     implicitApprovals: summary.implicitApproveCount,
     evidenceRequirementState: [],

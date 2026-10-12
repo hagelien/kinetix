@@ -37,6 +37,8 @@ const DECISION_COLUMNS = {
   policyVersion: kgPolicyDecisions.policyVersion,
   decision: kgPolicyDecisions.decision,
   inputFingerprint: kgPolicyDecisions.inputFingerprint,
+  policyFingerprint: kgPolicyDecisions.policyFingerprint,
+  matchedRuleIds: kgPolicyDecisions.matchedRuleIds,
   evaluationMode: kgPolicyDecisions.evaluationMode,
   evaluatedAt: kgPolicyDecisions.evaluatedAt,
 } as const;
@@ -60,6 +62,10 @@ export async function recordPolicyDecision(
     decision: KgPolicyDecisionOutcome;
     inputFingerprint: string;
     evaluationMode?: KgEvaluationMode;
+    /** `PolicySet.definitionFingerprint` of the policy that decided. */
+    policyFingerprint?: string | null;
+    /** The rules that applied, in evaluation order. */
+    matchedRuleIds?: readonly string[];
     requirements?: unknown;
     satisfiedRequirements?: unknown;
     unsatisfiedRequirements?: unknown;
@@ -81,6 +87,8 @@ export async function recordPolicyDecision(
       // fail-safe direction: a caller that forgets to say records a decision
       // that governs nothing, not one that governs everything.
       evaluationMode: args.evaluationMode ?? 'shadow',
+      policyFingerprint: args.policyFingerprint ?? null,
+      matchedRuleIds: args.matchedRuleIds ? [...args.matchedRuleIds] : null,
       requirements: args.requirements ?? null,
       satisfiedRequirements: args.satisfiedRequirements ?? null,
       unsatisfiedRequirements: args.unsatisfiedRequirements ?? null,
@@ -119,6 +127,8 @@ export async function recordCoreDecision(
     decision: args.outcome ?? (decision.allowed ? 'apply' : 'hold'),
     inputFingerprint: decision.inputFingerprint,
     evaluationMode: args.evaluationMode,
+    policyFingerprint: decision.policyFingerprint,
+    matchedRuleIds: decision.matchedRuleIds,
     requirements: decision.outcomes,
     satisfiedRequirements: decision.outcomes.filter((o) => o.met),
     unsatisfiedRequirements: decision.unmet,

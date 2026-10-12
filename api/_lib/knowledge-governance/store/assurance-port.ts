@@ -35,6 +35,8 @@
 
 import type {
   AssuranceStore,
+  DecisionQuery,
+  DecisionReason,
   EvidenceRequirementState,
   OpenDisputeInput,
   OpenProposalQuery,
@@ -51,6 +53,7 @@ import type {
   StoredProposal,
   StoredProposalVersion,
   TargetRef,
+  Timestamp,
 } from 'assurance-core';
 import { LOW_RISK, isRiskLevel } from 'assurance-core';
 import {
@@ -579,6 +582,52 @@ function toDecisionMode(stored: string): StoredDecision['mode'] {
   return stored === 'authoritative' ? 'authoritative' : 'shadow';
 }
 
+/** A JSONB column read as a list of strings; anything else reads as empty. */
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
+}
+
+/**
+ * The unmet requirements of a stored decision, in the port's shape.
+ *
+ * Two writers fill `unsatisfied_requirements`: `recordCoreDecision` stores the
+ * core's whole `RequirementOutcome` objects, and the port stores its reduced
+ * reasons. Both carry `requirementId`, `ruleId` and `detail`, so one reader
+ * serves both; an entry without a requirement id is not a reason and is left
+ * out rather than invented.
+ */
+function decisionReasons(value: unknown): DecisionReason[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    const e = entry as { requirementId?: unknown; ruleId?: unknown; detail?: unknown } | null;
+    if (!e || typeof e.requirementId !== 'string') return [];
+    return [
+      {
+        requirementId: e.requirementId,
+        ruleId: typeof e.ruleId === 'string' ? e.ruleId : null,
+        detail: typeof e.detail === 'string' ? e.detail : null,
+      },
+    ];
+  });
+}
+
+/**
+ * A version's submission time as the port reports it: never before its
+ * proposal was created.
+ *
+ * The contract requires it, and the review queue depends on it to stop before
+ * reading a whole backlog. Kinetix can break it for a reason the mirror owns:
+ * a proposal mirrored before the importer carried legacy proposal times was
+ * stamped when it was mirrored, while its version keeps the legacy submission
+ * time, which is earlier. The stored column keeps that legacy fact untouched;
+ * the port reports the earliest instant the version can have been submitted in
+ * this store's own history, which is the proposal's creation.
+ */
+function submittedNoEarlierThan(submittedAt: Date | null, proposalCreatedAt: Date): Timestamp | null {
+  if (submittedAt === null) return null;
+  return submittedAt < proposalCreatedAt ? proposalCreatedAt.toISOString() : iso(submittedAt);
+}
+
 /**
  * Read the assurance capabilities of a stored snapshot.
  *
@@ -782,7 +831,7 @@ export class KinetixAssuranceStore implements AssuranceStore {
       risk: toRiskProfile(row.riskProfile),
       payloadFingerprint: row.payloadFingerprint,
       versionNo: row.versionNo,
-      submittedAt: iso(row.submittedAt),
+      submittedAt: submittedNoEarlierThan(row.submittedAt, proposal.createdAt),
     };
   }
 
@@ -943,7 +992,7 @@ export class KinetixAssuranceStore implements AssuranceStore {
       conditions.push(eq(kgTargets.targetType, query.targetType));
     }
 
-    const rows = await this.db
+    const listing = this.db
       .select({
         id: kgProposals.id,
         spaceId: kgProposals.spaceId,
@@ -962,7 +1011,12 @@ export class KinetixAssuranceStore implements AssuranceStore {
       .innerJoin(kgTargets, eq(kgTargets.id, kgProposals.targetId))
       .where(and(...conditions))
       .orderBy(asc(kgProposals.createdAt), asc(kgProposals.id))
-      .limit(query.limit ?? 50);
+      .$dynamic();
+    // An omitted limit means every open proposal. A default page size here
+    // made `candidatesFromStore` read a space as finished when it had only
+    // been cut off, which is the one mistake a queue must not make quietly.
+    const rows =
+      query.limit === undefined ? await listing : await listing.limit(query.limit);
 
     const out: StoredProposal[] = [];
     for (const row of rows) {
@@ -1094,6 +1148,7 @@ export class KinetixAssuranceStore implements AssuranceStore {
         id: kgDisputes.id,
         openedByActorRef: kgDisputes.openedByActorRef,
         openedByKind: kgDisputes.openedByKind,
+        reasonMd: kgDisputes.reasonMd,
         closedAt: kgDisputes.closedAt,
         createdAt: kgDisputes.createdAt,
       })
@@ -1137,8 +1192,15 @@ export class KinetixAssuranceStore implements AssuranceStore {
       .orderBy(asc(kgDisputeRulings.createdAt), asc(kgDisputeRulings.id));
 
     const latestByDispute = new Map<number, string>();
+    // The most recent ruling that closed each dispute. Upheld is a fact about
+    // that ruling, not about the latest one: a later `superseded` hands the
+    // objection to a replacement without saying the first was wrong.
+    const closingByDispute = new Map<number, string>();
     for (const ruling of rulingRows) {
       latestByDispute.set(ruling.disputeId, ruling.ruling);
+      if (rulingClosesDispute(ruling.ruling)) {
+        closingByDispute.set(ruling.disputeId, ruling.ruling);
+      }
     }
 
     return rows.map((row) => {
@@ -1151,6 +1213,12 @@ export class KinetixAssuranceStore implements AssuranceStore {
         // No ruling at all means open. An unreadable latest ruling also means
         // open: nobody can say what settled it, so the objection stands.
         open: latest === undefined || !rulingClosesDispute(latest),
+        // Closed and upheld are separate facts: an upheld dispute is closed
+        // and still says the version is wrong. Reported so a policy reading
+        // `noUpheldDisputes` sees it; Kinetix's own path returns such an edit
+        // to its author (`upheld-dispute-return`).
+        upheld: closingByDispute.get(row.id) === 'upheld',
+        rationale: row.reasonMd ?? null,
         openedAt: row.createdAt.toISOString(),
       };
     });
@@ -1227,19 +1295,30 @@ export class KinetixAssuranceStore implements AssuranceStore {
     this.declaredEvidence.set(ref.versionId, state);
   }
 
-  async latestDecision(ref: ProposalVersionRef): Promise<StoredDecision | null> {
+  async latestDecision(
+    ref: ProposalVersionRef,
+    query: DecisionQuery = {},
+  ): Promise<StoredDecision | null> {
     const versionId = await this.versionIdOf(ref);
     if (versionId === null) return null;
-    const row = await decisions.latestDecisionForVersion(this.db, versionId);
+    const row = await decisions.latestDecisionForVersion(
+      this.db,
+      versionId,
+      query.mode,
+    );
     if (!row) return null;
+    const breakdown = await decisions.decisionRequirements(this.db, row.id);
     return {
       decisionId: String(row.id),
       version: ref,
       policyId: row.policyId,
       policyVersion: row.policyVersion,
+      policyFingerprint: row.policyFingerprint ?? null,
       allowed: row.decision === DECISION_ALLOW,
       inputFingerprint: row.inputFingerprint,
       mode: toDecisionMode(row.evaluationMode),
+      matchedRuleIds: stringArray(row.matchedRuleIds),
+      unmet: decisionReasons(breakdown?.unsatisfied),
       evaluatedAt: row.evaluatedAt.toISOString(),
     };
   }
@@ -1287,6 +1366,7 @@ export class KinetixAssuranceStore implements AssuranceStore {
       subjectId: versionId,
       openedByActorRef: input.openedByRef,
       openedByKind: input.openedByKind,
+      reasonMd: input.rationale ?? null,
       at: new Date(input.openedAt),
     });
     return {
@@ -1295,6 +1375,8 @@ export class KinetixAssuranceStore implements AssuranceStore {
       openedByRef: row.openedByActorRef,
       openedByKind: input.openedByKind,
       open: row.closedAt === null,
+      upheld: false,
+      rationale: row.reasonMd ?? null,
       openedAt: row.createdAt.toISOString(),
     };
   }
@@ -1327,6 +1409,9 @@ export class KinetixAssuranceStore implements AssuranceStore {
       decision: input.allowed ? DECISION_ALLOW : DECISION_HOLD,
       inputFingerprint: input.inputFingerprint,
       evaluationMode: input.mode,
+      policyFingerprint: input.policyFingerprint ?? null,
+      matchedRuleIds: [...(input.matchedRuleIds ?? [])],
+      unsatisfiedRequirements: (input.unmet ?? []).map((u) => ({ ...u })),
       at: new Date(input.evaluatedAt),
     });
     return {
@@ -1334,9 +1419,12 @@ export class KinetixAssuranceStore implements AssuranceStore {
       version: input.version,
       policyId: row.policyId,
       policyVersion: row.policyVersion,
+      policyFingerprint: row.policyFingerprint ?? null,
       allowed: row.decision === DECISION_ALLOW,
       inputFingerprint: row.inputFingerprint,
       mode: input.mode,
+      matchedRuleIds: stringArray(row.matchedRuleIds),
+      unmet: (input.unmet ?? []).map((u) => ({ ...u })),
       evaluatedAt: row.evaluatedAt.toISOString(),
     };
   }
