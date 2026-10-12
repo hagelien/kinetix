@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { getDbMock, getUserFromRequestMock } = vi.hoisted(() => ({
@@ -16,6 +17,7 @@ vi.mock('../../api/_lib/auth.js', () => ({
 }));
 
 import handler from '../../api/pdf-requests.ts';
+import { NO_PDF_URL_PATTERN } from '../../src/lib/publicDatabaseRecord.ts';
 
 function createResponse(): {
   res: ServerResponse;
@@ -697,6 +699,26 @@ describe('GET /api/pdf-requests', () => {
     expect(state.headers['Cache-Control']).toBe('no-store');
     expect(JSON.parse(state.body)).toEqual({ requests: rows });
     expect(leftJoin).toHaveBeenCalled();
+  });
+
+  it('excludes no-PDF citations (front pages, database records) from the follow-up queue', async () => {
+    const limit = vi.fn().mockResolvedValue([]);
+    const orderBy = vi.fn().mockReturnValue({ limit });
+    const where = vi.fn().mockReturnValue({ orderBy });
+    const leftJoin = vi.fn().mockReturnValue({ where });
+    const innerJoin = vi.fn().mockReturnValue({ leftJoin });
+    const from = vi.fn().mockReturnValue({ innerJoin });
+    const select = vi.fn().mockReturnValue({ from });
+    getDbMock.mockReturnValue({ select });
+
+    const { res } = createResponse();
+    await handler(createGetRequest('/api/pdf-requests?awaitingReview=1'), res);
+
+    const { sql: text, params } = new PgDialect().sqlToQuery(
+      where.mock.calls[0][0],
+    );
+    expect(text).toContain('not exists');
+    expect(params).toContain(NO_PDF_URL_PATTERN);
   });
 
   it('returns the open-queue count for the header badge', async () => {
