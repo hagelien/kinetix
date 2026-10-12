@@ -57,7 +57,7 @@ import type { KinetixAssuranceStore } from './store/assurance-port.js';
 import { resolveMigrationMode } from './migration-state.js';
 import { currentAssessments } from './store/assessments.js';
 import { findByLegacy } from './store/legacy-links.js';
-import { openDisputes } from './store/disputes.js';
+import { openDisputes, upheldDisputeCount } from './store/disputes.js';
 import { latestVersion } from './store/versions.js';
 import type { GovernanceDb } from './store/interface.js';
 import type { ApprovalTargetType } from '../../../db/schema.js';
@@ -142,6 +142,10 @@ export async function genericAssuranceProfile(
     subjectType: 'proposal_version',
     subjectId: version.id,
   });
+  const upheld = await upheldDisputeCount(db, {
+    subjectType: 'proposal_version',
+    subjectId: version.id,
+  });
 
   // Decoded once per assessment, before anything is filtered by verdict or
   // actor kind. Reporting from inside the capability aggregates made the
@@ -189,6 +193,7 @@ export async function genericAssuranceProfile(
     humanApprovalCapabilities: [...new Set(humans.flatMap(capabilityOf))].sort(),
     disputingAssessors: assessments.filter((a) => a.verdict === 'dispute').length,
     disputesOpen: disputes.length,
+    disputesUpheld: upheld,
     abstentions: assessments.filter((a) => a.verdict === 'abstain').length,
     evidenceRequirementState: [],
   };

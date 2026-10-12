@@ -51,6 +51,12 @@ import {
   type IntegrationDb,
 } from '../../integration/setup/harness.js';
 import { seedDrug, seedUser } from '../../integration/setup/seed.js';
+import {
+  openDispute,
+  recordRuling,
+} from '../../../api/_lib/knowledge-governance/store/disputes.js';
+import { findByLegacy } from '../../../api/_lib/knowledge-governance/store/legacy-links.js';
+import { latestVersion } from '../../../api/_lib/knowledge-governance/store/versions.js';
 
 let db: IntegrationDb;
 
@@ -265,6 +271,35 @@ describe('parity: the generic projection matches the legacy calculation', () => 
     });
     expect(resolved.source).toBe('generic');
     expect(resolved.generic).toEqual(resolved.legacy);
+  });
+
+  it('counts an upheld dispute apart from the open ones', async () => {
+    // An upheld dispute is closed and still says the version is wrong. A
+    // profile that counted only open disputes reported a correct objection as
+    // none at all, which is the flaw assurance-core 0.5 fixed in the kernel.
+    const world = await seedRevision();
+    await advanceTo('shadow');
+    await mirrorProposalVersion({
+      targetType: 'drug_parameter_revision',
+      targetId: world.revisionId,
+    });
+    const link = await findByLegacy(db, 'drug_parameter_revision', world.revisionId);
+    const version = await latestVersion(db, link!.genericId);
+    const subject = { subjectType: 'proposal_version' as const, subjectId: version!.id };
+    const spaceId = (await db.execute(sql`select space_id from kg_proposals where id = ${link!.genericId}`)).rows[0]!.space_id as number;
+
+    const upheld = await openDispute(db, { spaceId, ...subject, openedByActorRef: `user:${world.humanId}`, openedByKind: 'human', reasonMd: 'Quotes the fasted arm.' });
+    await recordRuling(db, { disputeId: upheld.id, ruling: 'upheld', actorRef: `user:${world.humanId}` });
+    const overruled = await openDispute(db, { spaceId, ...subject, openedByActorRef: `user:${world.humanId}`, openedByKind: 'human' });
+    await recordRuling(db, { disputeId: overruled.id, ruling: 'overruled', actorRef: `user:${world.humanId}` });
+    await openDispute(db, { spaceId, ...subject, openedByActorRef: `user:${world.humanId}`, openedByKind: 'human' });
+
+    const profile = await genericAssuranceProfile(db, {
+      targetType: 'drug_parameter_revision',
+      targetId: world.revisionId,
+    });
+    expect(profile!.disputesOpen).toBe(1);
+    expect(profile!.disputesUpheld).toBe(1);
   });
 
   it('counts an unreadable snapshot on the path production actually takes', async () => {
