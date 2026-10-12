@@ -509,9 +509,10 @@ function aboutColumnsSql(targetType: SQL, targetId: SQL): SQL {
       -- An approved delete removed the entry and may since have lost its drug
       -- to a merge, so applying it kept a snapshot of the names. proposed_meta
       -- is contributor-writable: trust the marker only on an approved
-      -- param_entry edit, and only when it has the expected shape.
+      -- param_entry delete, and only when it has the expected shape.
       (SELECT e.proposed_meta->'deletedEntry'->'drugNames' FROM ${pe} e
         WHERE e.edit_type = 'param_entry' AND e.status = 'approved'
+          AND e.proposed_value->>'op' = 'delete'
           AND jsonb_typeof(e.proposed_meta->'deletedEntry'->'drugNames') = 'object'))
   END`;
   const parameter = sql`CASE ${targetType}
