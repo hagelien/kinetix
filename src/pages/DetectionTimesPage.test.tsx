@@ -19,8 +19,8 @@ import i18n from 'i18next';
 import { DetectionTimesPage } from './DetectionTimesPage';
 import { useAuthStore } from '@/stores/authStore';
 import { useDrugStore } from '@/stores/drugStore';
-import { resetRefsDetectionCache } from '@/lib/refsDetectionApi';
-import { SYNTHETIC_REFS_PAYLOAD } from '@/lib/__tests__/fixtures/refsSyntheticGuideline';
+import { resetLabDetectionCache } from '@/lib/labDetectionApi';
+import { SYNTHETIC_LAB_PAYLOAD } from '@/lib/__tests__/fixtures/labSyntheticGuideline';
 import type { ParameterSummary } from '@/lib/parameterEntryAggregation';
 
 const fetchMock = vi.fn();
@@ -59,7 +59,7 @@ function signInAsGrantedMember() {
       enabledConcentrationUnits: ['µmol/L', 'mg/L'],
       notificationSettings: null,
       favoriteParameters: [],
-      groups: [{ id: 1, slug: 'lab', name: 'Lab', grants: ['methods.read', 'pmConcentrations.read', 'refsDetectionTimes.read', 'patternProfile.view'] }],
+      groups: [{ id: 1, slug: 'lab', name: 'Lab', grants: ['methods.read', 'pmConcentrations.read', 'labDetectionTimes.read', 'patternProfile.view'] }],
     },
     isAuthenticated: true,
     isLoading: false,
@@ -70,7 +70,7 @@ function signInAsGrantedMember() {
  * What the gated route answers a reader who may read the guideline — a
  * synthetic table, since the real one is restricted and lives only in the DB.
  */
-const REFS_PAYLOAD = SYNTHETIC_REFS_PAYLOAD;
+const LAB_PAYLOAD = SYNTHETIC_LAB_PAYLOAD;
 
 function LocationProbe() {
   const location = useLocation();
@@ -252,8 +252,8 @@ function routeFetch(overrides: Record<string, unknown> = {}) {
     if (url in overrides) {
       return { ok: true, json: async () => overrides[url] };
     }
-    if (url.includes('/api/refs-detection-times')) {
-      return { ok: true, json: async () => REFS_PAYLOAD };
+    if (url.includes('/api/lab-detection-times')) {
+      return { ok: true, json: async () => LAB_PAYLOAD };
     }
     if (url.includes('view=search')) {
       return {
@@ -296,7 +296,7 @@ describe('DetectionTimesPage', () => {
     vi.unstubAllGlobals();
     // The guideline payload is cached per identity for the module's lifetime;
     // without this, the next test inherits the previous reader's copy.
-    resetRefsDetectionCache();
+    resetLabDetectionCache();
     useDrugStore.setState({ pendingColumnPreset: null, tableView: 'sidebar' });
     useAuthStore.setState({ user: null, isAuthenticated: false, isLoading: false });
     await i18n.changeLanguage('nb');
@@ -723,24 +723,24 @@ describe('DetectionTimesPage', () => {
       renderPage('/detection-times?drug=7');
 
       await screen.findByRole('heading', { name: 'Diazepam', level: 2 });
-      expect(screen.queryByTestId('refs-detection-section')).toBeNull();
+      expect(screen.queryByTestId('lab-detection-section')).toBeNull();
       expect(
         fetchMock.mock.calls.some((call) =>
-          String(call[0]).includes('/api/refs-detection-times'),
+          String(call[0]).includes('/api/lab-detection-times'),
         ),
       ).toBe(false);
     });
 
-    it("shows a member REFS's own band, separately from the pooled windows", async () => {
+    it("shows a member the laboratory's own band, separately from the pooled windows", async () => {
       signInAsGrantedMember();
       routeFetch();
       renderPage('/detection-times?drug=7');
 
       await screen.findByRole('heading', { name: 'Diazepam', level: 2 });
-      const section = await screen.findByTestId('refs-detection-section');
+      const section = await screen.findByTestId('lab-detection-section');
 
       // The (synthetic) guideline's row for diazepam.
-      const row = within(section).getByTestId('refs-row-diazepam');
+      const row = within(section).getByTestId('lab-row-diazepam');
       expect(within(row).getByText('Last week')).toBeTruthy();
       expect(within(row).getByText(/Metabolites:/)).toBeTruthy();
 
@@ -766,7 +766,7 @@ describe('DetectionTimesPage', () => {
       });
       renderPage('/detection-times?drug=7');
 
-      const notice = await screen.findByTestId('refs-detection-no-match');
+      const notice = await screen.findByTestId('lab-detection-no-match');
       expect(notice.textContent).toContain('Paracetamol');
     });
 
@@ -781,7 +781,7 @@ describe('DetectionTimesPage', () => {
       fireEvent.click(toggle);
 
       // A row nothing on this page selected — the table stands on its own.
-      expect(await screen.findByTestId('refs-table-row-thc')).toBeTruthy();
+      expect(await screen.findByTestId('lab-table-row-thc')).toBeTruthy();
       expect(screen.getByText('Use the curves')).toBeTruthy();
     });
   });
@@ -804,7 +804,7 @@ describe('DetectionTimesPage', () => {
       ]);
     });
 
-    it("adds REFS's own column for a member", async () => {
+    it("adds the laboratory's own column for a member", async () => {
       signInAsGrantedMember();
       routeFetch();
       renderPage('/detection-times?drug=7');
@@ -813,7 +813,7 @@ describe('DetectionTimesPage', () => {
 
       await screen.findByTestId('landing');
       expect(useDrugStore.getState().pendingColumnPreset).toContain(
-        'refsUrineDetection',
+        'labUrineDetection',
       );
     });
   });

@@ -47,23 +47,23 @@ function storedTable(rows: unknown[]) {
   return chain;
 }
 
-import handler from '../../api/refs-detection-times.ts';
+import handler from '../../api/lab-detection-times.ts';
 import {
-  SYNTHETIC_REFS_PREAMBLE,
-  SYNTHETIC_REFS_ROWS,
-  SYNTHETIC_REFS_SOURCE,
-} from '../../src/lib/__tests__/fixtures/refsSyntheticGuideline.ts';
+  SYNTHETIC_LAB_PREAMBLE,
+  SYNTHETIC_LAB_ROWS,
+  SYNTHETIC_LAB_SOURCE,
+} from '../../src/lib/__tests__/fixtures/labSyntheticGuideline.ts';
 
 const STORED = {
-  source: SYNTHETIC_REFS_SOURCE,
-  preamble: SYNTHETIC_REFS_PREAMBLE,
-  rows: SYNTHETIC_REFS_ROWS,
+  source: SYNTHETIC_LAB_SOURCE,
+  preamble: SYNTHETIC_LAB_PREAMBLE,
+  rows: SYNTHETIC_LAB_ROWS,
 };
 
 function createRequest(method = 'GET'): IncomingMessage {
   return {
     method,
-    url: '/api/refs-detection-times',
+    url: '/api/lab-detection-times',
     headers: { host: 'localhost' },
   } as IncomingMessage;
 }
@@ -90,7 +90,7 @@ function createResponse() {
   return { res, state };
 }
 
-describe('GET /api/refs-detection-times', () => {
+describe('GET /api/lab-detection-times', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     loadPermissionOverridesMock.mockResolvedValue({});
@@ -136,7 +136,7 @@ describe('GET /api/refs-detection-times', () => {
     getUserFromRequestMock.mockResolvedValue({
       userId: 7,
       role: 'authenticated',
-      groups: [{ slug: 'lab', grants: ['methods.read', 'pmConcentrations.read', 'refsDetectionTimes.read', 'patternProfile.view'] }],
+      groups: [{ slug: 'lab', grants: ['methods.read', 'pmConcentrations.read', 'labDetectionTimes.read', 'patternProfile.view'] }],
     });
     const { res, state } = createResponse();
 
@@ -144,9 +144,9 @@ describe('GET /api/refs-detection-times', () => {
 
     const payload = JSON.parse(state.body);
     expect(payload.gated).toBe(false);
-    expect(payload.rows).toEqual(SYNTHETIC_REFS_ROWS);
-    expect(payload.preamble).toBe(SYNTHETIC_REFS_PREAMBLE);
-    expect(payload.source).toEqual(SYNTHETIC_REFS_SOURCE);
+    expect(payload.rows).toEqual(SYNTHETIC_LAB_ROWS);
+    expect(payload.preamble).toBe(SYNTHETIC_LAB_PREAMBLE);
+    expect(payload.source).toEqual(SYNTHETIC_LAB_SOURCE);
   });
 
   it('serves an admin, who holds the capability by default', async () => {
@@ -183,7 +183,7 @@ describe('GET /api/refs-detection-times', () => {
     storedTable([
       {
         ...STORED,
-        rows: [...SYNTHETIC_REFS_ROWS, { key: 'broken', parent: 'X' }],
+        rows: [...SYNTHETIC_LAB_ROWS, { key: 'broken', parent: 'X' }],
       },
     ]);
     getUserFromRequestMock.mockResolvedValue({

@@ -7,30 +7,30 @@
  * guideline's own spelling makes non-obvious — compound cells, parenthesised
  * synonyms, substances that are both a row and somebody's metabolite.
  *
- * The rows are SYNTHETIC (`fixtures/refsSyntheticGuideline.ts`): the real table
+ * The rows are SYNTHETIC (`fixtures/labSyntheticGuideline.ts`): the real table
  * is restricted and lives only in the database.
  */
 import { describe, expect, it } from 'vitest';
 import {
-  SYNTHETIC_REFS_ROWS as REFS_URINE_DETECTION_ROWS,
-  SYNTHETIC_REFS_SOURCE,
-} from './fixtures/refsSyntheticGuideline';
+  SYNTHETIC_LAB_ROWS as LAB_URINE_DETECTION_ROWS,
+  SYNTHETIC_LAB_SOURCE,
+} from './fixtures/labSyntheticGuideline';
 import {
-  buildRefsNameIndex,
+  buildLabNameIndex,
   foldSubstanceName,
-  matchRefsRows,
+  matchLabRows,
   nameMatchKeys,
-  isRefsGuidelineSource,
-  isRefsUrineDetectionRow,
-  refsStatementForRole,
+  isLabGuidelineSource,
+  isLabUrineDetectionRow,
+  labStatementForRole,
   substanceNameCandidates,
-} from '../refsDetectionTimes';
+} from '../labDetectionTimes';
 
-const index = buildRefsNameIndex(REFS_URINE_DETECTION_ROWS);
+const index = buildLabNameIndex(LAB_URINE_DETECTION_ROWS);
 
 /** Match by a bare name, the way a caller with one string would. */
 function match(...names: string[]) {
-  return matchRefsRows(index, names);
+  return matchLabRows(index, names);
 }
 
 describe('foldSubstanceName', () => {
@@ -55,7 +55,7 @@ describe('nameMatchKeys', () => {
   });
 });
 
-describe('matchRefsRows', () => {
+describe('matchLabRows', () => {
   it('finds a substance that is a row of its own', () => {
     const [first] = match('Ketamin');
     expect(first?.row.key).toBe('ketamin');
@@ -106,16 +106,16 @@ describe('matchRefsRows', () => {
       nameShort: null,
       aliases: ['EDDP'],
     });
-    expect(matchRefsRows(index, candidates)[0]?.row.key).toBe('metadon');
+    expect(matchLabRows(index, candidates)[0]?.row.key).toBe('metadon');
   });
 });
 
-describe('refsStatementForRole', () => {
+describe('labStatementForRole', () => {
   const row = (key: string) =>
-    REFS_URINE_DETECTION_ROWS.find((r) => r.key === key)!;
+    LAB_URINE_DETECTION_ROWS.find((r) => r.key === key)!;
 
   it('gives the one statement a row makes about the pair', () => {
-    expect(refsStatementForRole(row('ketamin'), 'parent')).toEqual({
+    expect(labStatementForRole(row('ketamin'), 'parent')).toEqual({
       kind: 'band',
       band: 'days',
     });
@@ -124,11 +124,11 @@ describe('refsStatementForRole', () => {
   it('gives each half of a split row its own statement', () => {
     // The etanol row states one band for the parent and another for EtG/EtS.
     // A reader who searched for EtG must get the second, not the first.
-    expect(refsStatementForRole(row('etanol'), 'parent')).toEqual({
+    expect(labStatementForRole(row('etanol'), 'parent')).toEqual({
       kind: 'band',
       band: 'halfDay',
     });
-    expect(refsStatementForRole(row('etanol'), 'metabolite')).toEqual({
+    expect(labStatementForRole(row('etanol'), 'metabolite')).toEqual({
       kind: 'band',
       band: 'days',
     });
@@ -138,11 +138,11 @@ describe('refsStatementForRole', () => {
     // The metadon row states a band for the parent only, with EDDP beside
     // it, so it says nothing about how long EDDP is found. Handing the
     // parent's band to EDDP would be inventing a forensic statement.
-    expect(refsStatementForRole(row('metadon'), 'parent')).toEqual({
+    expect(labStatementForRole(row('metadon'), 'parent')).toEqual({
       kind: 'band',
       band: 'week',
     });
-    expect(refsStatementForRole(row('metadon'), 'metabolite')).toEqual({
+    expect(labStatementForRole(row('metadon'), 'metabolite')).toEqual({
       kind: 'notStated',
     });
   });
@@ -150,8 +150,8 @@ describe('refsStatementForRole', () => {
 
 describe('the fixture table', () => {
   it('carries a document identity the source guard accepts', () => {
-    expect(isRefsGuidelineSource(SYNTHETIC_REFS_SOURCE)).toBe(true);
-    expect(isRefsGuidelineSource({ ...SYNTHETIC_REFS_SOURCE, version: 1 })).toBe(
+    expect(isLabGuidelineSource(SYNTHETIC_LAB_SOURCE)).toBe(true);
+    expect(isLabGuidelineSource({ ...SYNTHETIC_LAB_SOURCE, version: 1 })).toBe(
       false,
     );
   });
@@ -160,18 +160,18 @@ describe('the fixture table', () => {
     // Keeps the fixture honest against the guard: a row typed wrong here would
     // be dropped at the client boundary, and a shortened forensic table is
     // indistinguishable from a complete one.
-    for (const row of REFS_URINE_DETECTION_ROWS) {
-      expect(isRefsUrineDetectionRow(row), row.key).toBe(true);
+    for (const row of LAB_URINE_DETECTION_ROWS) {
+      expect(isLabUrineDetectionRow(row), row.key).toBe(true);
     }
   });
 
   it('keys every row uniquely', () => {
-    const keys = REFS_URINE_DETECTION_ROWS.map((row) => row.key);
+    const keys = LAB_URINE_DETECTION_ROWS.map((row) => row.key);
     expect(new Set(keys).size).toBe(keys.length);
   });
 
   it('states at least one reading per row', () => {
-    for (const row of REFS_URINE_DETECTION_ROWS) {
+    for (const row of LAB_URINE_DETECTION_ROWS) {
       expect(row.readings.length, row.key).toBeGreaterThan(0);
     }
   });
@@ -179,7 +179,7 @@ describe('the fixture table', () => {
   it('splits a reading by scope only when the row has more than one', () => {
     // A single-reading row saying "moderstoff" would draw a distinction the
     // guideline's cell did not make.
-    for (const row of REFS_URINE_DETECTION_ROWS) {
+    for (const row of LAB_URINE_DETECTION_ROWS) {
       if (row.readings.length === 1) {
         expect(row.readings[0]!.scope, row.key).not.toBe('metabolite');
       }
@@ -188,7 +188,7 @@ describe('the fixture table', () => {
 
   it('keeps every band within the vocabulary the module renders', () => {
     const allowed = new Set(['halfDay', 'day', 'days', 'week', 'twoWeeks']);
-    for (const row of REFS_URINE_DETECTION_ROWS) {
+    for (const row of LAB_URINE_DETECTION_ROWS) {
       for (const reading of row.readings) {
         if (reading.statement.kind !== 'band') continue;
         expect(allowed.has(reading.statement.band), row.key).toBe(true);
@@ -204,7 +204,7 @@ describe('metabolite synonyms', () => {
   it('keys every metabolite alias by a metabolite the row actually lists', () => {
     // Otherwise a metabolite renamed in the table leaves its synonyms pointing
     // at a name the guideline no longer uses.
-    for (const row of REFS_URINE_DETECTION_ROWS) {
+    for (const row of LAB_URINE_DETECTION_ROWS) {
       for (const key of Object.keys(row.metaboliteAliases ?? {})) {
         expect(row.metabolites, `${row.key}.${key}`).toContain(key);
       }
@@ -226,7 +226,7 @@ describe('metabolite synonyms', () => {
     // Two roles on ONE row is always a data error — a substance cannot be its
     // own metabolite. Two roles across two rows (oxazepam) is the guideline's
     // own cross-reference and stays.
-    const names = REFS_URINE_DETECTION_ROWS.flatMap((row) => [
+    const names = LAB_URINE_DETECTION_ROWS.flatMap((row) => [
       row.parent,
       ...row.metabolites,
       ...(row.aliases ?? []),

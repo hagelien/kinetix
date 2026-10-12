@@ -1,12 +1,12 @@
 /**
  * The laboratory's urine detection times.
  *
- *   GET /api/refs-detection-times — the whole table, once.
+ *   GET /api/lab-detection-times — the whole table, once.
  *
  * Read access is gated to admins + members of a group granted it in the database
- * (`canAccessRefsDetectionTimes`). There is no write path: the table is a
+ * (`canAccessLabDetectionTimes`). There is no write path: the table is a
  * transcription of an approved, versioned, restricted controlled document. It
- * lives in the `refs_detection_guidelines` table, loaded by an operator from
+ * lives in the `lab_detection_guidelines` table, loaded by an operator from
  * outside the repository, and changes when the document does — never by an
  * HTTP call, and never by a commit, because the source tree is public.
  *
@@ -18,13 +18,13 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { json, error, withErrorHandling, noStoreHeaders } from './_lib/response.js';
 import { getUserFromRequest } from './_lib/auth.js';
-import { canAccessRefsDetectionTimes } from '../src/lib/featureAccess.js';
+import { canAccessLabDetectionTimes } from '../src/lib/featureAccess.js';
 import { loadPermissionOverrides } from './_lib/permissions-store.js';
-import { loadRefsGuideline } from './_lib/refs-guideline-store.js';
-import { EMPTY_REFS_SOURCE } from '../src/lib/refsDetectionTimes.js';
+import { loadLabGuideline } from './_lib/lab-guideline-store.js';
+import { EMPTY_REFS_SOURCE } from '../src/lib/labDetectionTimes.js';
 
 /** Restricted internal material: never cached by a shared proxy. */
-const REFS_HEADERS = noStoreHeaders();
+const LAB_HEADERS = noStoreHeaders();
 
 export default withErrorHandling(async function handler(
   req: IncomingMessage,
@@ -36,7 +36,7 @@ export default withErrorHandling(async function handler(
   }
 
   const auth = await getUserFromRequest(req);
-  const entitled = canAccessRefsDetectionTimes(
+  const entitled = canAccessLabDetectionTimes(
     auth,
     await loadPermissionOverrides(),
   );
@@ -52,12 +52,12 @@ export default withErrorHandling(async function handler(
       res,
       200,
       { source: EMPTY_REFS_SOURCE, preamble: '', rows: [], gated: true },
-      { headers: REFS_HEADERS },
+      { headers: LAB_HEADERS },
     );
     return;
   }
 
-  const guideline = await loadRefsGuideline();
+  const guideline = await loadLabGuideline();
   if (!guideline) {
     // Not loaded on this deployment. The client treats any non-OK answer as
     // "nothing to show", which is the truth; an empty 200 would instead read
@@ -66,7 +66,7 @@ export default withErrorHandling(async function handler(
       res,
       503,
       { error: 'Guideline not available' },
-      { headers: REFS_HEADERS },
+      { headers: LAB_HEADERS },
     );
     return;
   }
@@ -83,7 +83,7 @@ export default withErrorHandling(async function handler(
       rows: guideline.rows,
       gated: false,
     },
-    { headers: REFS_HEADERS },
+    { headers: LAB_HEADERS },
   );
 });
 

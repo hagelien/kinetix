@@ -1133,12 +1133,12 @@ export const siteSettings = pgTable('site_settings', {
 /**
  * Restricted reference tables that are served behind a gate and never shipped
  * in the source tree — today the laboratory's urine detection-time guideline
- * (`/api/refs-detection-times`). One row per table: `source` is the document's
- * identity (`RefsGuidelineSource`), `rows` the `RefsUrineDetectionRow[]` the
+ * (`/api/lab-detection-times`). One row per table: `source` is the document's
+ * identity (`LabGuidelineSource`), `rows` the `LabUrineDetectionRow[]` the
  * route serves. The contents are loaded by an operator from outside the
  * repository; the public tree carries the shape only.
  */
-export const refsDetectionGuidelines = pgTable('refs_detection_guidelines', {
+export const labDetectionGuidelines = pgTable('lab_detection_guidelines', {
   key: varchar('key', { length: 64 }).primaryKey(),
   source: jsonb('source').notNull(),
   preamble: text('preamble').notNull().default(''),

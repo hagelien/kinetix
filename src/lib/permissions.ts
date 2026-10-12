@@ -163,11 +163,11 @@ export const CAPABILITY_LIST = [
     // statement for its own cut-offs, not a pooled literature window, and the
     // guideline they come from is an internal restricted document. `floorTier`
     // is `authenticated` so no configuration can put it in front of the public.
-    id: 'refsDetectionTimes.read',
+    id: 'labDetectionTimes.read',
     group: 'read',
     defaultTier: 'admin',
     floorTier: 'authenticated',
-    enforcedAt: ['GET /api/refs-detection-times'],
+    enforcedAt: ['GET /api/lab-detection-times'],
     alsoGrantedBy: ['group grant (database)'],
   },
   {

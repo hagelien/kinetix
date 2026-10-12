@@ -23,6 +23,6 @@ ALTER TABLE "user_groups"
 --> statement-breakpoint
 
 UPDATE "user_groups"
-SET "grants" = '["methods.read","pmConcentrations.read","refsDetectionTimes.read","patternProfile.view"]'::jsonb,
+SET "grants" = '["methods.read","pmConcentrations.read","labDetectionTimes.read","patternProfile.view"]'::jsonb,
     "updated_at" = now()
 WHERE md5("slug") = 'c5945d0e3394cb647791fb58615f7f56';

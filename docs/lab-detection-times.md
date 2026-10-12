@@ -1,4 +1,4 @@
-# The laboratory's own detection times (the REFS guideline)
+# The laboratory's own detection times
 
 The detection-times module (`/detection-times`) answers "how long can this be
 found" from the literature: three `*DetectionWindow` parameters, pooled from
@@ -11,7 +11,7 @@ for urine, the band the section has agreed to use at *its own* cut-offs and for
 it applies to, and keeps it clearly apart from the pooled windows.
 
 **The table itself is not in this repository.** It is a restricted internal
-document; its rows live only in the `refs_detection_guidelines` database table
+document; its rows live only in the `lab_detection_guidelines` database table
 and are loaded by an operator from outside the source tree. The repository
 carries the schema, the types, the matching and the UI — and synthetic test
 fixtures — never the guideline's content or identity.
@@ -24,9 +24,9 @@ behind the published studies. So the two are never merged, never averaged, and
 never rendered in the same grid:
 
 - the pooled cards keep their place, and gain a heading naming them as pooled
-  literature — but **only for a reader who can also see the REFS section**,
+  literature — but **only for a reader who can also see the laboratory section**,
   since for everyone else there is only one kind of answer on the page;
-- the REFS readings live in their own bordered section with the document's
+- the laboratory readings live in their own bordered section with the document's
   identity (title, id, version, approval date, owning unit, classification)
   printed beneath them.
 
@@ -34,20 +34,20 @@ never rendered in the same grid:
 
 | Piece | File |
 | --- | --- |
-| The table (rows + document identity) | `refs_detection_guidelines` (DB, key `urine`) — schema in `db/schema.ts`, `drizzle/0136_refs_detection_guidelines.sql` |
-| Validated read | `api/_lib/refs-guideline-store.ts` |
-| Types, validators, name folding, matching | `src/lib/refsDetectionTimes.ts` |
-| Gated route | `api/refs-detection-times.ts` |
-| Client fetch + per-identity cache | `src/lib/refsDetectionApi.ts` |
-| React binding | `src/lib/useRefsDetectionTimes.ts` |
-| Section UI | `src/components/detection/RefsDetectionSection.tsx` |
+| The table (rows + document identity) | `lab_detection_guidelines` (DB, key `urine`) — schema in `db/schema.ts`, `drizzle/0136_lab_detection_guidelines.sql` |
+| Validated read | `api/_lib/lab-guideline-store.ts` |
+| Types, validators, name folding, matching | `src/lib/labDetectionTimes.ts` |
+| Gated route | `api/lab-detection-times.ts` |
+| Client fetch + per-identity cache | `src/lib/labDetectionApi.ts` |
+| React binding | `src/lib/useLabDetectionTimes.ts` |
+| Section UI | `src/components/detection/LabDetectionSection.tsx` |
 | Register column + presets | `src/components/DrugTable.tsx`, `src/lib/detectionColumnPresets.ts` |
-| Strings | `detection.refs.*`, `drugTable.refsUrineDetection` in both locales |
-| Synthetic test table | `src/lib/__tests__/fixtures/refsSyntheticGuideline.ts` |
+| Strings | `detection.lab.*`, `drugTable.labUrineDetection` in both locales |
+| Synthetic test table | `src/lib/__tests__/fixtures/labSyntheticGuideline.ts` |
 
 ## The gate
 
-`refsDetectionTimes.read` — admin by default, floored at `authenticated`, and
+`labDetectionTimes.read` — admin by default, floored at `authenticated`, and
 also granted by membership in a group granted it in the database. Same shape as
 `methods.read` and `pmConcentrations.read`.
 
@@ -59,7 +59,7 @@ gate. An entitled caller on a deployment where the table has not been loaded
 gets `503`, which the client renders as "nothing to show" rather than as "the
 guideline names none of these substances".
 
-The read is all-or-nothing: a stored row that fails `isRefsUrineDetectionRow`
+The read is all-or-nothing: a stored row that fails `isLabUrineDetectionRow`
 fails the whole request instead of being filtered out, because a forensic
 table with one row silently missing is indistinguishable from a complete one.
 
@@ -88,7 +88,7 @@ each labelled with how it was reached.
 ## Reading the whole table
 
 Members get a disclosure that opens the full table (parent, metabolites,
-detection time, comment), and the substance register gains a **Urin (REFS)**
+detection time, comment), and the substance register gains a **Urin (lab)**
 column — gated the same way, absent rather than empty for everyone else, since
 an empty column would read as "no detection time" for substances the guideline
 does in fact name. The "Påvisningstider for alle stoffer" link on
@@ -103,12 +103,12 @@ repository. Never commit the rows, a seed file, or a migration containing them.
 
 1. Transcribe, do not paraphrase: comments and chapter quotes are the
    document's own wording and stay in Norwegian in every locale.
-2. Upsert the single row `key = 'urine'` with `source` (a `RefsGuidelineSource`
+2. Upsert the single row `key = 'urine'` with `source` (a `LabGuidelineSource`
    — bump `version` and `approvedFrom` with any row change), `preamble`, and
-   `rows` (a `RefsUrineDetectionRow[]`).
+   `rows` (a `LabUrineDetectionRow[]`).
 3. Carry the guideline's imprecision across as it stands — an empty cell is
    `{ kind: 'notStated' }`, "no documentation" is `{ kind: 'noDocumentation' }`.
    Do not fill either in from another source; that is what the pooled windows
    are for.
-4. Validate every row with `isRefsUrineDetectionRow` before writing; the route
+4. Validate every row with `isLabUrineDetectionRow` before writing; the route
    refuses the whole table if one row is malformed.

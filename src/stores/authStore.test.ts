@@ -294,7 +294,7 @@ describe('analytical-methods cache invalidation on auth change', () => {
 
     useAuthStore.setState({
       user: makeUser({
-        groups: [{ id: 1, slug: 'lab', name: 'Lab', grants: ['methods.read', 'pmConcentrations.read', 'refsDetectionTimes.read', 'patternProfile.view'] }],
+        groups: [{ id: 1, slug: 'lab', name: 'Lab', grants: ['methods.read', 'pmConcentrations.read', 'labDetectionTimes.read', 'patternProfile.view'] }],
       }),
       isAuthenticated: true,
     });

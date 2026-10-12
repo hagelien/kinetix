@@ -44,10 +44,10 @@ import {
   type DrugParameterId,
   type ParameterSpec,
 } from '@/lib/drugParameters';
-import { useRefsDetectionTimes } from '@/lib/useRefsDetectionTimes';
-import { refsStatementText } from '@/lib/refsStatementText';
-import { refsStatementForRole } from '@/lib/refsDetectionTimes';
-import { REFS_URINE_COLUMN_ID } from '@/lib/detectionColumnPresets';
+import { useLabDetectionTimes } from '@/lib/useLabDetectionTimes';
+import { labStatementText } from '@/lib/labStatementText';
+import { labStatementForRole } from '@/lib/labDetectionTimes';
+import { LAB_URINE_COLUMN_ID } from '@/lib/detectionColumnPresets';
 import { parseLocaleNumber } from '@/lib/parseNumber';
 import { buildSimulatorUrl } from '@/lib/simulatorRouting';
 import { loadTableColumns, saveTableColumns } from '@/lib/storage';
@@ -234,7 +234,7 @@ const COLUMN_I18N_KEYS: Record<string, string> = {
   proteinBinding: 'drugTable.fb',
   tmax: 'drugTable.tmax',
   pKa: 'drugTable.pKa',
-  refsUrineDetection: 'drugTable.refsUrineDetection',
+  labUrineDetection: 'drugTable.labUrineDetection',
 };
 
 const BUILT_IN_PARAMETER_COLUMN_IDS = new Set<DrugParameterId>([
@@ -383,8 +383,8 @@ const ALL_COLUMNS: ColumnSpec[] = [
   // positional, not keyed, so a column added in one place has to be added at
   // the same place in the other.
   {
-    id: REFS_URINE_COLUMN_ID,
-    label: 'Urin (REFS)',
+    id: LAB_URINE_COLUMN_ID,
+    label: 'Urin (lab)',
     defaultVisible: false,
     headClassName: 'w-[160px]',
   },
@@ -508,7 +508,7 @@ function DrugRow({
   preferredUnit,
   onSendToSimulator,
   onOpenDrug,
-  refsUrineLabel,
+  labUrineLabel,
   t,
   lang,
   fractionDisplay,
@@ -520,8 +520,8 @@ function DrugRow({
   preferredUnit: ConcentrationUnit;
   onSendToSimulator: (drugId: string, value: number, unit: string) => void;
   onOpenDrug: (drug: DrugComponent) => void;
-  /** REFS's band for this substance; null when the guideline does not name it. */
-  refsUrineLabel: string | null;
+  /** The laboratory's band for this substance; null when the guideline does not name it. */
+  labUrineLabel: string | null;
   t: (key: string, opts?: Record<string, unknown>) => string;
   lang: string;
   /** How F and protein binding are written — the 0–1 decimal, or a percentage. */
@@ -795,8 +795,8 @@ function DrugRow({
           {renderParameterTableValue(drug, parameterId, lang, fractionDisplay)}
         </TableCell>
       ))}
-      {visibleColumns.has(REFS_URINE_COLUMN_ID) && (
-        <TableCell className="text-xs">{refsUrineLabel ?? EMPTY_VALUE}</TableCell>
+      {visibleColumns.has(LAB_URINE_COLUMN_ID) && (
+        <TableCell className="text-xs">{labUrineLabel ?? EMPTY_VALUE}</TableCell>
       )}
     </TableRow>
   );
@@ -923,11 +923,11 @@ export function DrugTable({ fullScreen = false }: DrugTableProps = {}) {
     loadInitialVisibleColumns(),
   );
 
-  // The laboratory's guideline table, for the gated REFS column. `canAccess` is
+  // The laboratory's guideline table, for the gated laboratory column. `canAccess` is
   // false for everyone else, and then the column does not exist at all — it is
   // not merely empty, because an empty column reads as "no detection time" for
   // substances the guideline does in fact name.
-  const { canAccess: canAccessRefs, matchFor } = useRefsDetectionTimes();
+  const { canAccess: canAccessLab, matchFor } = useLabDetectionTimes();
 
   /**
    * Columns this reader may see. Filtering here rather than at render time
@@ -936,10 +936,10 @@ export function DrugTable({ fullScreen = false }: DrugTableProps = {}) {
    */
   const availableColumns = useMemo(
     () =>
-      canAccessRefs
+      canAccessLab
         ? ALL_COLUMNS
-        : ALL_COLUMNS.filter((col) => col.id !== REFS_URINE_COLUMN_ID),
-    [canAccessRefs],
+        : ALL_COLUMNS.filter((col) => col.id !== LAB_URINE_COLUMN_ID),
+    [canAccessLab],
   );
 
   const [compactParameterHeaders, setCompactParameterHeaders] = useState(false);
@@ -1079,7 +1079,7 @@ export function DrugTable({ fullScreen = false }: DrugTableProps = {}) {
    *
    * `visibleColumns` is the reader's *stored* selection and can name a column
    * this reader may not see: the column set is persisted per browser, so a
-   * granted member who enables the REFS column leaves its id in local storage
+   * granted member who enables the laboratory column leaves its id in local storage
    * for whoever signs in next. Filtering the header alone then left the cell
    * behind in every row and shifted the whole table one column out of step with
    * its own headings. Rows and headings now read the same list, by
@@ -1092,16 +1092,16 @@ export function DrugTable({ fullScreen = false }: DrugTableProps = {}) {
   );
 
   /**
-   * REFS's band per substance, resolved once for the whole catalog rather than
+   * The laboratory's band per substance, resolved once for the whole catalog rather than
    * per row: matching folds every name a substance is known by against the
    * guideline's index, and doing that inside the render of ~800 rows would be
    * paid again on every keystroke in the filter box.
    *
    * Only built when the column is actually on screen.
    */
-  const refsUrineLabels = useMemo(() => {
+  const labUrineLabels = useMemo(() => {
     const labels = new Map<string, string>();
-    if (!canAccessRefs || !visibleColumns.has(REFS_URINE_COLUMN_ID)) {
+    if (!canAccessLab || !visibleColumns.has(LAB_URINE_COLUMN_ID)) {
       return labels;
     }
     // Over the rows actually RENDERED, not the preloaded catalog: the preload
@@ -1115,21 +1115,21 @@ export function DrugTable({ fullScreen = false }: DrugTableProps = {}) {
       // (etanol: parent a day, metabolites a week) must not answer with the
       // wrong half, and a row whose only reading is the parent's states
       // nothing about its metabolite at all.
-      const statement = refsStatementForRole(primary.row, primary.role);
+      const statement = labStatementForRole(primary.row, primary.role);
       const text = statement
-        ? refsStatementText(statement, t)
-        : t('detection.refs.splitReading');
+        ? labStatementText(statement, t)
+        : t('detection.lab.splitReading');
       labels.set(
         drugComponentKey(drug),
         primary.role === 'metabolite'
-          ? t('detection.refs.viaShort', { parent: primary.row.parent, text })
+          ? t('detection.lab.viaShort', { parent: primary.row.parent, text })
           : text,
       );
     }
     return labels;
-    // `refs` itself is a fresh object every render; its two useful members are
+    // `lab` itself is a fresh object every render; its two useful members are
     // memoised, and depending on them is what keeps this off the render path.
-  }, [canAccessRefs, matchFor, visibleColumns, filteredComponents, t]);
+  }, [canAccessLab, matchFor, visibleColumns, filteredComponents, t]);
 
   useEffect(() => {
     const el = tableMeasureRef.current;
@@ -1354,7 +1354,7 @@ export function DrugTable({ fullScreen = false }: DrugTableProps = {}) {
                   updateConversion(drug.id, updates)
                 }
                 visibleColumns={renderedColumnIds}
-                refsUrineLabel={refsUrineLabels.get(drugComponentKey(drug)) ?? null}
+                labUrineLabel={labUrineLabels.get(drugComponentKey(drug)) ?? null}
                 preferredUnit={preferredUnit}
                 onSendToSimulator={handleSendToSimulator}
                 onOpenDrug={handleOpenDrug}

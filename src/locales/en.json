@@ -104,8 +104,8 @@
     "allSubstances": "Detection times for all substances",
     "pooledTitle": "Pooled literature (available to everyone)",
     "pooledHint": "The windows below are pooled from published source values, each with its own citation, at those sources' own cut-offs. They are not the laboratory's own detection times — those have a section of their own further down.",
-    "refs": {
-      "title": "The laboratory's own detection times (REFS)",
+    "lab": {
+      "title": "The laboratory's own detection times",
       "badge": "Restricted group only",
       "intro": "These are the times that apply at the laboratory, taken from its own approved guideline for interpreting urine analyses. They apply to urine, at the laboratory's cut-offs and case categories, and must not be mixed with the pooled literature windows above.",
       "metabolites": "Metabolites: {{names}}",
@@ -1112,7 +1112,7 @@
     "parametersLoadError": "Failed to load drug parameters: {{error}}",
     "parametersLoading": "Loading parameters…",
     "pkPdParametersTitle": "PK/PD Parameters",
-    "refsUrineDetection": "Urine (REFS)",
+    "labUrineDetection": "Urine (lab)",
     "tooltip": {
       "shortName": "Short name",
       "aliases": "Aliases"
@@ -1989,7 +1989,7 @@
         "admin_conversationIngestion_run": "Ingest a conversation bundle",
         "admin_settings_manage": "Change site-wide policy switches",
         "admin_navVisibility_manage": "Hide menu links from ordinary users",
-        "refsDetectionTimes_read": "Read the laboratory's own detection times (the REFS guideline)"
+        "labDetectionTimes_read": "Read the laboratory's own detection times"
       },
       "errorUnknownCapability": "\"{{capability}}\" is not a capability this version knows about. Reload the page and try again.",
       "errorLockedCapability": "\"{{capability}}\" cannot be delegated — it stays with administrators.",

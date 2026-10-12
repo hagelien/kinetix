@@ -10,13 +10,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   EMPTY_REFS_PAYLOAD,
-  fetchRefsDetectionTimes,
-  resetRefsDetectionCache,
-} from '../refsDetectionApi';
-import { SYNTHETIC_REFS_SOURCE } from './fixtures/refsSyntheticGuideline';
+  fetchLabDetectionTimes,
+  resetLabDetectionCache,
+} from '../labDetectionApi';
+import { SYNTHETIC_LAB_SOURCE } from './fixtures/labSyntheticGuideline';
 
 const PAYLOAD = {
-  source: SYNTHETIC_REFS_SOURCE,
+  source: SYNTHETIC_LAB_SOURCE,
   preamble: 'Synthetic preamble …',
   rows: [
     {
@@ -31,62 +31,62 @@ const PAYLOAD = {
 
 const fetchMock = vi.fn();
 
-describe('fetchRefsDetectionTimes', () => {
+describe('fetchLabDetectionTimes', () => {
   beforeEach(() => {
     fetchMock.mockReset();
     vi.stubGlobal('fetch', fetchMock);
-    resetRefsDetectionCache();
+    resetLabDetectionCache();
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    resetRefsDetectionCache();
+    resetLabDetectionCache();
   });
 
   it('asks once and serves the same answer afterwards', async () => {
     fetchMock.mockResolvedValue({ ok: true, json: async () => PAYLOAD });
 
-    expect(await fetchRefsDetectionTimes(1)).toEqual(PAYLOAD);
-    expect(await fetchRefsDetectionTimes(1)).toEqual(PAYLOAD);
+    expect(await fetchLabDetectionTimes(1)).toEqual(PAYLOAD);
+    expect(await fetchLabDetectionTimes(1)).toEqual(PAYLOAD);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('asks again for a different identity, and never reuses the previous one', async () => {
     fetchMock.mockResolvedValue({ ok: true, json: async () => PAYLOAD });
-    await fetchRefsDetectionTimes(1);
+    await fetchLabDetectionTimes(1);
 
     fetchMock.mockResolvedValue({
       ok: true,
       json: async () => ({ ...EMPTY_REFS_PAYLOAD, gated: true }),
     });
-    expect((await fetchRefsDetectionTimes(2)).rows).toEqual([]);
+    expect((await fetchLabDetectionTimes(2)).rows).toEqual([]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('retries after a network failure instead of caching the empty answer', async () => {
     fetchMock.mockRejectedValueOnce(new Error('offline'));
-    expect(await fetchRefsDetectionTimes(1)).toBe(EMPTY_REFS_PAYLOAD);
+    expect(await fetchLabDetectionTimes(1)).toBe(EMPTY_REFS_PAYLOAD);
 
     fetchMock.mockResolvedValue({ ok: true, json: async () => PAYLOAD });
-    expect(await fetchRefsDetectionTimes(1)).toEqual(PAYLOAD);
+    expect(await fetchLabDetectionTimes(1)).toEqual(PAYLOAD);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('retries after a non-OK response', async () => {
     fetchMock.mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) });
-    expect(await fetchRefsDetectionTimes(1)).toBe(EMPTY_REFS_PAYLOAD);
+    expect(await fetchLabDetectionTimes(1)).toBe(EMPTY_REFS_PAYLOAD);
 
     fetchMock.mockResolvedValue({ ok: true, json: async () => PAYLOAD });
-    expect((await fetchRefsDetectionTimes(1)).rows).toHaveLength(1);
+    expect((await fetchLabDetectionTimes(1)).rows).toHaveLength(1);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('retries after a malformed body', async () => {
     fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ nope: 1 }) });
-    expect(await fetchRefsDetectionTimes(1)).toBe(EMPTY_REFS_PAYLOAD);
+    expect(await fetchLabDetectionTimes(1)).toBe(EMPTY_REFS_PAYLOAD);
 
     fetchMock.mockResolvedValue({ ok: true, json: async () => PAYLOAD });
-    expect((await fetchRefsDetectionTimes(1)).rows).toHaveLength(1);
+    expect((await fetchLabDetectionTimes(1)).rows).toHaveLength(1);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
@@ -132,10 +132,10 @@ describe('fetchRefsDetectionTimes', () => {
     // the section reads five fields off `source` during render. A payload that
     // is almost right does not degrade — it throws mid-render.
     fetchMock.mockResolvedValueOnce({ ok: true, json: async () => body });
-    expect(await fetchRefsDetectionTimes(1)).toBe(EMPTY_REFS_PAYLOAD);
+    expect(await fetchLabDetectionTimes(1)).toBe(EMPTY_REFS_PAYLOAD);
 
     fetchMock.mockResolvedValue({ ok: true, json: async () => PAYLOAD });
-    expect((await fetchRefsDetectionTimes(1)).rows).toHaveLength(1);
+    expect((await fetchLabDetectionTimes(1)).rows).toHaveLength(1);
   });
 
   it('keeps a server-sent gated answer, which is a real answer', async () => {
@@ -144,8 +144,8 @@ describe('fetchRefsDetectionTimes', () => {
       json: async () => ({ ...PAYLOAD, rows: [], gated: true }),
     });
 
-    await fetchRefsDetectionTimes(1);
-    await fetchRefsDetectionTimes(1);
+    await fetchLabDetectionTimes(1);
+    await fetchLabDetectionTimes(1);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -153,6 +153,6 @@ describe('fetchRefsDetectionTimes', () => {
     vi.unstubAllGlobals();
     vi.stubGlobal('fetch', undefined);
 
-    await expect(fetchRefsDetectionTimes(1)).resolves.toBe(EMPTY_REFS_PAYLOAD);
+    await expect(fetchLabDetectionTimes(1)).resolves.toBe(EMPTY_REFS_PAYLOAD);
   });
 });

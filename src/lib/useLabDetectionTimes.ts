@@ -10,23 +10,23 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
-import { canAccessRefsDetectionTimes } from './featureAccess';
+import { canAccessLabDetectionTimes } from './featureAccess';
 import {
   EMPTY_REFS_PAYLOAD,
-  fetchRefsDetectionTimes,
-  refsNameIndexFor,
-} from './refsDetectionApi';
+  fetchLabDetectionTimes,
+  labNameIndexFor,
+} from './labDetectionApi';
 import {
-  matchRefsRows,
+  matchLabRows,
   substanceNameCandidates,
-  type RefsRowMatch,
-  type RefsUrineDetectionPayload,
-} from './refsDetectionTimes';
+  type LabRowMatch,
+  type LabUrineDetectionPayload,
+} from './labDetectionTimes';
 
-export interface RefsDetectionAccess {
+export interface LabDetectionAccess {
   /** True when this reader is entitled to the guideline at all. */
   canAccess: boolean;
-  payload: RefsUrineDetectionPayload;
+  payload: LabUrineDetectionPayload;
   /** True while the first request for this identity is open. */
   loading: boolean;
   /** The guideline rows a substance is named in, by its Kinetix names. */
@@ -34,19 +34,19 @@ export interface RefsDetectionAccess {
     names?: Record<string, string> | null;
     nameShort?: string | null;
     aliases?: string[] | null;
-  }) => RefsRowMatch[];
+  }) => LabRowMatch[];
 }
 
-export function useRefsDetectionTimes(): RefsDetectionAccess {
+export function useLabDetectionTimes(): LabDetectionAccess {
   const user = useAuthStore((state) => state.user);
   const overrides = useAuthStore((state) => state.permissionOverrides);
-  const canAccess = canAccessRefsDetectionTimes(user, overrides);
+  const canAccess = canAccessLabDetectionTimes(user, overrides);
   // Identity, not entitlement, keys the cache: two users may both be entitled
   // and must still not share a fetch.
   const identity = user?.id ?? null;
 
   const [payload, setPayload] =
-    useState<RefsUrineDetectionPayload>(EMPTY_REFS_PAYLOAD);
+    useState<LabUrineDetectionPayload>(EMPTY_REFS_PAYLOAD);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -57,7 +57,7 @@ export function useRefsDetectionTimes(): RefsDetectionAccess {
     }
     let cancelled = false;
     setLoading(true);
-    fetchRefsDetectionTimes(identity).then((result) => {
+    fetchLabDetectionTimes(identity).then((result) => {
       if (cancelled) return;
       setPayload(result);
       setLoading(false);
@@ -67,7 +67,7 @@ export function useRefsDetectionTimes(): RefsDetectionAccess {
     };
   }, [canAccess, identity]);
 
-  const index = useMemo(() => refsNameIndexFor(payload.rows), [payload.rows]);
+  const index = useMemo(() => labNameIndexFor(payload.rows), [payload.rows]);
 
   const matchFor = useMemo(
     () =>
@@ -78,7 +78,7 @@ export function useRefsDetectionTimes(): RefsDetectionAccess {
       }) =>
         payload.rows.length === 0
           ? []
-          : matchRefsRows(index, substanceNameCandidates(substance)),
+          : matchLabRows(index, substanceNameCandidates(substance)),
     [index, payload.rows.length],
   );
 
