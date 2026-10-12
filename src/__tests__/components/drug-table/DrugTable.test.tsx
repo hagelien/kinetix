@@ -14,11 +14,11 @@ import { useDrugStore } from '@/stores/drugStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useAppStore } from '@/stores/appStore';
 import { STORAGE_KEYS } from '@/types';
-import { resetRefsDetectionCache } from '@/lib/refsDetectionApi';
-import { SYNTHETIC_REFS_SOURCE } from '@/lib/__tests__/fixtures/refsSyntheticGuideline';
+import { resetLabDetectionCache } from '@/lib/labDetectionApi';
+import { SYNTHETIC_LAB_SOURCE } from '@/lib/__tests__/fixtures/labSyntheticGuideline';
 import {
   DETECTION_COLUMN_PRESET,
-  REFS_DETECTION_COLUMN_PRESET,
+  LAB_DETECTION_COLUMN_PRESET,
 } from '@/lib/detectionColumnPresets';
 
 /** The catalog every case starts from; one test swaps it for its own. */
@@ -34,7 +34,7 @@ const DEFAULT_COMPONENTS = [
 
 /**
  * The server-side search path. The preloaded catalog is capped by popularity,
- * so a search can surface a substance the store never held — the case the REFS
+ * so a search can surface a substance the store never held — the case the laboratory
  * column has to answer for too.
  */
 const fetchDrugSearchResultsMock = vi.fn();
@@ -101,15 +101,15 @@ describe('DrugTable columns', () => {
         pendingColumnPreset: null,
       });
     });
-    resetRefsDetectionCache();
+    resetLabDetectionCache();
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: unknown) => {
-        if (String(input).includes('/api/refs-detection-times')) {
+        if (String(input).includes('/api/lab-detection-times')) {
           return {
             ok: true,
             json: async () => ({
-              source: SYNTHETIC_REFS_SOURCE,
+              source: SYNTHETIC_LAB_SOURCE,
               preamble: '',
               rows: [
                 {
@@ -363,7 +363,7 @@ describe('DrugTable columns', () => {
     ).toBeInTheDocument();
   });
 
-  it('keeps the REFS column out of the picker for a reader outside the group', async () => {
+  it('keeps the laboratory column out of the picker for a reader outside the group', async () => {
     render(
       <MemoryRouter>
         <DrugTable />
@@ -374,24 +374,24 @@ describe('DrugTable columns', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /columns/i }));
     expect(
-      screen.queryByRole('checkbox', { name: 'Urine (REFS)' }),
+      screen.queryByRole('checkbox', { name: 'Urine (lab)' }),
     ).not.toBeInTheDocument();
 
     // And a preset naming it cannot smuggle it in either.
     act(() => {
       useDrugStore
         .getState()
-        .requestColumnPreset([...REFS_DETECTION_COLUMN_PRESET]);
+        .requestColumnPreset([...LAB_DETECTION_COLUMN_PRESET]);
     });
     await waitFor(() => {
       expect(useDrugStore.getState().pendingColumnPreset).toBeNull();
     });
     expect(
-      screen.queryByRole('columnheader', { name: 'Urine (REFS)' }),
+      screen.queryByRole('columnheader', { name: 'Urine (lab)' }),
     ).not.toBeInTheDocument();
   });
 
-  it("shows a group member REFS's own band next to the pooled windows", async () => {
+  it("shows a group member the laboratory's own band next to the pooled windows", async () => {
     act(() => {
       useAuthStore.setState({
         user: {
@@ -403,14 +403,14 @@ describe('DrugTable columns', () => {
           enabledConcentrationUnits: ['µmol/L'],
           notificationSettings: null,
           favoriteParameters: [],
-          groups: [{ id: 1, slug: 'lab', name: 'Lab', grants: ['methods.read', 'pmConcentrations.read', 'refsDetectionTimes.read', 'patternProfile.view'] }],
+          groups: [{ id: 1, slug: 'lab', name: 'Lab', grants: ['methods.read', 'pmConcentrations.read', 'labDetectionTimes.read', 'patternProfile.view'] }],
         },
         isAuthenticated: true,
         isLoading: false,
       });
       useDrugStore
         .getState()
-        .requestColumnPreset([...REFS_DETECTION_COLUMN_PRESET]);
+        .requestColumnPreset([...LAB_DETECTION_COLUMN_PRESET]);
     });
 
     render(
@@ -422,20 +422,20 @@ describe('DrugTable columns', () => {
     await screen.findByText('Test drug');
 
     expect(
-      await screen.findByRole('columnheader', { name: 'Urine (REFS)' }),
+      await screen.findByRole('columnheader', { name: 'Urine (lab)' }),
     ).toBeInTheDocument();
     // The guideline's band for the substance, not a pooled number.
     expect(await screen.findByText('Last week')).toBeInTheDocument();
   });
 
-  it('does not leave a REFS cell behind when the reader may not see the column', async () => {
+  it('does not leave a laboratory cell behind when the reader may not see the column', async () => {
     // The column set is persisted per BROWSER: a granted member who enables
-    // the REFS column leaves its id in local storage for whoever signs in
+    // the laboratory column leaves its id in local storage for whoever signs in
     // next. Filtering the header alone left an extra cell in every row and
     // shifted the whole table one column out of step with its own headings.
     localStorage.setItem(
       STORAGE_KEYS.drugTableColumns,
-      JSON.stringify(['name', 'molecularWeight', 'refsUrineDetection']),
+      JSON.stringify(['name', 'molecularWeight', 'labUrineDetection']),
     );
 
     render(
@@ -452,7 +452,7 @@ describe('DrugTable columns', () => {
       : [];
     const rowHeaderCount = headers.length;
     expect(
-      screen.queryByRole('columnheader', { name: 'Urine (REFS)' }),
+      screen.queryByRole('columnheader', { name: 'Urine (lab)' }),
     ).not.toBeInTheDocument();
     // One row in the fixture: its cells must match the headings exactly.
     expect(cells).toHaveLength(rowHeaderCount);
@@ -482,14 +482,14 @@ describe('DrugTable columns', () => {
           enabledConcentrationUnits: ['µmol/L'],
           notificationSettings: null,
           favoriteParameters: [],
-          groups: [{ id: 1, slug: 'lab', name: 'Lab', grants: ['methods.read', 'pmConcentrations.read', 'refsDetectionTimes.read', 'patternProfile.view'] }],
+          groups: [{ id: 1, slug: 'lab', name: 'Lab', grants: ['methods.read', 'pmConcentrations.read', 'labDetectionTimes.read', 'patternProfile.view'] }],
         },
         isAuthenticated: true,
         isLoading: false,
       });
       useDrugStore
         .getState()
-        .requestColumnPreset([...REFS_DETECTION_COLUMN_PRESET]);
+        .requestColumnPreset([...LAB_DETECTION_COLUMN_PRESET]);
     });
 
     render(
@@ -499,7 +499,7 @@ describe('DrugTable columns', () => {
     );
 
     await screen.findByText('Metabolitten');
-    await screen.findByRole('columnheader', { name: 'Urine (REFS)' });
+    await screen.findByRole('columnheader', { name: 'Urine (lab)' });
 
     expect(
       await screen.findByText(
@@ -512,7 +512,7 @@ describe('DrugTable columns', () => {
   it('labels a search hit the preloaded catalog never held', async () => {
     // `components` in the store is the popularity-capped preload; a search
     // resolves DB-only substances through the server. Built from the preload,
-    // the REFS column showed "—" for those rows — an empty cell claiming the
+    // the laboratory column showed "—" for those rows — an empty cell claiming the
     // guideline is silent about a substance it names.
     fetchDrugSearchResultsMock.mockResolvedValue({
       drugs: [{ id: 9, slug: 'moderstoff', names: { nb: 'Moderstoff' } }],
@@ -546,14 +546,14 @@ describe('DrugTable columns', () => {
           enabledConcentrationUnits: ['µmol/L'],
           notificationSettings: null,
           favoriteParameters: [],
-          groups: [{ id: 1, slug: 'lab', name: 'Lab', grants: ['methods.read', 'pmConcentrations.read', 'refsDetectionTimes.read', 'patternProfile.view'] }],
+          groups: [{ id: 1, slug: 'lab', name: 'Lab', grants: ['methods.read', 'pmConcentrations.read', 'labDetectionTimes.read', 'patternProfile.view'] }],
         },
         isAuthenticated: true,
         isLoading: false,
       });
       useDrugStore
         .getState()
-        .requestColumnPreset([...REFS_DETECTION_COLUMN_PRESET]);
+        .requestColumnPreset([...LAB_DETECTION_COLUMN_PRESET]);
     });
 
     render(

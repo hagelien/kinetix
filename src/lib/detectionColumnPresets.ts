@@ -13,7 +13,7 @@
  * substance register; the id lives here so the register and the presets cannot
  * disagree about how to spell it.
  */
-export const REFS_URINE_COLUMN_ID = 'refsUrineDetection';
+export const LAB_URINE_COLUMN_ID = 'labUrineDetection';
 
 /**
  * What the "detection times for every substance" link switches the register to:
@@ -27,8 +27,8 @@ export const DETECTION_COLUMN_PRESET: readonly string[] = [
   'urineDetectionWindow',
 ];
 
-/** The preset a granted member gets: the same axis, plus REFS's own band. */
-export const REFS_DETECTION_COLUMN_PRESET: readonly string[] = [
+/** The preset a granted member gets: the same axis, plus the laboratory's own band. */
+export const LAB_DETECTION_COLUMN_PRESET: readonly string[] = [
   ...DETECTION_COLUMN_PRESET,
-  REFS_URINE_COLUMN_ID,
+  LAB_URINE_COLUMN_ID,
 ];

@@ -138,7 +138,7 @@ describe('GET /api/pm-concentrations', () => {
     getUserFromRequestMock.mockResolvedValue({
       userId: 7,
       role: 'authenticated',
-      groups: [{ slug: 'lab', grants: ['methods.read', 'pmConcentrations.read', 'refsDetectionTimes.read', 'patternProfile.view'] }],
+      groups: [{ slug: 'lab', grants: ['methods.read', 'pmConcentrations.read', 'labDetectionTimes.read', 'patternProfile.view'] }],
     });
     mockQueries([DISTRIBUTION_ROW]);
     const { res, state } = createResponse();

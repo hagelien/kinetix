@@ -3,7 +3,7 @@
  * tests only.
  *
  * The real table is an internal controlled document and never enters the
- * source tree (it is loaded into `refs_detection_guidelines` from outside the
+ * source tree (it is loaded into `lab_detection_guidelines` from outside the
  * repository). These rows are invented: the substance names are ordinary
  * public names chosen to exercise the matcher's hard cases — compound cells,
  * parenthesised synonyms, a substance that is both a row and another row's
@@ -11,13 +11,13 @@
  * detail below was made up for the test. None of it is a forensic statement.
  */
 import type {
-  RefsDetectionBand,
-  RefsGuidelineSource,
-  RefsUrineDetectionPayload,
-  RefsUrineDetectionRow,
-} from '../../refsDetectionTimes';
+  LabDetectionBand,
+  LabGuidelineSource,
+  LabUrineDetectionPayload,
+  LabUrineDetectionRow,
+} from '../../labDetectionTimes';
 
-export const SYNTHETIC_REFS_SOURCE: RefsGuidelineSource = {
+export const SYNTHETIC_LAB_SOURCE: LabGuidelineSource = {
   title: 'Synthetic urine guideline (test fixture)',
   documentId: 'SYNTH-0001',
   version: '1',
@@ -26,13 +26,13 @@ export const SYNTHETIC_REFS_SOURCE: RefsGuidelineSource = {
   classification: 'Synthetic – not a real document',
 };
 
-export const SYNTHETIC_REFS_PREAMBLE =
+export const SYNTHETIC_LAB_PREAMBLE =
   'Synthetic preamble: these bands are invented for tests.';
 
 const band = (
-  value: RefsDetectionBand,
-  upper?: RefsDetectionBand,
-): RefsUrineDetectionRow['readings'] => [
+  value: LabDetectionBand,
+  upper?: LabDetectionBand,
+): LabUrineDetectionRow['readings'] => [
   {
     scope: 'both',
     statement: { kind: 'band', band: value, ...(upper ? { upper } : {}) },
@@ -40,14 +40,14 @@ const band = (
 ];
 
 const split = (
-  parent: RefsDetectionBand,
-  metabolite: RefsDetectionBand,
-): RefsUrineDetectionRow['readings'] => [
+  parent: LabDetectionBand,
+  metabolite: LabDetectionBand,
+): LabUrineDetectionRow['readings'] => [
   { scope: 'parent', statement: { kind: 'band', band: parent } },
   { scope: 'metabolite', statement: { kind: 'band', band: metabolite } },
 ];
 
-export const SYNTHETIC_REFS_ROWS: RefsUrineDetectionRow[] = [
+export const SYNTHETIC_LAB_ROWS: LabUrineDetectionRow[] = [
   {
     key: 'diazepam',
     parent: 'Diazepam',
@@ -132,9 +132,9 @@ export const SYNTHETIC_REFS_ROWS: RefsUrineDetectionRow[] = [
 ];
 
 /** What the route answers an entitled caller, built from the rows above. */
-export const SYNTHETIC_REFS_PAYLOAD: RefsUrineDetectionPayload = {
-  source: SYNTHETIC_REFS_SOURCE,
-  preamble: SYNTHETIC_REFS_PREAMBLE,
-  rows: SYNTHETIC_REFS_ROWS,
+export const SYNTHETIC_LAB_PAYLOAD: LabUrineDetectionPayload = {
+  source: SYNTHETIC_LAB_SOURCE,
+  preamble: SYNTHETIC_LAB_PREAMBLE,
+  rows: SYNTHETIC_LAB_ROWS,
   gated: false,
 };

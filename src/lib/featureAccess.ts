@@ -17,7 +17,7 @@ export const KINETIX_LEARN_GROUP_SLUG = 'kinetix-learn';
 export const GROUP_GRANT = {
   methods: 'methods.read',
   pmConcentrations: 'pmConcentrations.read',
-  refsDetectionTimes: 'refsDetectionTimes.read',
+  labDetectionTimes: 'labDetectionTimes.read',
   patternProfile: 'patternProfile.view',
 } as const;
 
@@ -96,23 +96,23 @@ export function canAccessPmConcentrations(
  * The laboratory's own urine detection times, from its approved, restricted
  * urine-interpretation guideline. Same audience as the analytical methods and
  * the postmortem cohort: a group granted it in the database, or whoever holds
- * `refsDetectionTimes.read` (admin by default).
+ * `labDetectionTimes.read` (admin by default).
  *
  * These bands are what one laboratory has agreed to state for its own cut-offs
  * and its own case categories, from an internal document with restricted
  * distribution. Read by someone outside the section they would also look like
  * Kinetix's answer to "how long is this detectable", which is what the pooled,
- * cited windows on the same page are for. `api/refs-detection-times.ts`
+ * cited windows on the same page are for. `api/lab-detection-times.ts`
  * enforces this — the table lives in the database and is never bundled into
  * the client, so a direct URL is the only other way in and it is refused there.
  */
-export function canAccessRefsDetectionTimes(
+export function canAccessLabDetectionTimes(
   user: FeatureAccessUser | null | undefined,
   overrides: PermissionOverrides = NO_OVERRIDES,
 ): boolean {
   return (
-    hasGroupGrant(user, GROUP_GRANT.refsDetectionTimes) ||
-    can(user?.role, CAP['refsDetectionTimes.read'], overrides)
+    hasGroupGrant(user, GROUP_GRANT.labDetectionTimes) ||
+    can(user?.role, CAP['labDetectionTimes.read'], overrides)
   );
 }
 
@@ -123,7 +123,7 @@ export function canAccessRefsDetectionTimes(
  * (docs/plans/2026-08-11-metabolite-ratio-profile.md §10 keeps it out of the
  * primary nav until then). So the nav entry is shown only to the forensic
  * audience — a group granted `patternProfile.view`, plus the admin tier — the same containment
- * the postmortem cohort and REFS tables use. The route itself stays reachable
+ * the postmortem cohort and laboratory tables use. The route itself stays reachable
  * by URL, exactly as it was before it was surfaced.
  *
  * Deliberately keyed on the admin *role*, not a capability: `admin.panel.access`

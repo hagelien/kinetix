@@ -18,8 +18,8 @@
  *
  * This file holds the *shape* and the *matching*, never the data. The guideline
  * is an internal, restricted document: its table lives in the
- * `refs_detection_guidelines` database table (loaded by an operator from outside
- * the repository) and is served only by `api/refs-detection-times.ts`, behind a
+ * `lab_detection_guidelines` database table (loaded by an operator from outside
+ * the repository) and is served only by `api/lab-detection-times.ts`, behind a
  * gate, rather than shipped in the client bundle where a gate would only be
  * cosmetic.
  */
@@ -30,7 +30,7 @@ import type { DetectionBand } from './detectionWindows';
  * the guideline never says "siste ukene" or longer in this table, and adding
  * bands it does not use would invite a reading it does not support.
  */
-export type RefsDetectionBand = Extract<
+export type LabDetectionBand = Extract<
   DetectionBand,
   'halfDay' | 'day' | 'days' | 'week' | 'twoWeeks'
 >;
@@ -44,9 +44,9 @@ export type RefsDetectionBand = Extract<
  * (the component is not part of this table's answer), and both are different
  * from THC, where the answer is a curve rather than a band.
  */
-export type RefsDetectionStatement =
+export type LabDetectionStatement =
   /** A band, optionally straddling two ("Siste uken/siste par ukene"). */
-  | { kind: 'band'; band: RefsDetectionBand; upper?: RefsDetectionBand }
+  | { kind: 'band'; band: LabDetectionBand; upper?: LabDetectionBand }
   /** THC-syre: read off the elimination curves, not off a band. */
   | { kind: 'curves' }
   /** The guideline says, in as many words, that documentation is lacking. */
@@ -55,15 +55,15 @@ export type RefsDetectionStatement =
   | { kind: 'notStated' };
 
 /** Which half of a parent/metabolite pair a reading speaks about. */
-export type RefsReadingScope = 'both' | 'parent' | 'metabolite';
+export type LabReadingScope = 'both' | 'parent' | 'metabolite';
 
-export interface RefsDetectionReading {
-  scope: RefsReadingScope;
-  statement: RefsDetectionStatement;
+export interface LabDetectionReading {
+  scope: LabReadingScope;
+  statement: LabDetectionStatement;
 }
 
 /** One row of the guideline's table. */
-export interface RefsUrineDetectionRow {
+export interface LabUrineDetectionRow {
   /** Stable key for React lists and test ids. */
   key: string;
   /** Parent substance, spelled as the guideline spells it. */
@@ -71,7 +71,7 @@ export interface RefsUrineDetectionRow {
   /** Metabolites the guideline lists next to that parent. */
   metabolites: string[];
   /** One entry per statement the cell makes; usually exactly one. */
-  readings: RefsDetectionReading[];
+  readings: LabDetectionReading[];
   /** The table's own "Kommentar" cell, verbatim (Norwegian). */
   comment?: string;
   /**
@@ -92,7 +92,7 @@ export interface RefsUrineDetectionRow {
   aliases?: string[];
   /**
    * Extra spellings of a METABOLITE, keyed by the guideline's own spelling of
-   * it. The key must be one of `metabolites` — `refsDetectionTimes.test.ts`
+   * it. The key must be one of `metabolites` — `labDetectionTimes.test.ts`
    * asserts it, so a metabolite renamed in the table cannot leave its synonyms
    * pointing at nothing.
    */
@@ -100,7 +100,7 @@ export interface RefsUrineDetectionRow {
 }
 
 /** Provenance of the table — shown wherever a reading from it is shown. */
-export interface RefsGuidelineSource {
+export interface LabGuidelineSource {
   /** Document title, as printed on the guideline. */
   title: string;
   documentId: string;
@@ -113,22 +113,22 @@ export interface RefsGuidelineSource {
   classification: string;
 }
 
-export interface RefsUrineDetectionPayload {
-  source: RefsGuidelineSource;
+export interface LabUrineDetectionPayload {
+  source: LabGuidelineSource;
   /** The table's own preamble, verbatim; empty for a gated caller. */
   preamble: string;
-  rows: RefsUrineDetectionRow[];
+  rows: LabUrineDetectionRow[];
   /** True when the caller may not read the guideline; `rows` is then empty. */
   gated: boolean;
 }
 
 /** How a substance ended up matching a row. */
-export type RefsMatchRole = 'parent' | 'metabolite';
+export type LabMatchRole = 'parent' | 'metabolite';
 
-export interface RefsRowMatch {
-  row: RefsUrineDetectionRow;
+export interface LabRowMatch {
+  row: LabUrineDetectionRow;
   /** Whether the substance is the row's parent or one of its metabolites. */
-  role: RefsMatchRole;
+  role: LabMatchRole;
   /** The guideline's own spelling of the name that matched. */
   matchedName: string;
 }
@@ -213,9 +213,9 @@ function isStringArray(value: unknown): boolean {
   );
 }
 
-export function isRefsUrineDetectionRow(
+export function isLabUrineDetectionRow(
   value: unknown,
-): value is RefsUrineDetectionRow {
+): value is LabUrineDetectionRow {
   if (!isStringRecord(value, ['key', 'parent'])) return false;
   const row = value as Record<string, unknown>;
   if (!isStringArray(row.metabolites)) return false;
@@ -238,7 +238,7 @@ export function isRefsUrineDetectionRow(
 }
 
 /** What the route and the client answer when no guideline is available. */
-export const EMPTY_REFS_SOURCE: RefsGuidelineSource = {
+export const EMPTY_LAB_SOURCE: LabGuidelineSource = {
   title: '',
   documentId: '',
   version: '',
@@ -247,22 +247,22 @@ export const EMPTY_REFS_SOURCE: RefsGuidelineSource = {
   classification: '',
 };
 
-export function isRefsGuidelineSource(
+export function isLabGuidelineSource(
   value: unknown,
-): value is RefsGuidelineSource {
+): value is LabGuidelineSource {
   return isStringRecord(value, SOURCE_KEYS);
 }
 
-export function isRefsUrineDetectionPayload(
+export function isLabUrineDetectionPayload(
   value: unknown,
-): value is RefsUrineDetectionPayload {
+): value is LabUrineDetectionPayload {
   if (!value || typeof value !== 'object') return false;
   const payload = value as Record<string, unknown>;
   if (typeof payload.gated !== 'boolean') return false;
   if (typeof payload.preamble !== 'string') return false;
   if (!isStringRecord(payload.source, SOURCE_KEYS)) return false;
   return (
-    Array.isArray(payload.rows) && payload.rows.every(isRefsUrineDetectionRow)
+    Array.isArray(payload.rows) && payload.rows.every(isLabUrineDetectionRow)
   );
 }
 
@@ -313,8 +313,8 @@ export function nameMatchKeys(name: string): string[] {
 }
 
 interface IndexEntry {
-  row: RefsUrineDetectionRow;
-  role: RefsMatchRole;
+  row: LabUrineDetectionRow;
+  role: LabMatchRole;
   matchedName: string;
 }
 
@@ -327,8 +327,8 @@ interface IndexEntry {
  * guideline's own, and losing them would hide the very ambiguity a case is
  * interpreted around — so the index keeps every entry a fold hits.
  */
-export function buildRefsNameIndex(
-  rows: readonly RefsUrineDetectionRow[],
+export function buildLabNameIndex(
+  rows: readonly LabUrineDetectionRow[],
 ): Map<string, IndexEntry[]> {
   const index = new Map<string, IndexEntry[]>();
 
@@ -385,13 +385,13 @@ export function buildRefsNameIndex(
  * answered by that row, and the rows that merely list it as a metabolite are
  * context after the fact. Within each role, the table's own order is kept.
  */
-export function matchRefsRows(
+export function matchLabRows(
   index: Map<string, IndexEntry[]>,
   names: readonly (string | null | undefined)[],
-): RefsRowMatch[] {
+): LabRowMatch[] {
   const seen = new Set<string>();
-  const parents: RefsRowMatch[] = [];
-  const metabolites: RefsRowMatch[] = [];
+  const parents: LabRowMatch[] = [];
+  const metabolites: LabRowMatch[] = [];
 
   for (const name of names) {
     if (!name) continue;
@@ -400,7 +400,7 @@ export function matchRefsRows(
         const dedupeKey = `${entry.row.key}:${entry.role}`;
         if (seen.has(dedupeKey)) continue;
         seen.add(dedupeKey);
-        const match: RefsRowMatch = {
+        const match: LabRowMatch = {
           row: entry.row,
           role: entry.role,
           matchedName: entry.matchedName,
@@ -445,10 +445,10 @@ export function substanceNameCandidates(substance: {
  * Null means "more than one applies"; the caller sends the reader to the full
  * row instead of picking.
  */
-export function refsStatementForRole(
-  row: RefsUrineDetectionRow,
-  role: RefsMatchRole,
-): RefsDetectionStatement | null {
+export function labStatementForRole(
+  row: LabUrineDetectionRow,
+  role: LabMatchRole,
+): LabDetectionStatement | null {
   const applicable = row.readings.filter(
     (reading) => reading.scope === 'both' || reading.scope === role,
   );

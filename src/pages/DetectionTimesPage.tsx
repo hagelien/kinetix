@@ -5,13 +5,13 @@ import { Clock, ExternalLink, Table as TableIcon, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DrugSearchDropdown } from '@/components/DrugSearchDropdown';
 import { DetectionMatrixCard } from '@/components/detection/DetectionMatrixCard';
-import { RefsDetectionSection } from '@/components/detection/RefsDetectionSection';
+import { LabDetectionSection } from '@/components/detection/LabDetectionSection';
 import {
   DETECTION_COLUMN_PRESET,
-  REFS_DETECTION_COLUMN_PRESET,
+  LAB_DETECTION_COLUMN_PRESET,
 } from '@/lib/detectionColumnPresets';
 import { useDrugStore } from '@/stores/drugStore';
-import { useRefsDetectionTimes } from '@/lib/useRefsDetectionTimes';
+import { useLabDetectionTimes } from '@/lib/useLabDetectionTimes';
 import { fetchDrugById, fetchDrugsByIds, type DrugRow } from '@/lib/drugApi';
 import {
   DETECTION_MATRICES,
@@ -71,7 +71,7 @@ export function DetectionTimesPage() {
 
   // The laboratory's own guideline table. Members see it as a section of its own,
   // below the pooled windows; nobody else knows it is there.
-  const refs = useRefsDetectionTimes();
+  const lab = useLabDetectionTimes();
 
   const navigate = useNavigate();
   const setTableView = useDrugStore((s) => s.setTableView);
@@ -225,9 +225,9 @@ export function DetectionTimesPage() {
     ? capitalizeGenericDrugName(resolveDrugName(drug.names, lang))
     : '';
 
-  const refsMatches = useMemo(
-    () => (drug ? refs.matchFor(drug) : []),
-    [drug, refs],
+  const labMatches = useMemo(
+    () => (drug ? lab.matchFor(drug) : []),
+    [drug, lab],
   );
 
   /**
@@ -237,14 +237,14 @@ export function DetectionTimesPage() {
    * `/` (the shell drops it to the sidebar on any other route), full is the
    * view worth reading a whole catalog in, and the axis is the point — a reader
    * who asked for "detection times for every substance" does not want to find
-   * MW, Vd and pKa and go hunting in the column picker. Members get REFS's own
+   * MW, Vd and pKa and go hunting in the column picker. Members get the laboratory's own
    * band as one more column, so the comparison the page makes for one substance
    * is the same comparison the register makes for all of them.
    */
   function openAllSubstances() {
     requestColumnPreset([
-      ...(refs.canAccess
-        ? REFS_DETECTION_COLUMN_PRESET
+      ...(lab.canAccess
+        ? LAB_DETECTION_COLUMN_PRESET
         : DETECTION_COLUMN_PRESET),
     ]);
     setTableView('full');
@@ -360,7 +360,7 @@ export function DetectionTimesPage() {
               everyone else there is one kind of detection time on this page and
               labelling it would answer a question they have not been given the
               other half of. */}
-          {refs.canAccess && (
+          {lab.canAccess && (
             <div>
               <h3 className="text-sm font-semibold">
                 {t('detection.pooledTitle')}
@@ -472,13 +472,13 @@ export function DetectionTimesPage() {
       {/* Outside the `drug &&` block on purpose: the guideline table is worth
           reading on its own, and a member who has not searched for anything yet
           should still be able to open it. */}
-      {refs.canAccess && (
+      {lab.canAccess && (
         <div className="mt-6">
-          <RefsDetectionSection
-            payload={refs.payload}
-            matches={refsMatches}
+          <LabDetectionSection
+            payload={lab.payload}
+            matches={labMatches}
             substanceName={drug ? drugName : null}
-            loading={refs.loading}
+            loading={lab.loading}
           />
         </div>
       )}

@@ -7,7 +7,7 @@
  * a day out is not cosmetic.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { formatCalendarDate } from '@/components/detection/RefsDetectionSection';
+import { formatCalendarDate } from '@/components/detection/LabDetectionSection';
 
 const originalTz = process.env.TZ;
 
