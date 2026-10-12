@@ -113,7 +113,7 @@ describe('PharmacodynamicsComparison', () => {
   it('keeps the loaded drugs when one basket drug can no longer be fetched', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     fetchDrugById.mockImplementation(async (id: number) => {
-      if (id === 1) throw new Error('Drug not found');
+      if (id === 1) throw Object.assign(new Error('Drug not found'), { status: 404 });
       return {
         drug: {
           id,
@@ -123,6 +123,25 @@ describe('PharmacodynamicsComparison', () => {
     });
     render(<Harness />);
     expect(await screen.findByRole('button', { name: /OPRM1/ })).toBeTruthy();
+    expect(screen.queryByText('comparison.pd.loadError')).toBeNull();
+    expect(screen.queryByText('comparison.pd.partialLoadError')).toBeNull();
+    consoleError.mockRestore();
+  });
+
+  it('warns that the matrix is incomplete when a drug fails for a non-404 reason', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    fetchDrugById.mockImplementation(async (id: number) => {
+      if (id === 1) throw Object.assign(new Error('Server error'), { status: 500 });
+      return {
+        drug: {
+          id,
+          receptorTargets: [mechanism(2, { ki: { median: 0.0049, unit: 'µM' } })],
+        },
+      };
+    });
+    render(<Harness />);
+    expect(await screen.findByRole('button', { name: /OPRM1/ })).toBeTruthy();
+    expect(screen.getByText('comparison.pd.partialLoadError')).toBeTruthy();
     expect(screen.queryByText('comparison.pd.loadError')).toBeNull();
     consoleError.mockRestore();
   });
