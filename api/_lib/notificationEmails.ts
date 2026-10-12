@@ -484,6 +484,9 @@ function aboutColumnsSql(targetType: SQL, targetId: SQL): SQL {
           THEN (SELECT title FROM learning_units WHERE id = e.target_id)
         WHEN e.edit_type = 'paper_review'
           THEN (SELECT metadata->>'title' FROM citations WHERE id = e.target_id)
+        WHEN e.edit_type = 'bio_entity' AND e.target_id IS NOT NULL
+          THEN (SELECT symbol FROM bio_entities WHERE id = e.target_id)
+        WHEN e.edit_type = 'bio_entity' THEN e.proposed_meta->>'symbol'
       END FROM ${pe} e)
   END`;
   const drugNames = sql`CASE ${targetType}
@@ -494,15 +497,29 @@ function aboutColumnsSql(targetType: SQL, targetId: SQL): SQL {
       SELECT dr.names FROM drug_parameter_discussions d JOIN drugs dr ON dr.id = d.drug_id
       WHERE d.id = ${targetId})
     WHEN 'pending_edit' THEN (
-      SELECT dr.names FROM ${pe} e JOIN drugs dr ON dr.id = e.target_id
-      WHERE e.edit_type = 'parameter')
+      SELECT dr.names FROM ${pe} e JOIN drugs dr ON dr.id = (
+        CASE
+          WHEN e.edit_type IN ('parameter', 'metabolism', 'receptor_targets') THEN e.target_id
+          -- A param_entry create stores the drug id in target_id; an update or
+          -- delete stores the parameter_entries id, so go through the entry.
+          WHEN e.edit_type = 'param_entry' AND e.proposed_value->>'op' = 'create' THEN e.target_id
+          WHEN e.edit_type = 'param_entry'
+            THEN (SELECT pen.drug_id FROM parameter_entries pen WHERE pen.id = e.target_id)
+        END))
   END`;
   const parameter = sql`CASE ${targetType}
     WHEN 'drug_parameter_revision' THEN (
       SELECT parameter FROM drug_parameter_revisions WHERE id = ${targetId})
     WHEN 'drug_discussion' THEN (
       SELECT parameter FROM drug_parameter_discussions WHERE id = ${targetId})
-    WHEN 'pending_edit' THEN (SELECT e.parameter FROM ${pe} e WHERE e.edit_type = 'parameter')
+    WHEN 'pending_edit' THEN (
+      SELECT CASE
+        WHEN e.edit_type = 'parameter' THEN e.parameter
+        WHEN e.edit_type = 'param_entry' AND e.proposed_value->>'op' = 'create'
+          THEN COALESCE(e.parameter, e.proposed_value->'input'->>'parameter')
+        WHEN e.edit_type = 'param_entry'
+          THEN (SELECT pen.parameter FROM parameter_entries pen WHERE pen.id = e.target_id)
+      END FROM ${pe} e)
   END`;
   const detail = sql`CASE ${targetType}
     WHEN 'wiki_revision' THEN (SELECT edit_summary FROM wiki_revisions WHERE id = ${targetId})
