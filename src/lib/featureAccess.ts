@@ -123,7 +123,7 @@ export function canAccessLabDetectionTimes(
  * (docs/plans/2026-08-11-metabolite-ratio-profile.md §10 keeps it out of the
  * primary nav until then). So the nav entry is shown only to the forensic
  * audience — a group granted `patternProfile.view`, plus the admin tier — the same containment
- * the postmortem cohort and LAB tables use. The route itself stays reachable
+ * the postmortem cohort and laboratory tables use. The route itself stays reachable
  * by URL, exactly as it was before it was surfaced.
  *
  * Deliberately keyed on the admin *role*, not a capability: `admin.panel.access`
