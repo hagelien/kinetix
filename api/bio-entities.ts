@@ -15,7 +15,7 @@
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { json, error, withErrorHandling } from './_lib/response.js';
-import { getDb } from './_lib/db.js';
+import { getDb, runInPoolTransaction } from './_lib/db.js';
 import { getUserFromRequest } from './_lib/auth.js';
 import { assertSameOrigin, parseAndValidate } from './_lib/validate.js';
 import {
@@ -272,12 +272,20 @@ async function handleCreate(
   }
 
   try {
-    // Resolve the hub first: it refuses an unusable page, and that must not
-    // happen after the entity is already committed without its monograph.
-    await ensureEntityHubPage(getDb(), actor.userId);
-    const entity = await createBioEntity(getDb(), entityInput);
-    // Mint an empty monograph up front, mirroring drug creation (#785).
-    const { page } = await ensureEntityMonograph(getDb(), entity, actor.userId);
+    // One transaction: the hub preflight, the entity and its monograph commit
+    // together. A hub that turns unusable (draft, non-topic) mid-request then
+    // rolls the entity back instead of leaving it without its monograph.
+    const { entity, page } = await runInPoolTransaction(async () => {
+      await ensureEntityHubPage(getDb(), actor.userId);
+      const created = await createBioEntity(getDb(), entityInput);
+      // Mint an empty monograph up front, mirroring drug creation (#785).
+      const monograph = await ensureEntityMonograph(
+        getDb(),
+        created,
+        actor.userId,
+      );
+      return { entity: created, page: monograph.page };
+    });
     json(res, 201, { entity, monographSlug: page.slug });
   } catch (err) {
     if (err instanceof BioEntityWriteError) {
