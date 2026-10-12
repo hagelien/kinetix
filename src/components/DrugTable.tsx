@@ -384,7 +384,7 @@ const ALL_COLUMNS: ColumnSpec[] = [
   // the same place in the other.
   {
     id: LAB_URINE_COLUMN_ID,
-    label: 'Urin (LAB)',
+    label: 'Urin (lab)',
     defaultVisible: false,
     headClassName: 'w-[160px]',
   },
@@ -520,7 +520,7 @@ function DrugRow({
   preferredUnit: ConcentrationUnit;
   onSendToSimulator: (drugId: string, value: number, unit: string) => void;
   onOpenDrug: (drug: DrugComponent) => void;
-  /** LAB's band for this substance; null when the guideline does not name it. */
+  /** The laboratory's band for this substance; null when the guideline does not name it. */
   labUrineLabel: string | null;
   t: (key: string, opts?: Record<string, unknown>) => string;
   lang: string;
@@ -923,7 +923,7 @@ export function DrugTable({ fullScreen = false }: DrugTableProps = {}) {
     loadInitialVisibleColumns(),
   );
 
-  // The laboratory's guideline table, for the gated LAB column. `canAccess` is
+  // The laboratory's guideline table, for the gated laboratory column. `canAccess` is
   // false for everyone else, and then the column does not exist at all — it is
   // not merely empty, because an empty column reads as "no detection time" for
   // substances the guideline does in fact name.
@@ -1079,7 +1079,7 @@ export function DrugTable({ fullScreen = false }: DrugTableProps = {}) {
    *
    * `visibleColumns` is the reader's *stored* selection and can name a column
    * this reader may not see: the column set is persisted per browser, so a
-   * granted member who enables the LAB column leaves its id in local storage
+   * granted member who enables the laboratory column leaves its id in local storage
    * for whoever signs in next. Filtering the header alone then left the cell
    * behind in every row and shifted the whole table one column out of step with
    * its own headings. Rows and headings now read the same list, by
@@ -1092,7 +1092,7 @@ export function DrugTable({ fullScreen = false }: DrugTableProps = {}) {
   );
 
   /**
-   * LAB's band per substance, resolved once for the whole catalog rather than
+   * The laboratory's band per substance, resolved once for the whole catalog rather than
    * per row: matching folds every name a substance is known by against the
    * guideline's index, and doing that inside the render of ~800 rows would be
    * paid again on every keystroke in the filter box.
@@ -1118,16 +1118,16 @@ export function DrugTable({ fullScreen = false }: DrugTableProps = {}) {
       const statement = labStatementForRole(primary.row, primary.role);
       const text = statement
         ? labStatementText(statement, t)
-        : t('detection.refs.splitReading');
+        : t('detection.lab.splitReading');
       labels.set(
         drugComponentKey(drug),
         primary.role === 'metabolite'
-          ? t('detection.refs.viaShort', { parent: primary.row.parent, text })
+          ? t('detection.lab.viaShort', { parent: primary.row.parent, text })
           : text,
       );
     }
     return labels;
-    // `refs` itself is a fresh object every render; its two useful members are
+    // `lab` itself is a fresh object every render; its two useful members are
     // memoised, and depending on them is what keeps this off the render path.
   }, [canAccessLab, matchFor, visibleColumns, filteredComponents, t]);
 

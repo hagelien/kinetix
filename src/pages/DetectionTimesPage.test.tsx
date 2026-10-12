@@ -731,7 +731,7 @@ describe('DetectionTimesPage', () => {
       ).toBe(false);
     });
 
-    it("shows a member LAB's own band, separately from the pooled windows", async () => {
+    it("shows a member the laboratory's own band, separately from the pooled windows", async () => {
       signInAsGrantedMember();
       routeFetch();
       renderPage('/detection-times?drug=7');
@@ -740,7 +740,7 @@ describe('DetectionTimesPage', () => {
       const section = await screen.findByTestId('lab-detection-section');
 
       // The (synthetic) guideline's row for diazepam.
-      const row = within(section).getByTestId('refs-row-diazepam');
+      const row = within(section).getByTestId('lab-row-diazepam');
       expect(within(row).getByText('Last week')).toBeTruthy();
       expect(within(row).getByText(/Metabolites:/)).toBeTruthy();
 
@@ -781,7 +781,7 @@ describe('DetectionTimesPage', () => {
       fireEvent.click(toggle);
 
       // A row nothing on this page selected — the table stands on its own.
-      expect(await screen.findByTestId('refs-table-row-thc')).toBeTruthy();
+      expect(await screen.findByTestId('lab-table-row-thc')).toBeTruthy();
       expect(screen.getByText('Use the curves')).toBeTruthy();
     });
   });
@@ -804,7 +804,7 @@ describe('DetectionTimesPage', () => {
       ]);
     });
 
-    it("adds LAB's own column for a member", async () => {
+    it("adds the laboratory's own column for a member", async () => {
       signInAsGrantedMember();
       routeFetch();
       renderPage('/detection-times?drug=7');

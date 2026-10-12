@@ -1,4 +1,4 @@
-# The laboratory's own detection times (the LAB guideline)
+# The laboratory's own detection times
 
 The detection-times module (`/detection-times`) answers "how long can this be
 found" from the literature: three `*DetectionWindow` parameters, pooled from
@@ -24,9 +24,9 @@ behind the published studies. So the two are never merged, never averaged, and
 never rendered in the same grid:
 
 - the pooled cards keep their place, and gain a heading naming them as pooled
-  literature — but **only for a reader who can also see the LAB section**,
+  literature — but **only for a reader who can also see the laboratory section**,
   since for everyone else there is only one kind of answer on the page;
-- the LAB readings live in their own bordered section with the document's
+- the laboratory readings live in their own bordered section with the document's
   identity (title, id, version, approval date, owning unit, classification)
   printed beneath them.
 
@@ -42,7 +42,7 @@ never rendered in the same grid:
 | React binding | `src/lib/useLabDetectionTimes.ts` |
 | Section UI | `src/components/detection/LabDetectionSection.tsx` |
 | Register column + presets | `src/components/DrugTable.tsx`, `src/lib/detectionColumnPresets.ts` |
-| Strings | `detection.refs.*`, `drugTable.labUrineDetection` in both locales |
+| Strings | `detection.lab.*`, `drugTable.labUrineDetection` in both locales |
 | Synthetic test table | `src/lib/__tests__/fixtures/labSyntheticGuideline.ts` |
 
 ## The gate
@@ -88,7 +88,7 @@ each labelled with how it was reached.
 ## Reading the whole table
 
 Members get a disclosure that opens the full table (parent, metabolites,
-detection time, comment), and the substance register gains a **Urin (LAB)**
+detection time, comment), and the substance register gains a **Urin (lab)**
 column — gated the same way, absent rather than empty for everyone else, since
 an empty column would read as "no detection time" for substances the guideline
 does in fact name. The "Påvisningstider for alle stoffer" link on

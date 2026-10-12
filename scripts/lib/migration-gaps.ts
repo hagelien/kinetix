@@ -106,8 +106,14 @@ export const RETIRED_MIGRATION_HASHES: Readonly<
   '0054_agent_focus_methods': [
     '05a78d69b6b92dd60178216b376f02b6222c52f9b136b20d201745a60ff4d0a2',
   ],
+  // Renamed from an internal acronym (tag and table name); 0146 renames the
+  // table on a database that already has it.
   '0136_lab_detection_guidelines': [
     'f79af36747c32df6ea73e4fe02624e0ababa956fb64619c3b7ef4a74e80cc8d9',
+    '8cc30eaef2528077fa8fc331952c16af8a2fee6bd0d5665cace3ed209a297392',
+  ],
+  '0145_user_group_grants': [
+    '0cdc6a98c49efceda9166b2ceb78b4c59d9035cc751810c7b54392f68c762749',
   ],
 };
 

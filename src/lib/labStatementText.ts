@@ -23,16 +23,16 @@ export function labStatementText(
       // say the same words ("Siste døgnet", "Siste par ukene"), which is why
       // the bands were named after them in the first place.
       return statement.upper
-        ? t('detection.refs.bandRange', {
+        ? t('detection.lab.bandRange', {
             low: t(`detection.band.${statement.band}`),
             high: t(`detection.band.${statement.upper}`),
           })
         : t(`detection.band.${statement.band}`);
     case 'curves':
-      return t('detection.refs.curves');
+      return t('detection.lab.curves');
     case 'noDocumentation':
-      return t('detection.refs.noDocumentation');
+      return t('detection.lab.noDocumentation');
     case 'notStated':
-      return t('detection.refs.notStated');
+      return t('detection.lab.notStated');
   }
 }

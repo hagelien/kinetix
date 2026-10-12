@@ -27,7 +27,7 @@ export const DETECTION_COLUMN_PRESET: readonly string[] = [
   'urineDetectionWindow',
 ];
 
-/** The preset a granted member gets: the same axis, plus LAB's own band. */
+/** The preset a granted member gets: the same axis, plus the laboratory's own band. */
 export const LAB_DETECTION_COLUMN_PRESET: readonly string[] = [
   ...DETECTION_COLUMN_PRESET,
   LAB_URINE_COLUMN_ID,
