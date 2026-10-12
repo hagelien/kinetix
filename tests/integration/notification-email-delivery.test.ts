@@ -606,6 +606,13 @@ describe('deliverNotificationEmails over real SQL', () => {
       // update / delete: targetId is the parameter_entries id
       { targetId: entry!.id, parameter: null, proposedValue: { op: 'update', patch: {} } },
       { targetId: entry!.id, parameter: null, proposedValue: { op: 'delete' } },
+      // an approved delete: the entry is gone, the apply step left its ids behind
+      {
+        targetId: 2_000_000_000,
+        parameter: null,
+        proposedValue: { op: 'delete' },
+        proposedMeta: { deletedEntry: { drugId: drug, parameter: 'halfLife' } },
+      },
     ];
     for (const e of edits) {
       const [pe] = await db
@@ -628,7 +635,7 @@ describe('deliverNotificationEmails over real SQL', () => {
 
     const { text } = sendEmailMock.mock.calls[0]![0];
     expect(text).toContain('Acetaminophen · CL');
-    expect(text.match(/Acetaminophen · Half-life/g)).toHaveLength(2);
+    expect(text.match(/Acetaminophen · Half-life/g)).toHaveLength(3);
   });
 
   it('holds a weekly summary until Monday', async () => {
