@@ -61,6 +61,30 @@ describe('entity monographs hang under the Bioentiteter hub', () => {
     expect(children.map((c) => c.id).sort()).toEqual([pa.id, pb.id].sort());
   });
 
+  it.each([
+    ['a draft page', { pageType: 'topic', status: 'draft' }],
+    ['a non-topic page', { pageType: 'entity_monograph', status: 'published' }],
+  ])('refuses %s on the hub slug instead of filing monographs under it', async (_l, over) => {
+    const user = await seedUser(db);
+    await db.insert(wikiPages).values({
+      slug: ENTITY_HUB_SLUG,
+      title: 'Bioentiteter',
+      createdBy: user,
+      updatedBy: user,
+      ...over,
+    });
+    const id = await seedBioEntity(db, { slug: 'cyp2d6', symbol: 'CYP2D6' });
+
+    await expect(
+      ensureEntityMonograph(db, { id, symbol: 'CYP2D6', name: 'Cytokrom P450 2D6' }, user),
+    ).rejects.toThrow(/cannot serve as the entity hub/);
+    const monographs = await db
+      .select({ id: wikiPages.id })
+      .from(wikiPages)
+      .where(eq(wikiPages.pageType, 'entity_monograph'));
+    expect(monographs.filter((m) => m.id).length).toBe(over.pageType === 'entity_monograph' ? 1 : 0);
+  });
+
   it('reuses a hand-made hub and leaves deliberately placed pages alone', async () => {
     const user = await seedUser(db);
     const [hub] = await db
