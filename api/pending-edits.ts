@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { json, error, withErrorHandling } from './_lib/response.js';
 import { getDb, inTransaction, runInPoolTransaction } from './_lib/db.js';
+import { lockWikiPageShared } from './_lib/wiki-page-lock.js';
 import {
   paramEntryPayloadParts,
   withParamEntryPayloadLocks,
@@ -2725,6 +2726,23 @@ async function handleCreate(
           .limit(1);
         if (!drugInTx) return { kind: 'gone' };
       }
+      const [row] = await insertPending();
+      if (!row) throw new Error('pendingEdits insert returned no row');
+      return { kind: 'ok', row };
+    });
+  } else if (
+    (parsed.data.editType === 'wiki_page' ||
+      parsed.data.editType === 'wiki_fact' ||
+      parsed.data.editType === 'wiki_section') &&
+    parsed.data.targetId != null
+  ) {
+    // A topic or entity page has no drug lock, but its deletion sweeps the
+    // page's proposals and pending_edits.target_id has no foreign key. Share-lock
+    // the page row around the insert; the delete takes it FOR UPDATE before
+    // sweeping, so the two serialize and no proposal outlives its page.
+    const pageId = parsed.data.targetId;
+    outcome = await runInPoolTransaction<SubmitOutcome>(async () => {
+      if (!(await lockWikiPageShared(pageId))) return { kind: 'gone' };
       const [row] = await insertPending();
       if (!row) throw new Error('pendingEdits insert returned no row');
       return { kind: 'ok', row };
