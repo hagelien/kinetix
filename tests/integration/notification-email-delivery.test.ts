@@ -9,6 +9,7 @@ import {
   drugParameterDiscussions,
   drugParameterRevisions,
   notifications,
+  parameterEntries,
   pendingEdits,
   users,
   wikiPages,
@@ -586,6 +587,48 @@ describe('deliverNotificationEmails over real SQL', () => {
     expect(text).toContain('Paracetamol · Halveringstid: Rettet intervallet');
     expect(text).toContain('CYP3A4: La til hemmere');
     expect(html).toContain('Paracetamol · Halveringstid: Rettet intervallet');
+  });
+
+  it('names the drug and parameter for every param_entry operation on a pending edit', async () => {
+    const daily = await user(
+      'entryabout',
+      { emailOnFeedback: true, emailFrequency: 'daily', emailLocale: 'en' },
+      new Date('2026-09-29T06:05:00Z'),
+    );
+    const drug = await seedDrug(db, { names: { nb: 'Paracetamol', en: 'Acetaminophen' } });
+    const [entry] = await db
+      .insert(parameterEntries)
+      .values({ drugId: drug, parameter: 'halfLife', low: '2', high: '3', unit: 'h' } as never)
+      .returning({ id: parameterEntries.id });
+    const edits = [
+      // create: targetId is the drug id
+      { targetId: drug, parameter: 'clearance', proposedValue: { op: 'create', input: { parameter: 'clearance' } } },
+      // update / delete: targetId is the parameter_entries id
+      { targetId: entry!.id, parameter: null, proposedValue: { op: 'update', patch: {} } },
+      { targetId: entry!.id, parameter: null, proposedValue: { op: 'delete' } },
+    ];
+    for (const e of edits) {
+      const [pe] = await db
+        .insert(pendingEdits)
+        .values({ editType: 'param_entry', submittedBy: daily, status: 'pending', ...e } as never)
+        .returning({ id: pendingEdits.id });
+      await db.insert(notifications).values({
+        userId: daily,
+        type: 'contribution_endorsed',
+        title: 'Your contribution received an approval stamp',
+        url: '/wiki',
+        audience: 'author',
+        targetType: 'pending_edit',
+        targetId: pe!.id,
+        createdAt: new Date(NOW.getTime() - 60_000),
+      });
+    }
+
+    await deliverNotificationEmails(APP, NOW);
+
+    const { text } = sendEmailMock.mock.calls[0]![0];
+    expect(text).toContain('Acetaminophen · CL');
+    expect(text.match(/Acetaminophen · Half-life/g)).toHaveLength(2);
   });
 
   it('holds a weekly summary until Monday', async () => {
