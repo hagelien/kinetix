@@ -28,7 +28,7 @@ In particular, do not act on stale statements that the reusable repository still
 
 `hagelien/assurance-core` is the canonical reusable repository.
 
-The npm package is **`assurance-core`**, currently `0.3.0`. It is deliberately a zero-runtime-dependency package. It contains the domain-independent policy/assurance primitives plus review machinery that has proved reusable:
+The npm package is **`assurance-core`**, currently `0.5.0`. It is deliberately a zero-runtime-dependency package. It contains the domain-independent policy/assurance primitives plus review machinery that has proved reusable:
 
 - actor, risk, assurance, requirement, policy and decision primitives;
 - immutable proposal/version references;

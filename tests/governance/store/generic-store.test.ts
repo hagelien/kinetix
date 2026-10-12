@@ -9,6 +9,13 @@
  * store rather than asserted about its types.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import {
+  independentApprovals,
+  policy,
+  poolStateFromEffectiveQuorum,
+  riskProfile,
+  tallyAssurance,
+} from 'assurance-core';
 import { sql } from 'drizzle-orm';
 import {
   ConflictingLegacyLinkError,
@@ -42,6 +49,7 @@ import {
   type SpaceRecord,
   type TargetRecord,
 } from '../../../api/_lib/knowledge-governance/store/postgres.js';
+import { recordCoreDecision } from '../../../api/_lib/knowledge-governance/store/decisions.js';
 import {
   resetIntegrationDb,
   setupIntegrationDb,
@@ -473,6 +481,37 @@ describe('policy decisions and publication events', () => {
     expect(
       (await latestDecisionForVersion(db, version.id, 'authoritative'))?.decision,
     ).toBe('apply');
+  });
+
+  it('keeps which policy definition decided, and which of its rules applied', async () => {
+    // A decision that names only `v1` cannot tell "v1 as written then" from
+    // "v1 edited in place since". The fingerprint and the matched rules travel
+    // with the decision from the core, through `recordCoreDecision`.
+    const proposal = await newProposal();
+    const version = await appendVersion(db, {
+      proposalId: proposal.id,
+      payload: {},
+      payloadFingerprint: 'aaaa',
+      authorActorRef: 'user:1',
+      actorKind: 'agent',
+    });
+    const rule = policy('kinetix-consensus', 'test')
+      .rule({ id: 'base', require: [independentApprovals(2)] })
+      .build();
+    const decided = rule.evaluate({
+      space: 'kinetix',
+      targetType: 'pending_edit',
+      proposalVersionId: String(version.id),
+      author: { actorRef: 'user:1', kind: 'agent', capabilities: [], assuranceCapabilities: [] },
+      risk: riskProfile('low'),
+      assurance: tallyAssurance([]),
+      pool: poolStateFromEffectiveQuorum({ effectiveQuorum: 2, designTargetQuorum: 2 }),
+      flags: [],
+    });
+    await recordCoreDecision(db, { spaceId: space.id, proposalVersionId: version.id, decision: decided });
+    const stored = await latestDecisionForVersion(db, version.id);
+    expect(stored?.policyFingerprint).toBe(rule.definitionFingerprint);
+    expect(stored?.matchedRuleIds).toEqual(['base']);
   });
 
   it('records what ultimately happened to a version', async () => {

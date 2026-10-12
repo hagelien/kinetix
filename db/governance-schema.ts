@@ -347,6 +347,10 @@ export const kgPolicyDecisions = pgTable(
     satisfiedRequirements: jsonb('satisfied_requirements'),
     unsatisfiedRequirements: jsonb('unsatisfied_requirements'),
     inputFingerprint: varchar('input_fingerprint', { length: 64 }).notNull(),
+    // What the policy required when it decided (`PolicySet.definitionFingerprint`)
+    // and which of its rules applied. Null on decisions recorded before 0147.
+    policyFingerprint: varchar('policy_fingerprint', { length: 64 }),
+    matchedRuleIds: jsonb('matched_rule_ids'),
     evaluationMode: varchar('evaluation_mode', { length: 16 })
       .notNull()
       .default('shadow'),

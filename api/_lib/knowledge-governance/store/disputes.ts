@@ -13,7 +13,7 @@
  * who ruled and why.
  */
 
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import {
   kgDisputeRulings,
   kgDisputes,
@@ -32,6 +32,7 @@ const DISPUTE_COLUMNS = {
   subjectType: kgDisputes.subjectType,
   subjectId: kgDisputes.subjectId,
   openedByActorRef: kgDisputes.openedByActorRef,
+  reasonMd: kgDisputes.reasonMd,
   state: kgDisputes.state,
   createdAt: kgDisputes.createdAt,
   closedAt: kgDisputes.closedAt,
@@ -217,4 +218,41 @@ export async function getDispute(
     .where(eq(kgDisputes.id, id))
     .limit(1);
   return (row as DisputeRecord | undefined) ?? null;
+}
+
+/**
+ * How many disputes on a subject were settled in the objector's favour: the
+ * most recent ruling that closed each one is `upheld`.
+ *
+ * Not a subset of `openDisputes`. An upheld dispute is closed — nobody need
+ * rule on it again — and still says the subject is wrong, so a profile that
+ * counted only open disputes reported a correct objection as no objection.
+ * Read from the ruling history rather than `state`, for the reason
+ * `recordRuling` gives: the history is what is authoritative.
+ */
+export async function upheldDisputeCount(
+  db: GovernanceDb,
+  args: { subjectType: SubjectType; subjectId: number },
+): Promise<number> {
+  const closed = await db
+    .select({ id: kgDisputes.id })
+    .from(kgDisputes)
+    .where(
+      and(
+        eq(kgDisputes.subjectType, args.subjectType),
+        eq(kgDisputes.subjectId, args.subjectId),
+        isNotNull(kgDisputes.closedAt),
+      ),
+    );
+  if (closed.length === 0) return 0;
+  const rulings = await db
+    .select({ disputeId: kgDisputeRulings.disputeId, ruling: kgDisputeRulings.ruling })
+    .from(kgDisputeRulings)
+    .where(inArray(kgDisputeRulings.disputeId, closed.map((d) => d.id)))
+    .orderBy(asc(kgDisputeRulings.createdAt), asc(kgDisputeRulings.id));
+  const closing = new Map<number, string>();
+  for (const r of rulings) {
+    if (rulingClosesDispute(r.ruling)) closing.set(r.disputeId, r.ruling);
+  }
+  return [...closing.values()].filter((ruling) => ruling === 'upheld').length;
 }

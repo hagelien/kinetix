@@ -291,6 +291,9 @@ describe('the projected context the legacy gate implies', () => {
       // checks those separately — so modelling them as zero is what keeps the
       // projection exactly equivalent.
       disputesOpen: 0,
+      // Likewise: the legacy path returns an edit whose dispute is upheld,
+      // so nothing it summarises stands on one.
+      disputesUpheld: 0,
       abstentions: 3,
       implicitApprovals: 1,
       evidenceRequirementState: [],
