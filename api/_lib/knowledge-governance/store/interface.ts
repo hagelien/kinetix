@@ -116,6 +116,8 @@ export interface DisputeRecord {
   readonly subjectType: string;
   readonly subjectId: number;
   readonly openedByActorRef: string;
+  /** Why it was raised, as the objector put it. */
+  readonly reasonMd: string | null;
   readonly state: string;
   readonly createdAt: Date;
   readonly closedAt: Date | null;
@@ -138,6 +140,10 @@ export interface PolicyDecisionRecord {
   readonly policyVersion: string;
   readonly decision: KgPolicyDecisionOutcome;
   readonly inputFingerprint: string;
+  /** Null on decisions recorded before migration 0147. */
+  readonly policyFingerprint: string | null;
+  /** The rules that applied, in order; null on decisions recorded before 0147. */
+  readonly matchedRuleIds: unknown;
   readonly evaluationMode: KgEvaluationMode;
   readonly evaluatedAt: Date;
 }

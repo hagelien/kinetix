@@ -88,7 +88,7 @@
     "@tiptap/starter-kit": "^3.20.0",
     "@types/katex": "^0.16.8",
     "@vercel/blob": "^2.4.0",
-    "assurance-core": "^0.3.0",
+    "assurance-core": "^0.5.0",
     "comlink": "^4.4.1",
     "dompurify": "^3.4.16",
     "drizzle-orm": "^0.45.2",
