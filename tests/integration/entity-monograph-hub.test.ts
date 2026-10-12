@@ -131,4 +131,32 @@ describe('entity monographs hang under the Bioentiteter hub', () => {
       adopted: 0,
     });
   });
+
+  it('re-adopts a monograph whose parent page was deleted', async () => {
+    const user = await seedUser(db);
+    const entity = await seedBioEntity(db, { slug: 'cyp3a4', symbol: 'CYP3A4' });
+    const [oldHub] = await db
+      .insert(wikiPages)
+      .values({ slug: 'old-hub', title: 'Old hub', pageType: 'topic', createdBy: user, updatedBy: user })
+      .returning({ id: wikiPages.id });
+    await db.insert(wikiPages).values({
+      slug: 'cyp3a4',
+      title: 'CYP3A4',
+      pageType: 'entity_monograph',
+      entityId: entity,
+      parentId: oldHub!.id,
+      createdBy: user,
+      updatedBy: user,
+    });
+    await db.delete(wikiPages).where(eq(wikiPages.id, oldHub!.id));
+
+    await ensureAllEntityMonographs(db, user);
+
+    const [hub] = await hubPages();
+    const [page] = await db
+      .select({ parentId: wikiPages.parentId })
+      .from(wikiPages)
+      .where(eq(wikiPages.entityId, entity));
+    expect(page!.parentId).toBe(hub!.id);
+  });
 });

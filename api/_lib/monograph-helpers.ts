@@ -12,7 +12,8 @@
  * manual "Create monograph" button produced — so the rendered page is identical
  * to a freshly hand-created one: the drug data sidebar shows, with no prose yet.
  */
-import { and, asc, eq, inArray, isNull, or } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, notExists, or, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import {
   bioEntities,
   wikiPages,
@@ -308,11 +309,28 @@ export async function ensureEntityMonograph(
   if (existing) {
     // Adopt a stray top-level monograph into the hub. A page an editor has
     // deliberately placed under some other parent is left where it is.
-    if (existing.parentId == null) {
+    // A parent that no longer exists (`parent_id` has no foreign key, so
+    // deleting the old hub leaves its children pointing at it) is not a
+    // deliberate placement either.
+    const parentGone =
+      existing.parentId != null &&
+      (await db
+        .select({ id: wikiPages.id })
+        .from(wikiPages)
+        .where(eq(wikiPages.id, existing.parentId))
+        .limit(1)).length === 0;
+    if (existing.parentId == null || parentGone) {
       await db
         .update(wikiPages)
         .set({ parentId: hubId })
-        .where(and(eq(wikiPages.id, existing.id), isNull(wikiPages.parentId)));
+        .where(
+          and(
+            eq(wikiPages.id, existing.id),
+            existing.parentId == null
+              ? isNull(wikiPages.parentId)
+              : eq(wikiPages.parentId, existing.parentId),
+          ),
+        );
     }
     return { page: { id: existing.id, slug: existing.slug }, created: false };
   }
@@ -367,6 +385,7 @@ export async function ensureAllEntityMonographs(
   db: Db,
   userId: number,
 ): Promise<{ created: number; adopted: number }> {
+  const parentPages = alias(wikiPages, 'parent_pages');
   const rows = await db
     .select({
       id: bioEntities.id,
@@ -382,7 +401,19 @@ export async function ensureAllEntityMonographs(
         eq(wikiPages.entityId, bioEntities.id),
       ),
     )
-    .where(or(isNull(wikiPages.id), isNull(wikiPages.parentId)))
+    .where(
+      or(
+        isNull(wikiPages.id),
+        isNull(wikiPages.parentId),
+        // Dangling parent: the page it was filed under has been deleted.
+        notExists(
+          db
+            .select({ one: sql`1` })
+            .from(parentPages)
+            .where(eq(parentPages.id, wikiPages.parentId)),
+        ),
+      ),
+    )
     .orderBy(asc(bioEntities.id));
 
   let created = 0;
