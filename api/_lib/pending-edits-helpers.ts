@@ -1306,6 +1306,17 @@ async function applyApprovedParameterEntry(
         'param_entry_target_missing',
       );
     }
+    // The entry is gone, but the decision notification (and its email, sent
+    // after this transaction commits) still names the drug and parameter it
+    // was about. Keep them on the edit, since the lookup through
+    // parameter_entries no longer finds a row.
+    await getDb()
+      .update(pendingEdits)
+      .set({
+        proposedMeta:
+          sql`CASE WHEN jsonb_typeof(${pendingEdits.proposedMeta}) = 'object' THEN ${pendingEdits.proposedMeta} ELSE '{}'::jsonb END || ${JSON.stringify({ deletedEntry: { drugId: deleted.drugId, parameter: deleted.parameter } })}::jsonb` as never,
+      })
+      .where(eq(pendingEdits.id, edit.id));
     target = deleted;
   }
 

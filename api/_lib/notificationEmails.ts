@@ -504,7 +504,10 @@ function aboutColumnsSql(targetType: SQL, targetId: SQL): SQL {
           -- delete stores the parameter_entries id, so go through the entry.
           WHEN e.edit_type = 'param_entry' AND e.proposed_value->>'op' = 'create' THEN e.target_id
           WHEN e.edit_type = 'param_entry'
-            THEN (SELECT pen.drug_id FROM parameter_entries pen WHERE pen.id = e.target_id)
+            THEN COALESCE(
+              (SELECT pen.drug_id FROM parameter_entries pen WHERE pen.id = e.target_id),
+              -- An approved delete removed the entry; it left the ids behind.
+              (e.proposed_meta->'deletedEntry'->>'drugId')::int)
         END))
   END`;
   const parameter = sql`CASE ${targetType}
@@ -518,7 +521,10 @@ function aboutColumnsSql(targetType: SQL, targetId: SQL): SQL {
         WHEN e.edit_type = 'param_entry' AND e.proposed_value->>'op' = 'create'
           THEN COALESCE(e.parameter, e.proposed_value->'input'->>'parameter')
         WHEN e.edit_type = 'param_entry'
-          THEN (SELECT pen.parameter FROM parameter_entries pen WHERE pen.id = e.target_id)
+          THEN COALESCE(
+            (SELECT pen.parameter FROM parameter_entries pen WHERE pen.id = e.target_id),
+            e.proposed_meta->'deletedEntry'->>'parameter',
+            e.parameter)
       END FROM ${pe} e)
   END`;
   const detail = sql`CASE ${targetType}
