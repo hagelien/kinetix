@@ -614,6 +614,14 @@ describe('deliverNotificationEmails over real SQL', () => {
         proposedValue: { op: 'delete' },
         proposedMeta: { deletedEntry: { drugNames: { nb: 'Paracetamol', en: 'Acetaminophen' } } },
       },
+      // an approved update whose target is gone must not trust a planted marker
+      {
+        targetId: 2_000_000_002,
+        parameter: null,
+        status: 'approved',
+        proposedValue: { op: 'update', patch: {} },
+        proposedMeta: { deletedEntry: { drugNames: { en: 'Planted Name' } } },
+      },
       // a rejected proposal with a hostile marker is ignored, not cast
       {
         targetId: 2_000_000_001,
@@ -645,6 +653,7 @@ describe('deliverNotificationEmails over real SQL', () => {
     const { text } = sendEmailMock.mock.calls[0]![0];
     expect(text).toContain('Acetaminophen · CL');
     expect(text.match(/Acetaminophen · Half-life/g)).toHaveLength(3);
+    expect(text).not.toContain('Planted Name');
   });
 
   it('holds a weekly summary until Monday', async () => {
