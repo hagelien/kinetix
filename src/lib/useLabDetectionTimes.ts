@@ -12,7 +12,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 import { canAccessLabDetectionTimes } from './featureAccess';
 import {
-  EMPTY_REFS_PAYLOAD,
+  EMPTY_LAB_PAYLOAD,
   fetchLabDetectionTimes,
   labNameIndexFor,
 } from './labDetectionApi';
@@ -46,12 +46,12 @@ export function useLabDetectionTimes(): LabDetectionAccess {
   const identity = user?.id ?? null;
 
   const [payload, setPayload] =
-    useState<LabUrineDetectionPayload>(EMPTY_REFS_PAYLOAD);
+    useState<LabUrineDetectionPayload>(EMPTY_LAB_PAYLOAD);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!canAccess) {
-      setPayload(EMPTY_REFS_PAYLOAD);
+      setPayload(EMPTY_LAB_PAYLOAD);
       setLoading(false);
       return;
     }

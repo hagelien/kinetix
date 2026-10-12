@@ -238,7 +238,7 @@ export function isLabUrineDetectionRow(
 }
 
 /** What the route and the client answer when no guideline is available. */
-export const EMPTY_REFS_SOURCE: LabGuidelineSource = {
+export const EMPTY_LAB_SOURCE: LabGuidelineSource = {
   title: '',
   documentId: '',
   version: '',

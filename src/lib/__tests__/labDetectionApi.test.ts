@@ -9,7 +9,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  EMPTY_REFS_PAYLOAD,
+  EMPTY_LAB_PAYLOAD,
   fetchLabDetectionTimes,
   resetLabDetectionCache,
 } from '../labDetectionApi';
@@ -57,7 +57,7 @@ describe('fetchLabDetectionTimes', () => {
 
     fetchMock.mockResolvedValue({
       ok: true,
-      json: async () => ({ ...EMPTY_REFS_PAYLOAD, gated: true }),
+      json: async () => ({ ...EMPTY_LAB_PAYLOAD, gated: true }),
     });
     expect((await fetchLabDetectionTimes(2)).rows).toEqual([]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -65,7 +65,7 @@ describe('fetchLabDetectionTimes', () => {
 
   it('retries after a network failure instead of caching the empty answer', async () => {
     fetchMock.mockRejectedValueOnce(new Error('offline'));
-    expect(await fetchLabDetectionTimes(1)).toBe(EMPTY_REFS_PAYLOAD);
+    expect(await fetchLabDetectionTimes(1)).toBe(EMPTY_LAB_PAYLOAD);
 
     fetchMock.mockResolvedValue({ ok: true, json: async () => PAYLOAD });
     expect(await fetchLabDetectionTimes(1)).toEqual(PAYLOAD);
@@ -74,7 +74,7 @@ describe('fetchLabDetectionTimes', () => {
 
   it('retries after a non-OK response', async () => {
     fetchMock.mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) });
-    expect(await fetchLabDetectionTimes(1)).toBe(EMPTY_REFS_PAYLOAD);
+    expect(await fetchLabDetectionTimes(1)).toBe(EMPTY_LAB_PAYLOAD);
 
     fetchMock.mockResolvedValue({ ok: true, json: async () => PAYLOAD });
     expect((await fetchLabDetectionTimes(1)).rows).toHaveLength(1);
@@ -83,7 +83,7 @@ describe('fetchLabDetectionTimes', () => {
 
   it('retries after a malformed body', async () => {
     fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ nope: 1 }) });
-    expect(await fetchLabDetectionTimes(1)).toBe(EMPTY_REFS_PAYLOAD);
+    expect(await fetchLabDetectionTimes(1)).toBe(EMPTY_LAB_PAYLOAD);
 
     fetchMock.mockResolvedValue({ ok: true, json: async () => PAYLOAD });
     expect((await fetchLabDetectionTimes(1)).rows).toHaveLength(1);
@@ -132,7 +132,7 @@ describe('fetchLabDetectionTimes', () => {
     // the section reads five fields off `source` during render. A payload that
     // is almost right does not degrade — it throws mid-render.
     fetchMock.mockResolvedValueOnce({ ok: true, json: async () => body });
-    expect(await fetchLabDetectionTimes(1)).toBe(EMPTY_REFS_PAYLOAD);
+    expect(await fetchLabDetectionTimes(1)).toBe(EMPTY_LAB_PAYLOAD);
 
     fetchMock.mockResolvedValue({ ok: true, json: async () => PAYLOAD });
     expect((await fetchLabDetectionTimes(1)).rows).toHaveLength(1);
@@ -153,6 +153,6 @@ describe('fetchLabDetectionTimes', () => {
     vi.unstubAllGlobals();
     vi.stubGlobal('fetch', undefined);
 
-    await expect(fetchLabDetectionTimes(1)).resolves.toBe(EMPTY_REFS_PAYLOAD);
+    await expect(fetchLabDetectionTimes(1)).resolves.toBe(EMPTY_LAB_PAYLOAD);
   });
 });

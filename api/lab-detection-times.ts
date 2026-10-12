@@ -21,7 +21,7 @@ import { getUserFromRequest } from './_lib/auth.js';
 import { canAccessLabDetectionTimes } from '../src/lib/featureAccess.js';
 import { loadPermissionOverrides } from './_lib/permissions-store.js';
 import { loadLabGuideline } from './_lib/lab-guideline-store.js';
-import { EMPTY_REFS_SOURCE } from '../src/lib/labDetectionTimes.js';
+import { EMPTY_LAB_SOURCE } from '../src/lib/labDetectionTimes.js';
 
 /** Restricted internal material: never cached by a shared proxy. */
 const LAB_HEADERS = noStoreHeaders();
@@ -51,7 +51,7 @@ export default withErrorHandling(async function handler(
     json(
       res,
       200,
-      { source: EMPTY_REFS_SOURCE, preamble: '', rows: [], gated: true },
+      { source: EMPTY_LAB_SOURCE, preamble: '', rows: [], gated: true },
       { headers: LAB_HEADERS },
     );
     return;

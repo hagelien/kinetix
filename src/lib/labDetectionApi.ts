@@ -18,7 +18,7 @@ import type {
   LabUrineDetectionRow,
 } from './labDetectionTimes';
 import {
-  EMPTY_REFS_SOURCE,
+  EMPTY_LAB_SOURCE,
   buildLabNameIndex,
   isLabUrineDetectionPayload,
 } from './labDetectionTimes';
@@ -27,8 +27,8 @@ import {
 export type LabAccessIdentity = number | null;
 
 /** What a caller with no access — or a failed request — sees. */
-export const EMPTY_REFS_PAYLOAD: LabUrineDetectionPayload = {
-  source: EMPTY_REFS_SOURCE,
+export const EMPTY_LAB_PAYLOAD: LabUrineDetectionPayload = {
+  source: EMPTY_LAB_SOURCE,
   preamble: '',
   rows: [],
   gated: true,
@@ -74,14 +74,14 @@ export function fetchLabDetectionTimes(
   inFlight = Promise.resolve()
     .then(() => fetch('/api/lab-detection-times', { credentials: 'same-origin' }))
     .then(async (res) => {
-      if (!res?.ok) return EMPTY_REFS_PAYLOAD;
+      if (!res?.ok) return EMPTY_LAB_PAYLOAD;
       const data: unknown = await res.json();
       // Validated whole, not partially: everything downstream trusts the
       // shape, and a 200 that is almost the payload throws inside a render
       // rather than degrading.
-      return isLabUrineDetectionPayload(data) ? data : EMPTY_REFS_PAYLOAD;
+      return isLabUrineDetectionPayload(data) ? data : EMPTY_LAB_PAYLOAD;
     })
-    .catch(() => EMPTY_REFS_PAYLOAD)
+    .catch(() => EMPTY_LAB_PAYLOAD)
     .then((payload) => {
       // Signed out (or in as someone else) while the request was open: the
       // answer belongs to the identity that asked for it, and storing it now
@@ -94,7 +94,7 @@ export function fetchLabDetectionTimes(
       // the rest of the session with nothing to retry — the next mount asks
       // again instead. A server-sent `gated: true` is a real answer and caches
       // like any other; it is a different object than this sentinel.
-      if (payload !== EMPTY_REFS_PAYLOAD) cached = payload;
+      if (payload !== EMPTY_LAB_PAYLOAD) cached = payload;
       return payload;
     });
 
