@@ -716,15 +716,16 @@ function directAdminWriteConflictId(
  * unrelated sibling-approval marker above) — nothing to acknowledge, so a
  * content revision clears it exactly as it always has.
  */
-/** A new wiki fact or a new wiki section (see `resubmitRebasesAdditiveWikiEdit`). */
+/**
+ * A new wiki fact (see `resubmitRebasesAdditiveWikiEdit`). A new section is not
+ * included: its numeric `position` was computed against the heading list a
+ * sibling approval has since changed, so only revising the proposal (the
+ * position) rebases it.
+ */
 function isAdditiveWikiEdit(
-  edit: Pick<typeof pendingEdits.$inferSelect, 'editType' | 'factOperation' | 'proposedValue'>,
+  edit: Pick<typeof pendingEdits.$inferSelect, 'editType' | 'factOperation'>,
 ): boolean {
-  if (edit.editType === 'wiki_fact') return edit.factOperation === 'add';
-  if (edit.editType === 'wiki_section') {
-    return isRecord(edit.proposedValue) && edit.proposedValue.operation === 'add';
-  }
-  return false;
+  return edit.editType === 'wiki_fact' && edit.factOperation === 'add';
 }
 
 function conflictMarkerAcknowledged(
@@ -3366,7 +3367,7 @@ async function handlePatch(
       edit.proposedMeta,
       parsed.data.acknowledgedConflictId,
     );
-    // An additive wiki edit — a new fact or a new section — writes nothing an
+    // An additive wiki edit — a new fact — writes nothing an
     // approved sibling could have changed under it, and its approval re-checks
     // the section anchor against the live page. There is no stale content to
     // rebase, so the author resubmitting after seeing the warning is the whole

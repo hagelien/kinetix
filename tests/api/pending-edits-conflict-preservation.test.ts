@@ -465,9 +465,10 @@ describe('/api/pending-edits submitter conflict-marker preservation', () => {
  * marker was announcing — reading and source quote together. Commentary
  * standing in for a rebase.
  */
-// A new fact or a new section has no stale content to rebase: approval
-// re-checks its section anchor against the live page. A plain resubmit is
-// therefore the author's whole answer to a sibling-approval marker.
+// A new fact has no stale content to rebase: approval re-checks its section
+// anchor against the live page. A plain resubmit is therefore the author's whole
+// answer to a sibling-approval marker. A new section carries a position computed
+// against the old heading list, so it must be revised to clear the marker.
 describe('/api/pending-edits — resubmitting an additive wiki edit', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -485,22 +486,40 @@ describe('/api/pending-edits — resubmitting an additive wiki edit', () => {
     expect(revisesPayloadFlag(capturedProposedMeta(set))).toBe(true);
   });
 
-  it('clears the marker on a plain resubmit of a new section', async () => {
-    const { set } = mockDb(
-      pendingEdit({
-        editType: 'wiki_section',
-        factOperation: null,
-        factStatement: null,
+  const sectionAdd = () =>
+    pendingEdit({
+      editType: 'wiki_section',
+      factOperation: null,
+      factStatement: null,
+      proposedValue: {
+        operation: 'add',
+        headingText: 'Farmakologi',
+        headingLevel: 2,
+        position: 2,
+      },
+      proposedMeta: { conflict: { approvedEditId: 41 } },
+    });
+
+  it('keeps the marker on a plain resubmit of a new section', async () => {
+    const { set } = mockDb(sectionAdd());
+    await handler(createPatchRequest({ status: 'pending' }), createResponse().res);
+    expect(revisesPayloadFlag(capturedProposedMeta(set))).toBe(false);
+  });
+
+  it('clears the marker once a new section revises its position', async () => {
+    const { set } = mockDb(sectionAdd());
+    await handler(
+      createPatchRequest({
+        status: 'pending',
         proposedValue: {
           operation: 'add',
           headingText: 'Farmakologi',
           headingLevel: 2,
-          position: 2,
+          position: 3,
         },
-        proposedMeta: { conflict: { approvedEditId: 41 } },
       }),
+      createResponse().res,
     );
-    await handler(createPatchRequest({ status: 'pending' }), createResponse().res);
     expect(revisesPayloadFlag(capturedProposedMeta(set))).toBe(true);
   });
 
