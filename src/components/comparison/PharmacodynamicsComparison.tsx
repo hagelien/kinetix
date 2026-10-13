@@ -525,10 +525,6 @@ export function PharmacodynamicsComparison({
           <p className="mt-3 text-sm text-destructive">
             {t('comparison.pd.loadError')}
           </p>
-        ) : targets.length === 0 ? (
-          <p className="mt-3 text-sm text-muted-foreground">
-            {t('comparison.pd.noTargets')}
-          </p>
         ) : (
           <>
             {partial && (
@@ -536,16 +532,24 @@ export function PharmacodynamicsComparison({
                 {t('comparison.pd.partialLoadError')}
               </p>
             )}
-            <TargetPicker
-              targets={targets}
-              selected={selectedTargetIds}
-              onToggle={onToggleTarget}
-            />
-            <ReceptorProfileMatrix
-              drugs={drugs}
-              targets={targets}
-              drugName={drugName}
-            />
+            {targets.length === 0 ? (
+              <p className="mt-3 text-sm text-muted-foreground">
+                {t('comparison.pd.noTargets')}
+              </p>
+            ) : (
+              <>
+                <TargetPicker
+                  targets={targets}
+                  selected={selectedTargetIds}
+                  onToggle={onToggleTarget}
+                />
+                <ReceptorProfileMatrix
+                  drugs={drugs}
+                  targets={targets}
+                  drugName={drugName}
+                />
+              </>
+            )}
           </>
         )}
       </section>
