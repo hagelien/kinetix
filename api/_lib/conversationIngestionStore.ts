@@ -2489,8 +2489,16 @@ async function planWikiFactItem(
       // proposals with it. A failed approval rolls the staged row back with it —
       // nothing is left in the review queue for a reviewer who never saw this
       // run, and nothing needs retiring afterwards.
+      //
+      // The advisory lock comes first and serializes concurrent ingestions on
+      // the page: `applyApprovedEdit` upgrades the page row to FOR NO KEY
+      // UPDATE, so two transactions that each held the FOR SHARE lock would
+      // deadlock on the upgrade.
       return runInPoolTransaction(async () => {
         const tx = getDb();
+        await tx.execute(
+          sql`SELECT pg_advisory_xact_lock(hashtext(${`wiki_fact_proposal:${targetPage!.id}`}))`,
+        );
         if (!(await lockWikiPageShared(targetPage!.id))) return null;
         const [row] = await tx
           .insert(pendingEdits)
