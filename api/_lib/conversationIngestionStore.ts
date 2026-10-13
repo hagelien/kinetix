@@ -2481,25 +2481,20 @@ async function planWikiFactItem(
         });
       }
 
-      // Staging and approval are one unit of work, under the same page row lock
-      // the queued branch takes. `applyApprovedEdit` joins this transaction, so
-      // a page delete cannot land between the insert and the approval and leave
-      // a row pointing at a page that is gone: the delete either commits first
-      // and the lock sees `false`, or waits for this commit and sweeps the page's
-      // proposals with it. A failed approval rolls the staged row back with it —
-      // nothing is left in the review queue for a reviewer who never saw this
-      // run, and nothing needs retiring afterwards.
+      // Staging and approval are one unit of work. `applyApprovedEdit` joins this
+      // transaction, so the staged row never exists outside the approval: a page
+      // that is gone when the approval reads it (a delete that committed between
+      // planning and here) makes the approval throw, and the row rolls back with
+      // it. Nothing is left in the review queue for a reviewer who never saw
+      // this run, and nothing needs retiring afterwards.
       //
-      // The advisory lock comes first and serializes concurrent ingestions on
-      // the page: `applyApprovedEdit` upgrades the page row to FOR NO KEY
-      // UPDATE, so two transactions that each held the FOR SHARE lock would
-      // deadlock on the upgrade.
+      // No page lock is taken up front on purpose. A share lock here would be
+      // held while the approval goes on to take its referenced-drug advisory
+      // locks and then upgrade the page row, which deadlocks against a drug
+      // merge (drug lock, then page row) and against a second ingestion
+      // upgrading the same lock. The approval orders its own locks.
       return runInPoolTransaction(async () => {
         const tx = getDb();
-        await tx.execute(
-          sql`SELECT pg_advisory_xact_lock(hashtext(${`wiki_fact_proposal:${targetPage!.id}`}))`,
-        );
-        if (!(await lockWikiPageShared(targetPage!.id))) return null;
         const [row] = await tx
           .insert(pendingEdits)
           .values(values)
