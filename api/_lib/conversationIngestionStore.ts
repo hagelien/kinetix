@@ -2481,38 +2481,25 @@ async function planWikiFactItem(
         });
       }
 
-      const [row] = await db2
-        .insert(pendingEdits)
-        .values(values)
-        .returning({ id: pendingEdits.id });
-      if (!row) return null;
-      try {
+      // Staging and approval are one unit of work, under the same page row lock
+      // the queued branch takes. `applyApprovedEdit` joins this transaction, so
+      // a page delete cannot land between the insert and the approval and leave
+      // a row pointing at a page that is gone: the delete either commits first
+      // and the lock sees `false`, or waits for this commit and sweeps the page's
+      // proposals with it. A failed approval rolls the staged row back with it —
+      // nothing is left in the review queue for a reviewer who never saw this
+      // run, and nothing needs retiring afterwards.
+      return runInPoolTransaction(async () => {
+        const tx = getDb();
+        if (!(await lockWikiPageShared(targetPage!.id))) return null;
+        const [row] = await tx
+          .insert(pendingEdits)
+          .values(values)
+          .returning({ id: pendingEdits.id });
+        if (!row) return null;
         await applyApprovedEdit(row.id, actor.userId);
-      } catch (err) {
-        // The staging insert has already committed, so a failed approval would
-        // otherwise leave a live `pending` proposal in the review queue —
-        // content this run reported as FAILED, sitting where someone can
-        // approve it later, outside the receipt the admin was shown. Retire the
-        // row before surfacing the failure. Best-effort: if the cleanup itself
-        // fails, the original error is still what the admin hears about.
-        try {
-          await db2
-            .update(pendingEdits)
-            .set({
-              status: 'rejected',
-              rejectionReason: 'other',
-              rejectionComment:
-                'Conversation ingestion: approval failed, staged fact withdrawn',
-              reviewedBy: actor.userId,
-              reviewedAt: new Date(),
-            })
-            .where(eq(pendingEdits.id, row.id));
-        } catch {
-          // Fall through to the original error.
-        }
-        throw err;
-      }
-      return row.id;
+        return row.id;
+      });
     },
   };
 }
