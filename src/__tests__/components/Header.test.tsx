@@ -296,6 +296,20 @@ describe('Header', () => {
     expect(screen.queryByTestId('header-active-drug')).toBeNull();
   });
 
+  it('shows no tab menu on the preview of a drug without a monograph', () => {
+    useDrugStore.setState({
+      activeDrug: {
+        id: '1',
+        names: { nb: 'paracetamol' },
+        _dbId: 7,
+      } as never,
+    });
+    renderHeader('/wiki/drug/7');
+
+    expect(screen.getByTestId('header-active-drug')).toBeTruthy();
+    expect(screen.queryByTestId('monograph-tab-nav')).toBeNull();
+  });
+
   it('marks the tab in the URL as current on a monograph', () => {
     useDrugStore.setState({
       activeDrug: {

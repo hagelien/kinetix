@@ -28,6 +28,8 @@ import {
 } from '@/lib/monographTabs';
 
 const MONOGRAPH_TAB_PATH_RE = /^\/wiki\/([^/]+)\/([^/]+)\/?$/;
+// The numeric drug preview, which is what a drug without a monograph shows.
+const DRUG_PREVIEW_PATH_RE = /^\/wiki\/drug\/\d+\/?$/;
 
 function safeDecode(segment: string): string {
   try {
@@ -106,6 +108,10 @@ export function Header() {
     return activeDrug?._dbId != null ? `/wiki/drug/${activeDrug._dbId}` : null;
   }
   const drugHomeHref = drugTabHref(currentTab ?? loadLastMonographTab());
+  // On the preview of a drug with no monograph there is nothing for a tab to
+  // open: every one would link back to this same preview.
+  const isUnwrittenDrugPreview =
+    !monographSlug && DRUG_PREVIEW_PATH_RE.test(location.pathname);
 
   // #310: only the drug table is reachable anonymously. Hide nav links to
   // gated routes so unauthenticated visitors don't click into a redirect
@@ -374,7 +380,7 @@ export function Header() {
       {/* The active drug's monograph, one tab per former parameter box. */}
       {/* Also shown when the optional drug-row lookup failed: the validated
           monograph route alone is enough to navigate between tabs. */}
-      {(activeDrug || currentTab) && drugHomeHref && (
+      {(activeDrug || currentTab) && drugHomeHref && !isUnwrittenDrugPreview && (
         <nav
           aria-label={t('monographTabs.navLabel', {
             drug: activeDrugName || monographSlug,
