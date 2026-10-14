@@ -26,7 +26,10 @@ import {
   clearVerificationsForTarget,
   recordImplicitAgentApproval,
 } from './agent-verifications.js';
-import { recomputeSummariesCitingCitation } from './parameter-entries-store.js';
+import {
+  lockDrugsCitingCitation,
+  recomputeSummariesCitingCitation,
+} from './parameter-entries-store.js';
 
 export interface PaperReviewInput {
   reviewMarkdown: string;
@@ -75,6 +78,13 @@ export async function recordPaperReview(args: {
     .where(eq(paperReviews.citationId, citationId))
     .limit(1);
   const priorScore = prior?.overallScore ?? null;
+  const recomputes = priorScore !== input.overallScore;
+
+  // The recompute below locks every drug citing this paper. Take those locks
+  // now, before the review row: a citation merge holds them (#243) while it
+  // rewrites this row, so reaching them only after the upsert would wait on the
+  // merge while holding the row it is waiting for.
+  if (recomputes) await lockDrugsCitingCitation(citationId);
 
   const [row] = await db
     .insert(paperReviews)
@@ -165,7 +175,7 @@ export async function recordPaperReview(args: {
   // Refresh the cached value for every summarizable parameter whose entries
   // cite this paper — but only when the score actually changed, so a prose-only
   // re-review doesn't churn revisions or reset approval state.
-  if (priorScore !== input.overallScore) {
+  if (recomputes) {
     await recomputeSummariesCitingCitation(citationId, authorUserId);
   }
 

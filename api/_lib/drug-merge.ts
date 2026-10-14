@@ -3501,7 +3501,10 @@ export async function mergeDrugs(
     .set({ targetId: winnerId })
     .where(and(eq(verificationLog.targetType, 'parameter'), eq(verificationLog.targetId, loserId)));
 
-  // paper_extraction_jobs.target_drug_ids is an advisory id array.
+  // paper_extraction_jobs.target_drug_ids is an advisory id array. These job
+  // rows are locked here, under both drug locks: drug before extraction job is
+  // the one order every path keeps (#243; `mergeCitations` takes a fold's drug
+  // locks before its job rows for exactly this statement).
   await db.execute(sql`
     UPDATE paper_extraction_jobs
     SET target_drug_ids = (

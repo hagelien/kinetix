@@ -1497,6 +1497,16 @@ export async function assertLockedEntryOwner(
  * advisory, and PostgreSQL resolves it by killing one of them. Taking it here
  * puts every party on one order — advisory, then row — so they queue instead.
  * The later acquisition inside the apply is re-entrant and free.
+ *
+ * A `parameter` edit and a `paper_review` edit are here for the same reason
+ * against `mergeCitations`, which since #243 takes the drug locks its summary
+ * recompute needs before any row it rewrites — the proposals citing the
+ * folded paper among them. A `parameter` apply reaches its drug's lock in
+ * `upsertDrugParameter` and the normalization-input recompute; a
+ * `paper_review` apply reaches every drug citing the reviewed paper in
+ * `recordPaperReview`'s recompute. Both used to get there only after this
+ * row lock, which a fold holding those drugs and waiting for this row would
+ * close into a cycle.
  */
 async function drugAdvisoryLockIdsForEdit(
   db: ReturnType<typeof getDb>,
@@ -1510,6 +1520,17 @@ async function drugAdvisoryLockIdsForEdit(
     // merge of a nested drug into it.
     const drugId = await paramEntryEditDrugId(db, edit);
     return paramEntryLockSet(drugId, edit.proposedValue);
+  }
+  if (edit.editType === 'parameter') {
+    return edit.targetId != null ? [edit.targetId] : [];
+  }
+  if (edit.editType === 'paper_review') {
+    if (edit.targetId == null) return [];
+    const rows = await db
+      .selectDistinct({ drugId: parameterEntries.drugId })
+      .from(parameterEntries)
+      .where(eq(parameterEntries.citationId, edit.targetId));
+    return rows.map((row) => row.drugId).sort((a, b) => a - b);
   }
   if (
     edit.editType !== 'wiki_new' &&

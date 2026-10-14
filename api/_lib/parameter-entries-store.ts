@@ -865,6 +865,25 @@ export async function findParametersCitingCitation(
 }
 
 /**
+ * Take, ascending, the per-drug lock of every drug with an entry citing this
+ * citation — the locks {@link recomputeSummariesCitingCitation} will take — so
+ * a caller can hold them before it writes the rows that trigger the recompute.
+ *
+ * The drug lock comes before any row lock everywhere else (entry writers,
+ * approvals, the drug merge, and `mergeCitations` since #243). A re-score that
+ * upserts its review row first and reaches the drug only at the recompute
+ * runs the other way round, against a citation merge that holds the drug and
+ * waits for that review row. Re-entrant, so the recompute's own acquisition
+ * afterwards is free. Must run inside a transaction to hold anything.
+ */
+export async function lockDrugsCitingCitation(citationId: number): Promise<void> {
+  const drugIds = [
+    ...new Set((await findParametersCitingCitation(citationId)).map((row) => row.drugId)),
+  ].sort((a, b) => a - b);
+  for (const drugId of drugIds) await lockDrugForRecompute(drugId);
+}
+
+/**
  * Recompute the cached aggregate for every summarizable parameter backed by an
  * entry that cites this citation. A paper review's `overall_score` feeds the
  * aggregation weight, so publishing or re-scoring a review can move the pooled
@@ -875,13 +894,20 @@ export async function findParametersCitingCitation(
 export async function recomputeSummariesCitingCitation(
   citationId: number,
   actorUserId: number,
+  opts?: {
+    /**
+     * Drugs to leave alone. `mergeCitations` passes the ones whose lock it
+     * could not take without waiting; see the note on its drug locks there.
+     */
+    skipDrugIds?: ReadonlySet<number>;
+  },
 ): Promise<void> {
   // Ascending drug id: this is the one path that locks SEVERAL drugs, so two
   // concurrent re-scores must walk them in the same order or they can deadlock
   // against each other on the per-drug recompute lock.
-  const affected = (await findParametersCitingCitation(citationId)).sort(
-    (a, b) => a.drugId - b.drugId,
-  );
+  const affected = (await findParametersCitingCitation(citationId))
+    .filter(({ drugId }) => !opts?.skipDrugIds?.has(drugId))
+    .sort((a, b) => a.drugId - b.drugId);
   // A re-score can move the blood:plasma ratio itself, which every concentration
   // aggregate is normalized with — so the drugs whose B/P actually changed need
   // the same dependent sweep an entry mutation triggers, or their serum/plasma

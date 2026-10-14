@@ -1,4 +1,4 @@
-import { and, eq, inArray, or, sql } from 'drizzle-orm';
+import { and, eq, inArray, or, sql, type SQL } from 'drizzle-orm';
 import {
   bioEntityFunctions,
   citationIdentifierAliases,
@@ -45,7 +45,10 @@ import {
 // real violation, and this merge would have rethrown the race it means to
 // absorb.
 import { isUniqueViolation } from './drugs-helpers.js';
-import { recomputeSummariesCitingCitation } from './parameter-entries-store.js';
+import {
+  findParametersCitingCitation,
+  recomputeSummariesCitingCitation,
+} from './parameter-entries-store.js';
 import { isInPoolTransaction } from './db.js';
 import type { getDb } from './db.js';
 
@@ -188,16 +191,119 @@ export async function lockCitationAgainstFold(
   );
 }
 
+/**
+ * The per-drug lock every parameter-summary recompute takes
+ * (`lockDrugForRecompute` in `parameter-entries-store`, the same key as
+ * `lockDrugForEntryApplicability`): the single-argument form on the drug id.
+ *
+ * **One global order: a drug's advisory lock before any extraction-job row
+ * lock (#243).** Three paths take both, and two already took them that way:
+ *
+ * - a paper-extraction fact filed on a drug monograph (`POST
+ *   /api/pending-edits`, the drug-scoped branch) takes the drug lock, then
+ *   re-checks the run's claim with the job row `FOR SHARE`;
+ * - a drug merge (`mergeDrugs`) takes both drugs' locks first and later
+ *   rewrites `paper_extraction_jobs.target_drug_ids`.
+ *
+ * This merge was the exception. It locks the loser's open jobs
+ * ({@link lockLoserExtractionJobs}) first, and the recompute at the end of the
+ * fold reached for the drug lock afterwards — and since every caller folds a
+ * whole duplicate group in one transaction, a fold that deferred on a run's
+ * claimed job, or moved a queued one, still held that row when a later fold's
+ * recompute waited for a drug. Either path above holding that drug and waiting
+ * for that job closed a cycle Postgres breaks by aborting one side (40P01).
+ *
+ * So a fold takes the drug locks its recompute will need *before* it locks any
+ * job row ({@link lockDrugsForFold}), and *tries* them rather than waiting, for
+ * the same reason as the winner's and the loser's keys: a later fold of a group
+ * may already hold job rows (and every other row lock) from the earlier ones,
+ * so a wait here could still close the cycle, and a try never registers a
+ * wait. A drug that stays held defers the fold as `drug_locked` before it
+ * writes anything. Taking them first also stops the fold being the odd one out
+ * against every other writer that holds a drug and then touches rows a fold
+ * rewrites (entry writers, the approvals that preflight their drug locks, the
+ * drug merge's own entry repoint): the fold queues behind those on rows rather
+ * than waiting on their drug while holding rows they need. The writers that
+ * took a drug lock only after such a row now take it up front as well —
+ * `recordPaperReview` before its review row, and approval of a `parameter` or
+ * `paper_review` edit before the edit's row (`drugAdvisoryLockIdsForEdit`).
+ *
+ * Unchanged around it: job before wiki page (#223), and the winner's key
+ * (namespace 1087) and the loser's fold key (1088) before the drug locks. Those
+ * two are taken here only by tries, and waited on only by an enqueue or requeue
+ * that holds nothing yet, so where they sit relative to a drug lock cannot form
+ * a cycle. The two-argument keys and this single-argument one are distinct
+ * lock spaces in Postgres, so a drug id never collides with a namespace pair.
+ */
+async function tryLockDrugForRecompute(db: Db, drugId: number): Promise<boolean> {
+  return retryTryLock(db, sql`SELECT pg_try_advisory_xact_lock(${drugId}::bigint) AS locked`);
+}
+
+/**
+ * The drugs whose cached summaries this fold will recompute, ascending — none
+ * when nothing that feeds a summary can move.
+ *
+ * The recompute runs when the loser's entries change hands or the winner ends
+ * up under the loser's review, and then covers every entry citing the winner,
+ * which by then includes the loser's. So: the drugs of entries citing either
+ * row, when the loser has an entry or a review to bring.
+ */
+async function drugsToRecomputeForFold(
+  db: Db,
+  winnerId: number,
+  loserId: number,
+): Promise<number[]> {
+  const result = await db.execute<{ drug_id: number }>(sql`
+    SELECT DISTINCT drug_id FROM parameter_entries
+    WHERE citation_id IN (${winnerId}, ${loserId})
+      AND (
+        EXISTS (SELECT 1 FROM parameter_entries WHERE citation_id = ${loserId})
+        OR EXISTS (SELECT 1 FROM paper_reviews WHERE citation_id = ${loserId})
+      )
+    ORDER BY drug_id
+  `);
+  return (result.rows ?? []).map((row) => Number(row.drug_id));
+}
+
+/**
+ * Try each drug lock this fold's recompute will need, ascending. Returns the
+ * drugs taken, or the first one whose lock stayed held — the fold then defers.
+ * Skipped without an actor (the recompute will not run) and outside a
+ * transaction (the lock would hold nothing).
+ */
+async function lockDrugsForFold(
+  db: Db,
+  winnerId: number,
+  loserId: number,
+  actorUserId: number | null | undefined,
+): Promise<{ locked: Set<number>; heldDrugId: number | null }> {
+  const locked = new Set<number>();
+  if (actorUserId == null || !isInPoolTransaction()) {
+    return { locked, heldDrugId: null };
+  }
+  for (const drugId of await drugsToRecomputeForFold(db, winnerId, loserId)) {
+    if (!(await tryLockDrugForRecompute(db, drugId))) return { locked, heldDrugId: drugId };
+    locked.add(drugId);
+  }
+  return { locked, heldDrugId: null };
+}
+
 async function tryAdvisoryXactLock(
   db: Db,
   namespace: number,
   key: number,
 ): Promise<boolean> {
+  return retryTryLock(
+    db,
+    sql`SELECT pg_try_advisory_xact_lock(${namespace}::int, ${key}::int) AS locked`,
+  );
+}
+
+/** A `pg_try_advisory_xact_lock` query, with the merge's bounded retries. */
+async function retryTryLock(db: Db, query: SQL): Promise<boolean> {
   if (!isInPoolTransaction()) return true;
   for (let attempt = 0; ; attempt += 1) {
-    const result = await db.execute<{ locked: boolean }>(
-      sql`SELECT pg_try_advisory_xact_lock(${namespace}::int, ${key}::int) AS locked`,
-    );
+    const result = await db.execute<{ locked: boolean }>(query);
     if ((result.rows[0] as { locked?: boolean } | undefined)?.locked === true) return true;
     if (attempt + 1 >= MERGE_LOCK_ATTEMPTS) return false;
     await new Promise((resolve) => {
@@ -222,6 +328,11 @@ export function describeDeferredMerge(stats: CitationMergeStats): string {
       return (
         `#${stats.loserId} was locked by an extraction (re)queue or another merge of it.` +
         ' Re-run to pick it up.'
+      );
+    case 'drug_locked':
+      return (
+        `drug ${stats.lockedDrugId}, whose parameter summaries the fold recomputes, was locked` +
+        ' by another write. Re-run to pick it up.'
       );
     default:
       return 'another merge into this paper was running. Re-run to pick it up.';
@@ -279,7 +390,15 @@ export interface CitationMergeStats {
    * attribute the resulting revisions to — surfaced rather than swallowed, so a
    * caller cannot leave stale values behind without it showing up.
    */
-  summaryRecompute: 'ran' | 'skipped' | 'not-needed';
+  summaryRecompute: 'ran' | 'partial' | 'skipped' | 'not-needed';
+  /**
+   * With `partial`: the drugs whose summaries were left as they were. A drug
+   * the fold had not locked up front — its first entry citing the pair landed
+   * after the fold's lock scan — is only tried, never waited for (see
+   * `tryLockDrugForRecompute`), and one that stays held is reported here
+   * rather than recomputed. Its next entry write or re-review refreshes it.
+   */
+  summaryRecomputeSkippedDrugIds?: number[];
   /**
    * True when this merge stood aside without writing anything; `deferredReason`
    * says why. Nothing was folded; the next write declaring the handle, or
@@ -293,11 +412,20 @@ export interface CitationMergeStats {
    * another merge folding it — so its job list could not be settled (see
    * `CITATION_FOLD_LOCK_NAMESPACE`). `extraction_in_flight`: a run is
    * extracting the loser under its id right now (`inFlightExtractionJobId`),
-   * and the fold waits for that run to finish or be cancelled.
+   * and the fold waits for that run to finish or be cancelled. `drug_locked`:
+   * a drug whose summaries the fold would recompute (`lockedDrugId`) was held
+   * by another write, and the fold does not wait for a drug once it may hold
+   * job rows (see `tryLockDrugForRecompute`).
    */
-  deferredReason?: 'merge_in_progress' | 'loser_locked' | 'extraction_in_flight';
+  deferredReason?:
+    | 'merge_in_progress'
+    | 'loser_locked'
+    | 'extraction_in_flight'
+    | 'drug_locked';
   /** The loser's claimed extraction job, when that is what deferred the merge. */
   inFlightExtractionJobId?: number;
+  /** The drug whose held lock deferred the merge (`drug_locked`). */
+  lockedDrugId?: number;
 }
 
 /**
@@ -1378,6 +1506,18 @@ export async function mergeCitations(
     return stats;
   }
 
+  // Before any job row (#243): the drug locks the recompute at the end will
+  // need, tried in ascending order — see `tryLockDrugForRecompute` for the
+  // global order this keeps and why it is a try. Before the first write too, so
+  // standing aside here leaves nothing half-applied.
+  const summaryDrugs = await lockDrugsForFold(db, winnerId, loserId, opts?.actorUserId);
+  if (summaryDrugs.heldDrugId !== null) {
+    stats.deferred = true;
+    stats.deferredReason = 'drug_locked';
+    stats.lockedDrugId = summaryDrugs.heldDrugId;
+    return stats;
+  }
+
   // Also before the first write, and for the same reason as the cohort check
   // below: a deferral after any mutation is a half-applied merge.
   const inFlightJobId = await lockLoserExtractionJobs(db, loserId);
@@ -1610,8 +1750,30 @@ export async function mergeCitations(
     scalarUpdates[1]!.length > 0 || reviewResult.winnerReviewChanged;
   if (summaryInputsMoved) {
     if (opts?.actorUserId != null) {
-      await recomputeSummariesCitingCitation(winnerId, opts.actorUserId);
-      stats.summaryRecompute = 'ran';
+      // The drugs locked up front cover the entries that cited the pair at the
+      // lock scan. One whose entry arrived since is tried like the rest — never
+      // waited for, as this transaction now holds job rows — and left stale
+      // and reported if it stays held.
+      const skipped: number[] = [];
+      for (const { drugId } of await findParametersCitingCitation(winnerId)) {
+        if (summaryDrugs.locked.has(drugId) || skipped.includes(drugId)) continue;
+        if (await tryLockDrugForRecompute(db, drugId)) summaryDrugs.locked.add(drugId);
+        else skipped.push(drugId);
+      }
+      await recomputeSummariesCitingCitation(winnerId, opts.actorUserId, {
+        skipDrugIds: new Set(skipped),
+      });
+      if (skipped.length > 0) {
+        stats.summaryRecompute = 'partial';
+        stats.summaryRecomputeSkippedDrugIds = skipped.sort((a, b) => a - b);
+        console.warn(
+          `mergeCitations: folded #${loserId} into #${winnerId} but left the parameter ` +
+            `summaries of drug(s) ${stats.summaryRecomputeSkippedDrugIds.join(', ')} ` +
+            'unrecomputed: their lock stayed held. The next entry write or re-review refreshes them.',
+        );
+      } else {
+        stats.summaryRecompute = 'ran';
+      }
     } else {
       stats.summaryRecompute = 'skipped';
     }

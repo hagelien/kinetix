@@ -19,6 +19,7 @@ vi.mock('../../api/_lib/agent-verifications.js', () => ({
 // path has its own integration coverage, so stub it here to keep this a focused
 // unit test of the review upsert against the mock DB.
 vi.mock('../../api/_lib/parameter-entries-store.js', () => ({
+  lockDrugsCitingCitation: vi.fn(async () => undefined),
   recomputeSummariesCitingCitation: vi.fn(async () => undefined),
 }));
 

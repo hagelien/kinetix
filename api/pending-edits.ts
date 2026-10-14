@@ -2735,6 +2735,12 @@ async function handleCreate(
     | { kind: 'claim_lost' };
   let outcome: SubmitOutcome;
   if (lockDrugId != null) {
+    // Drug lock first, the extraction job's (the claim re-check below) second:
+    // the one global order for the two (#243), which a drug merge keeps too and
+    // `mergeCitations` keeps by taking a fold's drug locks before any job row
+    // (see `tryLockDrugForRecompute` there). A fold used to lock the job first
+    // and wait for this drug at its recompute, and this branch holding the drug
+    // while waiting for the job closed the cycle.
     outcome = await runInPoolTransaction<SubmitOutcome>(async () => {
       await lockDrugForEntryApplicability(lockDrugId);
       // Re-verify the target under the lock. For wiki_page/wiki_fact the
