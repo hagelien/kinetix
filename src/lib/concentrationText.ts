@@ -51,13 +51,21 @@ const LETTER = String.raw`\p{L}`;
 const CONCENTRATION_NUMBER_START_GUARD = String.raw`(?<!\d[^${LETTER}\d]*|\d\s*[xX]\s*|[${LETTER}_.,]|[eE][+\-\u2212]?|[+\-\u2212–±]\s*)`;
 
 /**
+ * A time unit after the concentration unit makes it an exposure (AUC), not a
+ * concentration, however the two are joined: `mg/L h`, `mg/L . h`, `mg/L. h`.
+ * Named explicitly so a sentence-ending full stop before ordinary prose
+ * (`5 mg/L. Hver dag`) is still a concentration.
+ */
+const TIME_UNIT_PATTERN = String.raw`(?:h|hrs?|hours?|t|timer?|min)`;
+
+/**
  * Group 1: the (optionally qualified, optionally ranged) figure — it may carry
  * the whitespace that precedes it. Group 2: the unit as written. A unit that is
  * part of a compound unit (`mg/L/h`, `mg/L per dose`, `mg/L·h`, `mg/L×h`,
- * `mg/L x h`, `mg/L.h`) is not a concentration and is left alone; a full stop
- * that ends a sentence (`5 mg/L. Neste`) is not an operator.
+ * `mg/L x h`, `mg/L.h`, `mg/L . h`) is not a concentration and is left alone;
+ * a full stop that ends a sentence (`5 mg/L. Neste`) is not an operator.
  */
-const CONCENTRATION_SOURCE = `((?:<=|>=|[<>≤≥])?\\s*${CONCENTRATION_NUMBER_START_GUARD}${CONCENTRATION_NUMBER_PATTERN}(?:\\s*${CONCENTRATION_RANGE_SEPARATOR_PATTERN}\\s*${CONCENTRATION_NUMBER_PATTERN})?)\\s*(${CONCENTRATION_UNIT_PATTERN})(?!\\s*(?:/|[·⋅∙•×*]|x\\s+\\p{L}|per\\b)|\\.\\p{L})\\b`;
+const CONCENTRATION_SOURCE = `((?:<=|>=|[<>≤≥])?\\s*${CONCENTRATION_NUMBER_START_GUARD}${CONCENTRATION_NUMBER_PATTERN}(?:\\s*${CONCENTRATION_RANGE_SEPARATOR_PATTERN}\\s*${CONCENTRATION_NUMBER_PATTERN})?)\\s*(${CONCENTRATION_UNIT_PATTERN})(?!\\s*(?:/|[·⋅∙•×*]|x\\s+\\p{L}|per\\b)|\\.\\p{L}|\\s*\\.?\\s*${TIME_UNIT_PATTERN}\\b)\\b`;
 
 const CANONICAL_CONCENTRATION_UNITS = [
   "mmol/dL", "µmol/dL", "nmol/dL", "mmol/L", "µmol/L", "nmol/L",
