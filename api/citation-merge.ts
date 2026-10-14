@@ -190,6 +190,12 @@ async function handleApply(
   // a row that no longer exists, and the PDF it is reading may not be the one
   // the survivor keeps. The merge moves queued and settled jobs on its own; a
   // claimed one waits for its run to finish, or for an editor to cancel it.
+  //
+  // `mergeCitations` enforces this itself, atomically, by deferring the pair.
+  // This preflight stays because it answers better: a 409 naming the job, for
+  // the whole group before anything folds, rather than a 200 that folded the
+  // rest and lists this one as deferred. A claim that lands after this read is
+  // still caught there and reported in `deferred`.
   const [inFlight] = await db
     .select({ id: paperExtractionJobs.id, citationId: paperExtractionJobs.citationId })
     .from(paperExtractionJobs)

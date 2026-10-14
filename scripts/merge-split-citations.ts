@@ -335,8 +335,12 @@ async function main(): Promise<void> {
         });
         if (stats.deferred) {
           console.log(
-            `    deferred #${loser.id} → #${winner.id}: another merge into this paper` +
-              ` was running. Re-run to pick it up.`,
+            stats.deferredReason === 'extraction_in_flight'
+              ? `    deferred #${loser.id} → #${winner.id}: extraction job` +
+                  ` ${stats.inFlightExtractionJobId} is reading #${loser.id}.` +
+                  ` Re-run once it has finished or been cancelled.`
+              : `    deferred #${loser.id} → #${winner.id}: another merge into this paper` +
+                  ` was running. Re-run to pick it up.`,
           );
           deferred += 1;
           continue;
@@ -448,7 +452,7 @@ async function main(): Promise<void> {
   if (deferred > 0) {
     console.log(
       `\n${deferred} merge(s) deferred: another merge into the same paper held the` +
-        ` lock. Re-run to pick them up.`,
+        ` lock, or a run was extracting the duplicate. Re-run to pick them up.`,
     );
   }
   if (refused > 0) {

@@ -4,6 +4,7 @@ import {
   citations,
   drugParameterRevisions,
   drugReceptorTargets,
+  paperExtractionJobs,
   paperReviewRevisions,
   paperReviews,
   parameterEntries,
@@ -669,6 +670,114 @@ describe('mergeCitations — folding a split pair (#1018)', () => {
       unverifiedReferenceIds: [winner],
       returnedAt: '2026-10-06T00:00:00.000Z',
     });
+  });
+});
+
+describe('mergeCitations — a run extracting the loser (#127)', () => {
+  // The run was handed the loser's id with its claim and cites it in every
+  // fact it files; folding the loser away mid-run deletes that id. Every
+  // caller — not only the admin route's preflight — must leave the pair alone.
+  async function seedClaimedJob(citationId: number): Promise<number> {
+    const [job] = await db
+      .insert(paperExtractionJobs)
+      .values({
+        citationId,
+        status: 'claimed',
+        requestedBy: userId,
+        claimedBy: userId,
+        claimedAt: new Date(),
+        claimToken: 'tok',
+        attempts: 1,
+      })
+      .returning({ id: paperExtractionJobs.id });
+    return job!.id;
+  }
+
+  it('defers without writing anything while the loser has a claimed job', async () => {
+    const drugId = await seedDrug(db);
+    const winner = await seedCitation({ type: 'pmid', identifier: PMID });
+    const loser = await seedCitation({ type: 'doi', identifier: DOI });
+    const claimed = await seedClaimedJob(loser);
+    const [settled] = await db
+      .insert(paperExtractionJobs)
+      .values({ citationId: loser, status: 'completed', requestedBy: userId })
+      .returning({ id: paperExtractionJobs.id });
+    await db.insert(parameterEntries).values({
+      drugId,
+      parameter: 'halfLife',
+      citationId: loser,
+      value: 4,
+      unit: 'h',
+    });
+
+    const stats = await mergeCitations(db, winner, loser, { actorUserId: userId });
+
+    expect(stats).toMatchObject({
+      deferred: true,
+      deferredReason: 'extraction_in_flight',
+      inFlightExtractionJobId: claimed,
+      rowsRepointed: 0,
+    });
+    const rows = await db.select({ id: citations.id }).from(citations);
+    expect(rows.map((row) => row.id).sort()).toEqual([winner, loser].sort());
+    const jobs = await db
+      .select({
+        id: paperExtractionJobs.id,
+        citationId: paperExtractionJobs.citationId,
+        status: paperExtractionJobs.status,
+        claimToken: paperExtractionJobs.claimToken,
+      })
+      .from(paperExtractionJobs);
+    expect(jobs.sort((a, b) => a.id - b.id)).toEqual([
+      { id: claimed, citationId: loser, status: 'claimed', claimToken: 'tok' },
+      { id: settled!.id, citationId: loser, status: 'completed', claimToken: null },
+    ]);
+    const [entry] = await db
+      .select({ citationId: parameterEntries.citationId })
+      .from(parameterEntries);
+    expect(entry?.citationId).toBe(loser);
+  });
+
+  it('still folds when only the winner has a claimed job', async () => {
+    const winner = await seedCitation({ type: 'pmid', identifier: PMID });
+    const loser = await seedCitation({ type: 'doi', identifier: DOI });
+    await seedClaimedJob(winner);
+
+    const stats = await mergeCitations(db, winner, loser, { actorUserId: userId });
+
+    expect(stats.deferred).toBeUndefined();
+    const rows = await db.select({ id: citations.id }).from(citations);
+    expect(rows.map((row) => row.id)).toEqual([winner]);
+  });
+
+  it('leaves resolveCitation resolving to the survivor and the pair split until the run ends', async () => {
+    const pmidRow = await seedCitation({ type: 'pmid', identifier: PMID });
+    const doiRow = await seedCitation({ type: 'doi', identifier: DOI });
+    const claimed = await seedClaimedJob(doiRow);
+    const declared = { type: 'doi' as const, identifier: DOI, crosswalk: { pmid: PMID } };
+
+    const first = await resolveCitation(db, declared, userId);
+
+    expect(first).toMatchObject({ id: pmidRow, mergedIds: [], deferredIds: [doiRow] });
+    const [job] = await db
+      .select({ citationId: paperExtractionJobs.citationId, status: paperExtractionJobs.status })
+      .from(paperExtractionJobs)
+      .where(eq(paperExtractionJobs.id, claimed));
+    expect(job).toEqual({ citationId: doiRow, status: 'claimed' });
+
+    // The run finishes; the next write declaring the handle folds the pair.
+    await db
+      .update(paperExtractionJobs)
+      .set({ status: 'completed', claimedBy: null, claimedAt: null, claimToken: null })
+      .where(eq(paperExtractionJobs.id, claimed));
+    const second = await resolveCitation(db, declared, userId);
+
+    expect(second).toMatchObject({ id: pmidRow, mergedIds: [doiRow] });
+    const [moved] = await db
+      .select({ citationId: paperExtractionJobs.citationId })
+      .from(paperExtractionJobs)
+      .where(eq(paperExtractionJobs.id, claimed));
+    expect(moved?.citationId).toBe(pmidRow);
   });
 });
 

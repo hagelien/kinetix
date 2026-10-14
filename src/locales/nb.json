@@ -2131,7 +2131,7 @@
       "merging": "Slår sammen…",
       "merged_one": "Slo sammen {{count}} kilde inn i #{{survivor}}.",
       "merged_other": "Slo sammen {{count}} kilder inn i #{{survivor}}.",
-      "deferred": "Noen kilder ble ikke slått sammen fordi en annen sammenslåing inn i samme artikkel pågikk: {{ids}}. Prøv dem igjen.",
+      "deferred": "Noen kilder ble ikke slått sammen fordi en annen sammenslåing inn i samme artikkel, eller en faktauttrekkskjøring som leser dem, pågikk: {{ids}}. Prøv dem igjen.",
       "errors": {
         "generic": "Sammenslåingen mislyktes. Prøv igjen, og last siden på nytt hvis det fortsetter å feile.",
         "not_found": "Noen av disse kildene finnes ikke lenger — de kan allerede være slått sammen. Søk på nytt.",

@@ -178,11 +178,20 @@ export interface CitationMergeStats {
    */
   summaryRecompute: 'ran' | 'skipped' | 'not-needed';
   /**
-   * True when another merge into this same winner was already running and this
-   * one stood aside. Nothing was folded; the holder does it, or the next write
-   * declaring the handle, or `merge:split-citations`.
+   * True when this merge stood aside without writing anything; `deferredReason`
+   * says why. Nothing was folded; the next write declaring the handle, or
+   * `merge:split-citations`, does it once the cause has cleared.
    */
   deferred?: boolean;
+  /**
+   * `merge_in_progress`: another merge into this same winner held the lock, and
+   * the holder may well fold this pair itself. `extraction_in_flight`: a run is
+   * extracting the loser under its id right now (`inFlightExtractionJobId`),
+   * and the fold waits for that run to finish or be cancelled.
+   */
+  deferredReason?: 'merge_in_progress' | 'extraction_in_flight';
+  /** The loser's claimed extraction job, when that is what deferred the merge. */
+  inFlightExtractionJobId?: number;
 }
 
 /**
@@ -519,6 +528,47 @@ async function repointUniquePerCitation(
 }
 
 /**
+ * Lock the loser's open extraction jobs, and return the id of one that is
+ * claimed — or null when none is, and the merge may go ahead.
+ *
+ * A claimed job is a run reading the paper under the loser's id right now. The
+ * id was handed to the extractor with the claim, and every fact it files cites
+ * it; folding the loser away deletes that id, so the run's later submissions
+ * fail the live-claim citation check and the run is wasted. The admin route
+ * refuses such a merge up front with a message an operator can act on, but
+ * `resolveCitation` and `merge:split-citations` fold too, and neither should
+ * fail because an unrelated run is in flight — so the refusal lives here, as a
+ * deferral like the advisory lock's: nothing is written, and the pair folds on
+ * the next write declaring its handle, or the next CLI run, once the run has
+ * finished or been cancelled.
+ *
+ * Every open job is locked, not only the claimed ones, which is what makes the
+ * check atomic: claiming is an UPDATE, so a queued job cannot become claimed
+ * between this read and `repointExtractionJobs` moving it. A claim already
+ * under way is waited out and its result re-read (READ COMMITTED re-checks a
+ * locked row's newest version), and `claimNextJob` passes over a locked row
+ * (`SKIP LOCKED`) rather than waiting on it. `NO KEY UPDATE` is enough to
+ * conflict with every UPDATE that touches the row.
+ *
+ * Outside a transaction the lock releases with its own statement, as the
+ * advisory lock's does, and the check is only as good as a plain read.
+ */
+async function lockLoserExtractionJobs(db: Db, loserId: number): Promise<number | null> {
+  const open = await db
+    .select({ id: paperExtractionJobs.id, status: paperExtractionJobs.status })
+    .from(paperExtractionJobs)
+    .where(
+      and(
+        eq(paperExtractionJobs.citationId, loserId),
+        inArray(paperExtractionJobs.status, ['queued', 'claimed']),
+      ),
+    )
+    .orderBy(paperExtractionJobs.id)
+    .for('no key update');
+  return open.find((job) => job.status === 'claimed')?.id ?? null;
+}
+
+/**
  * Repoint the paper fact-extraction queue at the surviving citation.
  *
  * `paper_extraction_jobs.citation_id` is `ON DELETE CASCADE`, so leaving a job
@@ -527,13 +577,15 @@ async function repointUniquePerCitation(
  * job takes its result summary and the ids of the edits it filed with it.
  *
  * Settled jobs (`completed` / `failed` / `cancelled`) all move: they are the
- * paper's extraction history. An open one (`queued` / `claimed`) moves too,
- * unless the winner already has an open job of its own — the partial unique
- * index allows one open job per paper, and two would be two runs filing the
- * same facts. The loser's is then cancelled with a reason naming the winner,
- * and moved, so it stays visible on the queue page instead of vanishing.
- * Cancelling a claimed job is the queue's ordinary kill switch: the run stops at
- * its next claim check.
+ * paper's extraction history. A queued one moves too, unless the winner
+ * already has an open job of its own — the partial unique index allows one
+ * open job per paper, and two would be two runs filing the same facts. The
+ * loser's is then cancelled with a reason naming the winner, and moved, so it
+ * stays visible on the queue page instead of vanishing.
+ *
+ * A claimed one never reaches here: {@link lockLoserExtractionJobs} has
+ * already deferred the whole merge, and holds the loser's queued jobs so none
+ * can be claimed in between.
  */
 async function repointExtractionJobs(
   db: Db,
@@ -1195,6 +1247,17 @@ export async function mergeCitations(
   // cannot take the lock leaves this fold to the holder.
   if (!(await tryLockMergeWinner(db, winnerId))) {
     stats.deferred = true;
+    stats.deferredReason = 'merge_in_progress';
+    return stats;
+  }
+
+  // Also before the first write, and for the same reason as the cohort check
+  // below: a deferral after any mutation is a half-applied merge.
+  const inFlightJobId = await lockLoserExtractionJobs(db, loserId);
+  if (inFlightJobId !== null) {
+    stats.deferred = true;
+    stats.deferredReason = 'extraction_in_flight';
+    stats.inFlightExtractionJobId = inFlightJobId;
     return stats;
   }
 
