@@ -638,6 +638,28 @@ export async function listDisputesForTargets(args: {
 }
 
 /**
+ * Matches an `agent_verifications` row (left-joined to `agents`) that is a
+ * `dispute` verdict no ruling has answered since — the rule
+ * {@link unresolvedDisputeVerdictCount} documents. A predicate, so a query
+ * correlated on another table (the T4 handoff list) applies the same rule.
+ */
+export function unansweredDisputeVerdict() {
+  return and(
+    eq(agentVerifications.verdict, 'dispute'),
+    eq(agentVerifications.isImplicit, false),
+    sql`not exists (
+      select 1 from ${disputes}
+      where ${disputes.targetType} = ${agentVerifications.targetType}
+        and ${disputes.targetId} = ${agentVerifications.targetId}
+        and ${disputes.createdBy} = ${agents.userId}
+        and ${disputes.status} = 'resolved'
+        and ${disputes.resolvedAt} is not null
+        and ${disputes.resolvedAt} >= ${agentVerifications.updatedAt}
+    )`,
+  )!;
+}
+
+/**
  * How many agent `dispute` verdicts still stand *unanswered* on a target.
  *
  * A dispute verdict and its mirrored `disputes` row are two records of one
@@ -697,17 +719,7 @@ export async function unresolvedDisputeVerdictCounts(args: {
       and(
         eq(agentVerifications.targetType, args.targetType),
         inArray(agentVerifications.targetId, ids),
-        eq(agentVerifications.verdict, 'dispute'),
-        eq(agentVerifications.isImplicit, false),
-        sql`not exists (
-          select 1 from ${disputes}
-          where ${disputes.targetType} = ${agentVerifications.targetType}
-            and ${disputes.targetId} = ${agentVerifications.targetId}
-            and ${disputes.createdBy} = ${agents.userId}
-            and ${disputes.status} = 'resolved'
-            and ${disputes.resolvedAt} is not null
-            and ${disputes.resolvedAt} >= ${agentVerifications.updatedAt}
-        )`,
+        unansweredDisputeVerdict(),
       ),
     )
     .groupBy(agentVerifications.targetId);

@@ -9,7 +9,7 @@
  * withdrawAgentDisputesForTarget from disputes.ts).
  */
 
-import { eq } from 'drizzle-orm';
+import { eq, sql, type SQL } from 'drizzle-orm';
 import type { PgColumn, PgTable } from 'drizzle-orm/pg-core';
 import { getDb } from './db.js';
 import {
@@ -157,4 +157,36 @@ export async function verificationTargetVersion(
       return row ? `${row.submittedAt.toISOString()}|${row.status}` : null;
     }
   }
+}
+
+/** A stored timestamp as `Date.toISOString()` writes it (UTC, milliseconds). */
+const isoMs = (col: PgColumn) =>
+  sql`to_char(date_trunc('milliseconds', ${col}), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
+
+/**
+ * {@link verificationTargetVersion} as a SQL expression over a row naming a
+ * target, for a query that compares many stored versions with the live one at
+ * once. The same token, built the same way per type; null when the target is
+ * gone or the type is not one. Keep the two in step.
+ *
+ * The timestamps are stored without a zone, in UTC, and read back truncated to
+ * the millisecond, which is what `toISOString()` then writes.
+ */
+export function verificationTargetVersionSql(
+  targetType: PgColumn,
+  targetId: PgColumn,
+): SQL<string | null> {
+  const at = (table: PgTable & { id: PgColumn }, col: PgColumn) =>
+    sql`(select ${isoMs(col)} from ${table} where ${table.id} = ${targetId})`;
+  return sql<string | null>`(case ${targetType}
+    when 'wiki_revision' then ${at(wikiRevisions, wikiRevisions.createdAt)}
+    when 'drug_parameter_revision' then ${at(drugParameterRevisions, drugParameterRevisions.createdAt)}
+    when 'drug_discussion' then ${at(drugParameterDiscussions, drugParameterDiscussions.createdAt)}
+    when 'paper_review' then ${at(paperReviews, paperReviews.updatedAt)}
+    when 'learning_unit_revision' then ${at(learningUnitRevisions, learningUnitRevisions.createdAt)}
+    when 'pending_edit' then (
+      select ${isoMs(pendingEdits.submittedAt)} || '|' || ${pendingEdits.status}
+      from ${pendingEdits} where ${pendingEdits.id} = ${targetId}
+    )
+  end)`;
 }

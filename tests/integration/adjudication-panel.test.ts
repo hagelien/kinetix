@@ -34,6 +34,8 @@ import {
 import queueHandler from '../../api/agent-adjudication-queue.js';
 import opinionsHandler from '../../api/agent-adjudication-opinions.js';
 import { detectAdjudicationCase } from '../../api/_lib/adjudication/cases.js';
+import { listHandoffs } from '../../api/_lib/adjudication/caseFile.js';
+import { resolveDisputeById } from '../../api/_lib/disputes.js';
 import {
   resetIntegrationDb,
   setupIntegrationDb,
@@ -108,16 +110,19 @@ async function seedCase(
     agentDispute?: boolean;
     /** A person, not an agent, submitted the proposal. */
     humanAuthor?: boolean;
+    /** Prefixes every seeded identity, so one test can seed several cases. */
+    key?: string;
   } = {},
 ) {
+  const k = opts.key ?? '';
   const author = opts.humanAuthor
     ? {
-        userId: await seedUser(db, { email: 'person@example.com', username: 'person', role: 'contributor' }),
+        userId: await seedUser(db, { email: `${k}person@example.com`, username: `${k}person`, role: 'contributor' }),
         agentId: null,
       }
-    : await seedAgent('author', { tier: 'mid' });
-  const t1 = await seedAgent('t1', { tier: 'mid' });
-  const t2 = await seedAgent('t2', { tier: 'flagship' });
+    : await seedAgent(`${k}author`, { tier: 'mid' });
+  const t1 = await seedAgent(`${k}t1`, { tier: 'mid' });
+  const t2 = await seedAgent(`${k}t2`, { tier: 'flagship' });
   const [edit] = await db
     .insert(pendingEdits)
     .values({
@@ -147,7 +152,7 @@ async function seedCase(
     });
   }
   if (opts.humanDispute) {
-    const human = await seedUser(db, { email: 'h@example.com', username: 'h', role: 'contributor' });
+    const human = await seedUser(db, { email: `${k}h@example.com`, username: `${k}h`, role: 'contributor' });
     await db.insert(disputes).values({
       targetType: 'pending_edit',
       targetId: edit!.id,
@@ -158,8 +163,8 @@ async function seedCase(
     });
   }
   const { caseId } = await detectAdjudicationCase({ targetType: 'pending_edit', targetId: edit!.id });
-  const a = await seedAgent('adj-a', { tier: 'flagship', adjudicator: true, family: 'claude' });
-  const b = await seedAgent('adj-b', { tier: 'flagship', adjudicator: true, family: 'gpt' });
+  const a = await seedAgent(`${k}adj-a`, { tier: 'flagship', adjudicator: true, family: 'claude' });
+  const b = await seedAgent(`${k}adj-b`, { tier: 'flagship', adjudicator: true, family: 'gpt' });
   return { editId: edit!.id, version, caseId: caseId!, a, b, t1, t2, author };
 }
 
@@ -576,6 +581,48 @@ describe('T3 sealing, convergence and the T4 handoff', () => {
       { caseId: s.caseId, reasons: ['panel_diverged'], divergenceReason: 'value_differs' },
     ]);
     expect(list.body.handoffs[0]).not.toHaveProperty('summary');
+  });
+
+  it('retires a handoff from the T4 queue once a person has answered it, keeping the live ones (#96)', async () => {
+    const reviewer = await seedUser(db, { email: 'ed@example.com', username: 'ed', role: 'editor' });
+    const diverge = async (key: string) => {
+      const s = await seedCase({ agentDispute: true, key });
+      const { kase } = await panel(
+        s,
+        { resolvedValue: 60, resolvedUnit: 'L/h' },
+        { resolvedValue: 75, resolvedUnit: 'L/h' },
+      );
+      expect(kase.t4Required).toBe(true);
+      const [row] = await db.select().from(disputes).where(eq(disputes.targetId, s.editId));
+      return { ...s, disputeId: row!.id };
+    };
+    const listed = async () =>
+      (await call(queueHandler, { userId: reviewer, role: 'editor', method: 'GET', url: '/api/agent-adjudication-queue' }))
+        .body.handoffs.map((h: { caseId: number }) => h.caseId);
+
+    // Handed off first, so every later handoff is newer.
+    const live = await diverge('live-');
+    const overruled = await diverge('overruled-');
+    const upheld = await diverge('upheld-');
+    const decided = await diverge('decided-');
+    expect(await listed()).toEqual([decided.caseId, upheld.caseId, overruled.caseId, live.caseId]);
+
+    // A person overrules the objection: nothing is left on the version.
+    await resolveDisputeById({ id: overruled.disputeId, resolution: 'rejected', resolvedBy: reviewer });
+    // A person sustains it, but the proposal is not yet returned: still theirs.
+    await resolveDisputeById({ id: upheld.disputeId, resolution: 'upheld', resolvedBy: reviewer });
+    // A person decides the proposal itself, its dispute left open.
+    await db.update(pendingEdits).set({ status: 'rejected' }).where(eq(pendingEdits.id, decided.editId));
+    expect(await listed()).toEqual([upheld.caseId, live.caseId]);
+
+    // Returning the upheld proposal completes that one too.
+    await db.update(pendingEdits).set({ status: 'returned' }).where(eq(pendingEdits.id, upheld.editId));
+    expect(await listed()).toEqual([live.caseId]);
+    // Completed handoffs take no place under the limit from a live one.
+    expect((await listHandoffs(1)).map((h) => h.caseId)).toEqual([live.caseId]);
+    // The record stays: the case is still marked as handed to a person.
+    const [kept] = await db.select().from(adjudicationCases).where(eq(adjudicationCases.id, overruled.caseId));
+    expect(kept).toMatchObject({ t4Required: true, state: 'diverged' });
   });
 
   it('routes a converged case to a person when a person’s dispute is part of it', async () => {
@@ -1092,6 +1139,8 @@ describe('T3 automatic closure of converged agent-only cases', () => {
     const [kase] = await db.select().from(adjudicationCases).where(eq(adjudicationCases.id, caseId!));
     expect(kase!.closure).toMatchObject({ action: 'declined', declined: 'unmirrored_dispute' });
     expect(kase!.t4Required).toBe(true);
+    // Its version read in SQL matches the stored one: the handoff is listed.
+    expect((await listHandoffs()).map((h) => h.caseId)).toEqual([caseId]);
   });
 
   it('never closes anything on a case that rests on a person’s dispute', async () => {
