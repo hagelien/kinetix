@@ -27,6 +27,11 @@ import {
   simulateScenario,
 } from '@/lib/kinetics-core';
 
+// Full ODE (two-compartment / Michaelis-Menten / inverse-mode) runs take 10 s+
+// on an idle machine, so a loaded CI runner crossed the old 30 s limit and
+// turned unrelated PRs red (#226). The limit is a hang guard, not a speed check.
+const ODE_TEST_TIMEOUT_MS = 120_000;
+
 function baseConfig(overrides: Partial<DrugSimConfig> = {}): DrugSimConfig {
   return {
     id: 'cfg1',
@@ -1078,7 +1083,7 @@ describe('core-derived assumptions (model provenance)', () => {
         'assumptions.models.twoCompartmentFirstOrder',
       );
     },
-    30_000,
+    ODE_TEST_TIMEOUT_MS,
   );
 
   // Saturable elimination is an ODE family too, so it carries the same cost.
@@ -1090,7 +1095,7 @@ describe('core-derived assumptions (model provenance)', () => {
       expect(result.assumptions.model).toContain('Michaelis');
       expect(result.assumptions.modelId).toBe('mdma-michaelis-menten-v1');
     },
-    30_000,
+    ODE_TEST_TIMEOUT_MS,
   );
 
   it('keeps a genuinely one-compartment model labelled as one', async () => {
@@ -1190,7 +1195,7 @@ describe('question modes the core path had stopped answering', () => {
         );
         expect(result.timeSeries).toHaveLength(0);
       },
-      30_000,
+      ODE_TEST_TIMEOUT_MS,
     );
   });
 
@@ -1290,7 +1295,7 @@ describe('question modes the core path had stopped answering', () => {
           'simulator.warnings.nonlinearDoseSolve',
         );
       },
-      30_000,
+      ODE_TEST_TIMEOUT_MS,
     );
   });
 
@@ -1401,7 +1406,7 @@ describe('review findings on the restored inverse modes', () => {
       expect(refused.median).toBe(0);
       expect(refused.timeSeries).toHaveLength(0);
     },
-    30_000,
+    ODE_TEST_TIMEOUT_MS,
   );
 
   it('states which matrix the entered concentration is read as', async () => {
