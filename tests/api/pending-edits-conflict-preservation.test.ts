@@ -46,6 +46,7 @@ vi.mock('../../api/_lib/pending-edits-helpers.js', () => ({
 }));
 
 import handler from '../../api/pending-edits.ts';
+import { pendingEditReviewToken } from '../../api/_lib/pending-edit-review-token.ts';
 
 const dialect = new PgDialect();
 
@@ -552,6 +553,75 @@ describe('/api/pending-edits — resubmitting an additive wiki edit', () => {
     );
     await handler(createPatchRequest({ status: 'pending' }), createResponse().res);
     expect(revisesPayloadFlag(capturedProposedMeta(set))).toBe(false);
+  });
+});
+
+// The reviewer twin of the section-add rule above (#212): a reviewer returning
+// a conflicted new section with changes has rebased it only if the position
+// moved. Retitling it there would otherwise clear the marker, and the author's
+// bare resubmit would put the stale slot back up for approval.
+describe('/api/pending-edits — returning a conflicted new section', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getUserFromRequestMock.mockResolvedValue({ userId: 99, role: 'admin' });
+  });
+
+  const sectionAdd = () =>
+    pendingEdit({
+      editType: 'wiki_section',
+      factOperation: null,
+      factStatement: null,
+      proposedValue: {
+        operation: 'add',
+        headingText: 'Farmakologi',
+        headingLevel: 2,
+        position: 2,
+      },
+      proposedMeta: { conflict: { approvedEditId: 41 } },
+      submittedAt: new Date('2026-06-12T01:00:00.000Z'),
+    });
+
+  const returnWith = (
+    edit: ReturnType<typeof sectionAdd>,
+    proposedValue: Record<string, unknown>,
+  ) =>
+    createPatchRequest({
+      status: 'returned',
+      returnComment: 'Placed against the old heading list.',
+      reviewToken: pendingEditReviewToken(
+        edit as Parameters<typeof pendingEditReviewToken>[0],
+      ),
+      proposedValue,
+    });
+
+  it('keeps the marker when the reviewer changes the heading but not the position', async () => {
+    const edit = sectionAdd();
+    const { set } = mockDb(edit);
+    await handler(
+      returnWith(edit, {
+        operation: 'add',
+        headingText: 'Farmakodynamikk',
+        headingLevel: 3,
+        position: 2,
+      }),
+      createResponse().res,
+    );
+    expect(revisesPayloadFlag(capturedProposedMeta(set))).toBe(false);
+  });
+
+  it('clears the marker once the reviewer revises the position', async () => {
+    const edit = sectionAdd();
+    const { set } = mockDb(edit);
+    await handler(
+      returnWith(edit, {
+        operation: 'add',
+        headingText: 'Farmakologi',
+        headingLevel: 2,
+        position: 3,
+      }),
+      createResponse().res,
+    );
+    expect(revisesPayloadFlag(capturedProposedMeta(set))).toBe(true);
   });
 });
 
