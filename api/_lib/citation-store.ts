@@ -19,7 +19,7 @@ import {
   normalizeReferenceMetadata,
   type ReferenceMetadata,
 } from './reference-metadata.js';
-import { getDb, inTransaction } from './db.js';
+import { getDb, inTransaction, isInPoolTransaction } from './db.js';
 import {
   isMutuallySameWork,
   isSameWork,
@@ -187,11 +187,26 @@ export async function resolveCitation(
           metadata: incomingMetadata,
         })?.year;
     if (year !== null && year !== undefined) {
+      // Inside a caller's transaction the lock is held until the whole bundle
+      // commits, so a blocking wait could form a cycle with another bundle
+      // taking the same years in the opposite order. There, take it only if
+      // free and otherwise fall through unserialized: a rare duplicate is
+      // folded by the next write declaring the handle or merge:split-citations,
+      // where a deadlock would abort the caller's whole ingestion. In a
+      // transaction of our own only this one lock is ever held, so waiting is safe.
+      const joined = isInPoolTransaction();
       return inTransaction(async () => {
         const tx = getDb();
-        await tx.execute(
-          sql`SELECT pg_advisory_xact_lock(${FREETEXT_LOCK_NAMESPACE}::int, ${year}::int)`,
-        );
+        if (joined) {
+          // Result ignored: unlocked or not, resolution proceeds.
+          await tx.execute(
+            sql`SELECT pg_try_advisory_xact_lock(${FREETEXT_LOCK_NAMESPACE}::int, ${year}::int)`,
+          );
+        } else {
+          await tx.execute(
+            sql`SELECT pg_advisory_xact_lock(${FREETEXT_LOCK_NAMESPACE}::int, ${year}::int)`,
+          );
+        }
         return resolveCitation(tx, input, userId, true);
       });
     }
