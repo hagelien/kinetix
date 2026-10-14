@@ -19,7 +19,7 @@ import {
   normalizeReferenceMetadata,
   type ReferenceMetadata,
 } from './reference-metadata.js';
-import { getDb, inTransaction } from './db.js';
+import { getDb, inTransaction, isInPoolTransaction } from './db.js';
 import {
   isMutuallySameWork,
   isSameWork,
@@ -27,6 +27,9 @@ import {
 } from '../../src/lib/citationWorkMatch.js';
 
 type Db = ReturnType<typeof getDb>;
+
+/** Advisory-lock namespace for free-text citation creation, keyed by year. */
+const FREETEXT_LOCK_NAMESPACE = 1078;
 
 /**
  * The single place a citation row is created (#1018).
@@ -148,6 +151,7 @@ export async function resolveCitation(
   db: Db,
   input: ResolveCitationInput,
   userId: number | null,
+  holdsFreetextLock = false,
 ): Promise<ResolveCitationResult> {
   const incomingMetadata = normalizeReferenceMetadata(input.metadata);
   const canonical = canonicalCitationHandle(
@@ -168,6 +172,44 @@ export async function resolveCitation(
     .where(handleMatch(handles));
 
   if (existing.length === 0 && canonical.type === 'freetext') {
+    // Two requests wording the same unseen work differently carry different
+    // identifiers, so the `(type, identifier)` conflict handler lets both rows
+    // in, and each one's fuzzy lookup ran before the other's insert. Serialize
+    // them on the year the lookup is narrowed to, and redo the lookup under the
+    // lock: the loser then sees the winner's committed row. The lock is
+    // transaction-scoped, so it needs a transaction of its own (or the
+    // caller's) to hold anything.
+    const year = holdsFreetextLock
+      ? null
+      : matchableFingerprint({
+          type: 'freetext',
+          identifier: canonical.identifier,
+          metadata: incomingMetadata,
+        })?.year;
+    if (year !== null && year !== undefined) {
+      // Inside a caller's transaction the lock is held until the whole bundle
+      // commits, so a blocking wait could form a cycle with another bundle
+      // taking the same years in the opposite order. There, take it only if
+      // free and otherwise fall through unserialized: a rare duplicate is
+      // folded by the next write declaring the handle or merge:split-citations,
+      // where a deadlock would abort the caller's whole ingestion. In a
+      // transaction of our own only this one lock is ever held, so waiting is safe.
+      const joined = isInPoolTransaction();
+      return inTransaction(async () => {
+        const tx = getDb();
+        if (joined) {
+          // Result ignored: unlocked or not, resolution proceeds.
+          await tx.execute(
+            sql`SELECT pg_try_advisory_xact_lock(${FREETEXT_LOCK_NAMESPACE}::int, ${year}::int)`,
+          );
+        } else {
+          await tx.execute(
+            sql`SELECT pg_advisory_xact_lock(${FREETEXT_LOCK_NAMESPACE}::int, ${year}::int)`,
+          );
+        }
+        return resolveCitation(tx, input, userId, true);
+      });
+    }
     const sameWork = await findSameWorkForFreetext(
       db,
       canonical.identifier,
