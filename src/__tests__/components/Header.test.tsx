@@ -310,6 +310,20 @@ describe('Header', () => {
     expect(screen.queryByTestId('monograph-tab-nav')).toBeNull();
   });
 
+  it('does not show a previous drug\'s tabs while the numeric preview loads', () => {
+    useDrugStore.setState({
+      activeDrug: {
+        id: '1',
+        names: { nb: 'paracetamol' },
+        _monographSlug: 'paracetamol',
+        _dbId: 7,
+      } as never,
+    });
+    renderHeader('/wiki/drug/9');
+
+    expect(screen.queryByTestId('monograph-tab-nav')).toBeNull();
+  });
+
   it('marks the tab in the URL as current on a monograph', () => {
     useDrugStore.setState({
       activeDrug: {

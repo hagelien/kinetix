@@ -108,10 +108,10 @@ export function Header() {
     return activeDrug?._dbId != null ? `/wiki/drug/${activeDrug._dbId}` : null;
   }
   const drugHomeHref = drugTabHref(currentTab ?? loadLastMonographTab());
-  // On the preview of a drug with no monograph there is nothing for a tab to
-  // open: every one would link back to this same preview.
-  const isUnwrittenDrugPreview =
-    !monographSlug && DRUG_PREVIEW_PATH_RE.test(location.pathname);
+  // The numeric preview shows a drug with no monograph, or one about to
+  // redirect to its monograph. Either way no tab has a page to open yet, and
+  // a stale active drug from the previous page must not lend it its slug.
+  const isUnwrittenDrugPreview = DRUG_PREVIEW_PATH_RE.test(location.pathname);
 
   // #310: only the drug table is reachable anonymously. Hide nav links to
   // gated routes so unauthenticated visitors don't click into a redirect
