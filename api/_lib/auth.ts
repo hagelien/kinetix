@@ -4,6 +4,11 @@ import { SignJWT, jwtVerify } from "jose";
 import { eq } from "drizzle-orm";
 import { getDb } from "./db.js";
 import {
+  RUN_SESSION_HEADER,
+  parseRunSessionId,
+  setRunSessionId,
+} from "../../db/run-session.js";
+import {
   agents,
   agentTokens,
   userGroupMembers,
@@ -154,7 +159,11 @@ export async function getUserFromRequest(
   // Persistent agent tokens are opaque, DB-backed credentials — resolve
   // them by hash rather than verifying a JWT signature.
   if (authToken.token.startsWith(AGENT_TOKEN_PREFIX)) {
-    return resolveAgentTokenContext(authToken.token);
+    const ctx = await resolveAgentTokenContext(authToken.token);
+    // Only an authenticated agent's declaration is kept; human sessions never
+    // stamp a run session id on what they write.
+    if (ctx) setRunSessionId(parseRunSessionId(req.headers[RUN_SESSION_HEADER]));
+    return ctx;
   }
 
   const verified = await verifyToken(authToken.token);

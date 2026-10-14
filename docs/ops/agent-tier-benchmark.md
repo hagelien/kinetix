@@ -110,11 +110,17 @@ Four residual gaps are accepted for now and tracked in issue 1444:
   about the same share in every tier, so tier-vs-tier comparisons are largely
   unaffected; a Codex run's absolute cost reads slightly low, which matters
   only when comparing Codex runs against Claude Code ones.
-- **Concurrent runs of one identity can be confused.** Outputs are matched to
-  runs by time window. If two routines share one agent token, overlap, and one
-  of them fails to log, the failed run's outputs are credited to the other and
-  its `$/accepted` or `$/verdict` reads low. Giving each routine its own
-  identity removes the risk.
+- **Concurrent runs of one identity are matched by session id (issue 214).**
+  `scripts/kinetix-api.sh` sends the runner's session id
+  (`CLAUDE_CODE_SESSION_ID`, `CODEX_SESSION_ID` or `CODEX_THREAD_ID`) as
+  `X-Kinetix-Run-Session`; for agent-token requests the server stamps it on
+  `pending_edits.run_session_id` and `agent_verifications.run_session_id`, and
+  the benchmark counts a stamped output only for the logged run with that
+  session id, so an overlapping run whose usage log failed cannot put its
+  outputs in another run's denominator. Rows without a stamp (human rows, rows
+  older than migration 0150, runners that expose no session id) still fall back
+  to the time window, with the old overlap risk. The id is self-declared by
+  the agent (issue 215).
 - **The tier is read when the run is logged, not when it starts.** An agent
   reclassified while one of its runs is in flight has that run filed under
   the new tier. Since issue 216 the admin edit stamps

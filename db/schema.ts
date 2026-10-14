@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm';
+import { currentRunSessionId } from './run-session.js';
 import {
   customType,
   pgTable,
@@ -2067,6 +2068,16 @@ export const pendingEdits = pgTable(
     // failed to apply, or meaningless once the token no longer matches the
     // current proposal — readers must check the token, not just presence.
     lastConsensusApplyFailure: jsonb('last_consensus_apply_failure'),
+    /**
+     * Runner session id (agent_run_usage.session_id) the submitting agent
+     * declared in the X-Kinetix-Run-Session header, stamped by default from
+     * the request. NULL for human submissions and for rows older than the
+     * column; the tier benchmark matches those by time window instead.
+     */
+    runSessionId: varchar('run_session_id', { length: 128 }).$defaultFn(
+      // $defaultFn's type omits null, but a null default binds as SQL NULL.
+      () => currentRunSessionId() as string,
+    ),
   },
   (t) => [
     index('pending_edits_status_idx').on(t.status),
@@ -2219,6 +2230,14 @@ export const agentVerifications = pgTable(
     recordedVerifierTier: varchar('recorded_verifier_tier', { length: 20 }),
     /** True for the auto-row written when the agent submitted the target. */
     isImplicit: boolean('is_implicit').notNull().default(false),
+    /**
+     * Runner session id the verifying agent declared when this verdict was
+     * last written (see pending_edits.run_session_id). NULL = undeclared.
+     */
+    runSessionId: varchar('run_session_id', { length: 128 }).$defaultFn(
+      // $defaultFn's type omits null, but a null default binds as SQL NULL.
+      () => currentRunSessionId() as string,
+    ),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },

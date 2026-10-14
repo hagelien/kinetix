@@ -323,6 +323,50 @@ describe('measured run usage', () => {
     expect(sonnet!.costPerAcceptedEdit).toBeCloseTo(4.5 / 2);
   });
 
+  it('matches a stamped output to its own run by session id, not by overlap', () => {
+    // Two overlapping routines share one identity; only run A logged its usage.
+    // Run B's output falls inside A's window but is stamped with B's session, so
+    // it must not be counted against A's cost.
+    const [sonnet] = computeAgentCostMetrics(
+      [run({ sessionId: 'sess-a' })],
+      rateCard,
+      [
+        { agentSlug: 'claude-sonnet-5', at: new Date('2026-10-02T00:30:00Z'), runSessionId: 'sess-a' },
+        { agentSlug: 'claude-sonnet-5', at: new Date('2026-10-02T00:30:00Z'), runSessionId: 'sess-b' },
+      ],
+      [{ agentSlug: 'claude-sonnet-5', at: new Date('2026-10-02T00:30:00Z'), runSessionId: 'sess-b' }],
+    );
+    expect(sonnet).toMatchObject({ acceptedEdits: 1, verdicts: 0 });
+    expect(sonnet!.costPerAcceptedEdit).toBeCloseTo(4.5);
+    expect(sonnet!.costPerVerdict).toBeNull();
+  });
+
+  it('counts a stamped output wherever it landed in time, and falls back to the window when unstamped', () => {
+    const [sonnet] = computeAgentCostMetrics(
+      [run({ sessionId: 'sess-a' })],
+      rateCard,
+      [
+        // Stamped for the run but timestamped after its logged end (a late re-log).
+        { agentSlug: 'claude-sonnet-5', at: new Date('2026-10-02T05:00:00Z'), runSessionId: 'sess-a' },
+        // Older row, no session id: placed by the window.
+        { agentSlug: 'claude-sonnet-5', at: new Date('2026-10-02T00:30:00Z'), runSessionId: null },
+        { agentSlug: 'claude-sonnet-5', at: new Date('2026-10-02T05:00:00Z') },
+      ],
+      [],
+    );
+    expect(sonnet).toMatchObject({ acceptedEdits: 2 });
+  });
+
+  it('does not match a stamped output to a run that cannot be placed in time', () => {
+    const [sonnet] = computeAgentCostMetrics(
+      [run({ sessionId: 'sess-a', startedAt: null, durationMs: null })],
+      rateCard,
+      [{ agentSlug: 'claude-sonnet-5', at: new Date('2026-10-02T00:30:00Z'), runSessionId: 'sess-a' }],
+      [],
+    );
+    expect(sonnet).toMatchObject({ acceptedEdits: 0, unplacedRuns: 1 });
+  });
+
   it('leaves out outputs of a run whose usage log failed', () => {
     const [sonnet] = computeAgentCostMetrics(
       [

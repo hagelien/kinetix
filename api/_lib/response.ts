@@ -8,6 +8,7 @@ import {
   RequestBodyTooLargeError,
 } from './validate.js';
 import { isDatabaseUnavailableError } from './db-errors.js';
+import { runWithRunSessionCell } from '../../db/run-session.js';
 
 export function json(
   res: ServerResponse,
@@ -65,7 +66,7 @@ export function withErrorHandling(
 ): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
   return async (req, res) => {
     try {
-      await handler(req, res);
+      await runWithRunSessionCell(() => handler(req, res));
     } catch (err) {
       if (err instanceof RequestBodyTooLargeError) {
         if (!res.headersSent) {
