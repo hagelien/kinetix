@@ -30,18 +30,23 @@ const CONCENTRATION_UNIT_PATTERN = [
 ].join("|");
 
 /**
- * The figure must start a number, not continue one the pattern cannot read.
- * Without this, a space-grouped value (`2 500 mg/L`) or scientific notation
- * (`1e-3 mg/L`) matched from partway through — `500 mg/L`, `3 mg/L` — and the
- * tooltip converted the wrong value. Such forms are left unannotated instead:
- * no digit (or letter, decimal mark) may come before the figure, even across
- * spaces, and no exponent marker — neither `e`/`E` nor `^`, and no
- * multiplication sign after a digit (`5 × 10^-3`, `5 x 10-3`, `5·10-3`).
- * Nor may it follow a digit and a dash: a real range (`1–3 mg/L`) is matched
- * from its first figure, so a match that would start at the second one is the
- * tail of a form already refused above (the exponent in `5 x 10-3`).
+ * The figure must start a number, not continue an expression the pattern
+ * cannot read. Without this, the matcher restarted partway through one and the
+ * tooltip converted the wrong value: `500` from `2 500 mg/L`, `3` from
+ * `1e-3 mg/L` or `5 × 10^-3 mg/L`, the uncertainty `14` from `84 ± 14 ng/mL`.
+ *
+ * So the figure is refused when, looking back across anything that is neither
+ * a letter nor a digit (spaces, `±`, `×`, `^`, dashes, brackets, colons), the
+ * nearest character is a digit — the figure is then part of something
+ * numeric that started earlier. Also refused: a letter, `_` or decimal mark
+ * directly before it (`A5`), an exponent marker (`1e-3`, `1E3`), and a digit
+ * then the letter `x` used as a multiplication sign (`5 x 10-3`). A real range
+ * (`1–3 mg/L`) is matched from its first figure and is unaffected. The cost is
+ * the safe one: a concentration written straight after an unrelated number
+ * (`dag 1: 5 mg/L`) is left unannotated rather than ever converted wrongly.
  */
-const CONCENTRATION_NUMBER_START_GUARD = String.raw`(?<!\d[\s]*|[A-Za-z\u00C0-\u024F_.,]|[eE][+\-\u2212]?|\^[+\-\u2212]?|\d\s*[×x*·]\s*|\d\s*[\-−–]\s*)`;
+const LETTER = String.raw`A-Za-z\u00C0-\u024F`;
+const CONCENTRATION_NUMBER_START_GUARD = String.raw`(?<!\d[^${LETTER}\d]*|\d\s*[xX]\s*|[${LETTER}_.,]|[eE][+\-\u2212]?)`;
 
 /**
  * Group 1: the (optionally qualified, optionally ranged) figure — it may carry

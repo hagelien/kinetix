@@ -63,6 +63,8 @@ describe('splitConcentrationText', () => {
       'grense 5 x 10-3 mg/L',
       'grense 5×10^3 mg/L',
       'grense 5 · 10\u22123 mg/L',
+      'snitt 84 ± 14 ng/mL',
+      'snitt 84 +/- 14 ng/mL',
     ]) {
       expect(splitConcentrationText(text)).toEqual([{ kind: 'text', text }]);
       expect(containsConcentration(text)).toBe(false);
