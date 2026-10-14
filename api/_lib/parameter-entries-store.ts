@@ -894,20 +894,13 @@ export async function lockDrugsCitingCitation(citationId: number): Promise<void>
 export async function recomputeSummariesCitingCitation(
   citationId: number,
   actorUserId: number,
-  opts?: {
-    /**
-     * Drugs to leave alone. `mergeCitations` passes the ones whose lock it
-     * could not take without waiting; see the note on its drug locks there.
-     */
-    skipDrugIds?: ReadonlySet<number>;
-  },
 ): Promise<void> {
   // Ascending drug id: this is the one path that locks SEVERAL drugs, so two
   // concurrent re-scores must walk them in the same order or they can deadlock
   // against each other on the per-drug recompute lock.
-  const affected = (await findParametersCitingCitation(citationId))
-    .filter(({ drugId }) => !opts?.skipDrugIds?.has(drugId))
-    .sort((a, b) => a.drugId - b.drugId);
+  const affected = (await findParametersCitingCitation(citationId)).sort(
+    (a, b) => a.drugId - b.drugId,
+  );
   // A re-score can move the blood:plasma ratio itself, which every concentration
   // aggregate is normalized with — so the drugs whose B/P actually changed need
   // the same dependent sweep an entry mutation triggers, or their serum/plasma

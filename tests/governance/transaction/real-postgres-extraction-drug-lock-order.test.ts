@@ -51,6 +51,8 @@ import { lockDrugForEntryApplicability } from '../../../api/_lib/parameterApplic
 import {
   agents,
   citations,
+  drugParameterRevisions,
+  drugParameters,
   drugs,
   paperExtractionJobs,
   paperReviews,
@@ -651,6 +653,152 @@ describe.skipIf(!hasRealPostgres)(
           );
           expect(rejected).toHaveLength(1);
           expect(sqlState(rejected[0]!.reason)).toBe(DEADLOCK_DETECTED);
+        },
+        LOCK_TIMEOUT_MS * 3,
+      );
+    });
+
+    // The up-front scan covers the entries citing the pair when the fold
+    // starts. An entry on another drug can cite the winner by the recompute,
+    // and the fold only tries that drug's lock then too (it may hold job rows).
+    // If another writer holds it, committing the fold would leave that drug's
+    // summary pooled from weights the fold moved, with nothing due to refresh
+    // it — so the fold's writes are rolled back to their savepoint instead.
+    describe('a drug whose first entry citing the winner lands mid-fold', () => {
+      /** A duplicate with an entry on `drugId` and the review the winner inherits. */
+      let loser: number;
+      /** The drug whose entry lands mid-fold. */
+      let lateDrug: number;
+      /** A proposal citing the loser: holding it pauses the fold after its lock scan. */
+      let proposalId: number;
+
+      beforeEach(async () => {
+        loser = await seedCitation('doi', '10.1000/split-review');
+        await seedEntry(drugId, loser);
+        await db.insert(paperReviews).values({
+          citationId: loser,
+          reviewMarkdown: 'Lest i sin helhet.',
+          overallScore: 70,
+          readInFull: true,
+          createdBy: authorId,
+        });
+        lateDrug = await seedDrug('legemiddel-sent');
+        const [proposal] = await db
+          .insert(pendingEdits)
+          .values({
+            editType: 'wiki_fact',
+            targetId: pageId,
+            referenceId: loser,
+            proposedValue: { factStatement: 'Halveringstiden er 3–5 timer.' },
+            submittedBy: authorId,
+          })
+          .returning({ id: pendingEdits.id });
+        proposalId = proposal!.id;
+      });
+
+      /** Run `take` in a transaction of its own and hold it open until released. */
+      function holdInTransaction(take: () => Promise<unknown>) {
+        const taken = gate();
+        const release = gate();
+        const done = runInPoolTransaction(async () => {
+          await take();
+          taken.open();
+          await release.wait;
+        });
+        held.push({ release: release.open, done });
+        return { taken: taken.wait, release: release.open, done };
+      }
+
+      async function snapshot() {
+        const cits = await db.select({ id: citations.id }).from(citations);
+        const entries = await db
+          .select({ drugId: parameterEntries.drugId, citationId: parameterEntries.citationId })
+          .from(parameterEntries);
+        const reviews = await db
+          .select({ citationId: paperReviews.citationId })
+          .from(paperReviews);
+        const proposals = await db
+          .select({ id: pendingEdits.id, referenceId: pendingEdits.referenceId })
+          .from(pendingEdits);
+        const summaries = await db
+          .select({ drugId: drugParameters.drugId, parameter: drugParameters.parameter })
+          .from(drugParameters);
+        const revisions = await db
+          .select({ id: drugParameterRevisions.id })
+          .from(drugParameterRevisions);
+        return {
+          citations: cits.map((r) => r.id).sort((a, b) => a - b),
+          entries: entries.map((r) => `${r.drugId}:${r.citationId}`).sort(),
+          reviews: reviews.map((r) => r.citationId),
+          proposals,
+          summaries: summaries.map((r) => `${r.drugId}:${r.parameter}`).sort(),
+          revisions: revisions.length,
+        };
+      }
+
+      it(
+        'defers with nothing of the fold written while that drug stays locked, then folds',
+        async () => {
+          // Pauses the fold at its proposal lock: after the up-front drug scan
+          // (which finds only `drugId`), before any row the fold rewrites.
+          const proposalHold = holdInTransaction(() =>
+            getDb().execute(
+              sql`SELECT id FROM pending_edits WHERE id = ${proposalId} FOR UPDATE`,
+            ),
+          );
+          await proposalHold.taken;
+
+          const folding = runInPoolTransaction(() =>
+            mergeCitations(getDb(), winner, loser, { actorUserId: authorId }),
+          );
+          await blockedOn('pending_edits');
+
+          // Meanwhile another writer's entry on the late drug, citing the
+          // winner, commits; and some write on that drug holds its lock.
+          await seedEntry(lateDrug, winner);
+          const drugHold = holdInTransaction(() =>
+            getDb().execute(sql`SELECT pg_advisory_xact_lock(${lateDrug}::bigint)`),
+          );
+          await drugHold.taken;
+          const before = await snapshot();
+
+          proposalHold.release();
+          const stats = await folding;
+
+          expect(stats).toMatchObject({
+            deferred: true,
+            deferredReason: 'drug_locked',
+            lockedDrugId: lateDrug,
+            rowsRepointed: 0,
+            reviewsDropped: 0,
+            summaryRecompute: 'not-needed',
+          });
+          // The fold got as far as its recompute — every write made — and
+          // rolled all of it back: nothing moved, nothing recomputed.
+          expect(await snapshot()).toEqual(before);
+          expect(before.citations).toEqual([winner, loser].sort((a, b) => a - b));
+          expect(before.reviews).toEqual([loser]);
+          expect(before.proposals).toEqual([{ id: proposalId, referenceId: loser }]);
+
+          // Once the drug is free the pair folds, and the recompute covers the
+          // late drug as well as the one locked up front.
+          drugHold.release();
+          await drugHold.done;
+          const refold = await runInPoolTransaction(() =>
+            mergeCitations(getDb(), winner, loser, { actorUserId: authorId }),
+          );
+          expect(refold.deferred).toBeUndefined();
+          expect(refold.summaryRecompute).toBe('ran');
+          const after = await snapshot();
+          expect(after.citations).toEqual([winner]);
+          expect(after.entries).toEqual(
+            [`${drugId}:${winner}`, `${lateDrug}:${winner}`].sort(),
+          );
+          expect(after.reviews).toEqual([winner]);
+          expect(after.proposals).toEqual([{ id: proposalId, referenceId: winner }]);
+          expect(after.summaries).toEqual(
+            [`${drugId}:halfLife`, `${lateDrug}:halfLife`].sort(),
+          );
         },
         LOCK_TIMEOUT_MS * 3,
       );

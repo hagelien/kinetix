@@ -219,11 +219,16 @@ export async function lockCitationAgainstFold(
  * may already hold job rows (and every other row lock) from the earlier ones,
  * so a wait here could still close the cycle, and a try never registers a
  * wait. A drug that stays held defers the fold as `drug_locked` before it
- * writes anything. Taking them first also stops the fold being the odd one out
- * against every other writer that holds a drug and then touches rows a fold
- * rewrites (entry writers, the approvals that preflight their drug locks, the
- * drug merge's own entry repoint): the fold queues behind those on rows rather
- * than waiting on their drug while holding rows they need. The writers that
+ * writes anything. A drug whose first entry citing the pair lands after that
+ * scan is tried again just before the recompute, and one that stays held then
+ * defers the fold too — by rolling the fold's writes back to the savepoint
+ * they ran under (see {@link mergeCitations}), so a fold never commits with a
+ * summary it invalidated left unrecomputed. Taking them first also stops the
+ * fold being the odd one out against every other writer that holds a drug and
+ * then touches rows a fold rewrites (entry writers, the approvals that
+ * preflight their drug locks, the drug merge's own entry repoint): the fold
+ * queues behind those on rows rather than waiting on their drug while holding
+ * rows they need. The writers that
  * took a drug lock only after such a row now take it up front as well —
  * `recordPaperReview` before its review row, and approval of a `parameter` or
  * `paper_review` edit before the edit's row (`drugAdvisoryLockIdsForEdit`).
@@ -389,16 +394,11 @@ export interface CitationMergeStats {
    * `skipped` means a recompute was warranted but no actor was supplied to
    * attribute the resulting revisions to — surfaced rather than swallowed, so a
    * caller cannot leave stale values behind without it showing up.
+   *
+   * There is no partial outcome: with an actor, a fold either recomputes every
+   * drug whose summary it moved or does not happen (`drug_locked`).
    */
-  summaryRecompute: 'ran' | 'partial' | 'skipped' | 'not-needed';
-  /**
-   * With `partial`: the drugs whose summaries were left as they were. A drug
-   * the fold had not locked up front — its first entry citing the pair landed
-   * after the fold's lock scan — is only tried, never waited for (see
-   * `tryLockDrugForRecompute`), and one that stays held is reported here
-   * rather than recomputed. Its next entry write or re-review refreshes it.
-   */
-  summaryRecomputeSkippedDrugIds?: number[];
+  summaryRecompute: 'ran' | 'skipped' | 'not-needed';
   /**
    * True when this merge stood aside without writing anything; `deferredReason`
    * says why. Nothing was folded; the next write declaring the handle, or
@@ -415,7 +415,9 @@ export interface CitationMergeStats {
    * and the fold waits for that run to finish or be cancelled. `drug_locked`:
    * a drug whose summaries the fold would recompute (`lockedDrugId`) was held
    * by another write, and the fold does not wait for a drug once it may hold
-   * job rows (see `tryLockDrugForRecompute`).
+   * job rows (see `tryLockDrugForRecompute`) — whether found held at the
+   * up-front scan, before any write, or at the recompute, where the fold's
+   * writes are rolled back to their savepoint first.
    */
   deferredReason?:
     | 'merge_in_progress'
@@ -1466,6 +1468,9 @@ async function readCohortByIdentity(
  * serializes nothing. `resolveCitation`, the admin route and both CLIs open a
  * pool transaction around their merges for that reason. Every step is still
  * written to be repeatable, so a run that dies partway is finished by the next.
+ * Inside a pool transaction, with an actor, a fold's writes also run under a
+ * savepoint of their own, so one that defers or throws after its first write
+ * leaves none of them in the caller's transaction (see the note in the body).
  *
  * `actorUserId` attributes the parameter-summary recompute a merge can trigger.
  * Without one the recompute cannot stamp its revisions, so it is skipped and
@@ -1477,15 +1482,7 @@ export async function mergeCitations(
   loserId: number,
   opts?: { actorUserId?: number | null },
 ): Promise<CitationMergeStats> {
-  const stats: CitationMergeStats = {
-    winnerId,
-    loserId,
-    reviewsDropped: 0,
-    reviewRevisionsMoved: 0,
-    rowsRepointed: 0,
-    jsonDocumentsRewritten: 0,
-    summaryRecompute: 'not-needed',
-  };
+  const stats = emptyMergeStats(winnerId, loserId);
   if (winnerId === loserId) return stats;
 
   // Before the reads that decide anything, so two merges converging on this
@@ -1559,6 +1556,121 @@ export async function mergeCitations(
   // already folded. Throwing there would fail a submission *because*
   // serialization worked.
   if (!loser) return stats;
+
+  // From the first write through the recompute, the fold is one unit. The
+  // recompute tries again for any drug whose first entry citing the pair
+  // landed after the up-front scan, and only tries — this transaction holds job
+  // rows by now — so a drug can still be found held there, after every write.
+  // Committing the rest then would leave that drug's cached summary pooled
+  // from weights the fold just moved, with nothing due to refresh it. So the
+  // writes run under a savepoint, and a drug held at the recompute rolls them
+  // back and defers the pair (`drug_locked`), exactly as a drug held at the
+  // up-front scan does before any write: the next resolve or CLI run folds it.
+  // A fold that throws is rolled back the same way, so a caller that catches
+  // the error and commits its own work does not commit half a fold with it.
+  //
+  // Only with an actor and a pool transaction — the only case the late try can
+  // fail in. Without an actor nothing is recomputed (`skipped`), and outside a
+  // transaction (the http client, which has none to set a savepoint in) every
+  // try succeeds, as the lock would hold nothing anyway.
+  //
+  // Rolling back to the savepoint also releases the locks taken under it — the
+  // row locks of the writes, the pending edits', and the drug locks the late
+  // try did take. Postgres releases a transaction-scoped advisory lock taken
+  // after a savepoint when that savepoint is rolled back to, like any other
+  // lock. Nothing is lost by that: the writes those locks guarded are gone with
+  // them. The winner's, the loser's and the up-front drug locks, and the
+  // loser's job rows, were taken before the savepoint and stay held to the end
+  // of the transaction, as for every other deferral.
+  const actorUserId = opts?.actorUserId ?? null;
+  const atomic = actorUserId !== null && isInPoolTransaction();
+  if (atomic) await db.execute(sql`SAVEPOINT citation_fold`);
+  let lateHeldDrugId: number | null;
+  try {
+    lateHeldDrugId = await applyFold(
+      db,
+      winner,
+      loser,
+      stats,
+      summaryDrugs.locked,
+      actorUserId,
+    );
+  } catch (err) {
+    if (atomic) {
+      // The original error is the one worth surfacing; a rollback that fails
+      // too leaves the transaction to the caller's own rollback.
+      await rollBackFold(db).catch(() => undefined);
+    }
+    throw err;
+  }
+  if (lateHeldDrugId === null) {
+    if (atomic) await db.execute(sql`RELEASE SAVEPOINT citation_fold`);
+    return stats;
+  }
+  if (!atomic) {
+    // Unreachable: outside a pool transaction every try succeeds. Fail loudly
+    // rather than report as done a fold whose recompute did not run.
+    throw new Error(
+      `mergeCitations: drug ${lateHeldDrugId} held outside a transaction while folding ` +
+        `#${loserId} into #${winnerId}`,
+    );
+  }
+  await rollBackFold(db);
+  return {
+    ...emptyMergeStats(winnerId, loserId),
+    deferred: true,
+    deferredReason: 'drug_locked',
+    lockedDrugId: lateHeldDrugId,
+  };
+}
+
+function emptyMergeStats(winnerId: number, loserId: number): CitationMergeStats {
+  return {
+    winnerId,
+    loserId,
+    reviewsDropped: 0,
+    reviewRevisionsMoved: 0,
+    rowsRepointed: 0,
+    jsonDocumentsRewritten: 0,
+    summaryRecompute: 'not-needed',
+  };
+}
+
+/** Undo everything since `SAVEPOINT citation_fold`, and drop the savepoint. */
+async function rollBackFold(db: Db): Promise<void> {
+  await db.execute(sql`ROLLBACK TO SAVEPOINT citation_fold`);
+  await db.execute(sql`RELEASE SAVEPOINT citation_fold`);
+}
+
+/** The citation columns a fold reads from both rows. */
+type FoldedCitation = Pick<
+  typeof citations.$inferSelect,
+  | 'id'
+  | 'type'
+  | 'identifier'
+  | 'metadata'
+  | 'workKindHandles'
+  | 'workKindVerdicts'
+  | 'workKindResolvedAt'
+>;
+
+/**
+ * The writes of one fold, in order, ending with the summary recompute; see
+ * {@link mergeCitations} for the locks taken before it and the savepoint
+ * around it. Fills `stats` as it goes. Returns null once the fold is done, or
+ * — before the recompute, with every write made — the drug whose lock stayed
+ * held, for the caller to roll back on.
+ */
+async function applyFold(
+  db: Db,
+  winner: FoldedCitation,
+  loser: FoldedCitation,
+  stats: CitationMergeStats,
+  lockedDrugs: Set<number>,
+  actorUserId: number | null,
+): Promise<number | null> {
+  const winnerId = winner.id;
+  const loserId = loser.id;
 
   // The cohorts move first, ahead of every other consumer.
   //
@@ -1749,36 +1861,27 @@ export async function mergeCitations(
   const summaryInputsMoved =
     scalarUpdates[1]!.length > 0 || reviewResult.winnerReviewChanged;
   if (summaryInputsMoved) {
-    if (opts?.actorUserId != null) {
+    if (actorUserId !== null) {
       // The drugs locked up front cover the entries that cited the pair at the
-      // lock scan. One whose entry arrived since is tried like the rest — never
-      // waited for, as this transaction now holds job rows — and left stale
-      // and reported if it stays held.
-      const skipped: number[] = [];
-      for (const { drugId } of await findParametersCitingCitation(winnerId)) {
-        if (summaryDrugs.locked.has(drugId) || skipped.includes(drugId)) continue;
-        if (await tryLockDrugForRecompute(db, drugId)) summaryDrugs.locked.add(drugId);
-        else skipped.push(drugId);
+      // lock scan. One whose entry arrived since is tried like the rest, in
+      // ascending order — never waited for, as this transaction now holds job
+      // rows — and one that stays held hands the fold back to be undone.
+      const lateDrugIds = [
+        ...new Set((await findParametersCitingCitation(winnerId)).map((row) => row.drugId)),
+      ]
+        .filter((drugId) => !lockedDrugs.has(drugId))
+        .sort((a, b) => a - b);
+      for (const drugId of lateDrugIds) {
+        if (!(await tryLockDrugForRecompute(db, drugId))) return drugId;
+        lockedDrugs.add(drugId);
       }
-      await recomputeSummariesCitingCitation(winnerId, opts.actorUserId, {
-        skipDrugIds: new Set(skipped),
-      });
-      if (skipped.length > 0) {
-        stats.summaryRecompute = 'partial';
-        stats.summaryRecomputeSkippedDrugIds = skipped.sort((a, b) => a - b);
-        console.warn(
-          `mergeCitations: folded #${loserId} into #${winnerId} but left the parameter ` +
-            `summaries of drug(s) ${stats.summaryRecomputeSkippedDrugIds.join(', ')} ` +
-            'unrecomputed: their lock stayed held. The next entry write or re-review refreshes them.',
-        );
-      } else {
-        stats.summaryRecompute = 'ran';
-      }
+      await recomputeSummariesCitingCitation(winnerId, actorUserId);
+      stats.summaryRecompute = 'ran';
     } else {
       stats.summaryRecompute = 'skipped';
     }
   }
-  return stats;
+  return null;
 }
 
 /**
