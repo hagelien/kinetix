@@ -37,7 +37,7 @@ const rateCard = {
 };
 
 /** One agent with one logged run from 00:00 to 01:00 costing $4.50. */
-async function seedRun() {
+async function seedRun(opts: { tierChangedAt?: Date } = {}) {
   const humanId = await seedUser(db, {
     email: 'editor@example.com',
     username: 'editor',
@@ -56,6 +56,7 @@ async function seedRun() {
       slug: 'claude-sonnet-5',
       status: 'active',
       modelTier: 'mid',
+      modelTierChangedAt: opts.tierChangedAt ?? null,
     })
     .returning({ id: agents.id });
   await db.insert(agentRunUsage).values({
@@ -109,5 +110,22 @@ describe('benchmark cost-per-output bounds', () => {
     const [sonnet] = report.agentCosts;
     expect(sonnet).toMatchObject({ runs: 1, acceptedEdits: 1 });
     expect(sonnet!.costPerAcceptedEdit).toBeCloseTo(4.5);
+  });
+
+  it('leaves out a run its agent was reclassified during, and counts it', async () => {
+    await seedRun({ tierChangedAt: at('00:30') });
+
+    const report = await runBenchmark({ since: null, rateCard });
+    expect(report.tierChangeStraddlers).toBe(1);
+    expect(report.runUsage).toEqual([]);
+    expect(report.agentCosts).toEqual([]);
+  });
+
+  it('keeps a run logged before its agent was reclassified', async () => {
+    await seedRun({ tierChangedAt: at('02:00') });
+
+    const report = await runBenchmark({ since: null, rateCard });
+    expect(report.tierChangeStraddlers).toBe(0);
+    expect(report.runUsage).toHaveLength(1);
   });
 });

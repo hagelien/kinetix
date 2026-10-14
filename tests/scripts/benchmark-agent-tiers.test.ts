@@ -17,6 +17,7 @@ import {
   projectCosts,
   resolveEditOutcome,
   resolveVerifierTier,
+  straddlesTierChange,
   type ProducerRecord,
   type RunUsageRecord,
   type VerifierVerdictRecord,
@@ -184,6 +185,7 @@ describe('measured run usage', () => {
     startedAt: new Date('2026-10-02T00:00:00Z'),
     durationMs: 3_600_000,
     createdAt: new Date('2026-10-02T01:00:00Z'),
+    tierChangedAt: null,
     ...over,
   });
   const out = (agentSlug: string, iso: string, n = 1) =>
@@ -401,6 +403,71 @@ describe('measured run usage', () => {
       ]),
     ).toEqual(new Date('2026-10-01T12:00:00Z'));
     expect(earliestRunStart([])).toBeNull();
+  });
+
+  describe('straddlesTierChange', () => {
+    const changedAt = (iso: string) => ({ tierChangedAt: new Date(iso) });
+
+    it('flags a run whose span contains the change, up to its log', () => {
+      expect(straddlesTierChange(run(changedAt('2026-10-02T00:30:00Z')))).toBe(true);
+      // The tier is read at the log, so a change at that instant may be on
+      // either side of the snapshot.
+      expect(straddlesTierChange(run(changedAt('2026-10-02T01:00:00Z')))).toBe(true);
+    });
+
+    it('keeps a run entirely before or after the change', () => {
+      expect(straddlesTierChange(run({}))).toBe(false);
+      expect(straddlesTierChange(run(changedAt('2026-10-01T23:00:00Z')))).toBe(false);
+      // Changed as the run began: all of it ran at the new tier.
+      expect(straddlesTierChange(run(changedAt('2026-10-02T00:00:00Z')))).toBe(false);
+      expect(straddlesTierChange(run(changedAt('2026-10-02T02:00:00Z')))).toBe(false);
+    });
+
+    it('extends the span to a re-logged end past the first log', () => {
+      // First logged at 01:00 (the snapshot), then re-logged at 02:00 with the
+      // refreshed duration: a change at 01:30 split the run all the same.
+      expect(
+        straddlesTierChange(
+          run({ durationMs: 7_200_000, ...changedAt('2026-10-02T01:30:00Z') }),
+        ),
+      ).toBe(true);
+    });
+
+    it('reaches past the first log for a re-logged duration-only run', () => {
+      // First logged at 01:00, re-logged later with a 2 h duration: the run may
+      // have ended as late as 03:00, so a change at 02:30 can be inside it.
+      expect(
+        straddlesTierChange(
+          run({
+            startedAt: null,
+            durationMs: 7_200_000,
+            ...changedAt('2026-10-02T02:30:00Z'),
+          }),
+        ),
+      ).toBe(true);
+    });
+
+    it('places a run without a start from its duration, and keeps one with neither', () => {
+      expect(
+        straddlesTierChange(
+          run({ startedAt: null, ...changedAt('2026-10-02T00:30:00Z') }),
+        ),
+      ).toBe(true);
+      expect(
+        straddlesTierChange(
+          run({ startedAt: null, ...changedAt('2026-10-01T23:30:00Z') }),
+        ),
+      ).toBe(false);
+      expect(
+        straddlesTierChange(
+          run({
+            startedAt: null,
+            durationMs: null,
+            ...changedAt('2026-10-02T00:30:00Z'),
+          }),
+        ),
+      ).toBe(false);
+    });
   });
 
   it('keeps projections for entries with estimates and skips measured-only entries', () => {
