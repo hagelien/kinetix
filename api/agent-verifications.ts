@@ -27,7 +27,10 @@ import {
   lockPendingEditTargetPage,
   lockPendingEditSourceReviews,
   pendingEditTargetOpenToAgents,
+  pendingEditTargetsOpenToAgents,
   pendingEditCitesUnreadSources,
+  pendingEditsCitingUnreadSources,
+  activeAgentStandingsForUsers,
   lockConsensusEligibility,
   consensusApprovalHoldReason,
   countActiveVerifierAgents,
@@ -69,7 +72,9 @@ import {
 import { ParameterApplyError } from './_lib/drugs-helpers.js';
 import {
   hasOpenDispute,
+  openDisputeTargetIds,
   pendingEditUpheldRulingStands,
+  pendingEditsWithStandingUpheldRuling,
   withdrawOpenDispute,
 } from './_lib/disputes.js';
 import { detectAdjudicationCase } from './_lib/adjudication/cases.js';
@@ -251,7 +256,16 @@ export async function consensusExplanation(
   | { ready: true }
   | { ready: false; reason: AgentConsensusHold; unrankedFlagshipApprovers?: string[] }
 > {
-  const status = await agentConsensusStatus(pendingEditId);
+  return explainConsensusStatus(await agentConsensusStatus(pendingEditId), rows);
+}
+
+type ConsensusExplanation = Awaited<ReturnType<typeof consensusExplanation>>;
+
+/** The approver-name hint {@link consensusExplanation} adds to a status. */
+function explainConsensusStatus(
+  status: AgentConsensusStatus,
+  rows: Awaited<ReturnType<typeof listVerifications>>,
+): ConsensusExplanation {
   if (status.ready || status.reason !== 'high_risk_missing_flagship') {
     return status;
   }
@@ -268,29 +282,33 @@ export async function consensusExplanation(
 }
 
 /**
- * {@link consensusExplanation} for many pending edits at once (issue #1374).
- * The /review moderator queue can render up to ~100 cards, each of which
- * used to call GET ?targetId= on its own mount — up to 100 HTTP requests,
- * each re-running the same verdict lookup. This does the one batchable read
- * (`listVerificationsForTargets`) up front and fans the rest out with
- * `Promise.all` inside a single request instead of one per card.
+ * {@link consensusExplanation} for many pending edits at once (issue #1374,
+ * issue #33). The /review moderator queue can render up to ~100 cards, each
+ * of which used to call GET ?targetId= on its own mount — up to 100 HTTP
+ * requests. This answers the whole page in a fixed number of reads, whatever
+ * its size: the verdict rows (`listVerificationsForTargets`) and every input
+ * of the consensus gates ({@link agentConsensusStatusForTargets}).
+ *
+ * READ-ONLY. It annotates the card; it never decides a publication.
  */
 export async function consensusStatusForTargets(
   pendingEditIds: number[],
-): Promise<Map<number, Awaited<ReturnType<typeof consensusExplanation>>>> {
+): Promise<Map<number, ConsensusExplanation>> {
   const ids = [...new Set(pendingEditIds.filter(Number.isInteger))];
   if (ids.length === 0) return new Map();
-  const rowsByTarget = await listVerificationsForTargets({
-    targetType: 'pending_edit',
-    targetIds: ids,
-  });
-  const entries = await Promise.all(
-    ids.map(
-      async (id) =>
-        [id, await consensusExplanation(id, rowsByTarget.get(id) ?? [])] as const,
-    ),
+  const [rowsByTarget, statuses] = await Promise.all([
+    listVerificationsForTargets({ targetType: 'pending_edit', targetIds: ids }),
+    agentConsensusStatusForTargets(ids),
+  ]);
+  return new Map(
+    ids.map((id) => [
+      id,
+      explainConsensusStatus(
+        statuses.get(id) ?? { ready: false, reason: 'not_found' },
+        rowsByTarget.get(id) ?? [],
+      ),
+    ]),
   );
-  return new Map(entries);
 }
 
 async function handlePost(
@@ -812,27 +830,34 @@ type ConsensusPendingRow = NonNullable<
   Awaited<ReturnType<typeof readConsensusPendingRow>>
 >;
 
+/**
+ * The pending-edit columns every consensus gate reads. Shared by the
+ * single-edit read below and the batched read-only status
+ * ({@link consensusStatusForTargets}) so the two always examine the same row.
+ */
+const consensusPendingRowColumns = {
+  editType: pendingEdits.editType,
+  submittedBy: pendingEdits.submittedBy,
+  parameter: pendingEdits.parameter,
+  // The entry id for a `param_entry` update, needed to resolve the quote
+  // the write would preserve.
+  targetId: pendingEdits.targetId,
+  proposedValue: pendingEdits.proposedValue,
+  proposedMeta: pendingEdits.proposedMeta,
+  // Everything the review token is computed from, so the apply can be bound
+  // to the version this gate actually examined.
+  id: pendingEdits.id,
+  referenceId: pendingEdits.referenceId,
+  referenceIds: pendingEdits.referenceIds,
+  status: pendingEdits.status,
+  submittedAt: pendingEdits.submittedAt,
+  lastConsensusApplyFailure: pendingEdits.lastConsensusApplyFailure,
+};
+
 async function readConsensusPendingRow(pendingEditId: number) {
   const db = getDb();
   const [row] = await db
-    .select({
-      editType: pendingEdits.editType,
-      submittedBy: pendingEdits.submittedBy,
-      parameter: pendingEdits.parameter,
-      // The entry id for a `param_entry` update, needed to resolve the quote
-      // the write would preserve.
-      targetId: pendingEdits.targetId,
-      proposedValue: pendingEdits.proposedValue,
-      proposedMeta: pendingEdits.proposedMeta,
-      // Everything the review token is computed from, so the apply can be bound
-      // to the version this gate actually examined.
-      id: pendingEdits.id,
-      referenceId: pendingEdits.referenceId,
-      referenceIds: pendingEdits.referenceIds,
-      status: pendingEdits.status,
-      submittedAt: pendingEdits.submittedAt,
-      lastConsensusApplyFailure: pendingEdits.lastConsensusApplyFailure,
-    })
+    .select(consensusPendingRowColumns)
     .from(pendingEdits)
     .where(eq(pendingEdits.id, pendingEditId))
     .limit(1);
@@ -923,6 +948,10 @@ export async function persistConsensusApplyFailure(
  * submissions, the capability-aware tally and open disputes. Shared by the
  * apply path and the read-only {@link agentConsensusStatus} so the reason the
  * review card shows is the reason the apply path acts on.
+ *
+ * The /review queue's batched status transcribes these checks, in this order,
+ * into {@link consensusStatusFromFacts} (issue #33). A change here must be
+ * made there too; the parity tests it names fail until it is.
  */
 async function legacyConsensusHold(
   pendingEditId: number,
@@ -1069,9 +1098,13 @@ async function legacyConsensusHold(
  * The generic engine (only authoritative for cut-over edit types) is not
  * consulted; its rules are pinned to these by the parity tests.
  */
+export type AgentConsensusStatus =
+  | { ready: true }
+  | { ready: false; reason: AgentConsensusHold };
+
 export async function agentConsensusStatus(
   pendingEditId: number,
-): Promise<{ ready: true } | { ready: false; reason: AgentConsensusHold }> {
+): Promise<AgentConsensusStatus> {
   const pending = await readConsensusPendingRow(pendingEditId);
   if (!pending) return { ready: false, reason: 'not_found' };
   if (pending.status !== 'pending') return { ready: false, reason: 'not_pending' };
@@ -1094,6 +1127,217 @@ export async function agentConsensusStatus(
     return { ready: false, reason: 'apply_failed' };
   }
   return { ready: true };
+}
+
+/**
+ * Everything {@link agentConsensusStatus} reads about one pending edit that
+ * is already `pending`, gathered up front so the gates can be evaluated in
+ * memory. Each field names the single-edit read it stands in for.
+ */
+export interface ConsensusStatusFacts {
+  editType: string;
+  parameter: string | null;
+  submittedBy: number | null;
+  proposedMeta: unknown;
+  /** `highRiskProposalWouldPublishUnquoted`. */
+  lacksSourceQuote: boolean;
+  /** `isActiveAgentUser(submittedBy)`. */
+  submitterIsAgent: boolean;
+  /** `isSelfReviewAgentUser(submittedBy)`. */
+  authorSelfReviewGrant: boolean;
+  /** `pendingEditTargetOpenToAgents`. */
+  targetOpenToAgents: boolean;
+  /** `pendingEditCitesUnreadSources`. */
+  citesUnreadSources: boolean;
+  /** `countActiveVerifierAgents()`. */
+  activeAgents: number;
+  /**
+   * `summariseVerificationsForTargets` with the gate's options — active
+   * verifiers only, answered disputes left out, and the author's own verdicts
+   * left out unless it may review its own work. Undefined when no counted
+   * verdict exists.
+   */
+  summary: VerificationSummary | undefined;
+  /** `hasOpenDispute`. */
+  hasOpenDispute: boolean;
+  /** `pendingEditUpheldRulingStands`. */
+  upheldRulingStands: boolean;
+  /** A recorded apply failure under the current review token. */
+  applyFailedForCurrentToken: boolean;
+}
+
+/**
+ * {@link agentConsensusStatus}'s decision, from pre-fetched facts, in the
+ * same order its gates run: the source-quote gate, then
+ * `legacyConsensusHold`'s checks in turn, then a recorded apply failure.
+ *
+ * Exists only for the batched read-only status (issue #33). The apply path
+ * never calls it: `legacyConsensusHold` stays the one gate that decides a
+ * publication, and `tests/governance/policy/apply-gate-parity.test.ts` plus
+ * `tests/integration/pending-edits-consensus-status-batch.test.ts` hold this
+ * transcription to it.
+ */
+export function consensusStatusFromFacts(
+  facts: ConsensusStatusFacts,
+): AgentConsensusStatus {
+  const hold = (reason: AgentConsensusHold): AgentConsensusStatus => ({
+    ready: false,
+    reason,
+  });
+  if (facts.lacksSourceQuote) return hold('source_quote_missing');
+  // legacyConsensusHold, in order.
+  if (facts.editType === 'clinical_case') return hold('clinical_case');
+  if (facts.submittedBy == null) return hold('human_submitted');
+  if (!facts.targetOpenToAgents) return hold('target_unpublished');
+  if (facts.citesUnreadSources) return hold('unverified_sources');
+  const quorum = effectiveConsensusQuorum(facts.activeAgents, {
+    authorSelfReviews: !facts.submitterIsAgent || facts.authorSelfReviewGrant,
+  });
+  if (!facts.summary) return hold('quorum_unmet');
+  const highRisk = isHighRiskPendingEdit({
+    editType: facts.editType,
+    parameter: facts.parameter,
+  });
+  const tallyHold = consensusApprovalHoldReason(facts.summary, quorum, { highRisk });
+  if (tallyHold) return hold(tallyHold);
+  if (facts.hasOpenDispute) return hold('open_dispute');
+  if (facts.upheldRulingStands) return hold('upheld_dispute');
+  if (returnStandsUnrevised(facts.proposedMeta)) return hold('returned_unrevised');
+  // agentConsensusStatus, after the gates.
+  if (facts.applyFailedForCurrentToken) return hold('apply_failed');
+  return { ready: true };
+}
+
+/**
+ * How many `param_entry` source-quote checks run at once. Only a high-risk
+ * entry UPDATE asks the store (`quoteAfterUpdate`, one read per proposal — the
+ * write's own expression, which is not batchable); the rest answer from the
+ * payload. Capped so a queue full of them cannot fan out unbounded.
+ */
+const SOURCE_QUOTE_CHECK_CONCURRENCY = 8;
+
+/**
+ * {@link agentConsensusStatus} for many pending edits, in a fixed number of
+ * reads whatever their number (issue #33) — plus one per high-risk
+ * `param_entry` update, which the source-quote gate deliberately resolves
+ * through the write itself.
+ *
+ * READ-ONLY, for the /review card. It reads every input the gates consult
+ * once for the whole batch (the pool size once, the authors' standing, page
+ * visibility, source reviews, disputes, rulings and the verdict tally) and
+ * evaluates them in memory with {@link consensusStatusFromFacts}. The apply
+ * path does not use it: `runAgentConsensus` keeps `legacyConsensusHold`, its
+ * short-circuiting reads and its under-lock re-checks.
+ */
+export async function agentConsensusStatusForTargets(
+  pendingEditIds: number[],
+): Promise<Map<number, AgentConsensusStatus>> {
+  const ids = [...new Set(pendingEditIds.filter(Number.isInteger))];
+  const out = new Map<number, AgentConsensusStatus>();
+  if (ids.length === 0) return out;
+
+  const rows = await getDb()
+    .select(consensusPendingRowColumns)
+    .from(pendingEdits)
+    .where(inArray(pendingEdits.id, ids));
+  const rowById = new Map(rows.map((row) => [row.id, row]));
+  const live: ConsensusPendingRow[] = [];
+  for (const id of ids) {
+    const row = rowById.get(id);
+    if (!row) out.set(id, { ready: false, reason: 'not_found' });
+    else if (row.status !== 'pending') out.set(id, { ready: false, reason: 'not_pending' });
+    else live.push(row);
+  }
+  if (live.length === 0) return out;
+
+  const liveIds = live.map((row) => row.id);
+  const submitters = live
+    .map((row) => row.submittedBy)
+    .filter((id): id is number => id != null);
+  const [
+    lacksQuote,
+    activeAgents,
+    standings,
+    openTargets,
+    unreadSources,
+    openDisputes,
+    upheldRulings,
+  ] = await Promise.all([
+    mapWithConcurrency(live, SOURCE_QUOTE_CHECK_CONCURRENCY, (row) =>
+      highRiskProposalWouldPublishUnquoted(row, () => {}),
+    ),
+    countActiveVerifierAgents(),
+    activeAgentStandingsForUsers(submitters),
+    pendingEditTargetsOpenToAgents(live),
+    pendingEditsCitingUnreadSources(live),
+    openDisputeTargetIds({ targetType: 'pending_edit', targetIds: liveIds }),
+    pendingEditsWithStandingUpheldRuling(live),
+  ]);
+
+  // The author's own verdicts count only when it may review its own work —
+  // a person always (they hold no seat), an agent under the grant.
+  const excludeAuthor = new Map<number, number>();
+  for (const row of live) {
+    if (row.submittedBy == null) continue;
+    const standing = standings.get(row.submittedBy);
+    const authorSelfReviews = !standing || standing.selfReviews;
+    if (!authorSelfReviews) excludeAuthor.set(row.id, row.submittedBy);
+  }
+  const summaries = await summariseVerificationsForTargets({
+    targetType: 'pending_edit',
+    targetIds: liveIds,
+    excludeAgentUserIdByTarget: excludeAuthor,
+    onlyActiveVerifiers: true,
+    excludeAnsweredDisputes: true,
+  });
+
+  live.forEach((row, i) => {
+    const standing =
+      row.submittedBy == null ? undefined : standings.get(row.submittedBy);
+    const failure = row.lastConsensusApplyFailure;
+    out.set(
+      row.id,
+      consensusStatusFromFacts({
+        editType: row.editType,
+        parameter: row.parameter,
+        submittedBy: row.submittedBy,
+        proposedMeta: row.proposedMeta,
+        lacksSourceQuote: lacksQuote[i]!,
+        submitterIsAgent: standing !== undefined,
+        authorSelfReviewGrant: standing?.selfReviews ?? false,
+        targetOpenToAgents: openTargets.has(row.id),
+        citesUnreadSources: unreadSources.has(row.id),
+        activeAgents,
+        summary: summaries.get(row.id),
+        hasOpenDispute: openDisputes.has(row.id),
+        upheldRulingStands: upheldRulings.has(row.id),
+        applyFailedForCurrentToken:
+          isConsensusApplyFailure(failure) &&
+          failure.token === pendingEditReviewToken(row as never),
+      }),
+    );
+  });
+  return out;
+}
+
+/** `Promise.all` over `items`, at most `limit` in flight, results in order. */
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i]!);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, worker),
+  );
+  return results;
 }
 
 export async function applyOnAgentConsensus(args: {

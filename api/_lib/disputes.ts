@@ -996,15 +996,47 @@ export async function pendingEditUpheldRulingStands(
   pendingEditId: number,
   proposedMeta: unknown,
 ): Promise<boolean> {
+  return upheldDisputeStands({
+    targetType: 'pending_edit',
+    targetId: pendingEditId,
+    revisedAt: pendingEditRevisedAt(proposedMeta),
+  });
+}
+
+/** The server-owned `proposedMeta.revisedAt` marker, or null when absent. */
+function pendingEditRevisedAt(proposedMeta: unknown): string | null {
   const raw =
     proposedMeta && typeof proposedMeta === 'object'
       ? (proposedMeta as Record<string, unknown>).revisedAt
       : undefined;
-  return upheldDisputeStands({
+  return typeof raw === 'string' ? raw : null;
+}
+
+/**
+ * {@link pendingEditUpheldRulingStands} for many pending edits in one read
+ * (issue #33): the ids of `pendings` an upheld ruling still binds. Read-only
+ * consumers only — the /review queue's consensus annotation.
+ */
+export async function pendingEditsWithStandingUpheldRuling(
+  pendings: readonly { id: number; proposedMeta: unknown }[],
+): Promise<Set<number>> {
+  if (pendings.length === 0) return new Set();
+  const rulings = await upheldDisputeResolvedAt({
     targetType: 'pending_edit',
-    targetId: pendingEditId,
-    revisedAt: typeof raw === 'string' ? raw : null,
+    targetIds: pendings.map((p) => p.id),
   });
+  const out = new Set<number>();
+  for (const p of pendings) {
+    if (
+      anyUpheldRulingStands({
+        rulings: rulings.get(p.id),
+        revisedAt: pendingEditRevisedAt(p.proposedMeta),
+      })
+    ) {
+      out.add(p.id);
+    }
+  }
+  return out;
 }
 
 /** The single-target form of {@link anyUpheldRulingStands}. */

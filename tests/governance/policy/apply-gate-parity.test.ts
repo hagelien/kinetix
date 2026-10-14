@@ -35,6 +35,10 @@ import {
 } from '../../../api/_lib/knowledge-governance/policy-shadow.js';
 import type { VerificationSummary } from '../../../api/_lib/agent-verifications.js';
 import { genericConsensusHoldReason } from '../../../src/lib/assurance/projection.js';
+import {
+  consensusStatusFromFacts,
+  type ConsensusStatusFacts,
+} from '../../../api/agent-verifications.js';
 
 // ──────────────────────────────────────────────────────────────────────────
 // FROZEN REFERENCE — the legacy gate as of api/agent-verifications.ts
@@ -723,5 +727,260 @@ describe('context projection', () => {
     // into decision records, where a guess would be recorded as fact.
     const context = projectConsensusContext(facts({ activeAgents: 3 }));
     expect(context.pool.size).toBeNull();
+  });
+});
+
+/**
+ * Issue #33: the /review queue's read-only consensus status is computed for
+ * the whole page at once (`agentConsensusStatusForTargets`), by reading every
+ * gate input in bulk and evaluating the gates in memory with
+ * `consensusStatusFromFacts`. That function is a second transcription of
+ * `legacyConsensusHold` — used only for the card, never to publish — so it is
+ * held to the same frozen reference as the generic engine above: it must
+ * reach the frozen gate's outcome everywhere, and the frozen gate's reason
+ * wherever the frozen gate states one.
+ *
+ * The DB side (that the bulk reads feed it the same facts the single-edit
+ * reads would) is pinned against real SQL in
+ * tests/integration/pending-edits-consensus-status-batch.test.ts.
+ */
+describe('batched read-only status matches the frozen gate (issue #33)', () => {
+  /** The batched evaluator's facts for a parity row; every extra gate open. */
+  function batchedFacts(
+    f: ConsensusFacts,
+    over: Partial<ConsensusStatusFacts> = {},
+  ): ConsensusStatusFacts {
+    return {
+      editType: f.editType,
+      parameter: f.parameter ?? null,
+      submittedBy: f.submittedBy,
+      proposedMeta: null,
+      lacksSourceQuote: false,
+      submitterIsAgent: f.submitterIsAgent,
+      // A person holds no grant; the quorum arithmetic is the same either way.
+      authorSelfReviewGrant: f.submitterIsAgent && f.authorSelfReviews,
+      targetOpenToAgents: true,
+      citesUnreadSources: false,
+      activeAgents: f.activeAgents,
+      summary: f.summary,
+      hasOpenDispute: f.hasOpenHumanDispute,
+      upheldRulingStands: false,
+      applyFailedForCurrentToken: false,
+      ...over,
+    };
+  }
+
+  /**
+   * The frozen gate's reason, in its order — composed only of the frozen
+   * pieces above (`frozenHoldReason` for the tally), so the reasons are
+   * checked against the reference rather than against production code.
+   */
+  function frozenReason(f: ConsensusFacts): string | null {
+    if (f.editType === 'clinical_case') return 'clinical_case';
+    if (f.submittedBy === null) return 'human_submitted';
+    const tally = frozenHoldReason(f.summary, f.quorum, { highRisk: f.highRisk });
+    if (tally) return tally;
+    if (f.hasOpenHumanDispute) return 'open_dispute';
+    return null;
+  }
+
+  function batched(f: ConsensusFacts, over: Partial<ConsensusStatusFacts> = {}) {
+    const status = consensusStatusFromFacts(batchedFacts(f, over));
+    return status.ready ? null : status.reason;
+  }
+
+  it('consensus reached — ready', () => {
+    const f = facts({ summary: summary({ approveCount: 2 }) });
+    expect(frozenLegacyGate(f)).toBe('apply');
+    expect(consensusStatusFromFacts(batchedFacts(f))).toEqual({ ready: true });
+  });
+
+  it("a person's proposal at full quorum — ready", () => {
+    const f = facts({ submitterIsAgent: false, summary: summary({ approveCount: 2 }) });
+    expect(frozenLegacyGate(f)).toBe('apply');
+    expect(batched(f)).toBeNull();
+  });
+
+  it('held short of the quorum — quorum_unmet', () => {
+    const f = facts({ summary: summary({ approveCount: 1 }) });
+    expect(frozenLegacyGate(f)).toBe('hold');
+    expect(batched(f)).toBe('quorum_unmet');
+    // No counted verdict at all reads the same.
+    expect(batched(f, { summary: undefined })).toBe('quorum_unmet');
+  });
+
+  it('disputed by an agent — held on the tally', () => {
+    const f = facts({ summary: summary({ approveCount: 3, disputeCount: 1 }) });
+    expect(frozenLegacyGate(f)).toBe('hold');
+    expect(batched(f)).toBe('quorum_unmet');
+  });
+
+  it('disputed by a person — open_dispute', () => {
+    const f = facts({
+      summary: summary({ approveCount: 2 }),
+      hasOpenHumanDispute: true,
+    });
+    expect(frozenLegacyGate(f)).toBe('hold');
+    expect(batched(f)).toBe('open_dispute');
+  });
+
+  it('a high-risk hold outranks a human dispute', () => {
+    const f = facts({
+      editType: 'parameter',
+      parameter: 'halfLife',
+      highRisk: true,
+      summary: summary({ approveCount: 2, approveTier2Count: 0 }),
+      hasOpenHumanDispute: true,
+    });
+    expect(batched(f)).toBe('high_risk_missing_flagship');
+  });
+
+  it('insufficient verifiers — a degraded pool never carries a high-risk edit', () => {
+    const f = facts({
+      activeAgents: 2,
+      editType: 'parameter',
+      parameter: 'halfLife',
+      highRisk: true,
+      summary: summary({ approveCount: 1, approveTier2Count: 1 }),
+    });
+    expect(f.quorum).toBe(1);
+    expect(frozenLegacyGate(f)).toBe('hold');
+    expect(batched(f)).toBe('high_risk_degraded_quorum');
+  });
+
+  it('insufficient verifiers — the self-review grant raises the quorum', () => {
+    const f = facts({
+      activeAgents: 2,
+      authorSelfReviews: true,
+      summary: summary({ approveCount: 1 }),
+    });
+    expect(f.quorum).toBe(2);
+    expect(frozenLegacyGate(f)).toBe('hold');
+    expect(batched(f)).toBe('quorum_unmet');
+  });
+
+  it('legacy holds — clinical case and unattributed proposal, whatever the tally', () => {
+    const full = summary({ approveCount: 5, approveTier2Count: 3 });
+    const clinical = facts({ editType: 'clinical_case', summary: full });
+    expect(frozenLegacyGate(clinical)).toBe('hold');
+    expect(batched(clinical)).toBe('clinical_case');
+    const unattributed = facts({
+      submittedBy: null,
+      submitterIsAgent: false,
+      summary: full,
+    });
+    expect(frozenLegacyGate(unattributed)).toBe('hold');
+    expect(batched(unattributed)).toBe('human_submitted');
+  });
+
+  // The gates that postdate the frozen copy, at full quorum where the frozen
+  // gate would apply: each holds on its own reason, in legacyConsensusHold's
+  // order (and agentConsensusStatus's source-quote and apply-failure checks
+  // around it).
+  it('later gates hold on their own reason, in the live order', () => {
+    const ready = facts({ summary: summary({ approveCount: 2 }) });
+    expect(frozenLegacyGate(ready)).toBe('apply');
+    expect(batched(ready, { lacksSourceQuote: true })).toBe('source_quote_missing');
+    expect(batched(ready, { targetOpenToAgents: false })).toBe('target_unpublished');
+    expect(batched(ready, { citesUnreadSources: true })).toBe('unverified_sources');
+    expect(batched(ready, { upheldRulingStands: true })).toBe('upheld_dispute');
+    expect(
+      batched(ready, { proposedMeta: { returnedAt: '2026-10-06T10:00:00.000Z' } }),
+    ).toBe('returned_unrevised');
+    expect(batched(ready, { applyFailedForCurrentToken: true })).toBe('apply_failed');
+
+    // Order: the source quote is checked before anything else, even a
+    // clinical case; the page and the sources before the tally; the tally
+    // before a dispute, a ruling or a return; a recorded failure last.
+    const clinical = facts({ editType: 'clinical_case' });
+    expect(batched(clinical, { lacksSourceQuote: true })).toBe('source_quote_missing');
+    const short = facts({ summary: summary({ approveCount: 0 }) });
+    expect(batched(short, { targetOpenToAgents: false })).toBe('target_unpublished');
+    expect(batched(short, { citesUnreadSources: true })).toBe('unverified_sources');
+    expect(batched(short, { upheldRulingStands: true })).toBe('quorum_unmet');
+    expect(
+      batched(short, { proposedMeta: { returnedAt: '2026-10-06T10:00:00.000Z' } }),
+    ).toBe('quorum_unmet');
+    expect(batched(short, { applyFailedForCurrentToken: true })).toBe('quorum_unmet');
+    const disputed = facts({
+      summary: summary({ approveCount: 2 }),
+      hasOpenHumanDispute: true,
+    });
+    expect(batched(disputed, { upheldRulingStands: true })).toBe('open_dispute');
+    expect(batched(disputed, { applyFailedForCurrentToken: true })).toBe('open_dispute');
+  });
+
+  describe('across the exhaustive matrix', () => {
+    const EDIT_TYPES = ['wiki_fact', 'parameter', 'clinical_case'] as const;
+    const rows: ConsensusFacts[] = [];
+    for (const editType of EDIT_TYPES) {
+      for (const approveCount of [0, 1, 2, 3]) {
+        for (const disputeCount of [0, 1]) {
+          for (const approveTier2Count of [undefined, 0, 1]) {
+            for (const activeAgents of [1, 2, 3]) {
+              for (const submitterIsAgent of [true, false]) {
+                for (const submittedBy of [7, null]) {
+                  for (const hasOpenHumanDispute of [false, true]) {
+                    for (const authorSelfReviews of [false, true]) {
+                      rows.push(
+                        facts({
+                          editType,
+                          parameter: editType === 'parameter' ? 'halfLife' : null,
+                          highRisk: editType === 'parameter',
+                          submittedBy,
+                          submitterIsAgent: submittedBy !== null && submitterIsAgent,
+                          hasOpenHumanDispute,
+                          activeAgents,
+                          authorSelfReviews,
+                          quorum: frozenQuorum(
+                            activeAgents,
+                            authorSelfReviews,
+                            submittedBy !== null && submitterIsAgent,
+                          ),
+                          summary: summary({
+                            approveCount,
+                            disputeCount,
+                            approveTier2Count,
+                          }),
+                        }),
+                      );
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    it('reaches the frozen outcome in every case', () => {
+      const mismatches = rows
+        .filter((f) => (batched(f) === null ? 'apply' : 'hold') !== frozenLegacyGate(f))
+        .map((f) => ({ ...f, batched: batched(f), frozen: frozenLegacyGate(f) }));
+      expect(mismatches).toEqual([]);
+    });
+
+    it('states the frozen reason in every case', () => {
+      const mismatches = rows
+        .filter((f) => batched(f) !== frozenReason(f))
+        .map((f) => ({ ...f, batched: batched(f), frozen: frozenReason(f) }));
+      expect(mismatches).toEqual([]);
+    });
+
+    it('reaches every outcome, so agreement is not vacuous', () => {
+      const reasons = new Set(rows.map((f) => batched(f)));
+      for (const reason of [
+        null,
+        'quorum_unmet',
+        'high_risk_degraded_quorum',
+        'high_risk_missing_flagship',
+        'clinical_case',
+        'human_submitted',
+        'open_dispute',
+      ]) {
+        expect(reasons).toContain(reason);
+      }
+    });
   });
 });
