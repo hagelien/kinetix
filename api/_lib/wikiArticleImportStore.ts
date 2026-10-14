@@ -1,6 +1,7 @@
 /** Article imports create section headings and stage facts; they never approve. */
 import { and, eq, sql } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import { pendingEdits, wikiPages, wikiRevisions } from "../../db/schema.js";
 import { getDb, runInPoolTransaction } from "./db.js";
 import { followFoldedCitations, resolveCitation } from "./citation-store.js";
@@ -8,6 +9,7 @@ import { isActiveAgentUser } from "./agent-verifications.js";
 import { wikiContentFocusRefusal } from "../agent-focus.js";
 import { renderHtml, extractPlaintext } from "./tiptap-utils.js";
 import { applyAddSection } from "../../src/lib/topicSectionOps.js";
+import { rewriteCitationIdsInJson } from "../../src/lib/citationHandles.js";
 import { extractTopicSections } from "../../src/lib/topicSections.js";
 import {
   createFactNode,
@@ -158,22 +160,52 @@ export async function applyWikiArticle(
       const refusal = await wikiContentFocusRefusal(initial.id);
       if (refusal) throw new WikiArticleConflict(refusal);
     }
-    // Share the existing conversation-import queue lock; lock content as well.
+    // Share the existing conversation-import queue lock. Waited for first,
+    // while this transaction holds nothing, so the wait cannot be part of a
+    // cycle; its only other holder (a queued conversation-ingestion fact)
+    // takes it first as well.
     await db.execute(
       sql`SELECT pg_advisory_xact_lock(hashtext(${`wiki_fact_proposal:${initial.id}`}))`,
     );
-    const [page] = await db
+
+    // Sources are resolved BEFORE the page row is locked (#247). A resolution
+    // can fold a split pair, and a fold locks the loser's open extraction-job
+    // rows (`lockLoserExtractionJobs`) and then rewrites every wiki page citing
+    // the loser. The global order is drug advisory lock → extraction-job row →
+    // wiki page row (#223, #243; see `tryLockDrugForRecompute`): the
+    // paper-extraction fact route holds a run's job `FOR SHARE` and then
+    // share-locks the page, and `mergeCitations` holds jobs while it rewrites
+    // pages. Locking this page first and folding second was page → job, and
+    // closed a cycle with either of them that Postgres broke by aborting one
+    // side (40P01). Drug locks are no hazard here: a fold only *tries* them
+    // (before its job rows), and nothing in this import waits for one.
+    //
+    // Resolving first is safe because nothing in it needs the page: the
+    // sources come from the bundle, not from the page, and the preview check
+    // still runs under the page lock below, before any write of ours. What it
+    // changes is that a fold can itself rewrite this page (when the page
+    // already cites the loser), so the locked page is no longer the snapshot
+    // the preview pinned. Checked in two steps instead:
+    //   1. the preview fingerprint against an unlocked read taken after the
+    //      advisory lock — a stale preview is refused before anything is
+    //      resolved;
+    //   2. under the page lock, that the page is that same read with exactly
+    //      this transaction's folds applied — anything else changed it since,
+    //      and is refused as stale too (the rollback undoes the folds).
+    // The plan and the new document are then built from the locked page, so
+    // writing the new sections keeps the folds' rewrite instead of putting the
+    // deleted loser ids back.
+    const [snapshot] = await db
       .select()
       .from(wikiPages)
-      .where(eq(wikiPages.id, initial.id))
-      .for("update");
-    if (!page || page.slug !== bundle.page.slug)
+      .where(eq(wikiPages.id, initial.id));
+    if (!snapshot || snapshot.slug !== bundle.page.slug)
       throw new WikiArticleConflict("page_identity_conflict");
-    const { plan, doc } = prepare(bundle, page);
-    if (plan.fingerprint !== expectedFingerprint)
+    if (prepare(bundle, snapshot).plan.fingerprint !== expectedFingerprint)
       throw new WikiArticleConflict("stale_preview");
 
     const ids = new Map<string, number>();
+    const folds: Array<{ from: number; to: number }> = [];
     const needed = new Set(
       bundle.sections.flatMap((s) => s.facts.flatMap((f) => f.sourceKeys)),
     );
@@ -192,7 +224,28 @@ export async function applyWikiArticle(
         ([key]) => ids.set(key, citation.id),
       );
       ids.set(source.key, citation.id);
+      for (const loser of citation.mergedIds)
+        folds.push({ from: loser, to: citation.id });
     }
+
+    const [page] = await db
+      .select()
+      .from(wikiPages)
+      .where(eq(wikiPages.id, initial.id))
+      .for("update");
+    if (!page || page.slug !== bundle.page.slug)
+      throw new WikiArticleConflict("page_identity_conflict");
+    const folded = folds.reduce(
+      (value, { from, to }) => rewriteCitationIdsInJson(value, from, to).value,
+      snapshot.content,
+    );
+    if (
+      page.title !== snapshot.title ||
+      page.pageType !== snapshot.pageType ||
+      !isDeepStrictEqual(page.content, folded)
+    )
+      throw new WikiArticleConflict("stale_preview");
+    const { plan, doc } = prepare(bundle, page);
     if (plan.newSectionCount > 0) {
       const contentHtml = renderHtml(doc);
       await db
