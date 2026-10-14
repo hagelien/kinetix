@@ -28,6 +28,17 @@ vi.mock('@/components/wiki/DrugMonographSidebar', () => ({
     <div data-testid="parameter-box">{section}</div>
   ),
 }));
+vi.mock('@/components/wiki/FactDiscussionPanel', () => ({
+  FactDiscussionPanel: ({
+    factId,
+    focusCommentId,
+  }: {
+    factId: string;
+    focusCommentId?: number;
+  }) => (
+    <div data-testid="fact-panel">{`${factId}:${focusCommentId ?? ''}`}</div>
+  ),
+}));
 vi.mock('@/components/wiki/DrugMetadataHeader', () => ({
   DrugMetadataHeader: () => null,
 }));
@@ -58,8 +69,12 @@ vi.mock('@/lib/drugIndicatorsApi', () => ({
   fetchWikiPageIndicators: () => Promise.resolve({ comments: {} }),
 }));
 // The drug row never resolves: the page must still say which drug it is.
+const drugApi = vi.hoisted(() => ({ resolves: false }));
 vi.mock('@/lib/drugApi', () => ({
-  fetchDrugByWikiDrugId: () => Promise.reject(new Error('unavailable')),
+  fetchDrugByWikiDrugId: () =>
+    drugApi.resolves
+      ? Promise.resolve({ drug: { id: 7, pubchemCid: 7 } })
+      : Promise.reject(new Error('unavailable')),
   drugRowToComponent: () => ({}),
 }));
 
@@ -120,6 +135,7 @@ describe('WikiPage drug monograph tabs', () => {
   });
 
   afterEach(() => {
+    drugApi.resolves = false;
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
     useDrugStore.setState(originalDrugState);
@@ -172,6 +188,15 @@ describe('WikiPage drug monograph tabs', () => {
       expect(screen.getByTestId('location').textContent).toBe(
         '/wiki/paracetamol/interpretive_concentrations',
       ),
+    );
+  });
+
+  it("forwards a fact link's comment id to the fact thread", async () => {
+    drugApi.resolves = true;
+    renderAt('/wiki/paracetamol?fact=f-tox&comment=8');
+
+    expect((await screen.findByTestId('fact-panel')).textContent).toBe(
+      'f-tox:8',
     );
   });
 });

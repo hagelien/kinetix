@@ -90,6 +90,7 @@ export function WikiPage() {
   const [pendingEdit, setPendingEdit] = useState<PendingEditRow | null>(null);
   const [factDiscussion, setFactDiscussion] = useState<{
     factId: string;
+    focusCommentId?: number;
   } | null>(null);
   const [discussionCounts, setDiscussionCounts] = useState<
     Record<string, number>
@@ -313,14 +314,20 @@ export function WikiPage() {
   // discussion once the drug row that hosts the thread has loaded. Each link
   // is applied once, so closing the panel is not undone by a re-render.
   const linkedFactId = searchParams.get('fact');
+  const linkedCommentParam = searchParams.get('comment');
   const openedLinkedFact = useRef<string | null>(null);
   useEffect(() => {
     if (!linkedFactId || !drug || openedLinkedFact.current === linkedFactId) {
       return;
     }
     openedLinkedFact.current = linkedFactId;
-    setFactDiscussion({ factId: linkedFactId });
-  }, [linkedFactId, drug]);
+    const comment = Number(linkedCommentParam);
+    setFactDiscussion({
+      factId: linkedFactId,
+      focusCommentId:
+        Number.isInteger(comment) && comment > 0 ? comment : undefined,
+    });
+  }, [linkedFactId, linkedCommentParam, drug]);
 
   useEffect(() => {
     let cancelled = false;
@@ -546,6 +553,7 @@ export function WikiPage() {
       <FactDiscussionPanel
         host={drug ? { drugId: drug.id } : { wikiPageId: page.id }}
         factId={factDiscussion.factId}
+        focusCommentId={factDiscussion.focusCommentId}
         verification={factLevels[factDiscussion.factId]}
         onClose={() => setFactDiscussion(null)}
       />

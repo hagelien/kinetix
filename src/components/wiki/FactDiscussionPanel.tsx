@@ -13,6 +13,8 @@ interface Props {
   /** Drug monograph (`{ drugId }`) or topic page (`{ wikiPageId }`). */
   host: DiscussionHost;
   factId: string;
+  /** Comment to scroll to and highlight, from a `?comment=` link. */
+  focusCommentId?: number;
   /** Verification level of this fact's live value, if known. */
   verification?: VerificationLevelInfo;
   onClose: () => void;
@@ -21,6 +23,7 @@ interface Props {
 export function FactDiscussionPanel({
   host,
   factId,
+  focusCommentId,
   verification,
   onClose,
 }: Props) {
@@ -44,6 +47,7 @@ export function FactDiscussionPanel({
         <DiscussionThread
           host={host}
           parameter={discussionTargetForFact(factId)}
+          focusCommentId={focusCommentId}
         />
       </div>
     </ModalOverlay>
