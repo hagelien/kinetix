@@ -143,6 +143,23 @@ export function tabForParameter(parameter: string): MonographTabId | null {
   return group && isMonographTabId(group) ? group : DEFAULT_MONOGRAPH_TAB;
 }
 
+/**
+ * The tab whose prose contains the fact with this id, so a link to a fact's
+ * discussion opens the tab that shows it. Null when the page has no such fact.
+ */
+export function tabForFact(html: string, factId: string): MonographTabId | null {
+  const marker = `data-fact-id="${factId.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"`;
+  let unsectioned = '';
+  let last = 0;
+  for (const match of html.matchAll(SECTION_BLOCK_RE)) {
+    unsectioned += html.slice(last, match.index);
+    last = (match.index ?? 0) + match[0].length;
+    if (match[0].includes(marker)) return tabForSection(match[1]!);
+  }
+  unsectioned += html.slice(last);
+  return unsectioned.includes(marker) ? DEFAULT_MONOGRAPH_TAB : null;
+}
+
 const LAST_TAB_STORAGE_KEY = 'kinetix.monograph.lastTab';
 
 /** The tab the reader was last on, so switching drug keeps the same topic. */

@@ -76,6 +76,17 @@ describe('disputeTargetUrl over real SQL', () => {
     ).toBe(`/wiki/drug/${drugId}?param=halfLife&view=discussion&comment=${row!.id}`);
   });
 
+  it('routes a fact comment to the fact so its tab can be found', async () => {
+    const drugId = await seedDrug(db);
+    const [row] = await db
+      .insert(drugParameterDiscussions)
+      .values({ drugId, parameter: 'fact:abc-1', body: 'Source?', createdBy: authorId })
+      .returning({ id: drugParameterDiscussions.id });
+    expect(
+      await disputeTargetUrl({ targetType: 'drug_discussion', targetId: row!.id }),
+    ).toBe(`/wiki/drug/${drugId}?fact=abc-1&comment=${row!.id}`);
+  });
+
   it('routes a monograph-wide drug discussion to the drug monograph', async () => {
     const drugId = await seedDrug(db);
     const [row] = await db

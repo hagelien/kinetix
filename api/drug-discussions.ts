@@ -42,6 +42,7 @@ import {
   disputeTargetUrl,
   recordImplicitAgentApproval,
 } from './_lib/agent-verifications.js';
+import { drugDiscussionUrl } from './_lib/discussion-urls.js';
 import { notifyCommentFeedback } from './_lib/commentNotifications.js';
 import { isFactDiscussionTargetKey } from '../src/lib/discussionTargets.js';
 import {
@@ -287,17 +288,11 @@ async function handleGetById(
   let url = '/wiki';
   let isDraft = false;
   if (row.drugId != null) {
-    url = `/wiki/drug/${row.drugId}`;
-    // Same route shape as `disputeTargetUrl`: a comment on one drug parameter
-    // opens that parameter's discussion at the comment. Whole-monograph and
-    // `fact:` threads have no parameter panel to open.
-    if (row.parameter && !row.parameter.startsWith('fact:')) {
-      url += `?${new URLSearchParams({
-        param: row.parameter,
-        view: 'discussion',
-        comment: String(row.id),
-      })}`;
-    }
+    url = drugDiscussionUrl({
+      id: row.id,
+      drugId: row.drugId,
+      parameter: row.parameter,
+    });
   } else if (row.wikiPageId != null) {
     const [page] = await db
       .select({ slug: wikiPages.slug, status: wikiPages.status })

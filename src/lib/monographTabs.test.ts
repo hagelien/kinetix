@@ -6,6 +6,7 @@ import {
   filterMonographHtmlForTab,
   isMonographTabId,
   sectionsForTab,
+  tabForFact,
   tabForParameter,
 } from './monographTabs';
 
@@ -65,6 +66,17 @@ describe('monograph tabs', () => {
     // Ungrouped metadata (names, aliases) lives with the drug's identity.
     expect(tabForParameter('aliases')).toBe('chemistry');
     expect(tabForParameter('notAParameter')).toBeNull();
+  });
+
+  it("opens a fact's discussion on the tab whose prose contains the fact", () => {
+    const html =
+      '<p data-fact-id="loose">intro</p>' +
+      section('pk', '<p class="monograph-fact" data-fact-id="f-pk">x</p>') +
+      section('toxicity', '<div class="monograph-fact" data-fact-id="f-tox">y</div>');
+    expect(tabForFact(html, 'f-pk')).toBe('pharmacokinetics');
+    expect(tabForFact(html, 'f-tox')).toBe('interpretive_concentrations');
+    expect(tabForFact(html, 'loose')).toBe('chemistry');
+    expect(tabForFact(html, 'f-gone')).toBeNull();
   });
 
   it('recognises only known tab ids', () => {

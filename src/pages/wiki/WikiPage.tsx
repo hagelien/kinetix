@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   useLocation,
   useNavigate,
@@ -46,6 +46,7 @@ import {
   monographTabLabelKey,
   monographTabPath,
   saveLastMonographTab,
+  tabForFact,
   tabForParameter,
   type MonographTabId,
 } from '@/lib/monographTabs';
@@ -190,10 +191,15 @@ export function WikiPage() {
       return;
     }
     const linkedParam = searchParams.get('param');
+    const linkedFact = searchParams.get('fact');
     const target =
       (tabParam === undefined && linkedParam
         ? tabForParameter(linkedParam)
-        : null) ?? loadLastMonographTab();
+        : null) ??
+      (tabParam === undefined && linkedFact
+        ? tabForFact(page.contentHtml ?? '', linkedFact)
+        : null) ??
+      loadLastMonographTab();
     navigate(
       `${monographTabPath(page.slug, target)}${location.search}${location.hash}`,
       { replace: true },
@@ -302,6 +308,19 @@ export function WikiPage() {
     if (!matchedDrug || !drugComponent) return;
     setActiveDrug(drugComponent);
   }, [matchedDrug, drugComponent, setActiveDrug]);
+
+  // A `?fact=` link (a comment notification or dispute) opens that fact's
+  // discussion once the drug row that hosts the thread has loaded. Each link
+  // is applied once, so closing the panel is not undone by a re-render.
+  const linkedFactId = searchParams.get('fact');
+  const openedLinkedFact = useRef<string | null>(null);
+  useEffect(() => {
+    if (!linkedFactId || !drug || openedLinkedFact.current === linkedFactId) {
+      return;
+    }
+    openedLinkedFact.current = linkedFactId;
+    setFactDiscussion({ factId: linkedFactId });
+  }, [linkedFactId, drug]);
 
   useEffect(() => {
     let cancelled = false;
