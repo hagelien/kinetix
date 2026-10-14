@@ -11,7 +11,9 @@
  */
 
 const CONCENTRATION_NUMBER_PATTERN = String.raw`\d+(?:(?:[,.]\d{3})+)?(?:[,.]\d+)?`;
-const CONCENTRATION_RANGE_SEPARATOR_PATTERN = String.raw`(?:[–-]|\btil\b|\bto\b)`;
+// `og`/`and` too: "mellom 1 og 3 mg/L" is a range, and without it the match
+// would restart at the second figure and convert only the upper bound.
+const CONCENTRATION_RANGE_SEPARATOR_PATTERN = String.raw`(?:[–-]|\btil\b|\bto\b|\bog\b|\band\b)`;
 const CONCENTRATION_UNIT_PATTERN = [
   "mmol/dL",
   "(?:µ|μ|u)mol/dL",
@@ -205,7 +207,7 @@ export function parseConcentrationValue(raw: string): {
     return Number.isFinite(value) ? { high: value } : {};
   }
 
-  const range = normalized.split(/\s*(?:[–-]|\btil\b|\bto\b)\s*/i);
+  const range = normalized.split(/\s*(?:[–-]|\btil\b|\bto\b|\bog\b|\band\b)\s*/i);
   if (range.length === 2) {
     const low = numberFrom(range[0] ?? "");
     const high = numberFrom(range[1] ?? "");

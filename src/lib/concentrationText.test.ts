@@ -75,6 +75,21 @@ describe('splitConcentrationText', () => {
     }
   });
 
+  it('reads a range joined by a word as one range', () => {
+    for (const [text, value] of [
+      ['between 1 and 3 mg/L', '1 and 3'],
+      ['mellom 1 og 3 mg/L', '1 og 3'],
+      ['fra 0,2 til 0,5 mg/L', '0,2 til 0,5'],
+    ] as const) {
+      const concentrations = splitConcentrationText(text).filter(
+        (s) => s.kind === 'concentration',
+      );
+      expect(concentrations.map((s) => (s.kind === 'concentration' ? s.value : ''))).toEqual([value]);
+    }
+    expect(parseConcentrationValue('1 and 3')).toEqual({ low: 1, high: 3 });
+    expect(parseConcentrationValue('1 og 3')).toEqual({ low: 1, high: 3 });
+  });
+
   it('never annotates the tail of a number it cannot read', () => {
     // A suffix-only match would convert the wrong value in the tooltip.
     for (const text of [
