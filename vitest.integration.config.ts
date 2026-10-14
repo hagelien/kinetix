@@ -47,6 +47,7 @@ const MOCKED = [
   'tests/integration/wiki-page-delete.test.ts',
   'tests/integration/agent-focus-wiki-scope.test.ts',
   'tests/integration/agent-self-review.test.ts',
+  'tests/integration/agent-sweep-pending-entries.test.ts',
   'tests/integration/agent-verification-queue-submitters.test.ts',
   'tests/integration/agent-verifications-queue-hydration.test.ts',
   'tests/integration/agent-verifications-queue-revisit-abstained.test.ts',
