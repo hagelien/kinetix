@@ -70,6 +70,9 @@ describe('splitConcentrationText', () => {
       '95% KI −1–3 ng/mL',
       '95% KI -1-3 ng/mL',
       'endring +2 mg/L',
+      '95% KI − 1–3 ng/mL',
+      'endring + 2 mg/L',
+      'endring ± 2 mg/L',
     ]) {
       expect(splitConcentrationText(text)).toEqual([{ kind: 'text', text }]);
       expect(containsConcentration(text)).toBe(false);

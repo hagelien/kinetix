@@ -41,14 +41,14 @@ const CONCENTRATION_UNIT_PATTERN = [
  * numeric that started earlier. Also refused: a letter of any script, `_` or
  * decimal mark directly before it (`A5`, `β5`), an exponent marker (`1e-3`, `1E3`), and a digit
  * then the letter `x` used as a multiplication sign (`5 x 10-3`), and a sign
- * directly before it (`−1–3 ng/mL` in a confidence interval): the pattern is
+ * before it, spaced or not (`−1–3 ng/mL`, `− 1–3`, `+ 2 mg/L`): the pattern is
  * unsigned, so it would convert the interval as positive. A real range
  * (`1–3 mg/L`) is matched from its first figure and is unaffected. The cost is
  * the safe one: a concentration written straight after an unrelated number
  * (`dag 1: 5 mg/L`) is left unannotated rather than ever converted wrongly.
  */
 const LETTER = String.raw`\p{L}`;
-const CONCENTRATION_NUMBER_START_GUARD = String.raw`(?<!\d[^${LETTER}\d]*|\d\s*[xX]\s*|[${LETTER}_.,]|[eE][+\-\u2212]?|[+\-\u2212–±])`;
+const CONCENTRATION_NUMBER_START_GUARD = String.raw`(?<!\d[^${LETTER}\d]*|\d\s*[xX]\s*|[${LETTER}_.,]|[eE][+\-\u2212]?|[+\-\u2212–±]\s*)`;
 
 /**
  * Group 1: the (optionally qualified, optionally ranged) figure — it may carry
