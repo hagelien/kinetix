@@ -293,6 +293,51 @@ describe('conversation ingestion — apply', () => {
     expect(entries.every((e) => e.citationId === survivor!.id)).toBe(true);
   });
 
+  // #253: S1 creates a row for its paper (carrying the DOI its crosswalk
+  // verified), and S2 — the same paper under an older row's PMID, with that DOI
+  // — reaches both and folds the new row into the older one. Nothing was added
+  // in the end, so nothing may be counted as added.
+  async function seedOlderRowForFold() {
+    const [older] = await db
+      .insert(citations)
+      .values({ type: 'pmid', identifier: '10201674', createdBy: userId })
+      .returning({ id: citations.id });
+    const crosswalk = new Map([
+      ['S1', { doi: '10.1000/split' }],
+      ['S2', { doi: '10.1000/split' }],
+    ]);
+    return { olderId: older!.id, crosswalk };
+  }
+
+  it('does not count a citation a later item folded away as created', async () => {
+    const { olderId, crosswalk } = await seedOlderRowForFold();
+    const result = await applyIngestion(parse(bundle()), {
+      userId,
+      accept: [0, 1],
+      crosswalk,
+    });
+
+    expect(result.counts).toMatchObject({ failed: 0 });
+    expect((await db.select({ id: citations.id }).from(citations)).map((r) => r.id)).toEqual([
+      olderId,
+    ]);
+    expect(result.citationsCreated).toBe(0);
+  });
+
+  it('does not count a citation a later source of the same item folded away as created', async () => {
+    const { olderId, crosswalk } = await seedOlderRowForFold();
+    const raw = bundle();
+    const items = raw.items as Array<Record<string, unknown>>;
+    items[1] = { ...items[1]!, sourceKeys: ['S1', 'S2'] };
+    const result = await applyIngestion(parse(raw), { userId, accept: [1], crosswalk });
+
+    expect(result.counts).toMatchObject({ failed: 0 });
+    expect((await db.select({ id: citations.id }).from(citations)).map((r) => r.id)).toEqual([
+      olderId,
+    ]);
+    expect(result.citationsCreated).toBe(0);
+  });
+
   it('splices an accepted fact into the monograph through the approval path', async () => {
     const doc = parse(bundle());
     const result = await applyIngestion(doc, { userId, accept: [1] });
