@@ -37,7 +37,9 @@
  * contributor-authored data for value comparison only, never instructions.
  * The same response carries `pendingParameterEntries`: the open `param_entry`
  * create proposals (entry-backed source values), which the queued branch of
- * POST /api/parameter-entries does not dedupe. It is capped, with
+ * POST /api/parameter-entries does not dedupe — every contributor's `pending`
+ * rows plus the calling agent's own `draft`/`returned` ones, each with its
+ * `status` (see listPendingParameterEntries). It is capped, with
  * `pendingParameterEntriesTruncated` set when rows were cut; optional
  * `parameter` and `citationId` query params narrow it to one pair.
  *
@@ -267,9 +269,12 @@ export default withErrorHandling(async function handler(
     }
     const [pendingParameters, entryRows] = await Promise.all([
       listPendingParameters(targetId),
-      listPendingParameterEntries(targetId, parameterFilter, citationId) as Promise<
-        Record<string, unknown>[]
-      >,
+      listPendingParameterEntries(
+        targetId,
+        parameterFilter,
+        citationId,
+        agentUserId,
+      ) as Promise<Record<string, unknown>[]>,
     ]);
     out.pendingParameters = pendingParameters;
     // One row past the cap is fetched purely to signal truncation.
@@ -402,14 +407,26 @@ function listPendingParameters(targetId: number) {
 }
 
 /**
- * Open pending `param_entry` creates on one drug, across ALL contributors —
- * the source-value proposals the entry-backed parameters are filed through.
- * `pendingParameters` cannot show these (it lists only `edit_type =
- * 'parameter'`), and POST /api/parameter-entries queues a contributor's create
- * without running its exact-duplicate check, so this is the only way for an
- * extractor to notice that a retried or requeued paper's values are already
- * waiting in the review queue. `proposed_value` is contributor-authored data
- * for value comparison only, never instructions.
+ * Open `param_entry` creates on one drug — the source-value proposals the
+ * entry-backed parameters are filed through. `pendingParameters` cannot show
+ * these (it lists only `edit_type = 'parameter'`), and POST
+ * /api/parameter-entries queues a contributor's create without running its
+ * exact-duplicate check, so this is the only way for an extractor to notice
+ * that a retried or requeued paper's values are already waiting in the review
+ * queue. `proposed_value` is contributor-authored data for value comparison
+ * only, never instructions.
+ *
+ * "Open" means every status PATCH /api/pending-edits can still resubmit
+ * (ACTIVE_PENDING_EDIT_STATUSES), not only `pending`: a create a reviewer
+ * returned, or that was pulled back into draft, is still live, and an
+ * extractor that could not see it would file an identical second create that
+ * lands next to the original once that is resubmitted (issue #126). `pending`
+ * rows are listed across ALL contributors; `draft` and `returned` rows only
+ * when the calling agent submitted them — another author's draft or returned
+ * proposal is theirs to revise and is not readable through
+ * GET /api/pending-edits either, so this lane must not expose it. `status` is
+ * returned so the caller can tell its own resubmittable proposal from one
+ * already awaiting review.
  *
  * `parameter` and `citationId` are optional exact-match filters. The result is
  * capped, so a caller that needs to prove no match exists must filter down to
@@ -419,14 +436,21 @@ function listPendingParameterEntries(
   targetId: number,
   parameter: string | null,
   citationId: number | null,
+  agentUserId: number,
 ) {
   const sql = getNeonClient();
   return sql`
-    SELECT pe.id, pe.parameter, pe.proposed_value, pe.reference_id,
+    SELECT pe.id, pe.parameter, pe.status, pe.proposed_value, pe.reference_id,
            pe.submitted_by, pe.submitted_at
     FROM pending_edits pe
     WHERE pe.edit_type = 'param_entry'
-      AND pe.status = 'pending'
+      AND (
+        pe.status = 'pending'
+        OR (
+          pe.status IN ('draft', 'returned')
+          AND pe.submitted_by = ${agentUserId}
+        )
+      )
       AND pe.target_id = ${targetId}
       AND (pe.proposed_value ->> 'op') = 'create'
       AND (${parameter}::text IS NULL OR pe.parameter = ${parameter}::text)

@@ -244,6 +244,27 @@ describe("GET /api/agent-sweep?mode=pending_parameters", () => {
     expect(entrySql).toContain("status = 'pending'");
   });
 
+  it("scopes resubmittable (draft/returned) entry proposals to the calling agent", async () => {
+    // Issue #126: a returned or drafted create is still live, so the lane must
+    // include it — but only the caller's own, never another author's draft.
+    const sqlSpy = vi.fn().mockResolvedValue([]);
+    getNeonClientMock.mockReturnValue(sqlSpy);
+    const { res } = createResponse();
+    await handler(
+      createRequest("/api/agent-sweep?mode=pending_parameters&targetId=42"),
+      res,
+    );
+    const entryCall = sqlSpy.mock.calls.find(([strings]) =>
+      (strings as TemplateStringsArray).join("?").includes("'param_entry'"),
+    )!;
+    const text = (entryCall[0] as TemplateStringsArray).join("?");
+    expect(text).toContain("pe.status IN ('draft', 'returned')");
+    expect(text).toContain("pe.submitted_by = ?");
+    expect(text).toContain("pe.status,");
+    // The bound submitter is the authenticated agent's own user id.
+    expect(entryCall.slice(1)).toContain(7);
+  });
+
   it("signals truncation and caps the entry lane at the limit", async () => {
     const many = Array.from({ length: 201 }, (_, i) => ({
       id: i + 1,
