@@ -34,6 +34,9 @@
  * tier. The report sums it per tier × workflow and per identity; with a rate
  * card whose entries name the `models` they price, it turns those measured
  * tokens into measured cost, cost per accepted edit and cost per peer verdict.
+ * The tier is snapshotted when a run is logged, at its end, so a run whose span
+ * contains its agent's latest tier change (`agents.model_tier_changed_at`) is
+ * left out of those measured sections and counted instead.
  * The older rate-card projection (price × estimated tokens per action) is kept
  * for configs not yet run, and stays visually separate from measured cost.
  *
@@ -372,6 +375,8 @@ export interface RunUsageRecord extends TokenCounts {
   /** When the run began and how long it had run when last logged. */
   startedAt: Date | null;
   durationMs: number | null;
+  /** The agent's latest tier change (agents.model_tier_changed_at). */
+  tierChangedAt: Date | null;
 }
 
 const runTokens = (r: RunUsageRecord): number =>
@@ -553,6 +558,38 @@ export function runInterval(r: RunUsageRecord): [number, number] | null {
 }
 
 /**
+ * Whether the agent's tier changed while this run was under way, so the tier
+ * snapshotted when it was logged does not describe all of it.
+ *
+ * The span runs from the start (`started_at`, or `created_at - duration_ms`
+ * when only the duration was logged) to the later of the first log, where the
+ * tier was read, and the run's last known end: a re-log refreshes the duration
+ * but keeps the first snapshot. A change exactly at the start is not inside
+ * the run. With neither a start nor a duration the span is unknown and the run
+ * is kept: nothing says it began before the change.
+ *
+ * Only the latest change is stored, so a run straddling an earlier change that
+ * a later one overwrote is not caught. The routine is to be paused while its
+ * agent is reclassified, which keeps that case rare.
+ */
+export function straddlesTierChange(r: RunUsageRecord): boolean {
+  if (!r.tierChangedAt) return false;
+  const logged = r.createdAt.getTime();
+  let start: number;
+  let end = logged;
+  if (r.startedAt) {
+    start = r.startedAt.getTime();
+    if (r.durationMs != null) end = Math.max(end, start + r.durationMs);
+  } else if (r.durationMs != null) {
+    start = logged - r.durationMs;
+  } else {
+    return false;
+  }
+  const changed = r.tierChangedAt.getTime();
+  return start < changed && changed <= end;
+}
+
+/**
  * Where the cost ratio's outputs must be fetched from: the earliest START of
  * any included run. Runs are selected by `created_at` (written when the run
  * ends), so with `--since` a run under way at the cutoff is included and
@@ -703,8 +740,17 @@ function formatReport(report: BenchmarkReport): string {
   lines.push('its row, so its return is not recoverable from status alone.');
   lines.push('');
   lines.push('## Measured run usage by capability tier (agent_run_usage)');
+  if (report.tierChangeStraddlers > 0) {
+    lines.push(
+      `${report.tierChangeStraddlers} run(s) spanned a change of their agent's tier and are left out below.`,
+    );
+  }
   if (report.runUsage.length === 0) {
-    lines.push('no runs logged in this window (scripts/kinetix-log-run-usage.ts)');
+    lines.push(
+      report.tierChangeStraddlers > 0
+        ? 'no other runs logged in this window'
+        : 'no runs logged in this window (scripts/kinetix-log-run-usage.ts)',
+    );
   } else {
     lines.push(
       'tier      workflow       runs  tok/run  cacheRead  priced       cost  cost/run',
@@ -800,6 +846,8 @@ export interface BenchmarkReport {
   costs: CostProjection[] | null;
   runUsage: RunUsageMetrics[];
   agentCosts: AgentCostMetrics[];
+  /** Logged runs left out of both run sections (straddlesTierChange). */
+  tierChangeStraddlers: number;
 }
 
 export async function runBenchmark(opts: {
@@ -895,6 +943,7 @@ export async function runBenchmark(opts: {
       createdAt: agentRunUsage.createdAt,
       startedAt: agentRunUsage.startedAt,
       durationMs: agentRunUsage.durationMs,
+      tierChangedAt: agents.modelTierChangedAt,
     })
     .from(agentRunUsage)
     .leftJoin(agents, eq(agents.id, agentRunUsage.agentId))
@@ -904,11 +953,16 @@ export async function runBenchmark(opts: {
       if (isUndefinedTable(err)) return [];
       throw err;
     });
-  const runRecords: RunUsageRecord[] = usageRows.map((r) => ({
+  const loggedRuns: RunUsageRecord[] = usageRows.map((r) => ({
     ...r,
     agentSlug: r.agentSlug ?? null,
     modelUsage: r.modelUsage ?? null,
+    tierChangedAt: r.tierChangedAt ?? null,
   }));
+  // A run whose agent was reclassified while it ran is filed under a tier that
+  // describes only part of it; leave it out of the tier comparison entirely,
+  // outputs included, rather than credit either tier with it.
+  const runRecords = loggedRuns.filter((r) => !straddlesTierChange(r));
 
   // Outputs are counted only from the telemetry window onwards, so there is
   // nothing to fetch before the first logged run.
@@ -984,6 +1038,7 @@ export async function runBenchmark(opts: {
       acceptedOutputs,
       verdictOutputs,
     ),
+    tierChangeStraddlers: loggedRuns.length - runRecords.length,
   };
 }
 

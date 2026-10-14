@@ -107,8 +107,15 @@ Four residual gaps are accepted for now and tracked in issue 1444:
   identity removes the risk.
 - **The tier is read when the run is logged, not when it starts.** An agent
   reclassified while one of its runs is in flight has that run filed under
-  the new tier. Pause the routine before changing an agent's tier (the
-  model is changed on the Routine between runs anyway).
+  the new tier. Since issue 216 the admin edit stamps
+  `agents.model_tier_changed_at` whenever the tier actually changes, and the
+  report leaves out any run whose span (from `started_at`, or `created_at`
+  minus `duration_ms`, to its log or a later re-logged end) contains that
+  time, printing how many it left out. A run with neither a start nor a duration cannot be placed and is
+  kept. Only the latest change is stored, so a run that straddled an earlier
+  change, later followed by another, is still filed under the tier read at
+  its log. Pause the routine before changing an agent's tier (the model is
+  changed on the Routine between runs anyway).
 - **Rows are self-reported.** The logger reads the run's transcript, but the
   endpoint accepts any agent-token POST. It rejects rows no transcript could
   produce: zero usage, a per-model split that does not sum to the totals, and

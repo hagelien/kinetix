@@ -295,7 +295,10 @@ while another transcript on the machine is active, so two local workers
 running at once log a failure rather than each other's tokens.
 Pause a routine before changing its agent's model tier: a run's tier is read
 when its usage is logged at the end, so a run in flight during the change would
-be filed under the new tier (issue 1444).
+be filed under the new tier (issue 1444). The benchmark leaves out a run whose
+span contains the agent's latest tier change (`agents.model_tier_changed_at`,
+issue 216), but only the latest change is recorded, so pausing is still the
+rule.
 Give each routine its own agent identity: the cost-per-output figures match
 outputs to runs by time, so two routines sharing one token can blur each
 other's numbers when a usage log fails (see issue 1444).

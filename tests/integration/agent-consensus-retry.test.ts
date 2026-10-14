@@ -201,6 +201,44 @@ describe('agent consensus hold, re-stamp and retry', () => {
     });
   });
 
+  it('stamps model_tier_changed_at only when the tier actually changes', async () => {
+    const { agentId } = await seedAgent('opus');
+    const changedAt = async () =>
+      (
+        await db
+          .select({ at: agents.modelTierChangedAt })
+          .from(agents)
+          .where(eq(agents.id, agentId))
+      )[0]!.at;
+
+    // An edit that leaves the tier out, or re-sends the stored one (unset
+    // here), records no change: the benchmark would otherwise drop the
+    // agent's in-flight runs as straddling one.
+    await updateAgentWithTierRestamp(agentId, { name: 'Opus' });
+    expect(await changedAt()).toBeNull();
+    await updateAgentWithTierRestamp(agentId, { modelTier: null });
+    expect(await changedAt()).toBeNull();
+
+    const { updated } = await updateAgentWithTierRestamp(agentId, {
+      modelTier: 'flagship',
+    });
+    const first = await changedAt();
+    expect(first).toBeInstanceOf(Date);
+    expect(updated!.modelTierChangedAt).toEqual(first);
+
+    await updateAgentWithTierRestamp(agentId, { modelTier: 'flagship' });
+    expect(await changedAt()).toEqual(first);
+
+    // Backdate the stamp so a later now() is distinguishable from it.
+    const earlier = new Date('2026-01-01T00:00:00Z');
+    await db
+      .update(agents)
+      .set({ modelTierChangedAt: earlier })
+      .where(eq(agents.id, agentId));
+    await updateAgentWithTierRestamp(agentId, { modelTier: 'mid' });
+    expect((await changedAt())!.getTime()).toBeGreaterThan(earlier.getTime());
+  });
+
   it('withdraws flagship standing on pending edits only when demoted', async () => {
     const author = await seedAgent('author');
     const opus = await seedAgent('opus');

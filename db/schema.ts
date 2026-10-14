@@ -937,6 +937,13 @@ export const agents = pgTable(
     // provisions the agent; NULL never counts as flagship (fail-safe).
     modelTier: varchar('model_tier', { length: 20 }),
     /**
+     * When `modelTier` last changed (0149), set only by an admin edit that
+     * changes the value. The tier benchmark leaves out a logged run whose span
+     * contains it, because a run's tier is snapshotted at its end. NULL = no
+     * change recorded; only the latest change is kept.
+     */
+    modelTierChangedAt: timestamp('model_tier_changed_at'),
+    /**
      * Server-owned T3 adjudication grant (0138). The capability matrix is
      * monotone by role, so it cannot say "this one flagship identity may read
      * a T3 case file"; this per-agent flag does, set only by an admin like

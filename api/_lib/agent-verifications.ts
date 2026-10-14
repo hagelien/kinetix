@@ -1697,15 +1697,26 @@ export async function updateAgentWithTierRestamp(
       .where(eq(agents.id, agentId))
       .for('update');
     const tierChanged = 'modelTier' in update;
+    const newTier = (update.modelTier as string | null | undefined) ?? null;
     const touched = tierChanged
-      ? await restampPendingVerdictTiers(
-          agentId,
-          (update.modelTier as string | null | undefined) ?? null,
-        )
+      ? await restampPendingVerdictTiers(agentId, newTier)
       : [];
+    // Stamp the change time only when the value differs from the stored one,
+    // compared in the UPDATE itself: re-saving the admin form with the tier
+    // untouched must not mark the agent's in-flight runs as straddling a
+    // change (scripts/benchmark-agent-tiers.ts).
+    const set = tierChanged
+      ? {
+          ...update,
+          modelTierChangedAt: sql`CASE
+            WHEN ${agents.modelTier} IS DISTINCT FROM ${newTier}::varchar THEN now()
+            ELSE ${agents.modelTierChangedAt}
+          END`,
+        }
+      : update;
     const [updated] = await getDb()
       .update(agents)
-      .set(update as never)
+      .set(set as never)
       .where(eq(agents.id, agentId))
       .returning();
     if (!updated) return { updated: undefined, touched: [] };
