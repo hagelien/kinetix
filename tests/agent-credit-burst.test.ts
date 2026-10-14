@@ -26,7 +26,9 @@ echo "scrub=\${CLAUDE_CODE_SUBPROCESS_ENV_SCRUB:-unset} $*" >> "$STUB_LOG"
 case "$STUB_MODE" in
   ok) echo '{"is_error":false,"result":"Did a cycle.","total_cost_usd":4}' ;;
   error) echo '{"is_error":true,"result":"Credit balance is too low","total_cost_usd":0}' ;;
-  crash) exit 124 ;;
+  crash)
+    echo "error: bubblewrap is required for subprocess env scrubbing" >&2
+    exit 1 ;;
 esac
 `,
   );
@@ -63,6 +65,7 @@ function run(mode: string, budget: number) {
   const calls = readFileSync(log, "utf8").trim().split("\n").filter(Boolean);
   return {
     status: result.status,
+    stdout: result.stdout,
     calls,
     summary: readFileSync(summary, "utf8"),
   };
@@ -77,15 +80,19 @@ describe("agent-credit-burst.sh", () => {
     expect(summary).toContain("reviewer: 3 cycles, $12.00 spent");
   });
 
-  it("hides the API key from the agent's subprocesses", () => {
+  // Scrubbing strips KINETIX_TOKEN from Bash too, so the helpers would fail,
+  // and it refuses to start without bubblewrap. It must be switched off
+  // explicitly because Claude Code turns it on under GitHub Actions.
+  it("keeps the Kinetix token visible to the agent's helpers", () => {
     const { calls } = run("ok", 5);
-    expect(calls[0]).toMatch(/^scrub=1 /);
+    expect(calls[0]).toMatch(/^scrub=0 /);
     expect(calls[0]).toContain("--allowedTools Bash Read WebSearch WebFetch");
   });
 
   it("counts a cycle that died without reporting its cost as its full cap", () => {
-    const { calls, summary } = run("crash", 20);
+    const { calls, summary, stdout } = run("crash", 20);
     expect(calls).toHaveLength(2);
+    expect(stdout).toContain("error: bubblewrap is required");
     expect(summary).toContain("reviewer: 2 cycles, $20.00 spent");
   });
 

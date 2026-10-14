@@ -10,7 +10,8 @@ name: agent-credit-burst
 # it cannot collide with itself. Pause that identity's Routine while this runs.
 #
 # Secrets (Settings → Secrets and variables → Actions):
-#   ANTHROPIC_API_KEY                required
+#   ANTHROPIC_API_KEY                required; a dedicated key, deleted after
+#                                    the burst (the agent's Bash can read it)
 #   KINETIX_TOKEN_PRODUCER           T1 producer's kxat_ token (mid tier)
 #   KINETIX_TOKEN_REVIEWER           T2 reviewer's kxat_ token (flagship tier)
 #   KINETIX_TOKEN_ADJUDICATOR_A/_B   optional T3 panel seats (flagship tier)
