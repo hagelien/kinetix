@@ -36,10 +36,25 @@ def validate(bundle):
         require(all(e['sourceKey'] in fact['sourceKeys'] for e in fact.get('evidence', [])), 'Uncited evidence')
     require(all(b['sectionKey'] in {s['key'] for s in sections} for b in bundle.get('blockedCandidates', [])), 'Unknown blocked section')
 
+def check_section_ids(bundle, context):
+    # A sectionId is only valid if it was read from the live page; invented ones fail the import.
+    known = {s['sectionId']: s for s in (context or {}).get('sections', [])}
+    if context:
+        require(context.get('page', {}).get('slug') == bundle['page']['slug'], 'Context is for a different page')
+    for section in bundle['sections']:
+        if 'sectionId' not in section:
+            continue
+        found = known.get(section['sectionId'])
+        require(found, f'Unknown sectionId {section["sectionId"]!r} on {section["key"]}: '
+                       'use IDs from context.py exactly, or omit sectionId so Kinetix creates the heading')
+        require(found['heading'] == section['heading'] and found['level'] == section['level'],
+                f'Heading/level for {section["key"]} does not match existing section {section["sectionId"]!r}')
+
 def main():
     parser = argparse.ArgumentParser()
     for arg in ['article', 'inventory', 'draft', 'output']:
         parser.add_argument('--'+arg, required=True)
+    parser.add_argument('--context', help='KONTEKST.json from context.py; required for any sectionId')
     args = parser.parse_args()
     article = Path(args.article).read_bytes()
     units = load(args.inventory)
@@ -69,6 +84,7 @@ def main():
                  idempotencyKey=f'wiki-article:{draft["page"]["slug"][:100]}:{digest[:32]}',
                  createdAt=datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'))
     validate(draft)
+    check_section_ids(draft, load(args.context) if args.context else None)
     output = Path(args.output)
     output.write_text(json.dumps(draft, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
     report = {'articleDigest': digest, 'inputUnitCount': len(units),
