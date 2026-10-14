@@ -14,7 +14,7 @@
  * instruction.
  */
 
-import { and, asc, desc, eq, exists, inArray, isNull, notExists, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, exists, inArray, isNull, lte, notExists, or, sql } from 'drizzle-orm';
 import { getDb } from '../db.js';
 import {
   adjudicationCaseSeats,
@@ -300,11 +300,19 @@ export async function listAdjudicatorCases(agentId: number, limit = 20) {
  *   it, as a deleted one has: the package describes a payload that is no longer
  *   the live one, and a disagreement that survives on the new version is a new
  *   case (./cases.ts);
- * - and something on it still waits for a person: an open dispute raised on
- *   that version (or with none recorded, as `openDisputesOnVersion` keeps it),
- *   an agent dispute verdict no ruling has answered (kinetix-consensus@v3), or,
- *   on a pending edit, an upheld ruling on that version the edit was never
+ * - and something the case carries still waits for a person: one of the
+ *   disputes it captured, still open; an agent dispute verdict recorded before
+ *   it sealed that no ruling has answered (kinetix-consensus@v3); or, on a
+ *   pending edit, an upheld ruling on one of its disputes the edit was never
  *   returned for (`return_refused`).
+ *
+ * "Captured" is the case's own record: the seal merges every dispute open on
+ * the version into `t1_snapshot.openDisputes`, under the source-row lock, and
+ * that copy is what the case file serves. A terminal case is never refreshed,
+ * so a dispute opened after the seal — or a dispute verdict recorded or
+ * restated after it — is not in the package a person would be handed. It
+ * cannot revive a completed handoff; it is an objection in its own right,
+ * heard where disputes are heard.
  *
  * A handoff answered that way leaves the list, so completed work neither
  * repeats nor takes a place under the limit from one still open.
@@ -316,10 +324,13 @@ export async function listHandoffs(limit = 50) {
     eq(disputes.targetVersion, kase.targetVersion),
     isNull(disputes.targetVersion),
   );
+  // One of the disputes this case captured, by id: what its file serves.
+  const capturedByCase = sql`${kase.t1Snapshot} -> 'openDisputes' @> jsonb_build_array(jsonb_build_object('disputeId', ${disputes.id}))`;
   const onCaseTarget = and(
     eq(disputes.targetType, kase.targetType),
     eq(disputes.targetId, kase.targetId),
     onCaseVersion,
+    capturedByCase,
   );
   const awaitsPerson = or(
     exists(
@@ -337,6 +348,9 @@ export async function listHandoffs(limit = 50) {
           and(
             eq(agentVerifications.targetType, kase.targetType),
             eq(agentVerifications.targetId, kase.targetId),
+            // Recorded (or last restated) by the time the case sealed: one
+            // written later is an objection this case never heard.
+            lte(agentVerifications.updatedAt, kase.sealedAt),
             unansweredDisputeVerdict(),
           ),
         ),
