@@ -49,13 +49,16 @@ import {
 } from '../api/_lib/parameterApplicabilityStore';
 import { mergeIdentity } from './drug-merge/identity';
 import { API_ONLY_REFERENCES, apiOnlyRefusal } from './drug-merge/api-only-references';
-import { resolveMonographDrugCids } from '../api/_lib/monograph-helpers';
 import {
   buildDrugComponentId,
   simulatorDrugKeyCandidates,
 } from '../src/lib/drugComponentId';
 import { embeddedComponents } from '../data/components';
 import { seedSourceRefusal, seedSourcesFor } from './pubchem/seed-sources';
+import {
+  findLegacyCidKeyedMonographs,
+  legacyCidMonographRefusal,
+} from '../api/_lib/monograph-helpers';
 
 if (!process.env.DATABASE_URL) {
   console.error('DATABASE_URL is required');
@@ -502,15 +505,6 @@ interface Plan {
   kinelabCases: number;
   /** The monograph the survivor keeps, if any — where a focus selection moves. */
   survivorPageId: number | null;
-  /**
-   * The survivor's OWN legacy monograph key, when `--adopt-cid` is about to
-   * retire the number it is stored under. Null when there is nothing to move.
-   *
-   * Computed here rather than in the apply block so the dry run says it will
-   * happen. This file's structure exists because earlier rounds kept adding a
-   * check to one path and forgetting the other.
-   */
-  survivorLegacyMonographCid: number | null;
   /** Selected pages of the loser's that the merge is about to delete. */
   focusPageIds: number[];
   /** The whole selection, read under the same lock the rewrite relies on. */
@@ -633,18 +627,10 @@ async function readDrugs(
  * The loser's drug monographs, optionally locked.
  *
  * `wiki_pages.drug_cid` is a plain integer, not an FK, so the cascade never
- * reaches these and they have to be found and deleted explicitly. Only modern
- * `drug_cid = drugs.id` keying is touched: a legacy page keyed by PubChem CID
- * could belong to a different drug whose internal id happens to equal it, and
- * guessing there loses somebody's monograph.
- *
- * `drug_cid` is mixed-vintage — modern rows store `drugs.id`, legacy rows a
- * PubChem CID — so both are candidates, resolved by the same
- * `resolveMonographDrugCids` the admin delete uses. It drops a CID that is also
- * some *other* drug's internal id, which is the collision that makes a naive
- * "delete pages keyed by either number" lose an unrelated monograph. Handling
- * only `drugs.id` avoids that collision too, but at the cost of leaving a
- * legacy page orphaned once the drug row goes.
+ * reaches these and they have to be found and deleted explicitly. They are
+ * the pages keyed by the drug's `drugs.id` — the only thing the column holds.
+ * Never by its PubChem CID: that number can be a different drug's id, and
+ * matching on it would delete somebody else's monograph.
  *
  * The lock closes the window between reading a page's length and deleting it —
  * without it an editor can commit prose in between and have it deleted by a
@@ -655,17 +641,15 @@ async function readDrugs(
  */
 async function readMonographs(
   db: Db,
-  loser: { id: number; pubchemCid: number | null },
+  loser: { id: number },
   lock: boolean,
 ): Promise<MonographPage[]> {
-  const candidates = await resolveMonographDrugCids(db, loser);
-  if (candidates.length === 0) return [];
   const res = await db.execute(
     sql.raw(`
       SELECT id, slug, coalesce(length(content_plaintext), 0)::int AS chars
       FROM wiki_pages
       WHERE page_type = 'drug_monograph'
-        AND drug_cid IN (${candidates.join(', ')})${lock ? ' FOR UPDATE' : ''}`),
+        AND drug_cid = ${loser.id}${lock ? ' FOR UPDATE' : ''}`),
   );
   return rowsOf(res) as unknown as MonographPage[];
 }
@@ -880,36 +864,19 @@ async function buildPlan(
       ),
     );
   }
+  // A legacy monograph still keyed by the freed CID (one migration 0148 could
+  // not place) is protected from the deploy-time repair only while some drug
+  // carries that number. Freeing it would expose the page.
+  if (freedCid != null) {
+    const legacyPages = await findLegacyCidKeyedMonographs(db, freedCid);
+    if (legacyPages.length > 0) {
+      refusalList.push(legacyCidMonographRefusal(freedCid, legacyPages));
+    }
+  }
   if (adoptCid && loser.pubchemCid == null) {
     refusalList.push(
       '--adopt-cid was passed but the loser has no PubChem CID to adopt',
     );
-  }
-
-  // The survivor's OWN monograph may be legacy-keyed by the CID `--adopt-cid`
-  // is about to retire. `wiki_pages.drug_cid` is mixed-vintage —
-  // `ensureDrugMonograph` writes `drugs.id`, the older
-  // `seed-drug-monographs.ts` wrote the PubChem CID — and
-  // `resolveMonographDrugCids` only looks for the drug's id and its CURRENT
-  // CID. Change the CID and stop there and the written page stops resolving:
-  // the substance shows no monograph and the next backfill builds a SECOND,
-  // empty one beside it. The loser's pages are handled elsewhere (they go with
-  // the row); this one has to MOVE.
-  //
-  // Read through `resolveMonographDrugCids` so the collision rule is the
-  // repo's: a `drug_cid` that is some OTHER drug's internal id is that drug's
-  // modern link, and adopting it here would steal an unrelated monograph.
-  let survivorLegacyMonographCid: number | null = null;
-  if (adoptCid && survivor.pubchemCid != null && survivor.pubchemCid !== survivor.id) {
-    const survivorCids = await resolveMonographDrugCids(db, survivor);
-    if (survivorCids.includes(survivor.pubchemCid)) {
-      const legacyPages = await scalar(
-        db,
-        `SELECT count(*)::int AS n FROM wiki_pages
-         WHERE page_type = 'drug_monograph' AND drug_cid = ${survivor.pubchemCid}`,
-      );
-      if (legacyPages > 0) survivorLegacyMonographCid = survivor.pubchemCid;
-    }
   }
 
   // An OPEN pending edit is a contributor's proposal about a substance that
@@ -1107,7 +1074,6 @@ async function buildPlan(
     simulatorCases,
     kinelabCases,
     survivorPageId,
-    survivorLegacyMonographCid,
     focusPageIds,
     focusAllPageIds: focus.pageIds,
     extractionHints,
@@ -1128,13 +1094,6 @@ function describe(plan: Plan, adoptCid: boolean): void {
         `(was ${plan.survivor.pubchemCid ?? '—'}), applied after the loser is deleted ` +
         'so the unique index allows it',
     );
-    if (plan.survivorLegacyMonographCid != null) {
-      console.log(
-        `  the survivor's monograph is legacy-keyed by ${plan.survivorLegacyMonographCid} ` +
-          `— repointed to drug_cid = ${plan.survivor.id}, or the CID change strands it ` +
-          'and the next backfill builds a second, empty page',
-      );
-    }
   }
   console.log('\nWhat the loser carries:');
   for (const line of plan.carried) console.log(`  ${line}`);
@@ -1482,22 +1441,6 @@ async function main(): Promise<void> {
         // second command — split in two, the catalog sits between them with the
         // right substance under the wrong identity.
         if (opts.adoptCid && live.loser.pubchemCid != null) {
-          // Move the survivor's own legacy-keyed monograph onto the row id
-          // BEFORE the CID changes out from under it. Decided in `buildPlan`
-          // (re-run here under the locks), so the dry run says it will happen —
-          // see `Plan.survivorLegacyMonographCid` for why it is needed at all.
-          if (live.survivorLegacyMonographCid != null) {
-            await tx
-              .update(wikiPages)
-              .set({ drugCid: live.survivor.id, updatedAt: new Date() })
-              .where(
-                and(
-                  eq(wikiPages.pageType, 'drug_monograph'),
-                  eq(wikiPages.drugCid, live.survivorLegacyMonographCid),
-                ),
-              );
-          }
-
           await tx
             .update(drugs)
             .set({ pubchemCid: live.loser.pubchemCid, updatedAt: new Date() })

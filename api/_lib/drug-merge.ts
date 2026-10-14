@@ -56,8 +56,11 @@ import {
   wikiRevisions,
 } from '../../db/schema.js';
 import type { getDb } from './db.js';
+import {
+  findLegacyCidKeyedMonographs,
+  legacyCidMonographRefusal,
+} from './monograph-helpers.js';
 import { buildSearchKey } from './drugs-helpers.js';
-import { resolveMonographDrugCids } from './monograph-helpers.js';
 import {
   recomputeSummariesForDrug,
   sourceQuoteComparisonKeySql,
@@ -310,15 +313,13 @@ export interface DrugMergeStats {
 // ─── Loading & winner selection ───────────────────────────────────────────────
 
 /**
- * Resolve one drug's monograph page, if it has one. Uses the same mixed-vintage
- * `drug_cid` resolution as the DELETE teardown so a legacy CID that is really
- * another drug's internal id is not mistaken for this drug's monograph.
+ * Resolve one drug's monograph page — the page whose `drug_cid` is its
+ * `drugs.id` — if it has one.
  */
 async function loadMonograph(
   db: Db,
-  drug: { id: number; pubchemCid: number | null },
+  drugId: number,
 ): Promise<DrugMonographInfo | null> {
-  const candidates = await resolveMonographDrugCids(db, drug);
   const [page] = await db
     .select({
       id: wikiPages.id,
@@ -330,7 +331,7 @@ async function loadMonograph(
     .where(
       and(
         eq(wikiPages.pageType, 'drug_monograph'),
-        inArray(wikiPages.drugCid, candidates),
+        eq(wikiPages.drugCid, drugId),
       ),
     )
     .limit(1);
@@ -380,10 +381,7 @@ export async function loadDrugSideInfo(
     .where(eq(drugs.id, drugId))
     .limit(1);
   if (!row) return null;
-  const monograph = await loadMonograph(db, {
-    id: row.id,
-    pubchemCid: row.pubchemCid,
-  });
+  const monograph = await loadMonograph(db, row.id);
   const name =
     resolveDrugName(row.names, 'nb') ||
     resolveDrugName(row.names, 'en') ||
@@ -989,18 +987,7 @@ export async function detectDataConflicts(
   // Active proposals against the loser's monograph. The delete-teardown would
   // otherwise drop them wholesale, discarding contributor work-in-progress.
   // Only active statuses (draft/pending/returned) matter — approved/rejected
-  // are terminal. The candidate CID list handles legacy-keyed monographs whose
-  // `drug_cid` is the loser's PubChem CID rather than its internal id — same
-  // mixed-vintage resolution as `loadMonograph`, so a proposal on a legacy
-  // page is not missed and later dropped by the page delete.
-  const loserMonographCids = await resolveMonographDrugCids(db, {
-    id: loser.id,
-    pubchemCid: loser.pubchemCid,
-  });
-  const loserMonographCidList = sql.join(
-    loserMonographCids.map((c) => sql`${c}`),
-    sql`, `,
-  );
+  // are terminal.
   const monographProposalRows = await db.execute<{
     kind: string;
     count: number;
@@ -1012,7 +999,7 @@ export async function detectDataConflicts(
       AND target_id IN (
         SELECT id FROM wiki_pages
         WHERE page_type = 'drug_monograph'
-          AND drug_cid IN (${loserMonographCidList})
+          AND drug_cid = ${loser.id}
       )
     GROUP BY edit_type`);
   for (const row of monographProposalRows.rows) {
@@ -1114,8 +1101,8 @@ export async function detectDataConflicts(
   }
 
   // Multi-monograph refusal: `wiki_pages.drug_cid` isn't unique-per-drug at
-  // the schema level, so a legacy CID-keyed page and a modern id-keyed page
-  // can coexist for the same substance. `loadMonograph` returns only one —
+  // the schema level, so two pages can carry the same drug's id (a hand
+  // relink, say). `loadMonograph` returns only one —
   // whichever the planner-side query happened to see — so the delete step
   // would only handle that one, leaving a second page attached to a deleted
   // loser (or worse, still resolving as the drug's monograph). Check BOTH
@@ -1123,45 +1110,53 @@ export async function detectDataConflicts(
   // winner it means link rewrites and fingerprint reads land on an arbitrary
   // slug/page id, and the survivor stays ambiguously attached to more than
   // one monograph. Either way an admin must merge or delete the extras first.
-  const loserPageCidList = sql.join(
-    loserMonographCids.map((c) => sql`${c}`),
-    sql`, `,
-  );
   const loserPagesRows = await db.execute<{ n: number }>(sql`
     SELECT count(*)::int AS n FROM wiki_pages
-    WHERE page_type = 'drug_monograph' AND drug_cid IN (${loserPageCidList})`);
+    WHERE page_type = 'drug_monograph' AND drug_cid = ${loser.id}`);
   const loserPageCount = loserPagesRows.rows[0]?.n ?? 0;
   if (loserPageCount > 1) {
     conflicts.push({
       table: 'wiki_pages',
-      identity: `${loserPageCount} monograph pages resolve to loser (mixed-vintage drug_cid)`,
+      identity: `${loserPageCount} monograph pages resolve to loser`,
       message: {
         code: 'dataConflict.multiMonograph',
         params: { side: 'loser', count: loserPageCount },
-        fallback: 'the loser has more than one monograph page — a modern id-keyed page AND a legacy PubChem-CID-keyed page both resolve to it. The merge would delete only one, leaving the other attached to a deleted drug. Delete or merge the extra page(s) first, then merge.',
+        fallback: 'the loser has more than one monograph page keyed by its id. The merge would delete only one, leaving the other attached to a deleted drug. Delete or merge the extra page(s) first, then merge.',
       },
     });
   }
-  const winnerMonographCids = await resolveMonographDrugCids(db, {
-    id: winner.id,
-    pubchemCid: winner.pubchemCid,
-  });
-  const winnerPageCidList = sql.join(
-    winnerMonographCids.map((c) => sql`${c}`),
-    sql`, `,
-  );
+  // The loser's row goes, and with it the PubChem CID it holds. A legacy
+  // monograph migration 0148 left keyed by that CID is shielded from the
+  // per-deploy link repair only while some drug carries the number; freeing
+  // it would let the next deploy relink the page by title or recreate a drug
+  // for it, quietly undoing the merge.
+  if (loser.pubchemCid != null) {
+    const legacyPages = await findLegacyCidKeyedMonographs(db, loser.pubchemCid);
+    if (legacyPages.length > 0) {
+      const pages = legacyPages.map((p) => `/${p.slug}`).join(', ');
+      conflicts.push({
+        table: 'wiki_pages',
+        identity: `${legacyPages.length} legacy monograph page(s) keyed by loser CID ${loser.pubchemCid}`,
+        message: {
+          code: 'dataConflict.legacyCidMonograph',
+          params: { cid: loser.pubchemCid, pages },
+          fallback: legacyCidMonographRefusal(loser.pubchemCid, legacyPages),
+        },
+      });
+    }
+  }
   const winnerPagesRows = await db.execute<{ n: number }>(sql`
     SELECT count(*)::int AS n FROM wiki_pages
-    WHERE page_type = 'drug_monograph' AND drug_cid IN (${winnerPageCidList})`);
+    WHERE page_type = 'drug_monograph' AND drug_cid = ${winner.id}`);
   const winnerPageCount = winnerPagesRows.rows[0]?.n ?? 0;
   if (winnerPageCount > 1) {
     conflicts.push({
       table: 'wiki_pages',
-      identity: `${winnerPageCount} monograph pages resolve to winner (mixed-vintage drug_cid)`,
+      identity: `${winnerPageCount} monograph pages resolve to winner`,
       message: {
         code: 'dataConflict.multiMonograph',
         params: { side: 'winner', count: winnerPageCount },
-        fallback: 'the winner has more than one monograph page — a modern id-keyed page AND a legacy PubChem-CID-keyed page both resolve to it. Link rewrites and the fingerprint read would land on whichever page loadMonograph returned first, leaving the survivor ambiguously attached to more than one monograph. Delete or merge the extra page(s) first, then merge.',
+        fallback: 'the winner has more than one monograph page keyed by its id. Link rewrites and the fingerprint read would land on whichever page loadMonograph returned first, leaving the survivor ambiguously attached to more than one monograph. Delete or merge the extra page(s) first, then merge.',
       },
     });
   }
@@ -3526,8 +3521,9 @@ export async function mergeDrugs(
   };
   await rewriteWikiLinks(db, rewrite);
 
-  // 9. Resolve the loser's monograph page, unless it happens to be the winner's
-  //    own page (legacy CID collision).
+  // 9. Resolve the loser's monograph page. The page-id comparison is defensive:
+  //    the two sides are distinct drugs, so their id-keyed pages cannot be the
+  //    same row.
   let loserMonographDeleted = false;
   if (loser.monograph && loser.monograph.pageId !== winner.monograph?.pageId) {
     const pageId = loser.monograph.pageId;

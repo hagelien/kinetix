@@ -1,5 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
+import type { SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 
 const {
   buildSearchKeyMock,
@@ -73,8 +75,7 @@ vi.mock('../../api/_lib/drugs-helpers.js', async (importOriginal) => {
   };
 });
 
-// Keep the real monograph-helpers (the DELETE path uses resolveMonographDrugCids
-// against the mocked getDb) but stub the heavyweight ensureDrugMonograph.
+// Keep the real monograph-helpers but stub the heavyweight ensureDrugMonograph.
 vi.mock('../../api/_lib/monograph-helpers.js', async (importOriginal) => {
   const actual =
     await importOriginal<
@@ -161,10 +162,7 @@ import handler, {
   escapeDrugSearchLikePattern,
   parseExactPubchemCidQuery,
 } from '../../api/drugs.ts';
-import {
-  monographDrugCidCandidates,
-  resolveMonographDrugCids,
-} from '../../api/_lib/monograph-helpers.js';
+import { resolveOwningDrugIdForMonograph } from '../../api/_lib/monograph-helpers.js';
 import { drugs, parameterEntries } from '../../db/schema.js';
 
 function createMockResponse() {
@@ -270,8 +268,13 @@ function mockDeleteQuery(existingRow: unknown, atlasCount = 0) {
   const del = vi.fn().mockReturnValue({ where: deleteWhere });
 
   // The teardown's in-transaction count of open proposals naming this drug in
-  // their dose context (Cmax release B): none in these scenarios.
-  const execute = vi.fn().mockResolvedValue({ rows: [{ n: 0 }] });
+  // their dose context (Cmax release B), and its lookup of legacy monographs
+  // keyed by the CID the delete frees: none of either in these scenarios.
+  const execute = vi.fn().mockImplementation(async (query: unknown) =>
+    JSON.stringify(query).includes('drug_monograph')
+      ? { rows: [] }
+      : { rows: [{ n: 0 }] },
+  );
 
   getDbMock.mockReturnValue({ select, delete: del, execute });
   return { select, delete: del, deleteWhere, execute };
@@ -324,7 +327,7 @@ describe('GET /api/drugs', () => {
     expect(parseExactPubchemCidQuery('2147483648')).toBeNull();
   });
 
-  it('resolves a wiki drug id with one query across internal id and PubChem CID', async () => {
+  it('resolves a wiki drug id by its internal drugs.id', async () => {
     const row = {
       id: 42,
       slug: 'alprazolam',
@@ -347,7 +350,7 @@ describe('GET /api/drugs', () => {
     await handler(
       {
         method: 'GET',
-        url: '/api/drugs?wikiDrugId=2118',
+        url: '/api/drugs?wikiDrugId=42',
         headers: { host: 'localhost' },
       } as IncomingMessage,
       res,
@@ -376,14 +379,12 @@ describe('GET /api/drugs', () => {
     });
   });
 
-  it('prefers the drugs.id match when a wiki drug id collides with another drug PubChem CID', async () => {
-    // wikiDrugId=2118 matches two rows: drug id=2118 (modern drugs.id link)
-    // and drug id=42 whose pubchem_cid=2118 (a number collision). The id
-    // interpretation must win so a correctly-linked monograph still resolves.
-    mockSingleDrugQuery([
-      { id: 42, pubchemCid: 2118 },
-      { id: 2118, pubchemCid: 99999 },
-    ]);
+  it('never resolves a wiki drug id as a PubChem CID', async () => {
+    // `wiki_pages.drug_cid` holds `drugs.id`. 2118 is alprazolam's PubChem CID
+    // here but no drug's id, so the page is dangling — reading it as
+    // alprazolam's monograph is the collision that once handed 25C-NBOMe's
+    // page (id 281) to carbon monoxide (CID 281).
+    const { where } = mockSingleDrugQuery([]);
     const { res, state } = createMockResponse();
 
     await handler(
@@ -395,32 +396,12 @@ describe('GET /api/drugs', () => {
       res,
     );
 
-    expect(state.statusCode).toBe(200);
-    expect(getDrugParameterMapMock).toHaveBeenCalledWith(
-      expect.anything(),
-      2118,
-    );
-    expect(JSON.parse(state.body).drug.id).toBe(2118);
-  });
-
-  it('falls back to the PubChem CID match for legacy links with no id collision', async () => {
-    // Legacy drug_cid stored a PubChem CID; no drug carries that internal id,
-    // so the lone pubchem_cid match resolves.
-    mockSingleDrugQuery([{ id: 42, pubchemCid: 2118 }]);
-    const { res, state } = createMockResponse();
-
-    await handler(
-      {
-        method: 'GET',
-        url: '/api/drugs?wikiDrugId=2118',
-        headers: { host: 'localhost' },
-      } as IncomingMessage,
-      res,
-    );
-
-    expect(state.statusCode).toBe(200);
-    expect(getDrugParameterMapMock).toHaveBeenCalledWith(expect.anything(), 42);
-    expect(JSON.parse(state.body).drug.id).toBe(42);
+    expect(state.statusCode).toBe(404);
+    expect(getDrugParameterMapMock).not.toHaveBeenCalled();
+    const query = new PgDialect().sqlToQuery(where.mock.calls[0]![0] as SQL);
+    expect(query.sql).toContain('"id"');
+    expect(query.sql).not.toContain('pubchem_cid');
+    expect(query.params).toEqual([2118]);
   });
 
   it('returns a slim projection for search view', async () => {
@@ -1049,56 +1030,27 @@ describe('DELETE /api/drugs', () => {
   });
 });
 
-describe('monographDrugCidCandidates', () => {
-  it('always includes the internal id', () => {
-    expect(monographDrugCidCandidates(281, null, false)).toEqual([281]);
-  });
-
-  it('adds the PubChem CID for a modern row with no id collision', () => {
-    expect(monographDrugCidCandidates(281, 46856354, false)).toEqual([
-      281, 46856354,
-    ]);
-  });
-
-  it('drops the PubChem CID when it is another drug internal id', () => {
-    // 25C-NBOMe id=281; some other drug owns id=702 — its CID must not become
-    // a candidate, or that drug's monograph gets mis-linked / deleted.
-    expect(monographDrugCidCandidates(37, 702, true)).toEqual([37]);
-  });
-
-  it('does not duplicate when the CID equals the id', () => {
-    expect(monographDrugCidCandidates(500, 500, false)).toEqual([500]);
-  });
-});
-
-describe('resolveMonographDrugCids', () => {
+describe('resolveOwningDrugIdForMonograph', () => {
   function fakeDb(hitRows: unknown[]) {
     const limit = vi.fn().mockResolvedValue(hitRows);
     const where = vi.fn().mockReturnValue({ limit });
     const from = vi.fn().mockReturnValue({ where });
     const select = vi.fn().mockReturnValue({ from });
-    return { db: { select } as never, select };
+    return { db: { select } as never, select, where };
   }
 
-  it('keeps the CID when no drug claims it as an id', async () => {
-    const { db } = fakeDb([]);
-    await expect(
-      resolveMonographDrugCids(db, { id: 281, pubchemCid: 46856354 }),
-    ).resolves.toEqual([281, 46856354]);
+  it('returns the drug whose id the page carries', async () => {
+    const { db } = fakeDb([{ id: 281 }]);
+    await expect(resolveOwningDrugIdForMonograph(db, 281)).resolves.toBe(281);
   });
 
-  it('excludes the CID when it collides with another drug id', async () => {
-    const { db } = fakeDb([{ id: 702 }]);
-    await expect(
-      resolveMonographDrugCids(db, { id: 37, pubchemCid: 702 }),
-    ).resolves.toEqual([37]);
-  });
-
-  it('skips the collision query entirely when there is no distinct CID', async () => {
-    const { db, select } = fakeDb([]);
-    await expect(
-      resolveMonographDrugCids(db, { id: 42, pubchemCid: null }),
-    ).resolves.toEqual([42]);
-    expect(select).not.toHaveBeenCalled();
+  it('never falls back to a PubChem CID lookup', async () => {
+    // No drug has id 702. A drug whose pubchem_cid is 702 does not own the
+    // page: the number is a drugs.id or nothing.
+    const { db, select, where } = fakeDb([]);
+    await expect(resolveOwningDrugIdForMonograph(db, 702)).resolves.toBeNull();
+    expect(select).toHaveBeenCalledOnce();
+    const query = new PgDialect().sqlToQuery(where.mock.calls[0]![0] as SQL);
+    expect(query.sql).not.toContain('pubchem_cid');
   });
 });

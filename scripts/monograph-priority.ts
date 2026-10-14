@@ -15,20 +15,14 @@ const flags = await sql`
 console.log("UNREFERENCED_FLAGS:" + JSON.stringify(flags));
 
 // B: most popular published drug monograph shorter than ~800 words
-// COALESCE treats NULL plaintext as 0 so legacy/empty pages rank first.
-// LATERAL join resolves drug_cid as either drugs.id (modern) or
-// drugs.pubchem_cid (legacy rows), returning at most one drug per page.
+// COALESCE treats NULL plaintext as 0 so empty pages rank first.
+// `drug_cid` holds drugs.id, so the join is on the primary key.
 const shortMonographs = await sql`
   SELECT wp.id, wp.drug_cid, wp.title, wp.status,
          COALESCE(LENGTH(wp.content_plaintext), 0) AS plaintext_len,
          d.slug, d.names, d.popularity_score
   FROM wiki_pages wp
-  JOIN LATERAL (
-    SELECT id, slug, names, popularity_score
-    FROM drugs
-    WHERE id = wp.drug_cid OR pubchem_cid = wp.drug_cid
-    LIMIT 1
-  ) d ON true
+  JOIN drugs d ON d.id = wp.drug_cid
   WHERE wp.status = 'published'
     AND wp.page_type = 'drug_monograph'
     AND COALESCE(LENGTH(wp.content_plaintext), 0) < 4800
@@ -41,12 +35,7 @@ console.log("SHORT_MONOGRAPHS:" + JSON.stringify(shortMonographs));
 const stalest = await sql`
   SELECT wp.id, wp.drug_cid, wp.title, wp.updated_at, d.slug, d.names
   FROM wiki_pages wp
-  JOIN LATERAL (
-    SELECT id, slug, names
-    FROM drugs
-    WHERE id = wp.drug_cid OR pubchem_cid = wp.drug_cid
-    LIMIT 1
-  ) d ON true
+  JOIN drugs d ON d.id = wp.drug_cid
   WHERE wp.status = 'published'
     AND wp.page_type = 'drug_monograph'
   ORDER BY wp.updated_at ASC

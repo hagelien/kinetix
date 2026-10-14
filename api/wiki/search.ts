@@ -86,12 +86,12 @@ export default withErrorHandling(async function handler(
     // Match those pages through the linked drug's `search_key` (the same
     // lowercase, tab-joined "name + nameEn + aliases + shortname" key the drug
     // typeahead `/api/drugs?view=search` uses) so wiki search resolves the same
-    // drug the general search does. `wiki_pages.drug_cid` is mixed-vintage —
-    // modern rows store `drugs.id`, legacy ones a PubChem CID — so match both.
+    // drug the general search does. `wiki_pages.drug_cid` is the drug's
+    // `drugs.id`, never its PubChem CID.
     const loweredLike = escapeLikePattern(trimmedQuery.toLowerCase());
     const drugSearchKeyMatch = (pattern: string): SQL => sql`EXISTS (
       SELECT 1 FROM drugs d
-      WHERE (d.id = ${wikiPages.drugCid} OR d.pubchem_cid = ${wikiPages.drugCid})
+      WHERE d.id = ${wikiPages.drugCid}
         AND d.search_key LIKE ${pattern} ESCAPE '\\'
     )`;
     const drugMonographClause = sql`${wikiPages.pageType} = 'drug_monograph' AND ${drugSearchKeyMatch(

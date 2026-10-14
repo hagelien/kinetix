@@ -285,3 +285,24 @@ describe('DELETE /api/drugs — parameter_entries teardown', () => {
     },
   );
 });
+
+describe('DELETE /api/drugs — a legacy monograph keyed by the drug\'s CID', () => {
+  it('refuses while a page migration 0148 left keyed by the CID would be orphaned', async () => {
+    // The per-deploy link repair leaves a page keyed by a CID alone only
+    // while some drug carries that CID. Deleting the drug frees it, and the
+    // next deploy would recreate a drug for the page.
+    const userId = await seedUser(db);
+    const drugId = await seedDrug(db, { slug: 'eslicarbazepine', pubchemCid: 9881504 });
+    await db.execute(sql`
+      INSERT INTO wiki_pages (slug, title, page_type, drug_cid, created_by, updated_by)
+      VALUES ('eslikarbazepin-gammel', 'Eslikarbazepin', 'drug_monograph', 9881504, ${userId}, ${userId})`);
+
+    const state = await deleteDrug(drugId, userId);
+
+    expect(state.statusCode).toBe(409);
+    expect(JSON.parse(state.body).code).toBe('drug_cid_keys_legacy_monograph');
+    expect(
+      await db.select({ id: drugs.id }).from(drugs).where(eq(drugs.id, drugId)),
+    ).toHaveLength(1);
+  });
+});

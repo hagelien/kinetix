@@ -24,9 +24,9 @@ export function useDrugSidebarData(drugCid: number): DrugSidebarData {
   // `drugCid` change so the sidebar does not blank during navigation, which
   // means `drug` can be the substance you came from while the page is already
   // the one you went to. Anything that *writes* has to know the difference, and
-  // it cannot be re-derived from the row: `wiki_pages.drug_cid` holds
-  // `drugs.id` on modern rows and a PubChem CID on legacy ones (api/drugs.ts),
-  // so comparing either field to `drugCid` is wrong for half the catalog.
+  // it is keyed to the request rather than read off the row, so no comparison
+  // against the row's `pubchemCid` — which shares a number space with
+  // `drugs.id` — can ever pass the previous substance off as this one.
   const [loadedForCid, setLoadedForCid] = useState<number | null>(null);
   const [indicators, setIndicators] = useState<DrugIndicators>({
     comments: {},

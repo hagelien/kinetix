@@ -123,8 +123,8 @@ describe('drug merge', () => {
       names: { nb: 'Monohydroksyderivat', en: 'MHD (duplicate)' },
       popularityScore: 5,
     });
-    await ensureDrugMonograph(db, { id: winnerId, names: { nb: 'MHD' }, pubchemCid: null }, userId);
-    await ensureDrugMonograph(db, { id: loserId, names: { nb: 'MHD dup' }, pubchemCid: null }, userId);
+    await ensureDrugMonograph(db, { id: winnerId, names: { nb: 'MHD' } }, userId);
+    await ensureDrugMonograph(db, { id: loserId, names: { nb: 'MHD dup' } }, userId);
     await giveMonographContent(winnerId);
 
     // A conflicting curated parameter (both hold proteinBinding) and one only the
@@ -304,7 +304,7 @@ describe('drug merge', () => {
   it('lets the admin override the monograph-suggested winner', async () => {
     const withMono = await seedDrug(db, { slug: 'a', names: { nb: 'A' } });
     const without = await seedDrug(db, { slug: 'b', names: { nb: 'B' } });
-    await ensureDrugMonograph(db, { id: withMono, names: { nb: 'A' }, pubchemCid: null }, userId);
+    await ensureDrugMonograph(db, { id: withMono, names: { nb: 'A' } }, userId);
     await giveMonographContent(withMono);
 
     const a = await loadDrugSideInfo(db, withMono);
@@ -398,8 +398,8 @@ describe('drug merge', () => {
     // wrong survivor if the other side was still `{doc: []}`.
     const empty = await seedDrug(db, { slug: 'e', names: { nb: 'E' }, popularityScore: 100 });
     const withReal = await seedDrug(db, { slug: 'r', names: { nb: 'R' }, popularityScore: 0 });
-    await ensureDrugMonograph(db, { id: empty, names: { nb: 'E' }, pubchemCid: null }, userId);
-    await ensureDrugMonograph(db, { id: withReal, names: { nb: 'R' }, pubchemCid: null }, userId);
+    await ensureDrugMonograph(db, { id: empty, names: { nb: 'E' } }, userId);
+    await ensureDrugMonograph(db, { id: withReal, names: { nb: 'R' } }, userId);
     // Simulate a saved-then-emptied editor doc on the "empty" side.
     await db
       .update(wikiPages)
@@ -582,8 +582,8 @@ describe('drug merge', () => {
   it('refuses when the loser monograph has active review-queue proposals', async () => {
     const winnerId = await seedDrug(db, { slug: 'mpw', names: { nb: 'MPW' } });
     const loserId = await seedDrug(db, { slug: 'mpl', names: { nb: 'MPL' } });
-    await ensureDrugMonograph(db, { id: winnerId, names: { nb: 'MPW' }, pubchemCid: null }, userId);
-    await ensureDrugMonograph(db, { id: loserId, names: { nb: 'MPL' }, pubchemCid: null }, userId);
+    await ensureDrugMonograph(db, { id: winnerId, names: { nb: 'MPW' } }, userId);
+    await ensureDrugMonograph(db, { id: loserId, names: { nb: 'MPL' } }, userId);
     await giveMonographContent(winnerId);
     const loserSide = await loadDrugSideInfo(db, loserId);
     await db.insert(pendingEdits).values({
@@ -1922,8 +1922,8 @@ describe('drug merge', () => {
   it('retargets agent_focus_config.page_ids from the loser monograph to the winner', async () => {
     const winnerId = await seedDrug(db, { slug: 'afw', names: { nb: 'AFW' } });
     const loserId = await seedDrug(db, { slug: 'afl', names: { nb: 'AFL' } });
-    await ensureDrugMonograph(db, { id: winnerId, names: { nb: 'AFW' }, pubchemCid: null }, userId);
-    await ensureDrugMonograph(db, { id: loserId, names: { nb: 'AFL' }, pubchemCid: null }, userId);
+    await ensureDrugMonograph(db, { id: winnerId, names: { nb: 'AFW' } }, userId);
+    await ensureDrugMonograph(db, { id: loserId, names: { nb: 'AFL' } }, userId);
     await giveMonographContent(winnerId); // ensure monograph rule picks winnerId
     const winnerSide = await loadDrugSideInfo(db, winnerId);
     const loserSide = await loadDrugSideInfo(db, loserId);
@@ -2008,8 +2008,8 @@ describe('drug merge', () => {
     // and apply flips the digest and refuses the stale plan.
     const winnerId = await seedDrug(db, { slug: 'cdw', names: { nb: 'CDW' } });
     const loserId = await seedDrug(db, { slug: 'cdl', names: { nb: 'CDL' } });
-    await ensureDrugMonograph(db, { id: winnerId, names: { nb: 'CDW' }, pubchemCid: null }, userId);
-    await ensureDrugMonograph(db, { id: loserId, names: { nb: 'CDL' }, pubchemCid: null }, userId);
+    await ensureDrugMonograph(db, { id: winnerId, names: { nb: 'CDW' } }, userId);
+    await ensureDrugMonograph(db, { id: loserId, names: { nb: 'CDL' } }, userId);
     await giveMonographContent(winnerId);
     await giveMonographContent(loserId);
     const [winnerInfo, loserInfo] = await Promise.all([
@@ -2047,8 +2047,8 @@ describe('drug merge', () => {
   it('refuses when the loser monograph gains content between preview and apply', async () => {
     const winnerId = await seedDrug(db, { slug: 'lgw', names: { nb: 'LGW' } });
     const loserId = await seedDrug(db, { slug: 'lgl', names: { nb: 'LGL' } });
-    await ensureDrugMonograph(db, { id: winnerId, names: { nb: 'LGW' }, pubchemCid: null }, userId);
-    await ensureDrugMonograph(db, { id: loserId, names: { nb: 'LGL' }, pubchemCid: null }, userId);
+    await ensureDrugMonograph(db, { id: winnerId, names: { nb: 'LGW' } }, userId);
+    await ensureDrugMonograph(db, { id: loserId, names: { nb: 'LGL' } }, userId);
     await giveMonographContent(winnerId);
     const [winnerInfo, loserInfo] = await Promise.all([
       loadDrugSideInfo(db, winnerId),
@@ -2080,8 +2080,8 @@ describe('drug merge', () => {
   it('refuses when the loser monograph is empty now but has prose in history', async () => {
     const winnerId = await seedDrug(db, { slug: 'rhw', names: { nb: 'RHW' } });
     const loserId = await seedDrug(db, { slug: 'rhl', names: { nb: 'RHL' } });
-    await ensureDrugMonograph(db, { id: winnerId, names: { nb: 'RHW' }, pubchemCid: null }, userId);
-    await ensureDrugMonograph(db, { id: loserId, names: { nb: 'RHL' }, pubchemCid: null }, userId);
+    await ensureDrugMonograph(db, { id: winnerId, names: { nb: 'RHW' } }, userId);
+    await ensureDrugMonograph(db, { id: loserId, names: { nb: 'RHL' } }, userId);
     const loserSide = await loadDrugSideInfo(db, loserId);
     // A revision on the loser page that has meaningful prose in content_html,
     // while the current page snapshot stays empty (blanked-then-forgotten
@@ -2125,22 +2125,20 @@ describe('drug merge', () => {
   });
 
   it('refuses when the loser resolves to more than one monograph page', async () => {
-    // A drug can have a modern id-keyed page AND a legacy CID-keyed page (no
-    // uniqueness constraint), both surfacing as its monograph via
-    // `resolveMonographDrugCids`. `loadMonograph` returns only one; the merge
-    // would delete only that page and leave the other attached to a deleted
-    // drug. Refuse and let an admin merge/delete the extra page first.
+    // A drug can have two pages keyed by its id (no uniqueness constraint).
+    // `loadMonograph` returns only one; the merge would delete only that page
+    // and leave the other attached to a deleted drug. Refuse and let an admin
+    // merge/delete the extra page first.
     const winnerId = await seedDrug(db, { slug: 'mmw', names: { nb: 'MMW' } });
     const loserId = await seedDrug(db, { slug: 'mml', names: { nb: 'MML' }, pubchemCid: 5555 });
-    // Modern id-keyed monograph.
-    await ensureDrugMonograph(db, { id: loserId, names: { nb: 'MML' }, pubchemCid: 5555 }, userId);
-    // Second, legacy-keyed page for the SAME loser (drug_cid = pubchemCid).
+    await ensureDrugMonograph(db, { id: loserId, names: { nb: 'MML' } }, userId);
+    // Second page for the SAME loser.
     await db.insert(wikiPages).values({
-      slug: 'mml-legacy',
-      title: 'MML legacy',
+      slug: 'mml-extra',
+      title: 'MML extra',
       content: { type: 'doc', content: [] } as never,
       pageType: 'drug_monograph',
-      drugCid: 5555,
+      drugCid: loserId,
       status: 'published',
       createdBy: userId,
       updatedBy: userId,
@@ -2163,13 +2161,13 @@ describe('drug merge', () => {
     // monograph after the fold. Refuse the same way.
     const winnerId = await seedDrug(db, { slug: 'wmw', names: { nb: 'WMW' }, pubchemCid: 6666 });
     const loserId = await seedDrug(db, { slug: 'wml', names: { nb: 'WML' } });
-    await ensureDrugMonograph(db, { id: winnerId, names: { nb: 'WMW' }, pubchemCid: 6666 }, userId);
+    await ensureDrugMonograph(db, { id: winnerId, names: { nb: 'WMW' } }, userId);
     await db.insert(wikiPages).values({
-      slug: 'wmw-legacy',
-      title: 'WMW legacy',
+      slug: 'wmw-extra',
+      title: 'WMW extra',
       content: { type: 'doc', content: [] } as never,
       pageType: 'drug_monograph',
-      drugCid: 6666,
+      drugCid: winnerId,
       status: 'published',
       createdBy: userId,
       updatedBy: userId,
@@ -2252,15 +2250,15 @@ describe('drug merge', () => {
     ).rejects.toBeInstanceOf(DrugMergeDataConflictError);
   });
 
-  it('finds monograph proposals on a legacy CID-keyed page', async () => {
-    // The loser monograph is keyed by pubchemCid (drug_cid = pubchemCid), the
-    // legacy shape. The blocker used to search only by loser.id and miss this
-    // page entirely; the resolved-candidate query catches it.
+  it('does not attribute a page keyed by the loser\'s PubChem CID to the loser', async () => {
+    // `wiki_pages.drug_cid` holds `drugs.id`. A page carrying the loser's CID
+    // is not the loser's monograph — that number can be another drug's id —
+    // so its proposals are not the loser's to block on, and the merge must not
+    // count (or later delete) the page as the loser's.
     const winnerId = await seedDrug(db, { slug: 'lkw', names: { nb: 'LKW' } });
     const loserId = await seedDrug(db, { slug: 'lkl', names: { nb: 'LKL' }, pubchemCid: 4242 });
-    await ensureDrugMonograph(db, { id: winnerId, names: { nb: 'LKW' }, pubchemCid: null }, userId);
-    // Insert a page whose drug_cid is the loser's PubChem CID (the legacy way).
-    const [legacyPage] = await db
+    await ensureDrugMonograph(db, { id: winnerId, names: { nb: 'LKW' } }, userId);
+    const [cidKeyedPage] = await db
       .insert(wikiPages)
       .values({
         slug: 'lkl-legacy',
@@ -2276,7 +2274,7 @@ describe('drug merge', () => {
     await giveMonographContent(winnerId);
     await db.insert(pendingEdits).values({
       editType: 'wiki_page',
-      targetId: legacyPage!.id,
+      targetId: cidKeyedPage!.id,
       proposedValue: { title: 'draft edit' } as never,
       submittedBy: userId,
       status: 'draft',
@@ -2286,7 +2284,8 @@ describe('drug merge', () => {
       conflicts.some(
         (c) => c.table === 'pending_edits' && c.identity.includes('wiki_page'),
       ),
-    ).toBe(true);
+    ).toBe(false);
+    expect((await loadDrugSideInfo(db, loserId))?.monograph).toBeNull();
   });
 
   it('refuses when an image-only revision exists on the loser monograph', async () => {
@@ -2295,8 +2294,8 @@ describe('drug merge', () => {
     // and cascade the history away with the page delete.
     const winnerId = await seedDrug(db, { slug: 'ionw', names: { nb: 'IONW' } });
     const loserId = await seedDrug(db, { slug: 'ionl', names: { nb: 'IONL' } });
-    await ensureDrugMonograph(db, { id: winnerId, names: { nb: 'IONW' }, pubchemCid: null }, userId);
-    await ensureDrugMonograph(db, { id: loserId, names: { nb: 'IONL' }, pubchemCid: null }, userId);
+    await ensureDrugMonograph(db, { id: winnerId, names: { nb: 'IONW' } }, userId);
+    await ensureDrugMonograph(db, { id: loserId, names: { nb: 'IONL' } }, userId);
     const loserSide = await loadDrugSideInfo(db, loserId);
     await db.execute(sql`
       INSERT INTO wiki_revisions (page_id, content, content_html, created_by)
@@ -2352,7 +2351,7 @@ describe('drug merge', () => {
     const winnerId = await seedDrug(db, { slug: 'ihw', names: { nb: 'IHW' } });
     const loserId = await seedDrug(db, { slug: 'ihl', names: { nb: 'IHL' } });
     // Loser has a real monograph; winner has none.
-    await ensureDrugMonograph(db, { id: loserId, names: { nb: 'IHL' }, pubchemCid: null }, userId);
+    await ensureDrugMonograph(db, { id: loserId, names: { nb: 'IHL' } }, userId);
     await giveMonographContent(loserId);
     // A wiki_new proposal on the winner (would later create a second page).
     await db.insert(pendingEdits).values({
@@ -2397,7 +2396,7 @@ describe('drug merge', () => {
   it('refuses wiki_new proposals on loser when winner already has a monograph', async () => {
     const winnerId = await seedDrug(db, { slug: 'wnw', names: { nb: 'WNW' } });
     const loserId = await seedDrug(db, { slug: 'wnl', names: { nb: 'WNL' } });
-    await ensureDrugMonograph(db, { id: winnerId, names: { nb: 'WNW' }, pubchemCid: null }, userId);
+    await ensureDrugMonograph(db, { id: winnerId, names: { nb: 'WNW' } }, userId);
     await giveMonographContent(winnerId);
     await db.insert(pendingEdits).values({
       editType: 'wiki_new',
@@ -2598,8 +2597,8 @@ describe('drug merge', () => {
     // as disposable stubs.
     const winnerId = await seedDrug(db, { slug: 'rjw', names: { nb: 'RJW' } });
     const loserId = await seedDrug(db, { slug: 'rjl', names: { nb: 'RJL' } });
-    await ensureDrugMonograph(db, { id: winnerId, names: { nb: 'RJW' }, pubchemCid: null }, userId);
-    await ensureDrugMonograph(db, { id: loserId, names: { nb: 'RJL' }, pubchemCid: null }, userId);
+    await ensureDrugMonograph(db, { id: winnerId, names: { nb: 'RJW' } }, userId);
+    await ensureDrugMonograph(db, { id: loserId, names: { nb: 'RJL' } }, userId);
     const loserSide = await loadDrugSideInfo(db, loserId);
     // Revision whose JSON has real prose but content_html is empty.
     await db.execute(sql`
@@ -2712,5 +2711,27 @@ describe('drug merge', () => {
     // in first-seen order.
     expect(profile!.evidenceNote).toBe('loser note');
     expect(profile!.referenceIds).toEqual([10, 20, 30]);
+  });
+});
+
+describe('drug merge — a legacy monograph keyed by the loser\'s CID', () => {
+  it('refuses while freeing the loser\'s CID would expose the page', async () => {
+    // Deleting the loser frees its CID; a page migration 0148 left keyed by
+    // that CID is shielded from the per-deploy link repair only while some
+    // drug carries it.
+    const winnerId = await seedDrug(db, { slug: 'eslicarbazepine' });
+    const loserId = await seedDrug(db, { slug: 'eslicarbazepine-dup', pubchemCid: 9881504 });
+    await db.insert(wikiPages).values({
+      slug: 'eslikarbazepin-gammel',
+      title: 'Eslikarbazepin',
+      pageType: 'drug_monograph',
+      drugCid: 9881504,
+      createdBy: userId,
+      updatedBy: userId,
+    });
+
+    const conflicts = await dataConflictsFor(winnerId, loserId);
+
+    expect(conflicts.map((c) => c.message?.code)).toContain('dataConflict.legacyCidMonograph');
   });
 });

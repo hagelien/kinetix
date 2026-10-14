@@ -8,27 +8,26 @@
  * in a `names` jsonb keyed by BCP-47 language code (no top-level `name` /
  * `name_en` columns) and `aliases` is a jsonb string array.
  *
- * The UPDATEs below carry `RETURNING` so the log lines can count what they
+ * The UPDATE below carries `RETURNING` so the log line can count what it
  * touched: `neon()` without `fullResults` resolves to a plain row array, so
  * the `.count` these used to read was always `undefined` and every deploy
  * reported 0 rows fixed regardless of what it did.
  *
- * The collision guard (#1256 item 7): `wiki_pages.drug_cid` has no
- * uniqueness constraint, so a legacy row's CID can resolve to a `drugs.id`
- * that some OTHER page already links modernly. Remapping the legacy row onto
- * it anyway would produce a second page for a drug that already has one —
- * exactly the silent duplicate `scripts/fix-monograph-drug-links.ts` (the
- * manual, `[CONFLICT]`-reporting counterpart to this build-time pass) exists
- * to catch. That script escalates the case to a human; this one, running
- * unattended on every deploy, can only skip it and leave the legacy row
- * dangling for that script (or a human) to resolve — in EVERY case below, not
- * only Case 1: a page the guard excludes there would otherwise still fall
- * through to Case 2 (linked by a title match) or Case 3 (a spurious new drug
- * created for it), recreating the same duplicate a different way.
+ * `wiki_pages.drug_cid` holds `drugs.id` only, so a page is dangling when its
+ * number is no drug's id; it is never reinterpreted as a PubChem CID. The
+ * one-off remap of CID-keyed pages this script used to repeat on every deploy
+ * is migration 0148.
+ *
+ * The collision guard (#1256 item 7): a page 0148 declined to move — its
+ * number is still a drug's PubChem CID, because placing it would have given
+ * that drug two monographs — must not be linked by Case 1 (a title match onto
+ * that same drug) or Case 2 (a spurious new drug created for it).
+ * `scripts/fix-monograph-drug-links.ts`, the manual `[CONFLICT]`-reporting
+ * counterpart to this build-time pass, escalates it to a human; this one,
+ * running unattended on every deploy, can only leave it dangling.
  */
 import { neon } from '@neondatabase/serverless';
 import {
-  REMAP_LEGACY_CID_SQL,
   NAME_MATCH_SQL,
   DANGLING_MONOGRAPH_PAGES_SQL,
 } from './lib/monograph-legacy-cid-remap-sql';
@@ -44,16 +43,12 @@ const sql = neon(DATABASE_URL);
 async function main() {
   console.log('[fix-monograph-links] Fixing orphaned drug_monograph pages...');
 
-  // Case 1: Legacy PubChem CID stored in drug_cid → remap to internal drugs.id
-  const r1 = await sql.query(REMAP_LEGACY_CID_SQL);
-  console.log(`  Legacy CID remapped: ${r1.length}`);
-
-  // Case 2: NULL or dangling drug_cid but title matches an existing drug name
+  // Case 1: NULL or dangling drug_cid but title matches an existing drug name
   // in any language slot of the `names` jsonb.
-  const r2 = await sql.query(NAME_MATCH_SQL);
-  console.log(`  Matched by name:    ${r2.length}`);
+  const r1 = await sql.query(NAME_MATCH_SQL);
+  console.log(`  Matched by name:    ${r1.length}`);
 
-  // Case 3: NULL or dangling drug_cid with no match → create minimal drug rows.
+  // Case 2: NULL or dangling drug_cid with no match → create minimal drug rows.
   // Default the page title into the Norwegian slot to mirror what
   // `scripts/fix-monograph-drug-links.ts` does — most legacy monographs were
   // authored in NO and authors can promote into other languages later.

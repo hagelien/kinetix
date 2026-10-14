@@ -30,7 +30,6 @@ import { callerCan } from './_lib/permissions-store.js';
 import { and, eq, inArray } from 'drizzle-orm';
 import { wikiPages } from '../db/schema.js';
 import { isActiveAgentUser } from './_lib/agent-verifications.js';
-import { resolveMonographDrugCids } from './_lib/monograph-helpers.js';
 import { wikiContentFocusRefusal } from './agent-focus.js';
 import {
   DrugMergeBlockedError,
@@ -125,29 +124,24 @@ async function handlePreview(
 }
 
 /**
- * The drug-monograph page ids belonging to these drugs.
- *
- * `wiki_pages.drug_cid` is mixed-vintage — modern rows hold `drugs.id`, legacy
- * rows a PubChem CID — so the candidates go through the same
- * `resolveMonographDrugCids` the merge and the delete teardown use. Reading
- * `drug_cid` directly would miss a legacy-keyed monograph, and a gate that
- * misses the page is a gate that lets the fold through.
+ * The drug-monograph page ids belonging to these drugs: the pages whose
+ * `drug_cid` is one of their `drugs.id`s.
  */
 async function monographPagesForDrugs(
   db: ReturnType<typeof getDb>,
-  sides: Array<{ id: number; pubchemCid: number | null }>,
+  sides: Array<{ id: number }>,
 ): Promise<number[]> {
-  const candidates = (
-    await Promise.all(sides.map((side) => resolveMonographDrugCids(db, side)))
-  ).flat();
-  if (candidates.length === 0) return [];
+  if (sides.length === 0) return [];
   const rows = await db
     .select({ id: wikiPages.id })
     .from(wikiPages)
     .where(
       and(
         eq(wikiPages.pageType, 'drug_monograph'),
-        inArray(wikiPages.drugCid, candidates),
+        inArray(
+          wikiPages.drugCid,
+          sides.map((side) => side.id),
+        ),
       ),
     );
   return rows.map((r) => r.id);

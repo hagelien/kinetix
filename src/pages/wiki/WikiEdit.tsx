@@ -60,11 +60,10 @@ function WikiEditContent() {
     : undefined;
   const canSubmitWholePage = useCan('wiki.page.submit');
   const [page, setPage] = useState<WikiPageData | null>(null);
-  // Internal drugs.id resolved from page.drugCid. wiki_pages.drug_cid is a
-  // legacy column that historically stored a PubChem CID and now stores the
-  // internal id for newer rows; we normalize here so WikiEditor and any
-  // downstream API calls (especially citation inserts whose drug_id FKs
-  // drugs.id) always see a canonical id.
+  // Internal drugs.id resolved from page.drugCid. Despite its name,
+  // wiki_pages.drug_cid holds drugs.id; resolving it through the drug row
+  // confirms the drug still exists before WikiEditor and downstream API calls
+  // (especially citation inserts whose drug_id FKs drugs.id) use it.
   const [resolvedDrugId, setResolvedDrugId] = useState<number | null>(null);
   const [parentTitle, setParentTitle] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);

@@ -432,24 +432,20 @@ export function CommandPalette() {
     // server-side so Norwegian-slugged pages open instead of a 404 redirect
     // through the English drug slug.
     //
-    // `wiki_pages.drug_cid` can be either the internal drugs.id (modern) or a
-    // PubChem CID (legacy seed data). Try both — DrugMonographSidebar applies
-    // the same fallback when resolving a drug row.
-    const candidates = [result.drugId, result.pubchemCid].filter(
-      (v): v is number => typeof v === 'number' && Number.isFinite(v),
-    );
-    for (const cid of candidates) {
-      try {
-        const res = await fetch(`/api/wiki/pages?drugCid=${cid}`);
-        if (!res.ok) continue;
+    // `wiki_pages.drug_cid` is the drug's internal id. Never look it up by the
+    // PubChem CID as well: that number can be another drug's id, and the page
+    // found would be that drug's monograph.
+    try {
+      const res = await fetch(`/api/wiki/pages?drugCid=${result.drugId}`);
+      if (res.ok) {
         const data = (await res.json()) as { page?: { slug?: string } };
         if (data.page?.slug) {
           navigate(`/wiki/${data.page.slug}`);
           return;
         }
-      } catch {
-        // try the next candidate
       }
+    } catch {
+      // fall through to the drug preview route
     }
     navigate(`/wiki/drug/${result.drugId}`);
   }

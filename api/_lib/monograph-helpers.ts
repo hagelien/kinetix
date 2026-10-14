@@ -12,7 +12,7 @@
  * manual "Create monograph" button produced — so the rendered page is identical
  * to a freshly hand-created one: the drug data sidebar shows, with no prose yet.
  */
-import { and, asc, eq, inArray, isNull, notExists, or, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull, notExists, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import {
   bioEntities,
@@ -29,7 +29,6 @@ import { resolveDrugName, type LangCode } from '../../src/lib/drugNames.js';
 export interface MonographDrug {
   id: number;
   names: Record<LangCode, string>;
-  pubchemCid?: number | null;
 }
 
 type Db = ReturnType<typeof getDb>;
@@ -37,80 +36,67 @@ type Db = ReturnType<typeof getDb>;
 const EMPTY_DOC = { type: 'doc', content: [] } as const;
 
 /**
- * Which `wiki_pages.drug_cid` values legitimately belong to a drug. `drug_cid`
- * is mixed-vintage: modern rows store `drugs.id`, legacy rows a PubChem CID.
- * The drug's own id is always a candidate. Its PubChem CID is a candidate ONLY
- * when no *other* drug claims that number as its internal id — otherwise a page
- * with `drug_cid = <our CID>` is that other drug's modern monograph, so treating
- * it as ours would mis-link it here (and, in the DELETE teardown, delete it).
- * Mirrors the /api/drugs?wikiDrugId= read resolver, which prefers the drugs.id
- * interpretation for exactly this collision (e.g. 25C-NBOMe id=281 vs carbon
- * monoxide pubchem_cid=281).
+ * Monograph pages still keyed by a legacy PubChem CID: `drug_monograph` rows
+ * whose `drug_cid` is `cid` while no drug has `cid` as its `drugs.id`.
+ * Migration 0148 leaves such a page where it cannot place it unambiguously
+ * (its drug already had a monograph, or two pages shared the CID), and the
+ * per-deploy link repair (`scripts/fix-monograph-links-build.ts`) keeps its
+ * hands off it only while some drug still carries `cid` as its PubChem CID.
+ *
+ * So every path that retires a CID — deleting or merging away the drug that
+ * holds it, or moving it with `retarget:cid` — must refuse while this returns
+ * rows. Otherwise the next deploy links the page by title or creates a drug
+ * for it, quietly reversing the delete or merge. Pass the transaction handle
+ * so the check sees the same rows the retiring write does.
  */
-export function monographDrugCidCandidates(
-  drugId: number,
-  pubchemCid: number | null | undefined,
-  pubchemCidIsAnotherDrugId: boolean,
-): number[] {
-  const candidates = [drugId];
-  if (
-    pubchemCid != null &&
-    pubchemCid !== drugId &&
-    !pubchemCidIsAnotherDrugId
-  ) {
-    candidates.push(pubchemCid);
-  }
-  return candidates;
-}
-
-/**
- * Resolve {@link monographDrugCidCandidates} for a drug, querying the drugs
- * table to detect the id/PubChem-CID collision. Pass a transaction handle when
- * this must observe writes in progress (e.g. the DELETE teardown).
- */
-export async function resolveMonographDrugCids(
+export async function findLegacyCidKeyedMonographs(
   db: Db,
-  drug: { id: number; pubchemCid?: number | null },
-): Promise<number[]> {
-  let collision = false;
-  if (drug.pubchemCid != null && drug.pubchemCid !== drug.id) {
-    const [hit] = await db
-      .select({ id: drugs.id })
-      .from(drugs)
-      .where(eq(drugs.id, drug.pubchemCid))
-      .limit(1);
-    collision = Boolean(hit);
-  }
-  return monographDrugCidCandidates(drug.id, drug.pubchemCid, collision);
+  cid: number,
+): Promise<{ id: number; slug: string }[]> {
+  const res = await db.execute<{ id: number; slug: string }>(sql`
+    SELECT wp.id, wp.slug FROM wiki_pages wp
+    WHERE wp.page_type = 'drug_monograph'
+      AND wp.drug_cid = ${cid}
+      AND NOT EXISTS (SELECT 1 FROM drugs WHERE id = ${cid})`);
+  return res.rows.map((r) => ({ id: Number(r.id), slug: String(r.slug) }));
+}
+
+/** English refusal for {@link findLegacyCidKeyedMonographs} rows (scripts and API logs). */
+export function legacyCidMonographRefusal(
+  cid: number,
+  pages: { slug: string }[],
+): string {
+  return (
+    `${pages.length} monograph page(s) are still keyed by the legacy CID ${cid} ` +
+    `(${pages.map((p) => `/${p.slug}`).join(', ')}), which migration 0148 could ` +
+    `not place. Retiring the CID would leave them unprotected, and the next deploy ` +
+    `would link them by title or create a drug for them. Settle them with ` +
+    `scripts/fix-monograph-drug-links.ts first`
+  );
 }
 
 /**
- * Given a `wiki_pages.drug_cid` value (which is normally the owning drug's
- * internal id but for legacy rows is its PubChem CID), find the owning
- * `drugs.id`. Used by pending-edit submit paths that need to take the same
- * per-drug advisory lock the drug-merge admin holds: locking by the raw
- * `drug_cid` would use a legacy CID as the lock key while the merge locks
- * the internal id, letting the two paths race unblocked. Returns null if no
- * drug owns this drug_cid (the page is dangling).
+ * The `drugs.id` that owns a monograph's `wiki_pages.drug_cid`, or null when
+ * no drug does (the page is dangling). Despite its name the column holds
+ * `drugs.id` and nothing else — the PubChem CIDs the retired monograph seed
+ * once wrote there were moved onto `drugs.id` by migration 0148 — so this is
+ * an existence check, never a CID lookup. A number that is some drug's PubChem
+ * CID but no drug's id names no drug here.
+ *
+ * Used by pending-edit submit paths that need to take the same per-drug
+ * advisory lock the drug-merge admin holds, keyed by the drug that still
+ * exists rather than by whatever number the page carries.
  */
 export async function resolveOwningDrugIdForMonograph(
   db: Db,
   drugCid: number,
 ): Promise<number | null> {
-  // Modern shape: drug_cid IS the drugs.id.
   const [byId] = await db
     .select({ id: drugs.id })
     .from(drugs)
     .where(eq(drugs.id, drugCid))
     .limit(1);
-  if (byId) return byId.id;
-  // Legacy shape: drug_cid is the drug's PubChem CID.
-  const [byCid] = await db
-    .select({ id: drugs.id })
-    .from(drugs)
-    .where(eq(drugs.pubchemCid, drugCid))
-    .limit(1);
-  return byCid?.id ?? null;
+  return byId?.id ?? null;
 }
 
 /**
@@ -142,8 +128,8 @@ export interface EnsureMonographResult {
 
 /**
  * Ensure a drug has a monograph wiki page, creating an empty one if missing.
- * Idempotent: if a monograph already exists for the drug (linked by internal id
- * or, for legacy rows, by PubChem CID) it is returned untouched.
+ * Idempotent: if a monograph already exists for the drug (`drug_cid` equal to
+ * its `drugs.id`) it is returned untouched.
  *
  * @param db   Drizzle instance (passed in so the backfill script can use its
  *             own connection and callers can share a request-scoped db).
@@ -155,19 +141,13 @@ export async function ensureDrugMonograph(
   drug: MonographDrug,
   userId: number,
 ): Promise<EnsureMonographResult> {
-  // wiki_pages.drug_cid normally stores drugs.id, but some legacy rows carry a
-  // PubChem CID. Check both so we never double-create for an existing link —
-  // while excluding a CID that is actually another drug's internal id, which
-  // would otherwise match (and "adopt") that unrelated drug's monograph.
-  const candidateCids = await resolveMonographDrugCids(db, drug);
-
   const [existing] = await db
     .select({ id: wikiPages.id, slug: wikiPages.slug })
     .from(wikiPages)
     .where(
       and(
         eq(wikiPages.pageType, 'drug_monograph'),
-        inArray(wikiPages.drugCid, candidateCids),
+        eq(wikiPages.drugCid, drug.id),
       ),
     )
     .limit(1);

@@ -556,18 +556,12 @@ export async function resolveFocusNarrowing(): Promise<FocusNarrowing> {
 /**
  * Drugs whose monographs are among these wiki pages.
  *
- * `wiki_pages.drug_cid` is mixed-vintage — modern rows hold `drugs.id`, legacy
- * rows can hold a PubChem CID — so both have to be resolved. **Internal id
- * wins, PubChem CID is only a fallback for values no id matched**, the same
- * precedence `GET /api/drugs?wikiDrugId=` applies and for the same reason: the
- * two numbering spaces collide in live data (the repo's documented case is
- * 25C-NBOMe at id 281 against carbon monoxide at CID 281).
- *
- * Resolving both at once with an OR would put the collided drug in the focus
- * set too, and because the gap queue ranks by method membership and popularity
- * it could then hand the routine that drug's gap ahead of the intended one.
- * That is not a focus set one drug too wide — it is the agent working a
- * substance the admin did not select, which §3 explicitly forbids.
+ * `wiki_pages.drug_cid` holds `drugs.id`, so a page resolves to the drug with
+ * that id or to nothing. It is never also tried as a PubChem CID: the two
+ * numbering spaces collide in live data (25C-NBOMe at id 281 against carbon
+ * monoxide at CID 281), and putting the collided drug in the focus set would
+ * have the gap queue — which ranks by method membership and popularity — hand
+ * the routine a substance the admin did not select, which §3 forbids.
  */
 async function resolveDrugIdsForPages(pageIds: number[]): Promise<number[]> {
   if (pageIds.length === 0) return [];
@@ -589,19 +583,7 @@ async function resolveDrugIdsForPages(pageIds: number[]): Promise<number[]> {
     .select({ id: drugs.id })
     .from(drugs)
     .where(inArray(drugs.id, cids));
-  const resolved = new Set(byId.map((r) => r.id));
-
-  // Only the values no drug row claimed as its own id are treated as legacy
-  // PubChem CIDs. A value that matched an id is already answered.
-  const unresolved = cids.filter((cid) => !resolved.has(cid));
-  if (unresolved.length === 0) return Array.from(resolved);
-
-  const byCid = await db
-    .select({ id: drugs.id })
-    .from(drugs)
-    .where(inArray(drugs.pubchemCid, unresolved));
-  for (const row of byCid) resolved.add(row.id);
-  return Array.from(resolved);
+  return byId.map((r) => r.id);
 }
 
 export default withErrorHandling(async function handler(
