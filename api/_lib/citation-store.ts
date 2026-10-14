@@ -74,9 +74,12 @@ export interface ResolveCitationResult {
   mergedIds: number[];
   /**
    * Ids that are the same paper but were left unfolded: another merge into
-   * this survivor held the lock. Nothing is lost — the next write declaring
-   * the handle, or `merge:split-citations`, folds them — but until then the
-   * paper is still split, so callers that care can say so.
+   * this survivor held the lock, the duplicate's own lock was held (an
+   * extraction job being queued or requeued for it, or another merge of it),
+   * or a run was extracting the duplicate under its own id. Nothing is lost —
+   * the next write declaring the handle, or `merge:split-citations`, folds
+   * them — but until then the paper is still split, so callers that care can
+   * say so.
    */
   deferredIds?: number[];
 }
@@ -293,6 +296,7 @@ export async function resolveCitation(
   );
   const mergedIds: number[] = [];
   const deferredIds: number[] = [];
+  const deferredNotes: string[] = [];
   const duplicates = sorted.slice(1);
   // Only when there is something to merge. Outside an existing transaction
   // `runInPoolTransaction` opens a WebSocket pool of its own, and the ordinary
@@ -319,8 +323,17 @@ export async function resolveCitation(
         // resolution is unaffected either way: the survivor is the survivor —
         // but the paper stays split until something folds it, which is worth
         // saying out loud rather than returning as success.
-        if (stats.deferred) deferredIds.push(duplicate.id);
-        else mergedIds.push(duplicate.id);
+        if (stats.deferred) {
+          deferredIds.push(duplicate.id);
+          deferredNotes.push(
+            stats.deferredReason === 'extraction_in_flight'
+              ? `#${duplicate.id} (extraction job ${stats.inFlightExtractionJobId} in progress)`
+              : stats.deferredReason === 'loser_locked'
+                ? `#${duplicate.id} (its own lock was held: an extraction job being ` +
+                  `queued for it, or another merge of it)`
+                : `#${duplicate.id} (another merge into it held the lock)`,
+          );
+        } else mergedIds.push(duplicate.id);
       }
     });
     if (deferredIds.length > 0) {
@@ -329,7 +342,7 @@ export async function resolveCitation(
       // reviews are still divided.
       console.warn(
         `resolveCitation: left ${deferredIds.length} duplicate(s) of citation ` +
-          `${survivor.id} unfolded — another merge into it held the lock. ` +
+          `${survivor.id} unfolded: ${deferredNotes.join(', ')}. ` +
           `They fold on the next write declaring the handle, or via merge:split-citations.`,
       );
     }

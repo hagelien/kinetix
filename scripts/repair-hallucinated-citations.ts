@@ -50,8 +50,8 @@
 import 'dotenv/config';
 import fs from 'node:fs';
 import { sql, type SQL } from 'drizzle-orm';
-import { getDb } from '../api/_lib/db';
-import { mergeCitations } from '../api/_lib/citation-merge';
+import { getDb, runInPoolTransaction } from '../api/_lib/db';
+import { describeDeferredMerge, mergeCitations } from '../api/_lib/citation-merge';
 import { fetchRecords } from '../api/_lib/pubmed-eutils';
 import { fetchCrossRefMetadata } from '../api/_lib/crossref';
 import {
@@ -460,10 +460,17 @@ async function planRepoints(
 async function applyRepoints(
   plans: RepointPlan[],
   actorUserId: number,
-): Promise<{ updated: number; merged: number; skipped: number; done: number }> {
+): Promise<{
+  updated: number;
+  merged: number;
+  deferred: number;
+  skipped: number;
+  done: number;
+}> {
   const db = getDb();
   let updated = 0;
   let merged = 0;
+  let deferred = 0;
   let skipped = 0;
   let done = 0;
 
@@ -493,14 +500,35 @@ async function applyRepoints(
   if (updates.length > 0) process.stderr.write('\n');
 
   for (const plan of merges) {
-    if (plan.mergeInto === null) continue;
-    await mergeCitations(db, plan.mergeInto, plan.citationId, { actorUserId });
+    const winnerId = plan.mergeInto;
+    if (winnerId === null) continue;
+    // One pool transaction per fold, as `merge:split-citations` does, so the
+    // merge's locks have something to hold. On the auto-commit client the
+    // winner's advisory lock and the loser's extraction-job row locks each
+    // release with their own statement: a request folding into the same
+    // survivor, or an extraction run claiming the loser's job, would get
+    // between the check and the write it guards. This runs against a live
+    // deployment, so that racer is an ordinary request, not another run of
+    // this script. `getDb()` inside resolves to the transaction.
+    const stats = await runInPoolTransaction(() =>
+      mergeCitations(getDb(), winnerId, plan.citationId, { actorUserId }),
+    );
+    if (stats.deferred) {
+      // Nothing was folded, so it is not counted as merged. The plan stays
+      // pending — the next run re-plans it and tries again.
+      process.stderr.write('\n');
+      console.log(
+        `  deferred #${plan.citationId} → #${winnerId}: ${describeDeferredMerge(stats)}`,
+      );
+      deferred++;
+      continue;
+    }
     merged++;
     process.stderr.write(`  merging: ${merged}/${merges.length}\r`);
   }
   if (merges.length > 0) process.stderr.write('\n');
 
-  return { updated, merged, skipped, done };
+  return { updated, merged, deferred, skipped, done };
 }
 
 interface DeletePlan {
@@ -760,8 +788,15 @@ async function main(): Promise<void> {
       const stats = await applyRepoints(plans, actorUserId!);
       console.log(
         `  done: ${stats.updated} updated, ${stats.merged} merged, ` +
+          `${stats.deferred} deferred, ` +
           `${stats.done} already applied, ${stats.skipped} skipped`,
       );
+      if (stats.deferred > 0) {
+        console.log(
+          `  ${stats.deferred} merge(s) deferred (reasons above). Re-run with --apply ` +
+            'to pick them up.',
+        );
+      }
     }
   }
 

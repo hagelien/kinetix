@@ -2131,7 +2131,7 @@
       "merging": "Merging…",
       "merged_one": "Merged {{count}} citation into #{{survivor}}.",
       "merged_other": "Merged {{count}} citations into #{{survivor}}.",
-      "deferred": "Some citations were not merged because another merge into the same paper was running: {{ids}}. Try them again.",
+      "deferred": "Some citations were not merged because another merge involving the same paper, or paper extraction work on them, was in progress: {{ids}}. Try them again.",
       "errors": {
         "generic": "The merge failed. Try again, and reload the page if it keeps failing.",
         "not_found": "Some of these citations no longer exist — they may already have been merged. Search again.",

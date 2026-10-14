@@ -117,6 +117,10 @@ on:
       - 'api/_lib/drug-merge.ts'
       - 'api/drugs.ts'
       - 'api/pending-edits.ts'
+      # The citation merge's fold lock and the extraction-queue writes its
+      # real-Postgres suite races (#127).
+      - 'api/_lib/citation-merge.ts'
+      - 'api/_lib/paper-extraction-store.ts'
   push:
     branches: [main]
     paths:
@@ -155,6 +159,10 @@ on:
       - 'api/_lib/drug-merge.ts'
       - 'api/drugs.ts'
       - 'api/pending-edits.ts'
+      # The citation merge's fold lock and the extraction-queue writes its
+      # real-Postgres suite races (#127).
+      - 'api/_lib/citation-merge.ts'
+      - 'api/_lib/paper-extraction-store.ts'
 
 # Supersede an in-flight PR run when a newer commit lands on the same PR — this
 # repo iterates fast (many "Address Codex Nth pass" commits per PR), so a run
@@ -274,3 +282,9 @@ jobs:
         run: |
           npx vitest run --config vitest.integration.config.ts \
             tests/governance/transaction/real-postgres-dispute-lock-order.test.ts
+      - name: Real-Postgres citation merge vs. extraction queue
+        env:
+          KINETIX_TEST_PG_URL: postgres://postgres:postgres@localhost:5432/kinetix_test
+        run: |
+          npx vitest run --config vitest.integration.config.ts \
+            tests/governance/transaction/real-postgres-citation-merge-enqueue.test.ts
