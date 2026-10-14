@@ -4,10 +4,9 @@
  *
  * `applyWikiArticle` resolves the article's sources with `resolveCitation`,
  * which folds a split pair it finds — and a fold locks the loser's open
- * extraction jobs (`lockLoserExtractionJobs`, `FOR NO KEY UPDATE`; a claimed
- * one is waited for and then held even though the fold defers as
- * `extraction_in_flight`). The import used to do that *after* locking the
- * page `FOR UPDATE`: page, then job.
+ * extraction jobs (`lockLoserExtractionJobs`, `FOR NO KEY UPDATE`; it used to
+ * wait for a held one). The import used to do that *after* locking the page
+ * `FOR UPDATE`: page, then job.
  *
  * #223 settled the other order. The topic-page branch of a paper-extraction
  * fact submission (`POST /api/pending-edits`) re-checks the run's claim with
@@ -18,11 +17,14 @@
  * `deadlock_detected` (40P01).
  *
  * The fix resolves the sources before the page lock, so the import is job
- * before page as well. The first test drives the real route (paused between
- * its two locks, which is where the cycle closes) against the real import and
- * asserts both finish; the second is the negative control — the pre-fix
- * import order, by hand, against the same paused route — so a green first
- * test cannot be read as "nothing was contended".
+ * before page as well. And because a fold can still hold a page by then — an
+ * earlier fold in the same transaction rewrites every page citing its loser
+ * (`rewriteJsonDocuments`) — the fold's job lock is a try: a held job defers
+ * the fold as in flight instead of being waited for. The tests drive the real
+ * route (paused between its two locks, which is where the cycle closes)
+ * against the real import, and against a transaction folding two pairs;
+ * each has a negative control — the old wait, by hand, against the same
+ * paused route — so a green test cannot be read as "nothing was contended".
  *
  * PGlite has one connection and cannot deadlock with itself; this suite skips
  * without `KINETIX_TEST_PG_URL` and never falls back to it. The `migrations`
@@ -64,7 +66,7 @@ vi.mock('../../../api/_lib/wiki-page-lock.js', async (importOriginal) => {
 
 import handler from '../../../api/pending-edits.js';
 import { getDb, runInPoolTransaction } from '../../../api/_lib/db.js';
-import { resolveCitation } from '../../../api/_lib/citation-store.js';
+import { mergeCitations } from '../../../api/_lib/citation-merge.js';
 import {
   applyWikiArticle,
   planWikiArticle,
@@ -325,17 +327,14 @@ describe.skipIf(!hasRealPostgres)(
         const submit = submitFactPausedBeforePageLock();
         await submit.jobLocked;
 
-        // The route now holds the run's job row. The import's fold must wait
-        // for it holding nothing the route needs next — in particular not the
-        // page.
-        const importing = applyWikiArticle(bundle, authorId, plan.fingerprint);
-        await blockedOn('paper_extraction_jobs');
-        submit.resume();
-
-        const [importOutcome, submitOutcome] = await Promise.allSettled([
-          importing,
-          submit.done,
+        // The route now holds the run's job row. The import's fold finds it
+        // held and stands aside, so the import finishes without waiting on
+        // the route at all — before the route even reaches the page.
+        const [importOutcome] = await Promise.allSettled([
+          applyWikiArticle(bundle, authorId, plan.fingerprint),
         ]);
+        submit.resume();
+        const [submitOutcome] = await Promise.allSettled([submit.done]);
 
         if (importOutcome.status === 'rejected') {
           expect(sqlState(importOutcome.reason)).not.toBe(DEADLOCK_DETECTED);
@@ -365,9 +364,10 @@ describe.skipIf(!hasRealPostgres)(
           })
           .from(pendingEdits)
           .orderBy(pendingEdits.id);
+        // The import, not waiting on the route, filed first.
         expect(filed).toEqual([
-          { targetId: pageId, referenceId: heldLoser, submittedBy: agentId },
           { targetId: pageId, referenceId: winner, submittedBy: authorId },
+          { targetId: pageId, referenceId: heldLoser, submittedBy: agentId },
         ]);
         const [job] = await db
           .select({ status: paperExtractionJobs.status, citationId: paperExtractionJobs.citationId })
@@ -387,7 +387,7 @@ describe.skipIf(!hasRealPostgres)(
         await submit.jobLocked;
 
         // The import's old sequence, by hand: the page `FOR UPDATE`, then the
-        // source resolution whose fold locks the loser's jobs.
+        // fold's old wait for the loser's jobs.
         const pageLocked = gate();
         const oldOrder = runInPoolTransaction(async () => {
           const tx = getDb();
@@ -398,7 +398,9 @@ describe.skipIf(!hasRealPostgres)(
             .for('update');
           expect(page).toBeDefined();
           pageLocked.open();
-          return resolveCitation(tx, { type: 'pmid', identifier: WINNER_PMID }, authorId);
+          await tx.execute(
+            sql`SELECT id FROM paper_extraction_jobs WHERE id = ${jobId} FOR NO KEY UPDATE`,
+          );
         });
         await pageLocked.wait;
         await blockedOn('paper_extraction_jobs');
@@ -426,6 +428,140 @@ describe.skipIf(!hasRealPostgres)(
       },
       LOCK_TIMEOUT_MS * 3,
     );
+
+    // Codex on #257: a transaction folding two pairs. The first fold rewrites
+    // every page citing its loser, and holds that page row to commit; the
+    // second reaches the job a run holds while filing a fact on that page.
+    describe('a second fold in the transaction, after the first rewrote the page', () => {
+      /** A split pair whose loser the page already cites: folding it rewrites the page. */
+      let pageWinner: number;
+      let pageLoser: number;
+
+      beforeEach(async () => {
+        const [w] = await db
+          .insert(citations)
+          .values({ type: 'pmid', identifier: '11111111' })
+          .returning({ id: citations.id });
+        pageWinner = w!.id;
+        const [l] = await db
+          .insert(citations)
+          .values({ type: 'doi', identifier: '10.1000/page-cited' })
+          .returning({ id: citations.id });
+        pageLoser = l!.id;
+        await db
+          .update(wikiPages)
+          .set({
+            content: {
+              type: 'doc',
+              content: [
+                {
+                  type: 'heading',
+                  attrs: { sectionId: 'pk', level: 2 },
+                  content: [{ type: 'text', text: 'Farmakokinetikk' }],
+                },
+                {
+                  type: 'fact',
+                  attrs: { factId: 'f0', referenceIds: [pageLoser] },
+                  content: [{ type: 'text', text: 'Absorberes raskt.' }],
+                },
+              ],
+            },
+          })
+          .where(eq(wikiPages.id, pageId));
+      });
+
+      /** Fold the page's pair, hold the transaction, then run `then` in it. */
+      function foldPagePairThen<T>(then: () => Promise<T>) {
+        const folded = gate();
+        const resume = gate();
+        const done = runInPoolTransaction(async () => {
+          const first = await mergeCitations(getDb(), pageWinner, pageLoser, {
+            actorUserId: authorId,
+          });
+          folded.open();
+          await resume.wait;
+          return { first, second: await then() };
+        });
+        held.push({ release: resume.open, done });
+        return { folded: folded.wait, resume: resume.open, done };
+      }
+
+      it(
+        'defers the second fold on the held job, instead of deadlocking on page vs. job',
+        async () => {
+          const submit = submitFactPausedBeforePageLock();
+          await submit.jobLocked;
+
+          const merge = foldPagePairThen(() =>
+            mergeCitations(getDb(), winner, heldLoser, { actorUserId: authorId }),
+          );
+          await merge.folded;
+          // The route now waits for the page the first fold rewrote.
+          submit.resume();
+          await blockedOn('wiki_pages');
+          merge.resume();
+
+          const [mergeOutcome, submitOutcome] = await Promise.allSettled([
+            merge.done,
+            submit.done,
+          ]);
+          if (mergeOutcome.status === 'rejected') {
+            expect(sqlState(mergeOutcome.reason)).not.toBe(DEADLOCK_DETECTED);
+            throw mergeOutcome.reason;
+          }
+          const { first, second } = mergeOutcome.value;
+          expect(first.deferred).toBeUndefined();
+          expect(first.jsonDocumentsRewritten).toBeGreaterThan(0);
+          expect(second).toMatchObject({
+            deferred: true,
+            deferredReason: 'extraction_in_flight',
+            inFlightExtractionJobId: jobId,
+          });
+          expect(submitOutcome.status).toBe('fulfilled');
+          expect(
+            (submitOutcome as PromiseFulfilledResult<{ statusCode: number }>).value.statusCode,
+          ).toBe(201);
+        },
+        LOCK_TIMEOUT_MS * 3,
+      );
+
+      it(
+        'the old wait for the job in the second fold really does deadlock against the route',
+        async () => {
+          const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+          const submit = submitFactPausedBeforePageLock();
+          await submit.jobLocked;
+
+          const merge = foldPagePairThen(() =>
+            getDb().execute(
+              sql`SELECT id FROM paper_extraction_jobs WHERE id = ${jobId} FOR NO KEY UPDATE`,
+            ),
+          );
+          await merge.folded;
+          submit.resume();
+          await blockedOn('wiki_pages');
+          merge.resume();
+
+          const [mergeOutcome, submitOutcome] = await Promise.allSettled([
+            merge.done,
+            submit.done,
+          ]);
+          const routeLog = logged.mock.calls.map((call) => call.map(String).join(' ')).join('\n');
+          logged.mockRestore();
+          expect(submitOutcome.status).toBe('fulfilled');
+          const { statusCode } = (submitOutcome as PromiseFulfilledResult<{ statusCode: number }>)
+            .value;
+          if (mergeOutcome.status === 'rejected') {
+            expect(sqlState(mergeOutcome.reason)).toBe(DEADLOCK_DETECTED);
+            expect(statusCode).toBe(201);
+          } else {
+            expect(statusCode).toBe(500);
+            expect(routeLog).toContain('deadlock detected');
+          }
+        },
+        LOCK_TIMEOUT_MS * 3,
+      );
+    });
   },
 );
 
