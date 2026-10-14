@@ -56,7 +56,11 @@ import {
 } from '../../db/schema.js';
 import { getDb, runInPoolTransaction } from './db.js';
 import { lockWikiPageShared } from './wiki-page-lock.js';
-import { handleMatch, resolveCitation } from './citation-store.js';
+import {
+  followFoldedCitations,
+  handleMatch,
+  resolveCitation,
+} from './citation-store.js';
 import { recordPaperReview } from './paper-review-store.js';
 import { recordApproval } from './approvals.js';
 import {
@@ -811,6 +815,15 @@ async function commitSourcesFor(
           crosswalk: verified,
         },
         actor.userId,
+      );
+
+      followFoldedCitations(
+        results,
+        resolved,
+        (r) => r.id,
+        (r, id) => {
+          r.id = id;
+        },
       );
 
       // Read INSIDE the transaction, so a second key for the same paper sees

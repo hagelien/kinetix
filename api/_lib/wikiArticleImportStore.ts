@@ -3,7 +3,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
 import { pendingEdits, wikiPages, wikiRevisions } from "../../db/schema.js";
 import { getDb, runInPoolTransaction } from "./db.js";
-import { resolveCitation } from "./citation-store.js";
+import { followFoldedCitations, resolveCitation } from "./citation-store.js";
 import { isActiveAgentUser } from "./agent-verifications.js";
 import { wikiContentFocusRefusal } from "../agent-focus.js";
 import { renderHtml, extractPlaintext } from "./tiptap-utils.js";
@@ -183,6 +183,14 @@ export async function applyWikiArticle(
     )) {
       if (!needed.has(source.key)) continue;
       const citation = await resolveCitation(db, source, userId);
+      // A later handle for the same paper can fold the row an earlier source
+      // resolved to; keep every stored id pointing at a row that still exists.
+      followFoldedCitations(
+        [...ids],
+        citation,
+        ([, id]) => id,
+        ([key]) => ids.set(key, citation.id),
+      );
       ids.set(source.key, citation.id);
     }
     if (plan.newSectionCount > 0) {

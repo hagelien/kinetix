@@ -85,6 +85,28 @@ export interface ResolveCitationResult {
 }
 
 /**
+ * Re-point ids a caller collected from earlier `resolveCitation` calls at the
+ * survivor of a later one.
+ *
+ * Callers resolve a bundle's sources one after another and keep each id. A
+ * later source that reaches the same paper through another handle can fold the
+ * row an earlier source resolved to, leaving that id naming a deleted citation.
+ * Call this after every resolve with the values collected so far.
+ */
+export function followFoldedCitations<T>(
+  collected: Iterable<T>,
+  resolved: Pick<ResolveCitationResult, 'id' | 'mergedIds'>,
+  idOf: (item: T) => number,
+  repoint: (item: T, id: number) => void,
+): void {
+  if (resolved.mergedIds.length === 0) return;
+  const folded = new Set(resolved.mergedIds);
+  for (const item of collected) {
+    if (folded.has(idOf(item))) repoint(item, resolved.id);
+  }
+}
+
+/**
  * Everywhere a row for one of these handles could be sitting, as one OR
  * predicate: its own `(type, identifier)` columns, or its stored
  * `metadata.altIds`.

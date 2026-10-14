@@ -201,6 +201,46 @@ describe("wiki article imports", () => {
     ).toBe(true);
   });
 
+  it("points edits at the survivor when a later source folds an earlier source's citation", async () => {
+    const URL = "https://example.org/paper";
+    // Two rows for one split paper: the older (the survivor) and a younger one
+    // that only the first source's DOI reaches. The second source's URL is
+    // carried by both, so resolving it folds the younger row into the older.
+    const [survivor] = await db
+      .insert(citations)
+      .values({
+        type: "doi",
+        identifier: "10.1000/older",
+        metadata: { altIds: { url: URL } },
+        createdBy: userId,
+      })
+      .returning();
+    const [folded] = await db
+      .insert(citations)
+      .values({
+        type: "doi",
+        identifier: "10.1093/jat/bkae097",
+        metadata: { altIds: { url: URL } },
+        createdBy: userId,
+      })
+      .returning();
+    const b = bundle();
+    b.sources.push({ key: "S2", type: "url", identifier: URL } as never);
+    b.sections[0]!.facts[0]!.sourceKeys = ["S1", "S2"];
+    const plan = await planWikiArticle(b);
+    await applyWikiArticle(b, userId, plan.fingerprint);
+    const rows = await db.select({ id: citations.id }).from(citations);
+    expect(rows.map((r) => r.id)).toEqual([survivor!.id]);
+    expect(rows.map((r) => r.id)).not.toContain(folded!.id);
+    const edits = await db.select().from(pendingEdits);
+    const referenced = edits.flatMap((e) => [
+      ...(e.referenceIds ?? []),
+      ...(e.referenceId ? [e.referenceId] : []),
+    ]);
+    expect(referenced.length).toBeGreaterThan(0);
+    expect(new Set(referenced)).toEqual(new Set([survivor!.id]));
+  });
+
   it("is idempotent after a new preview, including newly created sections", async () => {
     const b = bundle();
     await applyWikiArticle(b, userId, (await planWikiArticle(b)).fingerprint);
