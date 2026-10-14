@@ -10,6 +10,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
 import {
+  citationIdentifierAliases,
   citations,
   drugs,
   drugParameters,
@@ -262,6 +263,34 @@ describe('conversation ingestion — apply', () => {
         ),
       );
     expect(summary).toBeDefined();
+  });
+
+  it('repoints an earlier item\'s citation when a later item folds it', async () => {
+    // Two rows for one split paper: the older (the survivor) and a younger one
+    // carrying the older's PMID as an alias. S1 reaches only the younger row;
+    // S2 reaches both, and resolving it folds the younger into the older.
+    const [survivor] = await db
+      .insert(citations)
+      .values({ type: 'pmid', identifier: '10201674', createdBy: userId })
+      .returning();
+    const [younger] = await db
+      .insert(citations)
+      .values({ type: 'pmid', identifier: '2719903', createdBy: userId })
+      .returning();
+    await db
+      .insert(citationIdentifierAliases)
+      .values({ citationId: younger!.id, type: 'pmid', identifier: '10201674' });
+    const raw = bundle();
+    const items = raw.items as Array<Record<string, unknown>>;
+    items.push({ ...items[0]!, median: 0.3, low: 0.25, high: 0.35 });
+    const result = await applyIngestion(parse(raw), { userId, accept: [0, 1, 2] });
+
+    expect(result.counts).toMatchObject({ failed: 0 });
+    const rows = await db.select().from(citations);
+    expect(rows.map((r) => r.id)).toEqual([survivor!.id]);
+    const entries = await db.select().from(parameterEntries);
+    expect(entries).toHaveLength(2);
+    expect(entries.every((e) => e.citationId === survivor!.id)).toBe(true);
   });
 
   it('splices an accepted fact into the monograph through the approval path', async () => {

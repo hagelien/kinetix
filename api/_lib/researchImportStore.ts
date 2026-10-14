@@ -30,7 +30,7 @@ import { generateSlug } from './slug.js';
 import { buildDrugSearchKey } from '../../src/lib/drugNames.js';
 import { normalizeMetabolismName } from '../../src/lib/metabolism.js';
 import { findOrCreateEntityBySymbol } from './bioEntityStore.js';
-import { resolveCitation } from './citation-store.js';
+import { followFoldedCitations, resolveCitation } from './citation-store.js';
 import {
   mergeAltIds,
   type CitationAltIds,
@@ -485,6 +485,12 @@ async function seedCitations(
         crosswalk: mergeAltIds(s.altIds, crosswalk?.get(s.sourceId)),
       },
       userId,
+    );
+    followFoldedCitations(
+      [...idByKey],
+      resolved,
+      ([, id]) => id,
+      ([key]) => idByKey.set(key, resolved.id),
     );
     idByKey.set(citationKey(s.type, s.identifier), resolved.id);
   }

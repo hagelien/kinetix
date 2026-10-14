@@ -56,7 +56,11 @@ import {
 } from '../../db/schema.js';
 import { getDb, runInPoolTransaction } from './db.js';
 import { lockWikiPageShared } from './wiki-page-lock.js';
-import { handleMatch, resolveCitation } from './citation-store.js';
+import {
+  followFoldedCitations,
+  handleMatch,
+  resolveCitation,
+} from './citation-store.js';
 import { recordPaperReview } from './paper-review-store.js';
 import { recordApproval } from './approvals.js';
 import {
@@ -783,8 +787,10 @@ async function commitSourcesFor(
     );
   };
 
+  let folds: Array<Awaited<ReturnType<typeof resolveCitation>>> = [];
   const outcomes = await runInPoolTransaction(async () => {
     const tx = getDb();
+    folds = [];
     const results: Array<{
       key: string;
       id: number;
@@ -812,6 +818,16 @@ async function commitSourcesFor(
         },
         actor.userId,
       );
+
+      followFoldedCitations(
+        results,
+        resolved,
+        (r) => r.id,
+        (r, id) => {
+          r.id = id;
+        },
+      );
+      folds.push(resolved);
 
       // Read INSIDE the transaction, so a second key for the same paper sees
       // the review the first one just wrote and keeps it rather than
@@ -855,6 +871,16 @@ async function commitSourcesFor(
 
   // Context moves only after the commit, so nothing is marked done — and no
   // counter reports a write — that a rollback has undone.
+  // Earlier items' ids, kept in the context, may name a citation this
+  // transaction folded away.
+  for (const resolved of folds) {
+    followFoldedCitations(
+      [...ctx.citationIdByKey],
+      resolved,
+      ([, id]) => id,
+      ([key]) => ctx.citationIdByKey.set(key, resolved.id),
+    );
+  }
   for (const outcome of outcomes) {
     ctx.citationIdByKey.set(outcome.key, outcome.id);
     if (outcome.created) ctx.citationsCreated += 1;
