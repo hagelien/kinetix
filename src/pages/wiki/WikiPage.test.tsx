@@ -70,7 +70,7 @@ const page = {
   content: {},
   contentHtml:
     '<section data-monograph-section="pk"><h2 data-monograph-section-title="pk">Farmakokinetikk</h2><p>PK text</p></section>' +
-    '<section data-monograph-section="toxicity"><h2 data-monograph-section-title="toxicity">Toksisitet</h2><p>Tox text</p></section>',
+    '<section data-monograph-section="toxicity"><h2 data-monograph-section-title="toxicity">Toksisitet</h2><p class="monograph-fact" data-fact-id="f-tox">Tox text</p></section>',
   pageType: 'drug_monograph',
   drugCid: 7,
   entityId: null,
@@ -161,6 +161,16 @@ describe('WikiPage drug monograph tabs', () => {
     await waitFor(() =>
       expect(screen.getByTestId('location').textContent).toBe(
         '/wiki/paracetamol/pharmacokinetics',
+      ),
+    );
+  });
+
+  it("opens a fact-comment link on the fact's tab", async () => {
+    renderAt('/wiki/paracetamol?fact=f-tox&comment=8');
+
+    await waitFor(() =>
+      expect(screen.getByTestId('location').textContent).toBe(
+        '/wiki/paracetamol/interpretive_concentrations',
       ),
     );
   });

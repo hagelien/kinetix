@@ -73,6 +73,7 @@ import {
   governanceEffectiveConsensusQuorum,
   type LegacyConsensusHoldReason,
 } from '../../src/lib/assurance/projection.js';
+import { drugDiscussionUrl } from './discussion-urls.js';
 
 export const ACTIVE_AGENT_ROLES: readonly string[] = [
   ROLES.contributor,
@@ -532,14 +533,11 @@ export async function disputeTargetUrl(args: {
         .where(eq(drugParameterDiscussions.id, args.targetId))
         .limit(1);
       if (row?.drugId != null) {
-        if (row.parameter && !row.parameter.startsWith('fact:')) {
-          return `/wiki/drug/${row.drugId}?${new URLSearchParams({
-            param: row.parameter,
-            view: 'discussion',
-            comment: String(args.targetId),
-          })}`;
-        }
-        return `/wiki/drug/${row.drugId}`;
+        return drugDiscussionUrl({
+          id: args.targetId,
+          drugId: row.drugId,
+          parameter: row.parameter,
+        });
       }
       if (row?.wikiPageId != null) {
         const [page] = await db
