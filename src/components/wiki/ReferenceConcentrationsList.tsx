@@ -13,6 +13,7 @@ import {
   type ReferenceScenario,
 } from '@/lib/referenceConcentrations';
 import { UnitTooltip } from '@/components/ui/UnitTooltip';
+import { ConcentrationText } from '@/components/ui/ConcentrationText';
 
 interface Props {
   drugId: number;
@@ -128,7 +129,10 @@ export function ReferenceConcentrationsList({
                       ) : (
                         row.comments && (
                           <div className="text-xs text-muted-foreground font-normal">
-                            {row.comments}
+                            <ConcentrationText
+                              text={row.comments}
+                              molecularWeight={molecularWeight}
+                            />
                           </div>
                         )
                       )}
@@ -137,7 +141,10 @@ export function ReferenceConcentrationsList({
                           Shown independent of the citation link, like `comments`. */}
                       {row.observationContext && (
                         <div className="text-xs text-muted-foreground font-normal">
-                          {row.observationContext}
+                          <ConcentrationText
+                            text={row.observationContext}
+                            molecularWeight={molecularWeight}
+                          />
                         </div>
                       )}
                     </div>

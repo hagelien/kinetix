@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ParameterEntryList } from '@/components/wiki/ParameterEntryList';
 import type { ParameterEntryRow } from '@/lib/parameterEntriesApi';
 import { useAuthStore } from '@/stores/authStore';
+import { useAppStore } from '@/stores/appStore';
 
 function row(over: Partial<ParameterEntryRow> = {}): ParameterEntryRow {
   return {
@@ -60,10 +61,81 @@ describe('ParameterEntryList', () => {
   it('renders a stored source quote beside the citation', async () => {
     const quote = 'Therapeutic serum concentrations ranged from 10 to 30 mg/L.';
     vi.stubGlobal('fetch', mockItems([row({ sourceQuote: quote })]));
-    render(<ParameterEntryList drugId={42} />);
+    const { container } = render(<ParameterEntryList drugId={42} />);
+    // The concentration in the quote is its own element (it carries the unit
+    // tooltip), so assert on the quotation block's text, figures as written.
     await waitFor(() =>
-      expect(screen.getByText(quote)).toBeInTheDocument(),
+      expect(container.querySelector('dd.italic')).not.toBeNull(),
     );
+    expect(container.querySelector('dd.italic')?.textContent).toContain(quote);
+  });
+
+  describe('concentrations in source prose', () => {
+    const initialUnits = useAppStore.getState().enabledUnits;
+    afterEach(() => {
+      useAppStore.setState({ enabledUnits: initialUnits });
+    });
+
+    // Issue #36: "LC-MS/MS med cut-off 1 µg/L" in a source row should let the
+    // reader hover the unit and see it in their other units.
+    it('puts a unit tooltip on a concentration in the observation context', async () => {
+      useAppStore.setState({ enabledUnits: ['µmol/L', 'mg/L'] });
+      const context = 'Påvisningstid i blod; LC-MS/MS med cut-off 1 µg/L.';
+      vi.stubGlobal(
+        'fetch',
+        mockItems([row({ observationContext: context })]),
+      );
+      render(<ParameterEntryList drugId={42} molecularWeight={200} />);
+      const prose = await screen.findByText((_, el) =>
+        el?.tagName === 'DD' && (el.textContent ?? '').startsWith('Påvisningstid'),
+      );
+      // The authored figure stays as written; only the unit is the trigger.
+      expect(prose.textContent).toContain('cut-off 1 µg/L');
+      const trigger = within(prose).getByText('µg/L');
+      expect(trigger).toHaveAttribute('tabindex', '0');
+      const tooltipId = trigger.getAttribute('aria-describedby');
+      expect(tooltipId).toBeTruthy();
+      const tooltip = document.getElementById(tooltipId!);
+      expect(tooltip).toHaveAttribute('role', 'tooltip');
+      // 1 µg/L = 0.001 mg/L = 0.005 µmol/L at MW 200.
+      expect(tooltip).toHaveTextContent('0.001 mg/L');
+      expect(tooltip).toHaveTextContent('0.005 µmol/L');
+    });
+
+    it('also annotates the source quote and the comments', async () => {
+      useAppStore.setState({ enabledUnits: ['µmol/L', 'mg/L'] });
+      vi.stubGlobal(
+        'fetch',
+        mockItems([
+          row({
+            sourceQuote: 'Toxic above 50 mg/L.',
+            comments: 'Kontrollert mot 20 µmol/L.',
+          }),
+        ]),
+      );
+      render(<ParameterEntryList drugId={42} molecularWeight={200} />);
+      const quote = await screen.findByText((_, el) =>
+        el?.tagName === 'DD' && (el.textContent ?? '').startsWith('Toxic above'),
+      );
+      expect(within(quote).getByText('mg/L')).toHaveAttribute('aria-describedby');
+      const comments = screen.getByText((_, el) =>
+        el?.tagName === 'DD' && (el.textContent ?? '').startsWith('Kontrollert'),
+      );
+      expect(within(comments).getByText('µmol/L')).toHaveAttribute(
+        'aria-describedby',
+      );
+    });
+
+    it('leaves prose without a convertible concentration as plain text', async () => {
+      const context = 'Målt etter 4 h i fullblod.';
+      vi.stubGlobal(
+        'fetch',
+        mockItems([row({ observationContext: context })]),
+      );
+      render(<ParameterEntryList drugId={42} />);
+      const prose = await screen.findByText(context);
+      expect(prose.querySelector('[aria-describedby]')).toBeNull();
+    });
   });
 
   it('renders nothing for a row with no quote', async () => {

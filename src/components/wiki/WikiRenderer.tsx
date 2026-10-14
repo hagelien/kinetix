@@ -23,6 +23,13 @@ import {
   getConversionTooltipRows,
   getPreferredUnitDisplay,
 } from "@/lib/unitTooltip";
+import {
+  containsConcentration,
+  parseConcentrationValue,
+  preserveStrictOperator,
+  splitConcentrationText,
+  strictOperator,
+} from "@/lib/concentrationText";
 import type { DrugParameterId } from "@/lib/drugParameters";
 import {
   citationTooltipLabel,
@@ -108,24 +115,6 @@ const FIELD_HEADING_RE =
   /(<h3\b[^>]*\bdata-monograph-field=")([a-z0-9_]+)("[^>]*\bdata-monograph-field-section=")([a-z_]+)("[^>]*>)([^<]*)(<\/h3>)/g;
 const FACT_OPEN_RE =
   /(<(?:div|p)\b(?=[^>]*\bclass="[^"]*\bmonograph-fact\b[^"]*")(?=[^>]*\bdata-fact-id="([^"]+)")[^>]*>)/g;
-const CONCENTRATION_NUMBER_PATTERN = String.raw`\d+(?:(?:[,.]\d{3})+)?(?:[,.]\d+)?`;
-const CONCENTRATION_RANGE_SEPARATOR_PATTERN = String.raw`(?:[–-]|\btil\b|\bto\b)`;
-const CONCENTRATION_UNIT_PATTERN = [
-  "mmol/dL",
-  "(?:µ|μ|u)mol/dL",
-  "nmol/dL",
-  "mmol/L",
-  "(?:µ|μ|u)mol/L",
-  "nmol/L",
-  "ng/mL",
-  "(?:µ|μ|u)g/mL",
-  "mg/L",
-  "(?:µ|μ|u)g/L",
-  "ng/L",
-  "mg/dL",
-  "(?:µ|μ|u)g/dL",
-  "ng/dL",
-].join("|");
 
 function escapeHtml(s: string): string {
   return s
@@ -135,10 +124,6 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-const CONCENTRATION_UNIT_RE = new RegExp(
-  `((?:<=|>=|[<>≤≥])?\\s*${CONCENTRATION_NUMBER_PATTERN}(?:\\s*${CONCENTRATION_RANGE_SEPARATOR_PATTERN}\\s*${CONCENTRATION_NUMBER_PATTERN})?)\\s*(${CONCENTRATION_UNIT_PATTERN})(?!\\s*(?:/|·|\\*|per\\b))\\b`,
-  "gi",
-);
 const SKIP_UNIT_TOOLTIP_ANCESTOR = [
   "a",
   "code",
@@ -148,75 +133,6 @@ const SKIP_UNIT_TOOLTIP_ANCESTOR = [
   ".unit-conversion-tooltip",
 ].join(",");
 
-function parseConcentrationValue(raw: string): {
-  value?: number;
-  low?: number;
-  high?: number;
-} {
-  const normalized = raw.trim();
-  const numberFrom = (value: string) => {
-    const compact = value.trim().replace(/\s+/g, "");
-    const lastComma = compact.lastIndexOf(",");
-    const lastDot = compact.lastIndexOf(".");
-    if (lastComma >= 0 && lastDot >= 0) {
-      return Number(
-        lastComma > lastDot
-          ? compact.replace(/\./g, "").replace(",", ".")
-          : compact.replace(/,/g, ""),
-      );
-    }
-    const commaMatches = compact.match(/,/g) ?? [];
-    const dotMatches = compact.match(/\./g) ?? [];
-    if (commaMatches.length > 1) return Number(compact.replace(/,/g, ""));
-    if (commaMatches.length === 1) {
-      const [whole = "", fraction = ""] = compact.split(",");
-      if (whole !== "0" && /^\d{1,3}$/.test(whole) && /^0{3}$/.test(fraction)) {
-        return Number(`${whole}${fraction}`);
-      }
-      return Number(compact.replace(",", "."));
-    }
-    if (dotMatches.length > 1) return Number(compact.replace(/\./g, ""));
-    if (dotMatches.length === 1) {
-      const [whole = "", fraction = ""] = compact.split(".");
-      if (whole !== "0" && /^\d{1,3}$/.test(whole) && /^0{3}$/.test(fraction)) {
-        return Number(`${whole}${fraction}`);
-      }
-    }
-    return Number(compact);
-  };
-  if (/^(?:>=|>|≥)/.test(normalized)) {
-    const value = numberFrom(normalized.replace(/^(?:>=|>|≥)\s*/, ""));
-    return Number.isFinite(value) ? { low: value } : {};
-  }
-  if (/^(?:<=|<|≤)/.test(normalized)) {
-    const value = numberFrom(normalized.replace(/^(?:<=|<|≤)\s*/, ""));
-    return Number.isFinite(value) ? { high: value } : {};
-  }
-
-  const range = normalized.split(/\s*(?:[–-]|\btil\b|\bto\b)\s*/i);
-  if (range.length === 2) {
-    const low = numberFrom(range[0] ?? "");
-    const high = numberFrom(range[1] ?? "");
-    return Number.isFinite(low) && Number.isFinite(high) ? { low, high } : {};
-  }
-
-  const value = numberFrom(normalized);
-  return Number.isFinite(value) ? { value } : {};
-}
-
-function strictOperator(raw: string): "<" | ">" | null {
-  const normalized = raw.trim();
-  if (/^<(?![=])/.test(normalized)) return "<";
-  if (/^>(?![=])/.test(normalized)) return ">";
-  return null;
-}
-
-function preserveStrictOperator(formatted: string, op: "<" | ">" | null) {
-  if (op === "<") return formatted.replace(/^≤\s*/, "< ");
-  if (op === ">") return formatted.replace(/^≥\s*/, "> ");
-  return formatted;
-}
-
 /**
  * Render a single matched concentration (value + unit) as prose, optionally
  * converted into the reader's preferred unit (#306) with the other units — the
@@ -225,18 +141,12 @@ function preserveStrictOperator(formatted: string, op: "<" | ">" | null) {
  * is nothing worth converting.
  */
 function concentrationSegmentHtml(
-  valueRaw: string,
+  value: string,
   unit: string,
   molecularWeight: number | null | undefined,
   enabledUnits: readonly string[] | null | undefined,
   tooltipId: string,
 ): string {
-  // The value pattern can absorb the whitespace that precedes it (the space in
-  // "was 1.5 mg/L" lands in the capture group). Peel it off so replacing the
-  // figure with a converted one keeps the surrounding prose spacing intact.
-  const leading = /^\s*/.exec(valueRaw)?.[0] ?? "";
-  const value = valueRaw.slice(leading.length);
-
   const op = strictOperator(value);
   const parsed = parseConcentrationValue(value);
 
@@ -262,7 +172,7 @@ function concentrationSegmentHtml(
   );
   if (rows.length === 0) {
     // No alternatives worth showing — plain text, no tooltip.
-    return `${leading}${escapeHtml(displayValue)} ${escapeHtml(displayUnit)}`;
+    return `${escapeHtml(displayValue)} ${escapeHtml(displayUnit)}`;
   }
 
   const renderGroup = (kind: "molar" | "mass") => {
@@ -286,7 +196,7 @@ function concentrationSegmentHtml(
       : "";
 
   return (
-    `${leading}${escapeHtml(displayValue)} ` +
+    `${escapeHtml(displayValue)} ` +
     `<span class="unit-conversion-tooltip" tabindex="0" aria-describedby="${escapeHtml(tooltipId)}">` +
     `<span class="unit-conversion-trigger">${escapeHtml(displayUnit)}</span>` +
     `<span id="${escapeHtml(tooltipId)}" class="unit-conversion-tooltip-panel" role="tooltip">${molar}${spacer}${mass}</span>` +
@@ -306,11 +216,10 @@ function annotateConcentrationUnits(
   while (node) {
     const parent = node.parentElement;
     const text = node.nodeValue ?? "";
-    CONCENTRATION_UNIT_RE.lastIndex = 0;
     if (
       parent &&
       !parent.closest(SKIP_UNIT_TOOLTIP_ANCESTOR) &&
-      CONCENTRATION_UNIT_RE.test(text)
+      containsConcentration(text)
     ) {
       textNodes.push(node as Text);
     }
@@ -320,30 +229,24 @@ function annotateConcentrationUnits(
   for (const [textNodeIndex, textNode] of textNodes.entries()) {
     const fragment = parsed.createDocumentFragment();
     const text = textNode.nodeValue ?? "";
-    let lastIndex = 0;
     let tooltipIndex = 0;
-    CONCENTRATION_UNIT_RE.lastIndex = 0;
-    for (const match of text.matchAll(CONCENTRATION_UNIT_RE)) {
-      const index = match.index ?? 0;
-      if (index > lastIndex) {
-        fragment.append(text.slice(lastIndex, index));
+    // The splitter keeps the whitespace ahead of each figure in the text run,
+    // so rewriting the figure never eats the space before it.
+    for (const segment of splitConcentrationText(text)) {
+      if (segment.kind === "text") {
+        fragment.append(segment.text);
+        continue;
       }
-      const valueRaw = match[1] ?? "";
-      const unit = match[2] ?? "";
       const template = parsed.createElement("template");
       template.innerHTML = concentrationSegmentHtml(
-        valueRaw,
-        unit,
+        segment.value,
+        segment.unit,
         molecularWeight,
         enabledUnits,
         `unit-conversion-tooltip-${textNodeIndex}-${tooltipIndex}`,
       );
       fragment.append(template.content);
       tooltipIndex++;
-      lastIndex = index + match[0].length;
-    }
-    if (lastIndex < text.length) {
-      fragment.append(text.slice(lastIndex));
     }
     textNode.replaceWith(fragment);
   }
