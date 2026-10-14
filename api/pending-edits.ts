@@ -4132,6 +4132,15 @@ async function handlePatch(
       edit.proposedMeta,
       parsed.data.acknowledgedConflictId,
     );
+    // A section add is rebased by moving its position, nothing else — for a
+    // reviewer's rewrite exactly as for the author's (#195, #212).
+    const reviewerContentRebasesConflict =
+      reviewerContentActuallyRevised &&
+      !sectionAddKeepsStalePosition(
+        edit.editType,
+        nextProposedValue,
+        edit.proposedValue,
+      );
 
     // A reviewer returning WITH CHANGES rewrites `proposedValue` (and may
     // rewrite the references the payload's citation has to be drawn from), and
@@ -4188,8 +4197,9 @@ async function handlePatch(
                 // Content only, same as the submitter path: a reviewer returning the
                 // proposal with a note has not rebased it either, and a note is the
                 // most ordinary thing a return carries. Acknowledgment required too
-                // (#1258): see `reviewerConflictAcknowledged`.
-                reviewerContentActuallyRevised && reviewerConflictAcknowledged,
+                // (#1258): see `reviewerConflictAcknowledged`. A section add
+                // must also move its position: see `reviewerContentRebasesConflict`.
+                reviewerContentRebasesConflict && reviewerConflictAcknowledged,
               ) as never,
               referenceId: nextReferenceId,
               ...(nextReferenceIds !== undefined
