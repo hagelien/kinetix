@@ -838,6 +838,63 @@ describe('PATCH /api/drugs', () => {
       },
     });
   });
+
+  it('refuses to change an existing PubChem CID and points at retarget:cid', async () => {
+    parseAndValidateMock.mockResolvedValue({ data: { pubchemCid: 9999 } });
+    const existingRow = {
+      id: 42,
+      names: { nb: 'Alprazolam', en: 'Alprazolam' },
+      nameShort: 'Xanax',
+      aliases: [],
+      pubchemCid: 2118,
+    };
+    const { set } = mockUpdateQuery(existingRow, existingRow);
+    const { res, state } = createMockResponse();
+
+    await handler(
+      {
+        method: 'PATCH',
+        url: '/api/drugs?id=42',
+        headers: { host: 'localhost' },
+      } as IncomingMessage,
+      res,
+    );
+
+    expect(state.statusCode).toBe(409);
+    expect(JSON.parse(state.body).code).toBe('pubchem_cid_change_refused');
+    expect(state.body).toContain('retarget:cid');
+    expect(set).not.toHaveBeenCalled();
+  });
+
+  it('allows setting a PubChem CID on a drug that had none', async () => {
+    parseAndValidateMock.mockResolvedValue({ data: { pubchemCid: 2118 } });
+    const existingRow = {
+      id: 42,
+      names: { nb: 'Alprazolam', en: 'Alprazolam' },
+      nameShort: 'Xanax',
+      aliases: [],
+      pubchemCid: null,
+    };
+    const { set } = mockUpdateQuery(existingRow, {
+      ...existingRow,
+      pubchemCid: 2118,
+    });
+    const { res, state } = createMockResponse();
+
+    await handler(
+      {
+        method: 'PATCH',
+        url: '/api/drugs?id=42',
+        headers: { host: 'localhost' },
+      } as IncomingMessage,
+      res,
+    );
+
+    expect(state.statusCode).toBe(200);
+    expect(set).toHaveBeenCalledWith(
+      expect.objectContaining({ pubchemCid: 2118 }),
+    );
+  });
 });
 
 describe('DELETE /api/drugs', () => {

@@ -723,6 +723,7 @@ async function handleUpdate(
   type UpdateOutcome =
     | { kind: 'ok'; applied: Awaited<ReturnType<typeof applyDrugRowUpdate>> }
     | { kind: 'gone' }
+    | { kind: 'cid_change'; current: number }
     | { kind: 'not_applicable'; error: ParameterNotApplicableError };
   let outcome: UpdateOutcome;
   try {
@@ -735,11 +736,25 @@ async function handleUpdate(
           names: drugs.names,
           nameShort: drugs.nameShort,
           aliases: drugs.aliases,
+          pubchemCid: drugs.pubchemCid,
         })
         .from(drugs)
         .where(eq(drugs.id, id))
         .limit(1);
       if (!existing) return { kind: 'gone' };
+
+      // Saved simulator cases key a CID-bearing drug by its CID. Moving an
+      // existing CID here would strand them (or let another drug that later
+      // takes the number open in their place); `retarget:cid` rewrites the
+      // cases in step. Setting a CID on a drug that had none is safe: those
+      // cases use `drug:<id>`.
+      if (
+        data.pubchemCid !== undefined &&
+        existing.pubchemCid !== null &&
+        existing.pubchemCid !== data.pubchemCid
+      ) {
+        return { kind: 'cid_change', current: existing.pubchemCid };
+      }
 
       const updates: Record<string, unknown> = { updatedAt: new Date() };
       let nextNames = existing.names;
@@ -808,6 +823,15 @@ async function handleUpdate(
   }
   if (outcome.kind === 'gone') {
     error(res, 404, 'Drug not found');
+    return;
+  }
+  if (outcome.kind === 'cid_change') {
+    error(
+      res,
+      409,
+      `This drug already has PubChem CID ${outcome.current}. Changing it here would strand saved simulator cases; run \`npm run retarget:cid\` instead.`,
+      'pubchem_cid_change_refused',
+    );
     return;
   }
   if (outcome.kind === 'not_applicable') {
