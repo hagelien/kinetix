@@ -317,10 +317,11 @@ export function WikiPage() {
   const linkedCommentParam = searchParams.get('comment');
   const openedLinkedFact = useRef<string | null>(null);
   useEffect(() => {
-    if (!linkedFactId || !drug || openedLinkedFact.current === linkedFactId) {
+    const linkKey = `${linkedFactId}:${linkedCommentParam ?? ''}`;
+    if (!linkedFactId || !drug || openedLinkedFact.current === linkKey) {
       return;
     }
-    openedLinkedFact.current = linkedFactId;
+    openedLinkedFact.current = linkKey;
     const comment = Number(linkedCommentParam);
     setFactDiscussion({
       factId: linkedFactId,
