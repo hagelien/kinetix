@@ -95,11 +95,21 @@ results the same way any other `agent_verifications` row is read today, via
 
 Four residual gaps are accepted for now and tracked in issue 1444:
 
-- **The closing inference is not counted.** Routines log usage as their last
-  tool call, so the one model turn that writes the final paragraph comes after
-  the transcript is read. That is roughly 1–3% of a run, and about the same
-  share in every tier, so tier-vs-tier comparisons are largely unaffected;
-  absolute cost reads slightly low.
+- **The closing inference is counted on Claude Code only.** Routines log usage
+  as their last tool call, so the one model turn that writes the final
+  paragraph comes after the transcript is read. On Claude Code, the logger
+  leaves a marker for its session (`kinetix-run-usage/<session>.json` under
+  `$CLAUDE_CONFIG_DIR` or `~/.claude`, never in the repository) and the
+  project's `Stop` hook (`.claude/hooks/relog-run-usage.mjs`) re-runs it on the
+  same transcript once the turn ends; the endpoint upserts on
+  (agent, session), so the row's counts and duration are refreshed in place
+  without moving its tier or date (issue 213). Sessions without a marker —
+  every developer session — are untouched. Codex has no such hook, so a Codex
+  run (the local workers) still omits that turn, as does a Claude Code run
+  whose re-log fails or times out. That turn is roughly 1–3% of a run and
+  about the same share in every tier, so tier-vs-tier comparisons are largely
+  unaffected; a Codex run's absolute cost reads slightly low, which matters
+  only when comparing Codex runs against Claude Code ones.
 - **Concurrent runs of one identity can be confused.** Outputs are matched to
   runs by time window. If two routines share one agent token, overlap, and one
   of them fails to log, the failed run's outputs are credited to the other and

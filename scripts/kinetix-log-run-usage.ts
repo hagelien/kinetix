@@ -18,6 +18,19 @@
  * The capability tier is not sent: the server snapshots it from the agent row.
  * Re-running the helper in the same session updates that session's row.
  *
+ * The closing inference (issue 213). Routines run this helper as their last
+ * tool call, so the model turn that writes the run's final paragraph comes
+ * after the transcript is read. After a successful Claude Code log the helper
+ * writes a marker for the session ($CLAUDE_CONFIG_DIR or ~/.claude, under
+ * `kinetix-run-usage/<session>.json` — outside the repository, so never
+ * committed; scripts/lib/run-usage-marker.mjs). The project's `Stop` hook
+ * (.claude/hooks/relog-run-usage.mjs) finds it when the turn ends and runs the
+ * helper again with the same flags, refreshing the same row so it includes
+ * that last turn. Sessions without a marker are untouched. Residual: Codex has
+ * no Stop hook, so a Codex run (the local workers) still omits its closing
+ * inference, as does a Claude Code run whose re-log fails (it keeps the row
+ * the routine posted).
+ *
  * Required env:
  *   KINETIX_BASE_URL  — e.g. https://kinetix.app
  *   KINETIX_TOKEN     — revocable agent token (prefix "kxat_")
@@ -43,6 +56,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { kinetixApi } from './kinetix-http';
+import {
+  RELOG_ENV,
+  writeMarker,
+  type RunUsageMarker,
+} from './lib/run-usage-marker.mjs';
 import { AGENT_RUN_RUNTIMES, AGENT_RUN_WORKFLOWS } from '../api/_lib/schemas';
 
 type Runtime = (typeof AGENT_RUN_RUNTIMES)[number];
@@ -471,6 +489,66 @@ function main(): void {
   console.log(
     `agent_run_usage.id=${parsed.id} tier=${parsed.modelTier ?? 'unclassified'} workflow=${workflow} runtime=${runtime} total_tokens=${total}`,
   );
+
+  // Leave the marker the Stop hook re-logs from, so the closing inference is
+  // counted. The row is already posted: a marker that cannot be written costs
+  // that last turn, never the run's log.
+  const marker = closingInferenceMarker({
+    runtime,
+    isRelog: process.env[RELOG_ENV] === '1',
+    runnerSessionId: process.env.CLAUDE_CODE_SESSION_ID,
+    sessionId: row.sessionId,
+    workflow,
+    transcript: path.resolve(transcript),
+    notes: row.notes,
+    cwd: process.cwd(),
+    now: new Date(),
+  });
+  if (marker) {
+    try {
+      writeMarker(marker.key, marker.marker);
+    } catch (err) {
+      console.error(
+        `[kinetix-log-run-usage] warning: closing-inference marker not written (${String(err)}); this run's last turn will not be counted`,
+      );
+    }
+  }
+}
+
+/**
+ * The marker a successful log leaves for the Stop hook, or null when none is
+ * due: not on a re-log (the hook's own run, which must not rewrite the
+ * routine's marker), and not for Codex, which has no Stop hook.
+ *
+ * Keyed by the id the hook will be given — Claude Code's session id, which the
+ * runner also exposes to this helper — falling back to the transcript's own id
+ * (normally the same value).
+ */
+export function closingInferenceMarker(args: {
+  runtime: Runtime;
+  isRelog: boolean;
+  runnerSessionId: string | undefined;
+  sessionId: string;
+  workflow: Workflow;
+  transcript: string;
+  notes: string | null;
+  cwd: string;
+  now: Date;
+}): { key: string; marker: RunUsageMarker } | null {
+  if (args.runtime !== 'claude-code' || args.isRelog) return null;
+  return {
+    key: args.runnerSessionId || args.sessionId,
+    marker: {
+      version: 1,
+      sessionId: args.sessionId,
+      workflow: args.workflow,
+      runtime: args.runtime,
+      transcript: args.transcript,
+      notes: args.notes,
+      cwd: args.cwd,
+      loggedAt: args.now.toISOString(),
+    },
+  };
 }
 
 // Run only as a CLI; importing for tests must not read transcripts or post.
