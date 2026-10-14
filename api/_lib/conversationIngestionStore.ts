@@ -80,10 +80,7 @@ import {
   attachSourceQuoteIfMissing,
 } from './parameter-entries-store.js';
 import { applyApprovedEdit } from './pending-edits-helpers.js';
-import {
-  ensureDrugMonograph,
-  resolveMonographDrugCids,
-} from './monograph-helpers.js';
+import { ensureDrugMonograph } from './monograph-helpers.js';
 import { generateSlug } from './slug.js';
 import { ensureTopicSectionIds, extractPlaintext, renderHtml } from './tiptap-utils.js';
 import {
@@ -1193,21 +1190,15 @@ async function loadPageBySlug(db: Db, slug: string): Promise<ResolvedPage | null
 }
 
 /**
- * The drug's monograph, without creating one (the plan pass writes nothing).
- *
- * `wiki_pages.drug_cid` is mixed-vintage — modern rows store `drugs.id`, legacy
- * rows a PubChem CID — so both are candidates, but not unconditionally: when
- * this drug's CID happens to be another drug's internal id, the page carrying it
- * is that other drug's monograph. `resolveMonographDrugCids` is the collision
- * check `ensureDrugMonograph` already uses, and reusing it is what keeps a fact
- * from being spliced into the wrong drug's page (25C-NBOMe id=281 vs carbon
- * monoxide pubchem_cid=281).
+ * The drug's monograph — the page whose `drug_cid` is its `drugs.id` — without
+ * creating one (the plan pass writes nothing). Never looked up by PubChem CID:
+ * that number can be another drug's id (25C-NBOMe id=281 vs carbon monoxide
+ * pubchem_cid=281), and a page keyed by it is that drug's monograph.
  */
 async function findMonographForDrug(
   db: Db,
   drug: ResolvedDrug,
 ): Promise<ResolvedPage | null> {
-  const candidateCids = await resolveMonographDrugCids(db, drug);
   const [row] = await db
     .select({
       id: wikiPages.id,
@@ -1221,7 +1212,7 @@ async function findMonographForDrug(
     .where(
       and(
         eq(wikiPages.pageType, 'drug_monograph'),
-        inArray(wikiPages.drugCid, candidateCids),
+        eq(wikiPages.drugCid, drug.id),
       ),
     )
     .limit(1);
@@ -2091,13 +2082,12 @@ async function planWikiFactItem(
       if (!resolvedDrug.ok) {
         return blocked(resolvedDrug.reason, resolvedDrug.detail, page);
       }
-      const owned = await resolveMonographDrugCids(db, resolvedDrug.drug);
       const [row] = await db
         .select({ drugCid: wikiPages.drugCid })
         .from(wikiPages)
         .where(eq(wikiPages.id, page.id))
         .limit(1);
-      if (row?.drugCid == null || !owned.includes(row.drugCid)) {
+      if (row?.drugCid !== resolvedDrug.drug.id) {
         return blocked(
           'page_identity_conflict',
           `page ${page.id} is not ${resolvedDrugLabel(resolvedDrug.drug)}'s monograph`,
@@ -2324,7 +2314,6 @@ async function planWikiFactItem(
           {
             id: monographDrug.id,
             names: monographDrug.names as Record<'nb' | 'en', string>,
-            pubchemCid: monographDrug.pubchemCid,
           },
           actor.userId,
         );

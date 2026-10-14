@@ -849,17 +849,9 @@ async function listApprovals(
       FROM pending_edits pe
       JOIN wiki_revisions wr ON wr.pending_edit_id = pe.id
       JOIN wiki_pages wp ON wp.id = wr.page_id
-      -- drug_cid normally holds the internal drugs.id, but legacy rows may
-      -- carry a PubChem CID. Resolve the internal id first and only fall back
-      -- to a PubChem match, so a low serial id that collides with another
-      -- drug's pubchem_cid cannot duplicate the revision under a wrong drug.
-      LEFT JOIN LATERAL (
-        SELECT d.id
-        FROM drugs d
-        WHERE d.id = wp.drug_cid OR d.pubchem_cid = wp.drug_cid
-        ORDER BY (d.id = wp.drug_cid) DESC
-        LIMIT 1
-      ) d_wiki ON true
+      -- drug_cid holds the internal drugs.id (never a PubChem CID), and is not
+      -- a foreign key, so a dangling page simply resolves to no drug.
+      LEFT JOIN drugs d_wiki ON d_wiki.id = wp.drug_cid
       WHERE pe.status = 'approved'
         -- Only surface revisions on pages the agent can actually read/stamp;
         -- otherwise the endpoint leaks hidden-page metadata and hands back

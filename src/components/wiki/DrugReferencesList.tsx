@@ -9,9 +9,9 @@ import {
 
 interface Props {
   /**
-   * Identifier from `wiki_pages.drug_cid` — can be either the internal
-   * `drugs.id` (modern) or a legacy PubChem CID. Resolution to the internal
-   * id happens inside the hook. Ignored when `orderedRefs` is supplied.
+   * Identifier from `wiki_pages.drug_cid` — despite the name, the internal
+   * `drugs.id`. The hook resolves it to the drug row before reading
+   * citations. Ignored when `orderedRefs` is supplied.
    */
   drugIdOrCid?: number;
   /**

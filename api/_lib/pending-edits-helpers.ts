@@ -1476,9 +1476,9 @@ export async function assertLockedEntryOwner(
  * in rewriteWikiLinks; approval would hold `FOR NO KEY UPDATE` and
  * request the advisory here).
  *
- * Slug links go through `resolveOwningDrugIdForMonograph` so a legacy
- * monograph (whose `wiki_pages.drug_cid` still holds the PubChem CID
- * rather than the internal id) locks the same key the merge does.
+ * Slug links go through `resolveOwningDrugIdForMonograph` so a dangling
+ * monograph (whose `wiki_pages.drug_cid` names no existing drug) takes no
+ * lock rather than one on a key no merge will ever hold.
  *
  * A `param_entry` edit is here for the same reason, against different writers.
  * Its drug lock used to be taken deep inside the apply (by

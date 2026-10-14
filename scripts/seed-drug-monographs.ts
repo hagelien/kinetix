@@ -6,12 +6,21 @@
  *
  * Prerequisites:
  *   - Database tables must exist (run db:push first)
+ *   - The drugs must already be seeded (`seed:drugs`): each component is
+ *     matched to its `drugs` row by PubChem CID, and one with no row is skipped
  *   - An admin user must exist (register via the app, then manually set role to 'admin')
+ *
+ * `wiki_pages.drug_cid` is written as the drug's `drugs.id`, never its PubChem
+ * CID. An earlier version of this script wrote the CID, which is how the
+ * column came to hold two id spaces until migration 0148 unified it — and the
+ * two overlap (25C-NBOMe is id 281, carbon monoxide CID 281), so a CID written
+ * here would read back as some other drug's monograph.
  */
 
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
-import { wikiPages, wikiRevisions } from '../db/schema';
+import { and, eq } from 'drizzle-orm';
+import { drugs, wikiPages, wikiRevisions } from '../db/schema';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -66,6 +75,30 @@ async function main() {
 
   for (const comp of components) {
     const title = comp.name ?? comp.nameEn;
+    const [drug] = await db
+      .select({ id: drugs.id })
+      .from(drugs)
+      .where(eq(drugs.pubchemCid, comp.pubchemCid))
+      .limit(1);
+    if (!drug) {
+      console.warn(`  Skipped: ${title} (no drug row for CID ${comp.pubchemCid})`);
+      skipped++;
+      continue;
+    }
+    const [existing] = await db
+      .select({ id: wikiPages.id })
+      .from(wikiPages)
+      .where(
+        and(
+          eq(wikiPages.pageType, 'drug_monograph'),
+          eq(wikiPages.drugCid, drug.id),
+        ),
+      )
+      .limit(1);
+    if (existing) {
+      skipped++;
+      continue;
+    }
     // The slug stays keyed to the ENGLISH name even though the title is
     // Norwegian. It is an identifier, not prose: the API resolves monograph
     // slugs by exact match, and KineLab's `analyteSlug`, its curated coverage
@@ -128,10 +161,10 @@ async function main() {
           slug,
           title,
           content,
-          contentHtml: `<h1>${title}</h1><h2>Oversikt</h2><p>${title} er et stoff i Kinetix-databasen.</p><h2>Farmakokinetikk</h2><div class="drug-info-card" data-drug-cid="${comp.pubchemCid}">[Drug Info Card]</div><h2>Farmakodynamikk</h2><p>Ikke skrevet ennå.</p><h2>Forensisk toksikologi</h2><p>Ikke skrevet ennå.</p><h2>Kilder</h2><p>Ikke skrevet ennå.</p>`,
+          contentHtml: `<h1>${title}</h1><h2>Oversikt</h2><p>${title} er et stoff i Kinetix-databasen.</p><h2>Farmakokinetikk</h2><div class="drug-info-card" data-drug-cid="${drug.id}">[Drug Info Card]</div><h2>Farmakodynamikk</h2><p>Ikke skrevet ennå.</p><h2>Forensisk toksikologi</h2><p>Ikke skrevet ennå.</p><h2>Kilder</h2><p>Ikke skrevet ennå.</p>`,
           contentPlaintext,
           pageType: 'drug_monograph',
-          drugCid: comp.pubchemCid,
+          drugCid: drug.id,
           status: 'published',
           createdBy: adminUserId,
           updatedBy: adminUserId,

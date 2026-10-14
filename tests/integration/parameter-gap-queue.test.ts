@@ -1021,10 +1021,11 @@ describe('parameter gap queue — admin focus', () => {
     expect(slugs).toEqual(new Set(['intended']));
   });
 
-  it('still falls back to PubChem CID for a legacy drug_cid', async () => {
-    // Legacy rows store a CID rather than an id; those must still resolve, or
-    // the fallback's removal would silently empty an admin's focus.
-    const drugId = await seedDrug(db, {
+  it('does not resolve a drug_cid as a PubChem CID', async () => {
+    // `wiki_pages.drug_cid` holds `drugs.id` (migration 0148). A page carrying
+    // a drug's CID is dangling, not that drug's monograph — resolving it would
+    // put a substance the admin never selected into the focus.
+    await seedDrug(db, {
       slug: 'legacy-linked',
       names: { en: 'Legacy linked' },
       pubchemCid: 999001,
@@ -1049,7 +1050,7 @@ describe('parameter gap queue — admin focus', () => {
       .insert(agentFocusConfig)
       .values({ id: 1, mode: 'pages', pageIds: [page!.id] });
 
-    expect((await resolveFocusNarrowing()).drugIds).toEqual([drugId]);
+    expect((await resolveFocusNarrowing()).drugIds).toEqual([]);
   });
 
   it('still returns the whole catalogue under mode=all', async () => {

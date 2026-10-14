@@ -1200,10 +1200,8 @@ async function handleUpdate(
     // merge itself may sweep the fresh proposal along with the page). Non-
     // drug-monograph pages don't participate in that race.
     //
-    // `page.drug_cid` may be a legacy PubChem CID rather than the drug's
-    // internal id; the merge locks by `drugs.id`, so we must resolve the
-    // raw drug_cid to its owning `drugs.id` before locking or the two paths
-    // would not serialize. And the resolver returning null means the drug
+    // The merge locks by `drugs.id`, which is what `page.drug_cid` holds; the
+    // resolver confirms that drug still exists. Returning null means the drug
     // is gone (a merge deleted it between the initial page lookup and
     // here) — refuse rather than treat as if this were a non-drug page,
     // which would skip both the lock and the recheck below.

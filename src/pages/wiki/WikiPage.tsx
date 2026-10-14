@@ -222,13 +222,12 @@ export function WikiPage() {
   const drugIdOrCid =
     page?.pageType === 'drug_monograph' ? (page.drugCid ?? null) : null;
   // The resolved row is kept **with the drugCid that asked for it**, not just
-  // on its own. Whether a row belongs to this page cannot be re-derived from
-  // the row: `drugs.id` and `drugs.pubchem_cid` share a number space, and the
-  // collision is real (25C-NBOMe id=281 vs carbon monoxide pubchem_cid=281 —
-  // see the resolver in `api/drugs.ts`). Comparing the row against drugCid on
-  // either column therefore passes the *previous* monograph's row whenever its
-  // CID happens to equal the next monograph's id. The request key has no such
-  // ambiguity.
+  // on its own, so a row is only used for the request that fetched it. Matching
+  // on the row's columns instead invites comparing against `pubchem_cid`,
+  // which shares a number space with `drugs.id` (25C-NBOMe id=281 vs carbon
+  // monoxide pubchem_cid=281) and would pass the *previous* monograph's row
+  // whenever its CID equals the next monograph's id. The request key has no
+  // such ambiguity.
   const [resolvedDrug, setResolvedDrug] = useState<{
     key: number;
     row: DrugRow;
@@ -260,10 +259,8 @@ export function WikiPage() {
   }, [orderedRefs]);
 
   // Load the drug row so we can hydrate the inline parameter-anchor
-  // placeholders (issue #276 phase 1d). `wikiPages.drugCid` is mixed-vintage
-  // data: modern rows store `drugs.id`, while legacy rows can store PubChem
-  // CID. The API resolver checks both candidates in one query and rejects
-  // ambiguous collisions instead of making clients issue /id and /cid reads.
+  // placeholders (issue #276 phase 1d). `wikiPages.drugCid` is the drug's
+  // `drugs.id`; `/api/drugs?wikiDrugId=` looks it up by id only.
   useEffect(() => {
     // Clear the previous monograph's drug row immediately so a client-
     // side route change can't render the new page's parameter anchors

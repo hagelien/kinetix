@@ -23,8 +23,8 @@ export interface DrugBibliography {
 export interface UseDrugBibliographyOptions {
   /**
    * Internal `drugs.id` when the caller already has the resolved drug row.
-   * Supplying this skips the id/CID disambiguation request and goes straight
-   * to citation and indicator reads.
+   * Supplying this skips the drug-row lookup and goes straight to citation
+   * and indicator reads.
    */
   resolvedDrugId?: number | null;
 }

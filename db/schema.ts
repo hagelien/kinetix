@@ -155,8 +155,9 @@ export const wikiPages = pgTable(
     contentPlaintext: text('content_plaintext'),
     pageType: varchar('page_type', { length: 30 }).notNull().default('topic'),
     // NOTE: despite the column name, this stores the internal `drugs.id`
-    // (serial PK), not a PubChem CID. Some legacy rows may still carry a
-    // PubChem CID from older seed data; the sidebar lookup tolerates both.
+    // (serial PK), never a PubChem CID. Older seed data once wrote CIDs here;
+    // migration 0148 moved those onto `drugs.id` and no reader interprets
+    // the column as a CID any more. Not a foreign key.
     drugCid: integer('drug_cid'),
     // Unified entity monograph link (#785 Phase 5): for page_type
     // 'entity_monograph', the bio_entities row this article describes. NULL for

@@ -39,10 +39,7 @@ import {
   isForeignKeyViolation,
   isUniqueViolation,
 } from './_lib/drugs-helpers.js';
-import {
-  ensureDrugMonograph,
-  resolveMonographDrugCids,
-} from './_lib/monograph-helpers.js';
+import { ensureDrugMonograph } from './_lib/monograph-helpers.js';
 import { drugAliasesSchema, drugNamesSchema } from './_lib/schemas.js';
 import { normalizeAliases } from '../src/lib/drugNames.js';
 import { lockDrugForEntryApplicability } from './_lib/parameterApplicabilityStore.js';
@@ -221,29 +218,20 @@ async function handleGet(
       return;
     }
 
-    // wiki_pages.drug_cid is mixed-vintage data: modern rows store drugs.id,
-    // while legacy rows can store PubChem CID. Resolve both candidates in one
-    // query instead of making clients issue /id and /cid requests.
-    const rows = await db
+    // `wiki_pages.drug_cid` holds `drugs.id` (migration 0148 moved the last
+    // PubChem-CID-keyed pages onto it), so this is a lookup by id only. It is
+    // never also tried as a PubChem CID: the two numbering spaces overlap —
+    // 25C-NBOMe is id 281, carbon monoxide is CID 281 — and a page whose
+    // number is no drug's id is dangling, not some other drug's monograph.
+    const [row] = await db
       .select()
       .from(drugs)
-      .where(or(eq(drugs.id, n), eq(drugs.pubchemCid, n)))
-      .limit(2);
-    if (rows.length === 0) {
+      .where(eq(drugs.id, n))
+      .limit(1);
+    if (!row) {
       error(res, 404, 'Drug not found');
       return;
     }
-    // `id` and `pubchem_cid` are both unique, so the OR can only match two
-    // rows when one drug's internal id equals a *different* drug's PubChem
-    // CID — e.g. 25C-NBOMe (id=281) collides with carbon monoxide
-    // (pubchem_cid=281). This is a number collision, not a genuinely
-    // ambiguous link: modern drug_cid values — including every monograph
-    // ensureDrugMonograph creates — store drugs.id, so prefer the id match
-    // and fall back to the PubChem CID interpretation only for legacy rows
-    // where no drug carries that internal id. (Previously this 409'd, which
-    // blanked the parameter sidebar and discussion on correctly-linked
-    // monographs whenever such a collision existed.)
-    const row = rows.find((r) => r.id === n) ?? rows[0]!;
     const [
       paramMap,
       metabolism,
@@ -474,17 +462,7 @@ async function handleGet(
       wikiPages,
       and(
         eq(wikiPages.pageType, 'drug_monograph'),
-        sql`(
-          ${wikiPages.drugCid} = ${drugs.id}
-          OR (
-            ${wikiPages.drugCid} = ${drugs.pubchemCid}
-            AND NOT EXISTS (
-              SELECT 1 FROM drugs d2
-              WHERE d2.id = ${drugs.pubchemCid}
-                AND d2.id <> ${drugs.id}
-            )
-          )
-        )`,
+        eq(wikiPages.drugCid, drugs.id),
       ),
     )
     .where(conditions.length ? and(...conditions) : undefined)
@@ -954,18 +932,15 @@ async function handleDelete(
   // monograph touches no wiki content, so the focus — which governs what
   // agents may author, not the catalog — has nothing to say about it.
   if (await isActiveAgentUser(auth.userId)) {
-    const monographCandidates = await resolveMonographDrugCids(db, existing);
-    const monographPages = monographCandidates.length
-      ? await db
-          .select({ id: wikiPages.id })
-          .from(wikiPages)
-          .where(
-            and(
-              eq(wikiPages.pageType, 'drug_monograph'),
-              inArray(wikiPages.drugCid, monographCandidates),
-            ),
-          )
-      : [];
+    const monographPages = await db
+      .select({ id: wikiPages.id })
+      .from(wikiPages)
+      .where(
+        and(
+          eq(wikiPages.pageType, 'drug_monograph'),
+          eq(wikiPages.drugCid, existing.id),
+        ),
+      );
     for (const page of monographPages) {
       const refusal = await wikiContentFocusRefusal(page.id);
       if (refusal) {
@@ -981,8 +956,8 @@ async function handleDelete(
   // discussions, revisions, …) is removed automatically by ON DELETE CASCADE
   // on their drug_id foreign keys. Two things are NOT FK-bound to drugs and
   // are cleaned up explicitly:
-  //   - the drug monograph wiki page (wiki_pages.drug_cid is a plain integer,
-  //     mixed-vintage: modern rows store drugs.id, legacy rows a PubChem CID)
+  //   - the drug monograph wiki page (wiki_pages.drug_cid is a plain integer
+  //     holding drugs.id, not a foreign key)
   //   - pending_edits whose polymorphic target_id points at this drug
   try {
     await runInPoolTransaction(async () => {
@@ -1019,14 +994,12 @@ async function handleDelete(
       );
       if (nested > 0) throw new NestedProposalReferenceError(nested);
 
-      // Only delete monographs that actually belong to this drug. drug_cid is
-      // mixed-vintage (modern = drugs.id, legacy = PubChem CID), but if our
-      // PubChem CID equals a *different* drug's internal id, a page keyed by
-      // that number is that drug's monograph — deleting it here would be silent
-      // data loss (e.g. deleting ethanol id=37/cid=702 must not delete timolol's
-      // monograph, drug_cid=702). resolveMonographDrugCids drops such a CID.
-      const monographCandidates = await resolveMonographDrugCids(tx, existing);
-
+      // Only delete monographs that actually belong to this drug: the pages
+      // keyed by its id. Never by its PubChem CID — that number can be a
+      // *different* drug's id, and a page keyed by it is that drug's monograph
+      // (deleting ethanol id=37/cid=702 must not delete timolol's monograph,
+      // drug_cid=702).
+      //
       // Find the monograph page IDs before deletion so we can clean up
       // wiki-scoped pending edits (wiki_page, wiki_section, wiki_fact) that
       // target the page by its numeric id rather than by drug id.
@@ -1037,7 +1010,7 @@ async function handleDelete(
           .where(
             and(
               eq(wikiPages.pageType, 'drug_monograph'),
-              inArray(wikiPages.drugCid, monographCandidates),
+              eq(wikiPages.drugCid, existing.id),
             ),
           )
       ).map((r) => r.id);
@@ -1063,7 +1036,7 @@ async function handleDelete(
         .where(
           and(
             eq(wikiPages.pageType, 'drug_monograph'),
-            inArray(wikiPages.drugCid, monographCandidates),
+            eq(wikiPages.drugCid, existing.id),
           ),
         );
 

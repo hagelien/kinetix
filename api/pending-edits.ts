@@ -2876,9 +2876,9 @@ function nextProposedMeta(
  * that component's monograph. The default is `'topic'`, so a `wiki_new` that
  * says nothing about its type is not a monograph however its drug resolves.
  *
- * The drug goes through the same legacy-CID precedence `resolveLockDrugId`
- * uses, so the gate and the lock cannot disagree about which drug an edit
- * belongs to. An edit that names no page AND no resolvable drug is judged as a
+ * The drug goes through the same `resolveOwningDrugIdForMonograph` lookup
+ * `resolveLockDrugId` uses, so the gate and the lock cannot disagree about
+ * which drug an edit belongs to. An edit that names no page AND no resolvable drug is judged as a
  * new page with no drug: refused under every narrowing, allowed under `all`.
  * `wiki_fact` / `wiki_section` never reach that branch, because the schema
  * requires their `targetId`.
@@ -2933,10 +2933,8 @@ async function resolveLockDrugId(
     if (page.pageType !== 'drug_monograph' || page.drugCid == null) {
       return { kind: 'not_drug_scoped' };
     }
-    // `page.drug_cid` may be a legacy PubChem CID rather than the drug's
-    // internal id; the merge locks by `drugs.id`, so we must resolve to
-    // the owning `drugs.id` before locking or the two paths would not
-    // serialize on the same key.
+    // The merge locks by `drugs.id`, which is what `page.drug_cid` holds; a
+    // page whose drug no longer exists has nothing to lock against.
     const owningId = await resolveOwningDrugIdForMonograph(getDb(), page.drugCid);
     if (owningId == null) return { kind: 'target_missing' };
     return { kind: 'drug_scoped', drugId: owningId };
@@ -2947,8 +2945,8 @@ async function resolveLockDrugId(
     if (typeof drugCid !== 'number' || !Number.isSafeInteger(drugCid)) {
       return { kind: 'not_drug_scoped' };
     }
-    // Same legacy-CID resolution as above — wiki_new's proposed_meta.drugCid
-    // is the same mixed-vintage shape as wiki_pages.drug_cid.
+    // Same resolution as above — wiki_new's proposed_meta.drugCid becomes
+    // the new page's wiki_pages.drug_cid, a drugs.id.
     const owningId = await resolveOwningDrugIdForMonograph(getDb(), drugCid);
     if (owningId == null) return { kind: 'target_missing' };
     return { kind: 'drug_scoped', drugId: owningId };

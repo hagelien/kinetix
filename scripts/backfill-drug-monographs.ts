@@ -33,7 +33,7 @@ async function main() {
 
   const db = getDb();
   const rows = await db
-    .select({ id: drugs.id, names: drugs.names, pubchemCid: drugs.pubchemCid })
+    .select({ id: drugs.id, names: drugs.names })
     .from(drugs);
 
   console.log(`Found ${rows.length} drugs. Ensuring monographs…`);

@@ -89,6 +89,32 @@ describe('wiki search — drug monographs are findable by search key', () => {
     expect(slugs).toContain('cocaine-monograph');
   });
 
+  it('does not match a page through the drug whose PubChem CID it carries', async () => {
+    // `wiki_pages.drug_cid` holds `drugs.id`. A page carrying cocaine's CID is
+    // not cocaine's monograph — that number can be another drug's id — so
+    // searching cocaine's names must not surface it.
+    const userId = await seedUser(db);
+    await seedDrug(db, {
+      slug: 'cocaine',
+      names: { nb: 'Kokain', en: 'Cocaine' },
+      pubchemCid: 446220,
+      searchKey: 'kokain\tcocaine',
+    });
+    await db.insert(wikiPages).values({
+      slug: 'unrelated-page',
+      title: 'Unrelated',
+      contentPlaintext: '',
+      pageType: 'drug_monograph',
+      drugCid: 446220,
+      status: 'published',
+      createdBy: userId,
+      updatedBy: userId,
+    });
+
+    const slugs = (await search('kokain')).map((r) => r.slug);
+    expect(slugs).not.toContain('unrelated-page');
+  });
+
   it('finds a monograph by a drug alias / street name', async () => {
     const userId = await seedUser(db);
     const drugId = await seedDrug(db, {

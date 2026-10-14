@@ -372,16 +372,12 @@ So a merge is four places:
    keeps its id, so all 16 tables referencing `drugs.id` stay attached and only
    the identity changes.
 
-   The monograph link is the exception that has to move with it.
-   `wiki_pages.drug_cid` is mixed-vintage — `ensureDrugMonograph` writes
-   `drugs.id`, the older `scripts/seed-drug-monographs.ts` wrote the PubChem
-   CID, and both readers resolve either — so a legacy row points at the old CID
-   and changing the drug's identity alone strands it: the monograph detaches
-   silently and the next backfill creates a second, empty one beside the written
-   page. The migration repoints it in the same statement, via a data-modifying
-   CTE so it binds to the row the update actually touched, and skips a
-   `drug_cid` that is some other drug's internal id — that is that drug's modern
-   link, and adopting it would steal a monograph.
+   The monograph link needs nothing: `wiki_pages.drug_cid` holds `drugs.id`
+   (migration 0148 moved the last pages the original
+   `scripts/seed-drug-monographs.ts` had keyed by PubChem CID), so it rides
+   along on the row id. Migrations written before 0148, such as 0104, still
+   repoint a CID-keyed monograph in the same statement because the column
+   held both id spaces when they ran.
 
 Prefer merging **into** the CID the dataset and fixtures already use. Whichever
 way it goes, re-run this seeder afterwards to repair the distribution row.

@@ -9,7 +9,7 @@
  * A CID is not a label. It is the key the offline catalog, the postmortem
  * resources and the method catalog all resolve by, it is what a saved simulator
  * case pins a drug with, and it is the address a reader follows out to PubChem.
- * So changing it is four changes at once, and this makes all four explicit:
+ * So changing it is three changes at once, and this makes all three explicit:
  *
  *   1. It asks PubChem whether the new CID actually answers to this drug's
  *      names. A correction to another wrong number is not an improvement, and
@@ -19,9 +19,7 @@
  *      internal id (see #1256) — leaving them behind does not break the case,
  *      it silently loads whatever drug now answers to the old number and
  *      simulates that one instead.
- *   3. It refuses if a monograph is keyed by the OLD CID (`wiki_pages.drug_cid`
- *      is mixed-vintage and not an FK), which the change would orphan.
- *   4. It refuses while any repo file is still keyed by the old CID, because
+ *   3. It refuses while any repo file is still keyed by the old CID, because
  *      those files seed the database: the retarget frees that number, and
  *      `seed:drugs` upserts on it while `seed:pm-concentrations` creates a drug
  *      for a CID it cannot find. Leave one and the next seed run rebuilds the
@@ -35,7 +33,6 @@ import 'dotenv/config';
 import { sql } from 'drizzle-orm';
 import { getDb, runInPoolTransaction } from '../api/_lib/db';
 import { catalogForms, candidates, matchesAny } from './pubchem/names';
-import { resolveMonographDrugCids } from '../api/_lib/monograph-helpers';
 import { simulatorDrugKeyCandidates } from '../src/lib/drugComponentId';
 import { embeddedComponents } from '../data/components';
 import { lockDrugForRetarget, rewriteCaseKeysAndCid } from './lib/retarget-cid-apply';
@@ -210,46 +207,8 @@ async function buildPlan(db: Db, drugId: number, to: number, lock: boolean): Pro
     }
   }
 
-  // A monograph keyed by the OLD CID is legacy-vintage and not an FK, so
-  // nothing repoints it and nothing complains — it just stops resolving.
-  //
-  // Which pages those are is not "every page whose drug_cid equals the old
-  // number": the two id spaces collide, so that number can equally be another
-  // drug's `drugs.id` and the page found would be that drug's modern monograph.
-  // Refusing on it would block this retarget over a page belonging to a
-  // different substance. `resolveMonographDrugCids` is the repo's answer to
-  // that collision — it drops a CID that is also some other drug's internal id
-  // — so the old CID is only treated as a monograph key when it survives that.
-  //
-  // With one exception the resolver cannot express: when a drug's CID EQUALS
-  // its own internal id, the two keys are the same number, and the candidate
-  // list cannot say which of the two it is. Every ordinary modern monograph
-  // would then look legacy-keyed and refuse — with a message telling the
-  // operator to set `drug_cid` to the value it already holds, making the
-  // correction impossible for exactly those drugs. A page keyed by that number
-  // is reachable as `drugs.id` regardless of what the CID becomes, so there is
-  // nothing to protect here.
-  const monographCids = await resolveMonographDrugCids(db, drug);
-  if (
-    drug.pubchemCid != null &&
-    drug.pubchemCid !== drug.id &&
-    monographCids.includes(drug.pubchemCid)
-  ) {
-    const pages = rowsOf(
-      await db.execute(
-        sql.raw(`
-          SELECT id, slug FROM wiki_pages
-          WHERE page_type = 'drug_monograph' AND drug_cid = ${drug.pubchemCid}`),
-      ),
-    );
-    if (pages.length > 0) {
-      refusals.push(
-        `${pages.length} monograph page(s) are keyed by the old CID ${drug.pubchemCid} ` +
-          `(${pages.map((p) => `/${String(p.slug)}`).join(', ')}). Repoint them to ` +
-          `drug_cid = ${drug.id} first, or the change orphans them`,
-      );
-    }
-  }
+  // Monographs are keyed by `drugs.id` (`wiki_pages.drug_cid`), which the CID
+  // change leaves alone, so nothing there needs repointing.
 
   // Saved cases pin a drug by `buildDrugComponentId` — a bare CID, or (#1256)
   // a `drug:<id>` key for a CID-less drug. A CID-less drug being given its

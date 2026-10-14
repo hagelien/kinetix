@@ -278,7 +278,7 @@ async function createDrug(
     );
     await ensureDrugMonograph(
       db,
-      { id: drugId, names, pubchemCid: row.pubchemCid },
+      { id: drugId, names },
       actorUserId,
     );
     return drugId;

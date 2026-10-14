@@ -67,7 +67,7 @@ beforeEach(async () => {
   });
   const ensured = await ensureDrugMonograph(
     db as never,
-    { id: drugId, names: { nb: 'Morfin', en: 'Morphine' }, pubchemCid: 5288826 },
+    { id: drugId, names: { nb: 'Morfin', en: 'Morphine' } },
     userId,
   );
   monographId = ensured.page.id;
@@ -1725,7 +1725,7 @@ describe('conversation ingestion — a page id is an assertion, not a fact', () 
     });
     const otherPage = await ensureDrugMonograph(
       db as never,
-      { id: other, names: { nb: 'Kodein', en: 'Codeine' }, pubchemCid: 5284371 },
+      { id: other, names: { nb: 'Kodein', en: 'Codeine' } },
       userId,
     );
 
@@ -1758,6 +1758,47 @@ describe('conversation ingestion — a page id is an assertion, not a fact', () 
       .from(wikiPages)
       .where(eq(wikiPages.id, otherPage.page.id));
     expect(JSON.stringify(page!.content)).not.toContain('forråtnelsesgrad');
+  });
+
+  it('does not treat a page keyed by the drug\'s PubChem CID as its monograph', async () => {
+    // `wiki_pages.drug_cid` holds `drugs.id`. A page carrying morphine's CID is
+    // not morphine's monograph — the number could as well be another drug's
+    // id — so naming it as morphine's page is an identity conflict.
+    const [cidKeyed] = await db
+      .insert(wikiPages)
+      .values({
+        slug: 'morfin-cid',
+        title: 'Morfin',
+        content: { type: 'doc', content: [] } as never,
+        pageType: 'drug_monograph',
+        drugCid: 5288826,
+        status: 'published',
+        createdBy: userId,
+        updatedBy: userId,
+      })
+      .returning({ id: wikiPages.id });
+
+    const doc = parse(
+      bundle({
+        items: [
+          {
+            ...bundle().items[1],
+            target: {
+              pageType: 'monograph',
+              pageId: cidKeyed!.id,
+              drug: { drugName: 'Morphine', pubchemCid: 5288826 },
+              sectionId: 'forensic',
+            },
+          },
+        ],
+      }),
+    );
+
+    const plan = await planIngestion(doc);
+    expect(plan.items[0]).toMatchObject({
+      disposition: 'blocked',
+      reason: 'page_identity_conflict',
+    });
   });
 
   it('blocks a monograph target naming a topic page', async () => {

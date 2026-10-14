@@ -368,9 +368,8 @@ export async function fetchDrugByCid(
 }
 
 /**
- * Resolve a `wiki_pages.drugCid` value, which can be either the internal
- * drugs.id (modern rows) or a legacy PubChem CID. The server checks both
- * candidates in one query and rejects ambiguous collisions.
+ * Resolve a `wiki_pages.drugCid` value — despite the name, the internal
+ * `drugs.id` — to the drug row the monograph sidebar renders.
  */
 export async function fetchDrugByWikiDrugId(
   wikiDrugId: number,

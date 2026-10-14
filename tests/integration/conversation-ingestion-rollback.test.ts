@@ -88,7 +88,7 @@ beforeEach(async () => {
   });
   const ensured = await ensureDrugMonograph(
     db as never,
-    { id: drugId, names: { nb: 'Morfin', en: 'Morphine' }, pubchemCid: 5288826 },
+    { id: drugId, names: { nb: 'Morfin', en: 'Morphine' } },
     userId,
   );
   monographId = ensured.page.id;

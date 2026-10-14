@@ -17,6 +17,13 @@
  * legacy row that actually carries prose is left for a human to reconcile,
  * same as every other genuinely ambiguous case in this file.
  *
+ * `wiki_pages.drug_cid` holds `drugs.id`, and migration 0148 moved every
+ * CID-keyed page it could place unambiguously; no reader interprets the column
+ * as a CID any more. What is left for case 2 here is exactly what 0148 declined
+ * — a CID-keyed page whose drug already has a monograph, or two pages sharing
+ * one CID — which is why this script, and not the unattended build pass,
+ * remains the way to settle them.
+ *
  * Usage:
  *   DATABASE_URL=... npx tsx scripts/fix-monograph-drug-links.ts
  *
