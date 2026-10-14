@@ -53,10 +53,11 @@ const CONCENTRATION_NUMBER_START_GUARD = String.raw`(?<!\d[^${LETTER}\d]*|\d\s*[
 /**
  * Group 1: the (optionally qualified, optionally ranged) figure — it may carry
  * the whitespace that precedes it. Group 2: the unit as written. A unit that is
- * itself the numerator of a compound unit (`mg/L/h`, `mg/L per dose`) is not a
- * concentration and is left alone.
+ * part of a compound unit (`mg/L/h`, `mg/L per dose`, `mg/L·h`, `mg/L×h`,
+ * `mg/L x h`, `mg/L.h`) is not a concentration and is left alone; a full stop
+ * that ends a sentence (`5 mg/L. Neste`) is not an operator.
  */
-const CONCENTRATION_SOURCE = `((?:<=|>=|[<>≤≥])?\\s*${CONCENTRATION_NUMBER_START_GUARD}${CONCENTRATION_NUMBER_PATTERN}(?:\\s*${CONCENTRATION_RANGE_SEPARATOR_PATTERN}\\s*${CONCENTRATION_NUMBER_PATTERN})?)\\s*(${CONCENTRATION_UNIT_PATTERN})(?!\\s*(?:/|[·⋅∙•×*]|x\\s+\\p{L}|per\\b))\\b`;
+const CONCENTRATION_SOURCE = `((?:<=|>=|[<>≤≥])?\\s*${CONCENTRATION_NUMBER_START_GUARD}${CONCENTRATION_NUMBER_PATTERN}(?:\\s*${CONCENTRATION_RANGE_SEPARATOR_PATTERN}\\s*${CONCENTRATION_NUMBER_PATTERN})?)\\s*(${CONCENTRATION_UNIT_PATTERN})(?!\\s*(?:/|[·⋅∙•×*]|x\\s+\\p{L}|per\\b)|\\.\\p{L})\\b`;
 
 const CANONICAL_CONCENTRATION_UNITS = [
   "mmol/dL", "µmol/dL", "nmol/dL", "mmol/L", "µmol/L", "nmol/L",
