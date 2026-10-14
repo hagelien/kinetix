@@ -43,6 +43,7 @@ import {
   ReferenceGateError,
   WikiFactApprovalError,
 } from './_lib/pending-edits-helpers.js';
+import { PaperReviewDrugLockedError } from './_lib/paper-review-store.js';
 import {
   pendingEditPayloadFingerprint,
   pendingEditReviewToken,
@@ -2735,6 +2736,12 @@ async function handleCreate(
     | { kind: 'claim_lost' };
   let outcome: SubmitOutcome;
   if (lockDrugId != null) {
+    // Drug lock first, the extraction job's (the claim re-check below) second:
+    // the one global order for the two (#243), which a drug merge keeps too and
+    // `mergeCitations` keeps by taking a fold's drug locks before any job row
+    // (see `tryLockDrugForRecompute` there). A fold used to lock the job first
+    // and wait for this drug at its recompute, and this branch holding the drug
+    // while waiting for the job closed the cycle.
     outcome = await runInPoolTransaction<SubmitOutcome>(async () => {
       await lockDrugForEntryApplicability(lockDrugId);
       // Re-verify the target under the lock. For wiki_page/wiki_fact the
@@ -4365,6 +4372,12 @@ async function handlePatch(
     // generic 500 for a condition the sequential path explains properly.
     if (err instanceof ParameterNotApplicableError) {
       error(res, 409, err.message, err.code);
+      return;
+    }
+    // A paper review whose recompute needed a drug a concurrent write held.
+    // Nothing was applied; approving again records it.
+    if (err instanceof PaperReviewDrugLockedError) {
+      error(res, err.statusHint, err.message, err.code);
       return;
     }
     if (

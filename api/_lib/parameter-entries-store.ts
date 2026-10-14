@@ -865,6 +865,32 @@ export async function findParametersCitingCitation(
 }
 
 /**
+ * Take, ascending, the per-drug lock of every drug with an entry citing this
+ * citation — the locks {@link recomputeSummariesCitingCitation} will take — so
+ * a caller can hold them before it writes the rows that trigger the recompute.
+ *
+ * The drug lock comes before any row lock everywhere else (entry writers,
+ * approvals, the drug merge, and `mergeCitations` since #243). A re-score that
+ * upserts its review row first and reaches the drug only at the recompute
+ * runs the other way round, against a citation merge that holds the drug and
+ * waits for that review row. Re-entrant, so the recompute's own acquisition
+ * afterwards is free. Must run inside a transaction to hold anything. Returns
+ * the drugs it locked.
+ */
+export async function lockDrugsCitingCitation(citationId: number): Promise<number[]> {
+  const drugIds = await findDrugsCitingCitation(citationId);
+  for (const drugId of drugIds) await lockDrugForRecompute(drugId);
+  return drugIds;
+}
+
+/** Drugs with an entry citing this citation, ascending. */
+export async function findDrugsCitingCitation(citationId: number): Promise<number[]> {
+  return [
+    ...new Set((await findParametersCitingCitation(citationId)).map((row) => row.drugId)),
+  ].sort((a, b) => a - b);
+}
+
+/**
  * Recompute the cached aggregate for every summarizable parameter backed by an
  * entry that cites this citation. A paper review's `overall_score` feeds the
  * aggregation weight, so publishing or re-scoring a review can move the pooled

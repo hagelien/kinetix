@@ -353,7 +353,10 @@ export async function resolveCitation(
               : stats.deferredReason === 'loser_locked'
                 ? `#${duplicate.id} (its own lock was held: an extraction job being ` +
                   `queued for it, or another merge of it)`
-                : `#${duplicate.id} (another merge into it held the lock)`,
+                : stats.deferredReason === 'drug_locked'
+                  ? `#${duplicate.id} (drug ${stats.lockedDrugId}, whose summaries the ` +
+                    `fold recomputes, was locked by another write)`
+                  : `#${duplicate.id} (another merge into it held the lock)`,
           );
         } else mergedIds.push(duplicate.id);
       }

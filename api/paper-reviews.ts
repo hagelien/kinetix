@@ -29,6 +29,7 @@ import { callerCan } from './_lib/permissions-store.js';
 import { agents, citations, paperReviews } from '../db/schema.js';
 import {
   listPaperReviewHistory,
+  PaperReviewDrugLockedError,
   recordPaperReview,
 } from './_lib/paper-review-store.js';
 
@@ -137,20 +138,31 @@ async function handleCreate(
   // transaction so the whole write (incl. the parameter-cache recompute it now
   // triggers when the score changes) is atomic and its advisory lock actually
   // serializes against concurrent entry mutations.
-  const recorded = await runInPoolTransaction(() =>
-    recordPaperReview({
-      citationId,
-      authorUserId: auth.userId,
-      input: {
-        reviewMarkdown: parsed.data.reviewMarkdown,
-        overallScore: parsed.data.overallScore ?? null,
-        conclusionSupport: parsed.data.conclusionSupport ?? null,
-        reviewConfidence: parsed.data.reviewConfidence ?? null,
-        readInFull: parsed.data.readInFull,
-        editSummary: parsed.data.editSummary ?? null,
-      },
-    }),
-  );
+  let recorded: Awaited<ReturnType<typeof recordPaperReview>>;
+  try {
+    recorded = await runInPoolTransaction(() =>
+      recordPaperReview({
+        citationId,
+        authorUserId: auth.userId,
+        input: {
+          reviewMarkdown: parsed.data.reviewMarkdown,
+          overallScore: parsed.data.overallScore ?? null,
+          conclusionSupport: parsed.data.conclusionSupport ?? null,
+          reviewConfidence: parsed.data.reviewConfidence ?? null,
+          readInFull: parsed.data.readInFull,
+          editSummary: parsed.data.editSummary ?? null,
+        },
+      }),
+    );
+  } catch (err) {
+    // A concurrent write held a drug the score change has to recompute. The
+    // review was not written; submitting it again records it.
+    if (err instanceof PaperReviewDrugLockedError) {
+      error(res, err.statusHint, err.message, err.code);
+      return;
+    }
+    throw err;
+  }
 
   const [review] = await db
     .select()

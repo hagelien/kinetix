@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, type SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import {
   citations,
   drugParameterRevisions,
+  drugParameters,
   drugReceptorTargets,
   paperExtractionJobs,
   paperReviewRevisions,
@@ -12,6 +14,7 @@ import {
   wikiPages,
 } from '../../db/schema.js';
 import { handleMatch, resolveCitation } from '../../api/_lib/citation-store.js';
+import { getDb, runInPoolTransaction } from '../../api/_lib/db.js';
 import {
   lockPendingEditsCitingCitation,
   mergeCitations,
@@ -843,6 +846,201 @@ describe('mergeCitations — parameter summary recompute (#1018)', () => {
     const loser = await seedCitation({ type: 'doi', identifier: DOI });
     const stats = await mergeWithEntryOn(loser, winner, loser, null);
     expect(stats.summaryRecompute).toBe('skipped');
+  });
+});
+
+describe('mergeCitations — a drug whose first entry lands after the lock scan (#243)', () => {
+  // The fold tries the drug locks its recompute needs before it locks any job
+  // row, from a scan of the entries citing the pair. An entry for another drug
+  // can cite the winner by the time the recompute runs, and the fold only
+  // *tries* that drug's lock then too (it may hold job rows by now). PGlite is
+  // one connection, where every advisory lock is re-entrant, so the held lock
+  // is stood in for at the fold's own client: the lock scan is followed by the
+  // new entry, and a try of that drug's lock reports it held while `held` is
+  // set. Everything else runs for real, inside a real transaction.
+  const dialect = new PgDialect();
+
+  function interceptFold(
+    tx: ReturnType<typeof getDb>,
+    hooks: { afterLockScan: () => Promise<void>; heldDrugId: () => number | null },
+  ): ReturnType<typeof getDb> {
+    return new Proxy(tx, {
+      get(target, prop, receiver) {
+        if (prop !== 'execute') return Reflect.get(target, prop, receiver);
+        return async (query: SQL) => {
+          const { sql: text, params } = dialect.sqlToQuery(query);
+          const held = hooks.heldDrugId();
+          if (
+            held !== null &&
+            /pg_try_advisory_xact_lock\(\$1::bigint\)/.test(text) &&
+            Number(params[0]) === held
+          ) {
+            return { rows: [{ locked: false }] };
+          }
+          const result = await target.execute(query);
+          if (/SELECT DISTINCT drug_id FROM parameter_entries/.test(text)) {
+            await hooks.afterLockScan();
+          }
+          return result;
+        };
+      },
+    });
+  }
+
+  async function snapshot() {
+    const byKey = <T>(rows: T[], key: (row: T) => string) =>
+      [...rows].sort((a, b) => key(a).localeCompare(key(b)));
+    return {
+      citations: byKey(await db.select({ id: citations.id }).from(citations), (r) =>
+        String(r.id),
+      ),
+      entries: byKey(
+        await db
+          .select({ drugId: parameterEntries.drugId, citationId: parameterEntries.citationId })
+          .from(parameterEntries),
+        (r) => `${r.drugId}:${r.citationId}`,
+      ),
+      reviews: byKey(
+        await db
+          .select({ id: paperReviews.id, citationId: paperReviews.citationId })
+          .from(paperReviews),
+        (r) => String(r.id),
+      ),
+      summaries: byKey(await db.select().from(drugParameters), (r) =>
+        `${r.drugId}:${r.parameter}`,
+      ),
+      revisions: byKey(
+        await db.select({ id: drugParameterRevisions.id }).from(drugParameterRevisions),
+        (r) => String(r.id),
+      ),
+    };
+  }
+
+  /** A loser with an entry on `drugId` and the read-in-full review the winner will inherit. */
+  async function seedLoserWithEntryAndReview(drugId: number): Promise<number> {
+    const loser = await seedCitation({ type: 'doi', identifier: DOI });
+    await db.insert(parameterEntries).values({
+      drugId,
+      parameter: 'halfLife',
+      citationId: loser,
+      low: '3',
+      high: '5',
+      unit: 'h',
+    });
+    await db.insert(paperReviews).values({
+      citationId: loser,
+      reviewMarkdown: 'Lest i sin helhet.',
+      readInFull: true,
+    });
+    return loser;
+  }
+
+  it('defers with nothing written while that drug stays locked, and folds once it is free', async () => {
+    const drugA = await seedDrug(db, { slug: 'drug-a' });
+    const drugB = await seedDrug(db, { slug: 'drug-b' });
+    const winner = await seedCitation({ type: 'pmid', identifier: PMID });
+    // A is locked up front; the review the winner inherits re-weights every
+    // entry citing the winner, B's included.
+    const loser = await seedLoserWithEntryAndReview(drugA);
+
+    let held: number | null = drugB;
+    const stats = await runInPoolTransaction(() =>
+      mergeCitations(
+        interceptFold(getDb(), {
+          // Another writer's entry on B citing the winner, committed after the
+          // fold's lock scan; that writer (or any other) now holds B's lock.
+          afterLockScan: async () => {
+            await getDb().insert(parameterEntries).values({
+              drugId: drugB,
+              parameter: 'halfLife',
+              citationId: winner,
+              low: '6',
+              high: '8',
+              unit: 'h',
+            });
+          },
+          heldDrugId: () => held,
+        }),
+        winner,
+        loser,
+        { actorUserId: userId },
+      ),
+    );
+
+    expect(stats).toMatchObject({
+      deferred: true,
+      deferredReason: 'drug_locked',
+      lockedDrugId: drugB,
+      rowsRepointed: 0,
+      reviewsDropped: 0,
+      reviewRevisionsMoved: 0,
+      jsonDocumentsRewritten: 0,
+      summaryRecompute: 'not-needed',
+    });
+    // Nothing of the fold was written: both rows, the entries and the review
+    // where they were, and no summary computed or revision stamped — the
+    // transaction committed (B's entry is there), the fold did not.
+    const deferred = await snapshot();
+    expect(deferred.citations.map((r) => r.id).sort()).toEqual([winner, loser].sort());
+    expect(deferred.entries).toHaveLength(2);
+    expect(deferred.entries).toEqual(
+      expect.arrayContaining([
+        { drugId: drugA, citationId: loser },
+        { drugId: drugB, citationId: winner },
+      ]),
+    );
+    expect(deferred.reviews.map((r) => r.citationId)).toEqual([loser]);
+    expect(deferred.summaries).toEqual([]);
+    expect(deferred.revisions).toEqual([]);
+
+    // The lock is free on the next resolve or CLI run: the pair folds, and
+    // the recompute covers B as well as A.
+    held = null;
+    const retry = await runInPoolTransaction(() =>
+      mergeCitations(
+        interceptFold(getDb(), { afterLockScan: async () => {}, heldDrugId: () => held }),
+        winner,
+        loser,
+        { actorUserId: userId },
+      ),
+    );
+    expect(retry.deferred).toBeUndefined();
+    expect(retry.summaryRecompute).toBe('ran');
+    const folded = await snapshot();
+    expect(folded.citations.map((r) => r.id)).toEqual([winner]);
+    expect(folded.entries.map((r) => r.citationId)).toEqual([winner, winner]);
+    expect(folded.reviews.map((r) => r.citationId)).toEqual([winner]);
+    expect(folded.summaries.map((r) => `${r.drugId}:${r.parameter}`).sort()).toEqual(
+      [`${drugA}:halfLife`, `${drugB}:halfLife`].sort(),
+    );
+  });
+
+  it('leaves none of a failed fold behind for a caller that catches and commits', async () => {
+    const drugA = await seedDrug(db, { slug: 'drug-a' });
+    const winner = await seedCitation({ type: 'pmid', identifier: PMID });
+    const loser = await seedLoserWithEntryAndReview(drugA);
+    const before = await snapshot();
+
+    // The fold has moved the review and the entry by its first delete.
+    const outcome = await runInPoolTransaction(async () => {
+      const failing = new Proxy(getDb(), {
+        get(target, prop, receiver) {
+          if (prop !== 'delete') return Reflect.get(target, prop, receiver);
+          return () => {
+            throw new Error('simulated failure partway through the fold');
+          };
+        },
+      });
+      try {
+        await mergeCitations(failing, winner, loser, { actorUserId: userId });
+        return 'merged';
+      } catch (err) {
+        return (err as Error).message;
+      }
+    });
+
+    expect(outcome).toBe('simulated failure partway through the fold');
+    expect(await snapshot()).toEqual(before);
   });
 });
 
