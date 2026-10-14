@@ -5,7 +5,7 @@
  *   - POST /api/wiki/pages (monograph creation with a brand-new drug)
  *   - approval worker for `wiki_new` pending edits
  */
-import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { drugs, drugParameterRevisions, wikiPages } from "../../db/schema.js";
 import { getDb } from "./db.js";
 import { withDrugApplicabilityLock } from "./parameterApplicabilityStore.js";
@@ -201,8 +201,10 @@ export class ParameterApplyError extends Error {
  *
  * - changing an existing CID strands the cases keyed by the old number (or
  *   lets another drug that later takes it open in their place);
- * - taking a number that is another CID-less drug's internal id makes that
- *   drug's cases load this one ({@link assertPubchemCidShadowsNoDrug}).
+ * - taking a number that is another drug's internal id makes that drug's
+ *   bare-id cases load this one ({@link assertPubchemCidShadowsNoDrug}) — a
+ *   CID-less drug's, and a drug's that has since been given a CID but still
+ *   has cases saved under its bare id from before.
  *
  * `npm run retarget:cid` rewrites the cases and runs the same shadow check;
  * every other writer of an existing drug's CID (PATCH /api/drugs, the
@@ -241,11 +243,20 @@ export async function assertPubchemCidWritable(
 const MAX_DRUG_ID = 2147483647;
 
 /**
- * Of `cids`, the numbers that are some CID-less drug's internal id — other
- * than `takerId`, the drug that would take the number (null for a drug not
- * inserted yet). Taking any of them as a PubChem CID would make that drug's
- * bare-key saved simulator cases load the taker instead. Sorted ascending;
- * each returned number is both the CID and the shadowed drug's id.
+ * Of `cids`, the numbers that are some other drug's internal id while that
+ * id can still be a saved case's key — other than `takerId`, the drug that
+ * would take the number (null for a drug not inserted yet). Taking any of
+ * them as a PubChem CID would make that drug's bare-key saved simulator cases
+ * load the taker instead. Sorted ascending; each returned number is both the
+ * CID and the shadowed drug's id.
+ *
+ * A drug's id can be a case key while the drug is CID-less, and also after:
+ * giving a drug its first CID (PATCH, the research import's backfill) does
+ * not rewrite the cases saved under its bare id before, and they keep
+ * resolving to it only while no drug holds that number as a CID. So a drug
+ * that has a CID is still shadowed when a saved case names its bare id. Such
+ * a key cannot mean anything else: no drug has the number as a CID (it is the
+ * one being assigned), so it resolves to the drug by id today.
  *
  * The batch form exists for bulk writers (`seed:drugs`) that check a whole
  * fixture before writing any of it; single writes use
@@ -267,7 +278,15 @@ export async function findPubchemCidShadows(
     .where(
       and(
         inArray(drugs.id, candidates),
-        isNull(drugs.pubchemCid),
+        or(
+          isNull(drugs.pubchemCid),
+          sql`EXISTS (
+            SELECT 1 FROM simulator_cases c
+            WHERE c.case_data->'drugs' @> jsonb_build_array(
+              jsonb_build_object('drugId', ${drugs.id}::text)
+            )
+          )`,
+        ),
         takerId === null ? undefined : ne(drugs.id, takerId),
       ),
     );
@@ -287,7 +306,10 @@ export async function findPubchemCidShadows(
  * it; `retarget:cid` and a merge's `--adopt-cid` only replace one), a deleted
  * drug's id is not reused, and a drug created afterwards whose serial id
  * happens to reach `newCid` is keyed `drug:<id>`, never by its bare id, so it
- * has no bare-key cases for the number to capture. A stale read can therefore
+ * has no bare-key cases for the number to capture. Nor does a bare-id key
+ * appear later: a save keys a CID-less drug `drug:<id>` and a CID-bearing one
+ * by its CID, and only `retarget:cid` writes a bare number — a CID it checks
+ * the same way. A stale read can therefore
  * only refuse a write that has meanwhile become safe — never admit one that
  * has become unsafe. The taker's own lock (when it exists) is the caller's
  * business, as in `assertPubchemCidWritable`.
@@ -299,7 +321,7 @@ export async function assertPubchemCidShadowsNoDrug(
   const [shadowed] = await findPubchemCidShadows([newCid], takerId);
   if (shadowed !== undefined) {
     throw new ParameterApplyError(
-      `PubChem CID ${newCid} is also the internal id of drug ${shadowed}, which has no CID of its own; saved cases key that drug by this number and would load this one instead. Give that drug its own CID first, or run \`npm run retarget:cid\`.`,
+      `PubChem CID ${newCid} is also the internal id of drug ${shadowed}, and saved cases key that drug by this number (it has no CID of its own, or cases from before it got one still use its id); they would load this one instead. A CID-less drug needs its own CID first; cases saved under the id of a drug that already has one must be moved off it before this number can be used.`,
       409,
       "pubchem_cid_shadows_drug_id",
     );

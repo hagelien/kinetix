@@ -12,7 +12,7 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { citations, drugs } from '../../db/schema.js';
+import { citations, drugs, simulatorCases } from '../../db/schema.js';
 import {
   assertPubchemCidWritable,
   findPubchemCidShadows,
@@ -110,6 +110,37 @@ describe('findPubchemCidShadows / assertPubchemCidWritable on real SQL', () => {
     );
 
     await db.update(drugs).set({ pubchemCid: 5555 }).where(eq(drugs.id, shadowed));
+    await expect(assertPubchemCidWritable(taker, shadowed)).resolves.toBeUndefined();
+  });
+
+  it('keeps refusing it after the drug gets a CID, while cases saved under its bare id remain', async () => {
+    // Codex on #261: a first CID does not rewrite the cases saved under the
+    // drug's id before it, and those resolve CID-first — to whoever takes the
+    // number next.
+    const shadowed = await seedCidLess('annet-stoff', 'Annet stoff');
+    const taker = await seedCidLess('kokain', 'Kokain');
+    const [legacyCase] = await db
+      .insert(simulatorCases)
+      .values({
+        name: 'Gammel sak',
+        caseData: { drugs: [{ drugId: String(shadowed) }] },
+        createdBy: userId,
+      })
+      .returning({ id: simulatorCases.id });
+    await db.update(drugs).set({ pubchemCid: 5555 }).where(eq(drugs.id, shadowed));
+
+    expect(await findPubchemCidShadows([shadowed], taker)).toEqual([shadowed]);
+    await expect(assertPubchemCidWritable(taker, shadowed)).rejects.toMatchObject(SHADOW);
+    await expect(
+      insertDrug({ names: { nb: 'Ny' } as never, pubchemCid: shadowed }),
+    ).rejects.toMatchObject(SHADOW);
+
+    // A case keyed by the drug's new CID, or by `drug:<id>`, does not hold the id.
+    await db
+      .update(simulatorCases)
+      .set({ caseData: { drugs: [{ drugId: '5555' }, { drugId: `drug:${shadowed}` }] } })
+      .where(eq(simulatorCases.id, legacyCase!.id));
+    expect(await findPubchemCidShadows([shadowed], taker)).toEqual([]);
     await expect(assertPubchemCidWritable(taker, shadowed)).resolves.toBeUndefined();
   });
 });
