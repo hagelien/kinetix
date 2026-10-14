@@ -35,9 +35,13 @@ const CONCENTRATION_UNIT_PATTERN = [
  * (`1e-3 mg/L`) matched from partway through — `500 mg/L`, `3 mg/L` — and the
  * tooltip converted the wrong value. Such forms are left unannotated instead:
  * no digit (or letter, decimal mark) may come before the figure, even across
- * spaces, and no exponent marker.
+ * spaces, and no exponent marker — neither `e`/`E` nor `^`, and no
+ * multiplication sign after a digit (`5 × 10^-3`, `5 x 10-3`, `5·10-3`).
+ * Nor may it follow a digit and a dash: a real range (`1–3 mg/L`) is matched
+ * from its first figure, so a match that would start at the second one is the
+ * tail of a form already refused above (the exponent in `5 x 10-3`).
  */
-const CONCENTRATION_NUMBER_START_GUARD = String.raw`(?<!\d[\s]*|[A-Za-zÀ-ɏ_.,]|[eE][+-]?)`;
+const CONCENTRATION_NUMBER_START_GUARD = String.raw`(?<!\d[\s]*|[A-Za-z\u00C0-\u024F_.,]|[eE][+\-\u2212]?|\^[+\-\u2212]?|\d\s*[×x*·]\s*|\d\s*[\-−–]\s*)`;
 
 /**
  * Group 1: the (optionally qualified, optionally ranged) figure — it may carry

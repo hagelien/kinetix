@@ -59,6 +59,10 @@ describe('splitConcentrationText', () => {
       'grense 1e-3 mg/L',
       'grense 1E3 mg/L',
       'prøve A5 mg/L',
+      'grense 5 × 10^-3 mg/L',
+      'grense 5 x 10-3 mg/L',
+      'grense 5×10^3 mg/L',
+      'grense 5 · 10\u22123 mg/L',
     ]) {
       expect(splitConcentrationText(text)).toEqual([{ kind: 'text', text }]);
       expect(containsConcentration(text)).toBe(false);
@@ -67,10 +71,10 @@ describe('splitConcentrationText', () => {
 
   it('still reads a figure after a word, a qualifier or a range dash', () => {
     expect(
-      splitConcentrationText('nivå 5 mg/L, < 2 µg/L og 1–3 ng/mL')
+      splitConcentrationText('nivå 5 mg/L, < 2 µg/L, max 4 mg/L og 1–3 ng/mL')
         .filter((s) => s.kind === 'concentration')
         .map((s) => (s.kind === 'concentration' ? s.value : '')),
-    ).toEqual(['5', '< 2', '1–3']);
+    ).toEqual(['5', '< 2', '4', '1–3']);
   });
 
   it('agrees with containsConcentration and has no state between calls', () => {
