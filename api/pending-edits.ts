@@ -2775,8 +2775,11 @@ async function handleCreate(
     // sweeping, so the two serialize and no proposal outlives its page.
     const pageId = parsed.data.targetId;
     outcome = await runInPoolTransaction<SubmitOutcome>(async () => {
-      if (!(await lockWikiPageShared(pageId))) return { kind: 'gone' };
+      // Job lock before page lock: `mergeCitations` repoints extraction jobs
+      // before it rewrites the wiki page, so taking them in the opposite
+      // order here can deadlock against an automatic citation merge.
       if (!(await paperExtractionClaimHeld())) return { kind: 'claim_lost' };
+      if (!(await lockWikiPageShared(pageId))) return { kind: 'gone' };
       const [row] = await insertPending();
       if (!row) throw new Error('pendingEdits insert returned no row');
       return { kind: 'ok', row };
