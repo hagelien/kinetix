@@ -15,7 +15,9 @@ const {
   getDrugMetabolismMock,
   getDrugReceptorTargetsMock,
   lockDrugForEntryApplicabilityMock,
+  assertPubchemCidWritableMock,
 } = vi.hoisted(() => ({
+  assertPubchemCidWritableMock: vi.fn(),
   buildSearchKeyMock: vi.fn(),
   getDbMock: vi.fn(),
   getUserFromRequestMock: vi.fn(),
@@ -59,11 +61,17 @@ vi.mock('../../api/_lib/validate.js', async (importOriginal) => {
   };
 });
 
-vi.mock('../../api/_lib/drugs-helpers.js', () => ({
-  buildSearchKey: buildSearchKeyMock,
-  insertDrug: insertDrugMock,
-  isUniqueViolation: isUniqueViolationMock,
-}));
+vi.mock('../../api/_lib/drugs-helpers.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../api/_lib/drugs-helpers.js')>();
+  return {
+    ParameterApplyError: actual.ParameterApplyError,
+    assertPubchemCidWritable: assertPubchemCidWritableMock,
+    buildSearchKey: buildSearchKeyMock,
+    insertDrug: insertDrugMock,
+    isUniqueViolation: isUniqueViolationMock,
+  };
+});
 
 // Keep the real monograph-helpers (the DELETE path uses resolveMonographDrugCids
 // against the mocked getDb) but stub the heavyweight ensureDrugMonograph.
@@ -839,14 +847,23 @@ describe('PATCH /api/drugs', () => {
     });
   });
 
-  it('refuses to change an existing PubChem CID and points at retarget:cid', async () => {
+  it('answers 409 with the guard\'s code when the CID write is refused', async () => {
+    const { ParameterApplyError } = await import(
+      '../../api/_lib/drugs-helpers.js'
+    );
     parseAndValidateMock.mockResolvedValue({ data: { pubchemCid: 9999 } });
+    assertPubchemCidWritableMock.mockRejectedValue(
+      new ParameterApplyError(
+        'already has CID 2118; run `npm run retarget:cid`',
+        409,
+        'pubchem_cid_change_refused',
+      ),
+    );
     const existingRow = {
       id: 42,
       names: { nb: 'Alprazolam', en: 'Alprazolam' },
       nameShort: 'Xanax',
       aliases: [],
-      pubchemCid: 2118,
     };
     const { set } = mockUpdateQuery(existingRow, existingRow);
     const { res, state } = createMockResponse();
@@ -860,20 +877,20 @@ describe('PATCH /api/drugs', () => {
       res,
     );
 
+    expect(assertPubchemCidWritableMock).toHaveBeenCalledWith(42, 9999);
     expect(state.statusCode).toBe(409);
     expect(JSON.parse(state.body).code).toBe('pubchem_cid_change_refused');
-    expect(state.body).toContain('retarget:cid');
     expect(set).not.toHaveBeenCalled();
   });
 
-  it('allows setting a PubChem CID on a drug that had none', async () => {
+  it('applies a CID write the guard allows', async () => {
     parseAndValidateMock.mockResolvedValue({ data: { pubchemCid: 2118 } });
+    assertPubchemCidWritableMock.mockResolvedValue(undefined);
     const existingRow = {
       id: 42,
       names: { nb: 'Alprazolam', en: 'Alprazolam' },
       nameShort: 'Xanax',
       aliases: [],
-      pubchemCid: null,
     };
     const { set } = mockUpdateQuery(existingRow, {
       ...existingRow,

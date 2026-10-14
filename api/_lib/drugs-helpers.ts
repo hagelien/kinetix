@@ -5,7 +5,7 @@
  *   - POST /api/wiki/pages (monograph creation with a brand-new drug)
  *   - approval worker for `wiki_new` pending edits
  */
-import { and, eq, ne, sql } from "drizzle-orm";
+import { and, eq, isNull, ne, sql } from "drizzle-orm";
 import { drugs, drugParameterRevisions, wikiPages } from "../../db/schema.js";
 import { getDb } from "./db.js";
 import { withDrugApplicabilityLock } from "./parameterApplicabilityStore.js";
@@ -178,6 +178,60 @@ export class ParameterApplyError extends Error {
   ) {
     super(message);
     this.name = "ParameterApplyError";
+  }
+}
+
+/**
+ * Refuse a PubChem CID write that saved simulator cases cannot survive.
+ * Cases key a CID-bearing drug by its CID and a CID-less drug by its bare
+ * `drugs.id`, and `hydrateComponentByRouteId` tries the CID lookup first. So:
+ *
+ * - changing an existing CID strands the cases keyed by the old number (or
+ *   lets another drug that later takes it open in their place);
+ * - taking a number that is another CID-less drug's internal id makes that
+ *   drug's cases load this one.
+ *
+ * `npm run retarget:cid` rewrites the cases and runs the same shadow check;
+ * every other writer (PATCH /api/drugs, the parameter edit and its approval)
+ * goes through here. Setting a first CID that shadows nothing is safe.
+ */
+export async function assertPubchemCidWritable(
+  drugId: number,
+  newCid: number | null,
+): Promise<void> {
+  const db = getDb();
+  const [current] = await db
+    .select({ pubchemCid: drugs.pubchemCid })
+    .from(drugs)
+    .where(eq(drugs.id, drugId))
+    .limit(1);
+  const currentCid = current?.pubchemCid ?? null;
+  if (newCid === currentCid) return;
+  if (currentCid !== null) {
+    throw new ParameterApplyError(
+      `This drug already has PubChem CID ${currentCid}. Changing it here would strand saved simulator cases; run \`npm run retarget:cid\` instead.`,
+      409,
+      "pubchem_cid_change_refused",
+    );
+  }
+  if (newCid === null) return;
+  const [shadowed] = await db
+    .select({ id: drugs.id })
+    .from(drugs)
+    .where(
+      and(
+        eq(drugs.id, newCid),
+        isNull(drugs.pubchemCid),
+        ne(drugs.id, drugId),
+      ),
+    )
+    .limit(1);
+  if (shadowed) {
+    throw new ParameterApplyError(
+      `PubChem CID ${newCid} is also the internal id of drug ${shadowed.id}, which has no CID of its own; saved cases key that drug by this number and would load this one instead. Give that drug its own CID first, or run \`npm run retarget:cid\`.`,
+      409,
+      "pubchem_cid_shadows_drug_id",
+    );
   }
 }
 
@@ -382,6 +436,10 @@ export async function buildParameterUpdate(args: {
         `${spec.longLabel} must be a finite number`,
         400,
       );
+    }
+
+    if (parameter === "pubchemCid") {
+      await assertPubchemCidWritable(drugId, newValue);
     }
 
     if (spec.unique) {

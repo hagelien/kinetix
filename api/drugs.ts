@@ -34,10 +34,12 @@ import { getDb, runInPoolTransaction } from './_lib/db.js';
 import { getUserFromRequest, requestHasAuthCookie } from './_lib/auth.js';
 import { assertSameOrigin, parseAndValidate } from './_lib/validate.js';
 import {
+  assertPubchemCidWritable,
   buildSearchKey,
   insertDrug,
   isForeignKeyViolation,
   isUniqueViolation,
+  ParameterApplyError,
 } from './_lib/drugs-helpers.js';
 import {
   ensureDrugMonograph,
@@ -723,7 +725,7 @@ async function handleUpdate(
   type UpdateOutcome =
     | { kind: 'ok'; applied: Awaited<ReturnType<typeof applyDrugRowUpdate>> }
     | { kind: 'gone' }
-    | { kind: 'cid_change'; current: number }
+    | { kind: 'cid_refused'; error: ParameterApplyError }
     | { kind: 'not_applicable'; error: ParameterNotApplicableError };
   let outcome: UpdateOutcome;
   try {
@@ -736,24 +738,21 @@ async function handleUpdate(
           names: drugs.names,
           nameShort: drugs.nameShort,
           aliases: drugs.aliases,
-          pubchemCid: drugs.pubchemCid,
         })
         .from(drugs)
         .where(eq(drugs.id, id))
         .limit(1);
       if (!existing) return { kind: 'gone' };
 
-      // Saved simulator cases key a CID-bearing drug by its CID. Moving an
-      // existing CID here would strand them (or let another drug that later
-      // takes the number open in their place); `retarget:cid` rewrites the
-      // cases in step. Setting a CID on a drug that had none is safe: those
-      // cases use `drug:<id>`.
-      if (
-        data.pubchemCid !== undefined &&
-        existing.pubchemCid !== null &&
-        existing.pubchemCid !== data.pubchemCid
-      ) {
-        return { kind: 'cid_change', current: existing.pubchemCid };
+      if (data.pubchemCid !== undefined) {
+        try {
+          await assertPubchemCidWritable(id, data.pubchemCid);
+        } catch (err: unknown) {
+          if (err instanceof ParameterApplyError) {
+            return { kind: 'cid_refused', error: err };
+          }
+          throw err;
+        }
       }
 
       const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -825,13 +824,8 @@ async function handleUpdate(
     error(res, 404, 'Drug not found');
     return;
   }
-  if (outcome.kind === 'cid_change') {
-    error(
-      res,
-      409,
-      `This drug already has PubChem CID ${outcome.current}. Changing it here would strand saved simulator cases; run \`npm run retarget:cid\` instead.`,
-      'pubchem_cid_change_refused',
-    );
+  if (outcome.kind === 'cid_refused') {
+    error(res, 409, outcome.error.message, outcome.error.code);
     return;
   }
   if (outcome.kind === 'not_applicable') {
