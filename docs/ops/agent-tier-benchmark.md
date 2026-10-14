@@ -117,7 +117,10 @@ Four residual gaps are accepted for now and tracked in issue 1444:
   `pending_edits.run_session_id` and `agent_verifications.run_session_id`, and
   the benchmark counts a stamped output only for the logged run with that
   session id, so an overlapping run whose usage log failed cannot put its
-  outputs in another run's denominator. Rows without a stamp (human rows, rows
+  outputs in another run's denominator. A resubmit or revision of an edit
+  re-stamps it with the session that made it (or clears the stamp when that
+  request named none), the same moment it moves `submitted_at` (issue 228).
+  Rows without a stamp (human rows, rows
   older than migration 0150, runners that expose no session id) still fall back
   to the time window, with the old overlap risk. The id is self-declared by
   the agent (issue 215).
