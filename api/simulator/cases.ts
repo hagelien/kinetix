@@ -75,6 +75,8 @@ export interface CaseDrugResolution {
   slugIds: Map<string, number[]>;
   missingKeys: string[];
   missingSlugs: string[];
+  /** The PubChem CID of every matched drug (null when it has none). */
+  cidById: Map<number, number | null>;
 }
 
 /**
@@ -98,6 +100,7 @@ async function resolveCaseDrugRefs(
     slugIds: new Map(),
     missingKeys: [],
     missingSlugs: [],
+    cidById: new Map(),
   });
   if (keys.size === 0 && slugs.size === 0) return empty();
   // A `drug:<id>` key (#1256) names an internal id unambiguously and is
@@ -132,7 +135,9 @@ async function resolveCaseDrugRefs(
   const keyIds = new Map<string, Set<number>>([...keys].map((k) => [k, new Set()]));
   const slugIds = new Map<string, Set<number>>([...slugs].map((s) => [s, new Set()]));
   const drugIds = new Set<number>();
+  const cidById = new Map<number, number | null>();
   for (const r of rows) {
+    cidById.set(r.id, r.pubchemCid ?? null);
     // Every spelling this row could legitimately be referenced by — id and
     // pubchemCid are both globally unique, so matching on all of them can
     // never attribute a different drug's key to this row.
@@ -151,7 +156,44 @@ async function resolveCaseDrugRefs(
     slugIds: slugMap,
     missingKeys: [...keyMap].filter(([, ids]) => ids.length === 0).map(([k]) => k),
     missingSlugs: [...slugMap].filter(([, ids]) => ids.length === 0).map(([s]) => s),
+    cidById,
   };
+}
+
+/**
+ * Re-key, in place, every `drugs[].drugId` that is a drug's bare internal id
+ * while that drug has a PubChem CID, onto the CID — the key the drug picker
+ * gives such a drug today (`buildDrugComponentId`). Run under the per-drug
+ * locks, after the refs were re-resolved, so the drug's CID cannot move
+ * between this read and the write.
+ *
+ * A bare id is only ever a legacy key: a CID-less drug is saved `drug:<id>`
+ * since #1256 and a CID-bearing one by its CID, but a client loaded before
+ * then still sends a bare id. Stored as such for a drug that has a CID, the
+ * key would resolve CID-first to whichever drug later takes that number, and
+ * the PubChem CID shadow check (`findPubchemCidShadows`) — which refuses that
+ * number only while a case still holds the id — reads the cases without the
+ * drug's lock, so a save landing after its read would slip past it. With
+ * this, a bare id is written only for a CID-less drug, which the shadow check
+ * refuses unconditionally. A CID-less drug's bare key is left alone: rewriting
+ * it to `drug:<id>` is the fold's business, and it stays guarded as it is.
+ */
+function rekeyLegacyIdKeysOntoCids(
+  caseData: Record<string, unknown>,
+  resolution: Pick<CaseDrugResolution, 'keyIds' | 'cidById'>,
+): void {
+  const drugsArr = caseData.drugs;
+  if (!Array.isArray(drugsArr)) return;
+  for (const d of drugsArr) {
+    if (!d || typeof d !== 'object') continue;
+    const entry = d as Record<string, unknown>;
+    const key = entry.drugId;
+    if (typeof key !== 'string') continue;
+    const ids = resolution.keyIds.get(key);
+    if (!ids || ids.length !== 1 || String(ids[0]) !== key) continue;
+    const cid = resolution.cidById.get(ids[0]!);
+    if (cid != null && String(cid) !== key) entry.drugId = String(cid);
+  }
 }
 
 /**
@@ -241,6 +283,7 @@ async function saveCaseWithMergeLock<T>(
     }
     const drift = caseDrugResolutionDrift(resolved, locked);
     if (drift) return { kind: 'changed' as const, ...drift };
+    rekeyLegacyIdKeysOntoCids(caseData, locked);
     return { kind: 'ok' as const, result: await work() };
   });
 }
