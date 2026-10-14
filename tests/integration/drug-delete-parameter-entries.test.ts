@@ -43,7 +43,7 @@ vi.mock('../../api/_lib/auth.js', () => ({
 }));
 
 import drugsHandler from '../../api/drugs.js';
-import { drugs, parameterEntries } from '../../db/schema.js';
+import { drugs, parameterEntries, pendingEdits } from '../../db/schema.js';
 import {
   resetIntegrationDb,
   setupIntegrationDb,
@@ -305,4 +305,123 @@ describe('DELETE /api/drugs — a legacy monograph keyed by the drug\'s CID', ()
       await db.select({ id: drugs.id }).from(drugs).where(eq(drugs.id, drugId)),
     ).toHaveLength(1);
   });
+});
+
+// An open `param_entry` proposal about ANOTHER drug that names this one in its
+// dose context. JSON carries no foreign key, so the teardown counts them under
+// the drug's lock and refuses (Cmax release B, #19). The real-Postgres lock
+// suite races this against an author; here the refusal itself, for each of
+// the two columns that name a drug, in a create's `input` and an update's
+// `patch` — the four JSON paths the scan reads.
+describe('DELETE /api/drugs — open proposals naming the drug', () => {
+  type Column = 'administeredDrugId' | 'interactingDrugId';
+
+  /** A Cmax payload body naming `ref` under `column`. */
+  function doseContext(analyte: number, ref: number, column: Column) {
+    return column === 'administeredDrugId'
+      ? { administeredDrugId: ref }
+      : {
+          administeredDrugId: analyte,
+          interactingDrugId: ref,
+          coadministrationState: 'with_interacting_drug',
+        };
+  }
+
+  async function queueProposal(
+    shape: 'create' | 'update',
+    analyte: number,
+    ref: number,
+    column: Column,
+    submittedBy: number,
+    status = 'pending',
+  ): Promise<number> {
+    const refs = doseContext(analyte, ref, column);
+    const [targetId, proposedValue] =
+      shape === 'create'
+        ? [
+            analyte,
+            {
+              op: 'create',
+              input: {
+                drugId: analyte,
+                parameter: 'cmax',
+                unit: 'ng/mL',
+                matrix: 'plasma',
+                centralValue: 84,
+                centralStatistic: 'arithmetic_mean',
+                valueBasis: 'concentration',
+                doseValue: 2,
+                doseUnit: 'mg',
+                ...refs,
+              },
+            },
+          ]
+        : [await seedEntry(analyte), { op: 'update', patch: refs }];
+    const [row] = await db
+      .insert(pendingEdits)
+      .values({
+        editType: 'param_entry',
+        targetId,
+        parameter: 'cmax',
+        proposedValue: proposedValue as never,
+        status,
+        submittedBy,
+      })
+      .returning({ id: pendingEdits.id });
+    return row!.id;
+  }
+
+  it.each([
+    ['administeredDrugId', 'create'],
+    ['administeredDrugId', 'update'],
+    ['interactingDrugId', 'create'],
+    ['interactingDrugId', 'update'],
+  ] as const)(
+    'refuses while an open proposal names the drug as %s (%s proposal)',
+    async (column, shape) => {
+      const admin = await seedUser(db, { role: 'admin' });
+      const parent = await seedDrug(db, { slug: 'kokain' });
+      const metabolite = await seedDrug(db, { slug: 'benzoylekgonin' });
+      const ownEntry = await seedEntry(parent);
+      const editId = await queueProposal(shape, metabolite, parent, column, admin);
+
+      const state = await deleteDrug(parent, admin);
+
+      expect(state.statusCode).toBe(409);
+      expect(JSON.parse(state.body).code).toBe('drug_named_by_open_proposals');
+      // Refused before anything was torn down: the drug, its own entry and
+      // the proposal all survive.
+      expect(
+        await db.select({ id: drugs.id }).from(drugs).where(eq(drugs.id, parent)),
+      ).toEqual([{ id: parent }]);
+      expect(
+        await db
+          .select({ id: parameterEntries.id })
+          .from(parameterEntries)
+          .where(eq(parameterEntries.drugId, parent)),
+      ).toEqual([{ id: ownEntry }]);
+      expect(
+        await db.select({ id: pendingEdits.id }).from(pendingEdits),
+      ).toEqual([{ id: editId }]);
+    },
+  );
+
+  // The negative control: only ACTIVE proposals block. A settled one is
+  // history, not queued work, and must not keep the drug alive.
+  it.each([['administeredDrugId'], ['interactingDrugId']] as const)(
+    'does not count a settled proposal naming the drug as %s',
+    async (column) => {
+      const admin = await seedUser(db, { role: 'admin' });
+      const parent = await seedDrug(db, { slug: 'kokain' });
+      const metabolite = await seedDrug(db, { slug: 'benzoylekgonin' });
+      await queueProposal('create', metabolite, parent, column, admin, 'rejected');
+
+      const state = await deleteDrug(parent, admin);
+
+      expect(state.statusCode).toBe(200);
+      expect(await db.select().from(drugs).where(eq(drugs.id, parent))).toEqual(
+        [],
+      );
+    },
+  );
 });
