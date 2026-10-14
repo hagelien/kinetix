@@ -28,7 +28,18 @@ describe('wikiSectionSiblingConflictIds', () => {
   it('leaves pending facts alone when a section is renamed', () => {
     expect(
       wikiSectionSiblingConflictIds({ operation: 'edit', sectionId: 'sec-a' }, siblings),
-    ).toEqual([3, 7]);
+    ).toEqual([3]);
+  });
+
+  it('keeps a same-section reorder or remove approvable after a rename', () => {
+    const sameSection = [
+      section(10, 'edit', 'sec-a'),
+      section(11, 'reorder', 'sec-a'),
+      section(12, 'remove', 'sec-a'),
+    ];
+    expect(
+      wikiSectionSiblingConflictIds({ operation: 'edit', sectionId: 'sec-a' }, sameSection),
+    ).toEqual([10]);
   });
 
   it('leaves pending facts alone when a section is added', () => {
