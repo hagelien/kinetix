@@ -577,6 +577,17 @@ describe("WikiRenderer inline concentration unit tooltips", () => {
     expect(panels[1]?.textContent).toContain("0.456 mg/L");
   });
 
+  it("keeps an authored lowercase unit on screen while converting from it", () => {
+    // Primary unit equals the source unit, so the figure stays as written.
+    useAppStore.setState({ enabledUnits: ["mg/L", "µmol/L"] });
+    const { container } = render(
+      <WikiRenderer contentHtml="<p>Cut-off 5 mg/l i blod.</p>" molecularWeight={150} />,
+    );
+    expect(container.textContent).toContain("5 mg/l");
+    expect(container.textContent).not.toContain("5 mg/L");
+    expect(container.querySelectorAll(".unit-conversion-tooltip-panel").length).toBe(1);
+  });
+
   it("keeps single-separator three-decimal concentration values as decimals", () => {
     const { container } = render(
       <WikiRenderer

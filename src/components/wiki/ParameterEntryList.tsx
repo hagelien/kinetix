@@ -26,6 +26,7 @@ import {
   type ParameterSummary,
 } from '@/lib/parameterEntryAggregation';
 import { UnitTooltip } from '@/components/ui/UnitTooltip';
+import { ConcentrationText } from '@/components/ui/ConcentrationText';
 import {
   convertParameterDisplayValue,
   formatUnitSuffix,
@@ -497,9 +498,14 @@ export function ParameterEntryList({
                       // live value can check the number against the source's
                       // own words — which is the durable half of what the
                       // field is for. Set as a quotation so it does not read
-                      // as another note.
+                      // as another note. Concentrations in this prose (and in
+                      // the two notes below) keep their authored figures but
+                      // carry the unit-conversion tooltip.
                       <dd className="w-full border-l-2 border-border pl-2 text-xs italic text-muted-foreground">
-                        {row.sourceQuote}
+                        <ConcentrationText
+                          text={row.sourceQuote}
+                          molecularWeight={molecularWeight}
+                        />
                       </dd>
                     ) : null}
                     {row.observationContext ? (
@@ -507,7 +513,10 @@ export function ParameterEntryList({
                       // of what the quote above attests to, unlike the curator
                       // notes below. Shown on the published list, like the quote.
                       <dd className="w-full text-xs text-muted-foreground">
-                        {row.observationContext}
+                        <ConcentrationText
+                          text={row.observationContext}
+                          molecularWeight={molecularWeight}
+                        />
                       </dd>
                     ) : null}
                     {row.comments ? (
@@ -516,7 +525,10 @@ export function ParameterEntryList({
                       // warning live. The stable English import suffix is swapped
                       // for a localized note; any authored prefix is preserved.
                       <dd className="w-full text-xs text-muted-foreground">
-                        {formatComments(row.comments, t)}
+                        <ConcentrationText
+                          text={formatComments(row.comments, t)}
+                          molecularWeight={molecularWeight}
+                        />
                       </dd>
                     ) : null}
                     {/* A grandfathered placeholder is not real evidence: editing
