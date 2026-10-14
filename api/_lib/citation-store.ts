@@ -74,10 +74,12 @@ export interface ResolveCitationResult {
   mergedIds: number[];
   /**
    * Ids that are the same paper but were left unfolded: another merge into
-   * this survivor held the lock, or a run was extracting the duplicate under
-   * its own id. Nothing is lost — the next write declaring the handle, or
-   * `merge:split-citations`, folds them — but until then the paper is still
-   * split, so callers that care can say so.
+   * this survivor held the lock, the duplicate's own lock was held (an
+   * extraction job being queued or requeued for it, or another merge of it),
+   * or a run was extracting the duplicate under its own id. Nothing is lost —
+   * the next write declaring the handle, or `merge:split-citations`, folds
+   * them — but until then the paper is still split, so callers that care can
+   * say so.
    */
   deferredIds?: number[];
 }
@@ -326,7 +328,10 @@ export async function resolveCitation(
           deferredNotes.push(
             stats.deferredReason === 'extraction_in_flight'
               ? `#${duplicate.id} (extraction job ${stats.inFlightExtractionJobId} in progress)`
-              : `#${duplicate.id} (another merge into it held the lock)`,
+              : stats.deferredReason === 'loser_locked'
+                ? `#${duplicate.id} (its own lock was held: an extraction job being ` +
+                  `queued for it, or another merge of it)`
+                : `#${duplicate.id} (another merge into it held the lock)`,
           );
         } else mergedIds.push(duplicate.id);
       }

@@ -85,6 +85,7 @@ import {
   assertNoConflictingCohortBaselines,
   chooseSurvivingReview,
   countCitationUsage,
+  describeDeferredMerge,
   mergeCitations,
 } from '../api/_lib/citation-merge';
 import { resolveCitationCrosswalk } from '../api/_lib/citation-crosswalk';
@@ -335,12 +336,7 @@ async function main(): Promise<void> {
         });
         if (stats.deferred) {
           console.log(
-            stats.deferredReason === 'extraction_in_flight'
-              ? `    deferred #${loser.id} → #${winner.id}: extraction job` +
-                  ` ${stats.inFlightExtractionJobId} is reading #${loser.id}.` +
-                  ` Re-run once it has finished or been cancelled.`
-              : `    deferred #${loser.id} → #${winner.id}: another merge into this paper` +
-                  ` was running. Re-run to pick it up.`,
+            `    deferred #${loser.id} → #${winner.id}: ${describeDeferredMerge(stats)}`,
           );
           deferred += 1;
           continue;
@@ -452,7 +448,8 @@ async function main(): Promise<void> {
   if (deferred > 0) {
     console.log(
       `\n${deferred} merge(s) deferred: another merge into the same paper held the` +
-        ` lock, or a run was extracting the duplicate. Re-run to pick them up.`,
+        ` lock, the duplicate was locked by an extraction (re)queue or another merge,` +
+        ` or a run was extracting it. Re-run to pick them up.`,
     );
   }
   if (refused > 0) {

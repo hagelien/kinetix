@@ -112,16 +112,119 @@ const MERGE_LOCK_ATTEMPTS = 4;
 const MERGE_LOCK_BACKOFF_MS = 40;
 
 async function tryLockMergeWinner(db: Db, winnerId: number): Promise<boolean> {
+  return tryAdvisoryXactLock(db, CITATION_MERGE_LOCK_NAMESPACE, winnerId);
+}
+
+/**
+ * Serialize folding a citation away with opening an extraction job on it.
+ *
+ * {@link lockLoserExtractionJobs} locks the loser's open jobs, but a row lock
+ * only covers rows that are open when it is taken. `enqueueJob` inserts a new
+ * one, and nothing about the scan stops it: the insert commits after the scan
+ * found nothing, `claimNextJob` hands the job to a run (its row was never
+ * locked, so `SKIP LOCKED` does not skip it), and `repointExtractionJobs` then
+ * moves a claimed job and the merge deletes the citation id the run was given
+ * — the exact outcome the scan exists to refuse. A requeue (`applyJobAction`
+ * reopening a settled job) is the same hole through another door. Both have to
+ * take part in the same lock, keyed on the citation rather than on a job row
+ * the scan could not see.
+ *
+ * **Why an advisory lock and not the loser's `citations` row.** The FK does
+ * make an insert take `FOR KEY SHARE` on the referenced citation, and a
+ * `FOR UPDATE` on the loser taken up front would serialize every enqueue with
+ * no change to `enqueueJob` at all. But it would also be held, from the first
+ * statement on, against every other writer that locks or references that row —
+ * and some of them lock rows this merge touches later *first*.
+ * `attachInboxItem` holds its inbox row and then takes the citation
+ * `FOR UPDATE`; this merge would hold the citation and then reach that inbox
+ * row in `repointInboxItems`. That is a wait-for cycle PostgreSQL breaks by
+ * killing one side; the merge avoids it today only because it first locks the
+ * loser's row at the delete, after the inbox repoint. Every row-lock mode
+ * conflicts with the attach's `FOR UPDATE`, so no weaker one escapes that. An
+ * advisory key in its own namespace conflicts with nothing but the two callers
+ * that agree on it.
+ *
+ * The two sides take it differently, and both choices are about cycles:
+ *
+ * - The merge **tries**, with the same bounded retries as the winner's lock and
+ *   for the same reason: it may already hold row locks from earlier folds in
+ *   its transaction (`commitSources` runs a whole bundle in one), so waiting
+ *   here could close a cycle. If the key stays held, the merge defers as
+ *   `loser_locked` before writing anything; the holder is an enqueue or
+ *   requeue that finishes in milliseconds, or another merge folding the same
+ *   loser.
+ * - `enqueueJob` and a requeue **wait** ({@link lockCitationAgainstFold}).
+ *   Each takes the key before it writes or locks anything, so it holds nothing
+ *   anyone else could be waiting for, and its wait cannot be part of a cycle.
+ *   When the merge commits, the enqueue's next statement (a fresh snapshot
+ *   under READ COMMITTED) finds the citation gone and refuses with a 404 —
+ *   rather than inserting a job under a deleted id or racing the repoint — and
+ *   the requeue lands on the job where the merge moved it, under the winner.
+ *
+ * Taken after the winner's lock and before the job scan, so an enqueue or
+ * requeue that got in first has committed — and its open job is visible to the
+ * scan — or has not started. Like the winner's lock, it serializes nothing
+ * outside a transaction.
+ */
+const CITATION_FOLD_LOCK_NAMESPACE = 1088;
+
+async function tryLockFoldedCitation(db: Db, loserId: number): Promise<boolean> {
+  return tryAdvisoryXactLock(db, CITATION_FOLD_LOCK_NAMESPACE, loserId);
+}
+
+/**
+ * The queue side of {@link CITATION_FOLD_LOCK_NAMESPACE}: wait until no merge
+ * is folding `citationId` away, and keep any from starting until the caller's
+ * transaction ends. Must come before the transaction writes or locks anything
+ * — see the note on the namespace for why that is what keeps the wait out of
+ * any cycle — and must run inside one, or it releases at once.
+ */
+export async function lockCitationAgainstFold(
+  db: Db,
+  citationId: number,
+): Promise<void> {
+  await db.execute(
+    sql`SELECT pg_advisory_xact_lock(${CITATION_FOLD_LOCK_NAMESPACE}::int, ${citationId}::int)`,
+  );
+}
+
+async function tryAdvisoryXactLock(
+  db: Db,
+  namespace: number,
+  key: number,
+): Promise<boolean> {
   if (!isInPoolTransaction()) return true;
   for (let attempt = 0; ; attempt += 1) {
     const result = await db.execute<{ locked: boolean }>(
-      sql`SELECT pg_try_advisory_xact_lock(${CITATION_MERGE_LOCK_NAMESPACE}::int, ${winnerId}::int) AS locked`,
+      sql`SELECT pg_try_advisory_xact_lock(${namespace}::int, ${key}::int) AS locked`,
     );
     if ((result.rows[0] as { locked?: boolean } | undefined)?.locked === true) return true;
     if (attempt + 1 >= MERGE_LOCK_ATTEMPTS) return false;
     await new Promise((resolve) => {
       setTimeout(resolve, MERGE_LOCK_BACKOFF_MS * (attempt + 1));
     });
+  }
+}
+
+/**
+ * Why a merge stood aside, as the CLIs print it after "deferred #loser →
+ * #winner: ". One wording for both scripts that fold, so the reasons cannot
+ * drift apart between them.
+ */
+export function describeDeferredMerge(stats: CitationMergeStats): string {
+  switch (stats.deferredReason) {
+    case 'extraction_in_flight':
+      return (
+        `extraction job ${stats.inFlightExtractionJobId} is reading #${stats.loserId}.` +
+        ' Re-run once it has finished or been cancelled.'
+      );
+    case 'loser_locked':
+      return (
+        `#${stats.loserId} was locked by an extraction (re)queue or another merge of it.` +
+        ' Re-run to pick it up.'
+      );
+    default:
+      return 'another merge into this paper was running. Re-run to pick it up.';
   }
 }
 
@@ -185,11 +288,14 @@ export interface CitationMergeStats {
   deferred?: boolean;
   /**
    * `merge_in_progress`: another merge into this same winner held the lock, and
-   * the holder may well fold this pair itself. `extraction_in_flight`: a run is
+   * the holder may well fold this pair itself. `loser_locked`: the loser's own
+   * lock was held — an extraction job being queued or requeued for it, or
+   * another merge folding it — so its job list could not be settled (see
+   * `CITATION_FOLD_LOCK_NAMESPACE`). `extraction_in_flight`: a run is
    * extracting the loser under its id right now (`inFlightExtractionJobId`),
    * and the fold waits for that run to finish or be cancelled.
    */
-  deferredReason?: 'merge_in_progress' | 'extraction_in_flight';
+  deferredReason?: 'merge_in_progress' | 'loser_locked' | 'extraction_in_flight';
   /** The loser's claimed extraction job, when that is what deferred the merge. */
   inFlightExtractionJobId?: number;
 }
@@ -550,6 +656,14 @@ async function repointUniquePerCitation(
  * (`SKIP LOCKED`) rather than waiting on it. `NO KEY UPDATE` is enough to
  * conflict with every UPDATE that touches the row.
  *
+ * Two ways for an open job to appear *after* this scan are not rows it can
+ * lock: an enqueue inserting one, and a requeue reopening a settled one. Both
+ * take the loser's fold lock instead (`CITATION_FOLD_LOCK_NAMESPACE`), which
+ * the merge holds from before this scan. Settled jobs are deliberately not
+ * locked here: `repointExtractionJobs` reaches them after the parameter-entry
+ * and review writes, the same order a drug merge (entries, then
+ * `target_drug_ids`) takes them in, and locking them first would invert it.
+ *
  * Outside a transaction the lock releases with its own statement, as the
  * advisory lock's does, and the check is only as good as a plain read.
  */
@@ -585,7 +699,8 @@ async function lockLoserExtractionJobs(db: Db, loserId: number): Promise<number 
  *
  * A claimed one never reaches here: {@link lockLoserExtractionJobs} has
  * already deferred the whole merge, and holds the loser's queued jobs so none
- * can be claimed in between.
+ * can be claimed in between; the fold lock keeps a new one from being
+ * enqueued, or a settled one requeued, behind its back.
  */
 async function repointExtractionJobs(
   db: Db,
@@ -1216,10 +1331,13 @@ async function readCohortByIdentity(
  * Merge `loserId` into `winnerId`. Idempotent per pair (a second run finds
  * nothing left to move); a no-op when the two ids are the same.
  *
- * Runs a series of statements rather than one transaction of its own — wrap the
- * call when atomicity matters. The backfill CLI deliberately does not: it runs
- * over the neon-http driver, which has no transaction to offer, so every step
- * is written to be repeatable instead.
+ * Runs a series of statements rather than one transaction of its own, so the
+ * caller wraps it — and every caller that folds must, atomicity aside: the
+ * advisory locks and the extraction-job row locks above are transaction-scoped,
+ * and on the auto-commit client each releases with its own statement and
+ * serializes nothing. `resolveCitation`, the admin route and both CLIs open a
+ * pool transaction around their merges for that reason. Every step is still
+ * written to be repeatable, so a run that dies partway is finished by the next.
  *
  * `actorUserId` attributes the parameter-summary recompute a merge can trigger.
  * Without one the recompute cannot stamp its revisions, so it is skipped and
@@ -1248,6 +1366,15 @@ export async function mergeCitations(
   if (!(await tryLockMergeWinner(db, winnerId))) {
     stats.deferred = true;
     stats.deferredReason = 'merge_in_progress';
+    return stats;
+  }
+
+  // Before the job scan, so no enqueue or requeue for the loser can commit
+  // behind it; see the note on the namespace. A try, like the winner's: a merge that cannot
+  // take it stands aside rather than waiting.
+  if (!(await tryLockFoldedCitation(db, loserId))) {
+    stats.deferred = true;
+    stats.deferredReason = 'loser_locked';
     return stats;
   }
 

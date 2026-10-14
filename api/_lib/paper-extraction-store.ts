@@ -19,7 +19,8 @@
 import { randomBytes } from 'node:crypto';
 import { and, asc, desc, eq, gte, inArray, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
-import { getDb } from './db.js';
+import { getDb, inTransaction } from './db.js';
+import { lockCitationAgainstFold } from './citation-merge.js';
 import {
   citationPdfs,
   citations,
@@ -214,6 +215,15 @@ export async function countOpenJobs(): Promise<number> {
  * start would sit at the head of the queue forever. The `queued`/`claimed`
  * partial unique index makes a double-enqueue a clean 409 rather than two
  * agents racing to file the same facts.
+ *
+ * Runs as one transaction that first takes the citation's fold lock
+ * (`lockCitationAgainstFold`), so it never interleaves with a citation
+ * merge folding this paper away: a merge's job scan either sees this job
+ * committed or runs before it starts. Without that, a job inserted after the
+ * scan could be claimed before the merge moved it, and the merge would then
+ * delete the citation id the run had been handed. An enqueue that waited for
+ * such a merge finds the citation gone and answers 404, as it would had it
+ * arrived a moment later.
  */
 export async function enqueueJob(input: {
   citationId: number;
@@ -221,20 +231,27 @@ export async function enqueueJob(input: {
   targetDrugIds?: number[] | null;
   requestedBy: number;
 }): Promise<PaperExtractionJobRow> {
+  return inTransaction(() => enqueueJobLocked(input));
+}
+
+async function enqueueJobLocked(input: {
+  citationId: number;
+  scopeNote?: string | null;
+  targetDrugIds?: number[] | null;
+  requestedBy: number;
+}): Promise<PaperExtractionJobRow> {
   const db = getDb();
+
+  // First, before any read: the reads below decide whether to insert, so they
+  // must see the citation as a merge that held the lock left it.
+  await lockCitationAgainstFold(db, input.citationId);
 
   const [citation] = await db
     .select({ id: citations.id, type: citations.type })
     .from(citations)
     .where(eq(citations.id, input.citationId))
     .limit(1);
-  if (!citation) {
-    throw new PaperExtractionError(
-      'paper_extraction_citation_not_found',
-      'Citation not found',
-      404,
-    );
-  }
+  if (!citation) throw citationNotFound();
   // A freetext citation names no retrievable paper, so there is nothing to
   // upload and nothing to read. Same rule the PDF-request queue applies.
   if (citation.type === 'freetext') {
@@ -300,8 +317,37 @@ export async function enqueueJob(input: {
         409,
       );
     }
+    // The citation was deleted between the read above and the insert by a
+    // path that does not take the fold lock (a merge holding it is waited out
+    // before the read). Same answer as the read's.
+    if (isCitationForeignKeyViolation(err)) throw citationNotFound();
     throw err;
   }
+}
+
+function citationNotFound(): PaperExtractionError {
+  return new PaperExtractionError(
+    'paper_extraction_citation_not_found',
+    'Citation not found — it may have been merged into another citation',
+    404,
+  );
+}
+
+/** The FK from a job to its paper (the Postgres default name, from 0089). */
+const CITATION_FK = 'paper_extraction_jobs_citation_id_fkey';
+
+/** True for the FK violation raised when the job's citation no longer exists. */
+function isCitationForeignKeyViolation(err: unknown): boolean {
+  const candidates = [err, (err as { cause?: unknown } | null)?.cause];
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== 'object') continue;
+    const record = candidate as Record<string, unknown>;
+    if (record.code !== '23503') continue;
+    const constraint = record.constraint ?? record.constraint_name;
+    if (typeof constraint === 'string') return constraint === CITATION_FK;
+    return String(record.message ?? '').includes(CITATION_FK);
+  }
+  return false;
 }
 
 /** The partial unique index that allows at most one OPEN job per paper. */
@@ -445,7 +491,30 @@ export async function claimNextJob(
  * taken over by a later cycle) fails the write instead of silently
  * overwriting the newer state.
  */
-export async function applyJobAction(input: {
+export async function applyJobAction(
+  input: ApplyJobActionInput,
+): Promise<PaperExtractionJobRow | null> {
+  if (input.nextStatus !== 'queued') return applyJobActionUnlocked(input);
+  // Reopening a job (requeue, release) makes it claimable, which is what a
+  // citation merge's job scan has to be able to rule out. A requeue landing
+  // between that scan and the merge's repoint would be claimed, moved and have
+  // its citation id deleted under the run — so it takes the citation's fold
+  // lock first, like `enqueueJob`, and waits out a merge folding the paper
+  // away. The read before it locks nothing; the UPDATE after it targets the job
+  // by id, so it lands wherever the merge moved the job.
+  return inTransaction(async () => {
+    const db = getDb();
+    const [job] = await db
+      .select({ citationId: paperExtractionJobs.citationId })
+      .from(paperExtractionJobs)
+      .where(eq(paperExtractionJobs.id, input.id))
+      .limit(1);
+    if (job) await lockCitationAgainstFold(db, job.citationId);
+    return applyJobActionUnlocked(input);
+  });
+}
+
+interface ApplyJobActionInput {
   id: number;
   expectedStatuses: readonly PaperExtractionStatus[];
   nextStatus: PaperExtractionStatus;
@@ -475,7 +544,11 @@ export async function applyJobAction(input: {
    */
   clearResult?: boolean;
   now?: Date;
-}): Promise<PaperExtractionJobRow | null> {
+}
+
+async function applyJobActionUnlocked(
+  input: ApplyJobActionInput,
+): Promise<PaperExtractionJobRow | null> {
   const db = getDb();
   const now = input.now ?? new Date();
 
