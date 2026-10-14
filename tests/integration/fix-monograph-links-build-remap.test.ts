@@ -20,6 +20,7 @@ import { drugs, wikiPages } from '../../db/schema.js';
 import {
   NAME_MATCH_SQL,
   DANGLING_MONOGRAPH_PAGES_SQL,
+  legacyCidKeyedMonographsSql,
 } from '../../scripts/lib/monograph-legacy-cid-remap-sql.js';
 import {
   resetIntegrationDb,
@@ -159,5 +160,40 @@ describe('fix-monograph-links-build — a page 0148 declined stays dangling', ()
     const candidates = await danglingPageIds();
 
     expect(candidates).toContain(orphanPage);
+  });
+});
+
+describe('legacyCidKeyedMonographsSql — what a CID-retiring script must refuse on', () => {
+  async function legacyPagesFor(cid: number): Promise<number[]> {
+    const res = await db.execute(sql.raw(legacyCidKeyedMonographsSql(cid)));
+    return rowsOf(res).map((r) => r.id as number);
+  }
+
+  it('finds a declined legacy page keyed by the CID', async () => {
+    // Retiring 9881504 (retarget:cid, or a merge that frees it) would end the
+    // collision guard's protection for this page, and the next deploy would
+    // link it by title or invent a drug for it.
+    const id = await seedDrug(db, { slug: 'eslicarbazepine', pubchemCid: 9881504 });
+    await seedMonograph(id, { slug: 'eslikarbazepin', title: 'Eslikarbazepin (ny)' });
+    const legacyPage = await seedMonograph(9881504, {
+      slug: 'eslikarbazepin-gammel',
+      title: 'Eslikarbazepin',
+    });
+
+    expect(await legacyPagesFor(9881504)).toEqual([legacyPage]);
+  });
+
+  it("ignores a page whose number is some drug's id", async () => {
+    // The number is both drug A's id and drug B's CID: the page is A's modern
+    // monograph, and changing B's CID leaves it alone.
+    const a = await seedDrug(db, { slug: 'drug-a' });
+    await seedDrug(db, { slug: 'drug-b', pubchemCid: a });
+    await seedMonograph(a, { slug: 'drug-a', title: 'Drug A' });
+
+    expect(await legacyPagesFor(a)).toEqual([]);
+  });
+
+  it('refuses a non-integer CID instead of interpolating it', () => {
+    expect(() => legacyCidKeyedMonographsSql(1.5)).toThrow();
   });
 });

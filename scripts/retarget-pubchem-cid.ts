@@ -9,7 +9,7 @@
  * A CID is not a label. It is the key the offline catalog, the postmortem
  * resources and the method catalog all resolve by, it is what a saved simulator
  * case pins a drug with, and it is the address a reader follows out to PubChem.
- * So changing it is three changes at once, and this makes all three explicit:
+ * So changing it is four changes at once, and this makes all four explicit:
  *
  *   1. It asks PubChem whether the new CID actually answers to this drug's
  *      names. A correction to another wrong number is not an improvement, and
@@ -19,7 +19,10 @@
  *      internal id (see #1256) — leaving them behind does not break the case,
  *      it silently loads whatever drug now answers to the old number and
  *      simulates that one instead.
- *   3. It refuses while any repo file is still keyed by the old CID, because
+ *   3. It refuses while a legacy monograph migration 0148 could not place is
+ *      still keyed by the old CID: that page is shielded from the deploy-time
+ *      link repair only while some drug carries the number.
+ *   4. It refuses while any repo file is still keyed by the old CID, because
  *      those files seed the database: the retarget frees that number, and
  *      `seed:drugs` upserts on it while `seed:pm-concentrations` creates a drug
  *      for a CID it cannot find. Leave one and the next seed run rebuilds the
@@ -37,6 +40,10 @@ import { simulatorDrugKeyCandidates } from '../src/lib/drugComponentId';
 import { embeddedComponents } from '../data/components';
 import { lockDrugForRetarget, rewriteCaseKeysAndCid } from './lib/retarget-cid-apply';
 import { seedSourceRefusal, seedSourcesFor } from './pubchem/seed-sources';
+import {
+  legacyCidKeyedMonographsRefusal,
+  legacyCidKeyedMonographsSql,
+} from './lib/monograph-legacy-cid-remap-sql';
 
 if (!process.env.DATABASE_URL) {
   console.error('DATABASE_URL is required');
@@ -208,7 +215,18 @@ async function buildPlan(db: Db, drugId: number, to: number, lock: boolean): Pro
   }
 
   // Monographs are keyed by `drugs.id` (`wiki_pages.drug_cid`), which the CID
-  // change leaves alone, so nothing there needs repointing.
+  // change leaves alone. The exception is a legacy page still keyed by the old
+  // CID because migration 0148 could not place it: it is protected from the
+  // deploy-time repair only while some drug carries that CID, so retiring the
+  // number would expose it. Refuse until it is settled.
+  if (drug.pubchemCid != null) {
+    const legacyPages = rowsOf(
+      await db.execute(sql.raw(legacyCidKeyedMonographsSql(drug.pubchemCid))),
+    );
+    if (legacyPages.length > 0) {
+      refusals.push(legacyCidKeyedMonographsRefusal(drug.pubchemCid, legacyPages));
+    }
+  }
 
   // Saved cases pin a drug by `buildDrugComponentId` — a bare CID, or (#1256)
   // a `drug:<id>` key for a CID-less drug. A CID-less drug being given its

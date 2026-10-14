@@ -55,6 +55,10 @@ import {
 } from '../src/lib/drugComponentId';
 import { embeddedComponents } from '../data/components';
 import { seedSourceRefusal, seedSourcesFor } from './pubchem/seed-sources';
+import {
+  legacyCidKeyedMonographsRefusal,
+  legacyCidKeyedMonographsSql,
+} from './lib/monograph-legacy-cid-remap-sql';
 
 if (!process.env.DATABASE_URL) {
   console.error('DATABASE_URL is required');
@@ -859,6 +863,17 @@ async function buildPlan(
           : 'the surviving row (which has no CID — give it one first, or remove the entries)',
       ),
     );
+  }
+  // A legacy monograph still keyed by the freed CID (one migration 0148 could
+  // not place) is protected from the deploy-time repair only while some drug
+  // carries that number. Freeing it would expose the page.
+  if (freedCid != null) {
+    const legacyPages = rowsOf(
+      await db.execute(sql.raw(legacyCidKeyedMonographsSql(freedCid))),
+    );
+    if (legacyPages.length > 0) {
+      refusalList.push(legacyCidKeyedMonographsRefusal(freedCid, legacyPages));
+    }
   }
   if (adoptCid && loser.pubchemCid == null) {
     refusalList.push(
