@@ -288,3 +288,9 @@ jobs:
         run: |
           npx vitest run --config vitest.integration.config.ts \
             tests/governance/transaction/real-postgres-citation-merge-enqueue.test.ts
+      - name: Real-Postgres extraction fact vs. citation merge lock order
+        env:
+          KINETIX_TEST_PG_URL: postgres://postgres:postgres@localhost:5432/kinetix_test
+        run: |
+          npx vitest run --config vitest.integration.config.ts \
+            tests/governance/transaction/real-postgres-extraction-fact-lock-order.test.ts

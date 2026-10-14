@@ -2773,10 +2773,20 @@ async function handleCreate(
     // page's proposals and pending_edits.target_id has no foreign key. Share-lock
     // the page row around the insert; the delete takes it FOR UPDATE before
     // sweeping, so the two serialize and no proposal outlives its page.
+    //
+    // The extraction job's row lock comes first, the page's second (#223).
+    // `mergeCitations` locks the loser's open jobs before it rewrites the wiki
+    // pages citing the loser, and folds a whole duplicate group in one
+    // transaction — so a fold that defers on this run's job holds it while the
+    // next fold updates pages. Page-then-job here closed that into a cycle
+    // Postgres breaks by aborting one side (40P01). Job-then-page waits for the
+    // merge holding nothing it needs. The page check still answers first, so
+    // a deleted page reads as 404 whatever the claim's state.
     const pageId = parsed.data.targetId;
     outcome = await runInPoolTransaction<SubmitOutcome>(async () => {
+      const claimHeld = await paperExtractionClaimHeld();
       if (!(await lockWikiPageShared(pageId))) return { kind: 'gone' };
-      if (!(await paperExtractionClaimHeld())) return { kind: 'claim_lost' };
+      if (!claimHeld) return { kind: 'claim_lost' };
       const [row] = await insertPending();
       if (!row) throw new Error('pendingEdits insert returned no row');
       return { kind: 'ok', row };
