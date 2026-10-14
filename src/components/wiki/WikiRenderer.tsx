@@ -150,12 +150,15 @@ function concentrationSegmentHtml(
 ): string {
   const op = strictOperator(value);
   const parsed = parseConcentrationValue(value);
+  // Convert from the registry spelling (`mg/l` → `mg/L`); show the authored
+  // one whenever the figure stays as written.
+  const conversionUnit = canonicalConcentrationUnit(unit);
 
   // Prefer re-expressing the value in the reader's primary unit; fall back to
   // the authored figure verbatim when it can't (or shouldn't) be converted.
   const preferred = getPreferredUnitDisplay(
     parsed,
-    unit,
+    conversionUnit,
     molecularWeight,
     enabledUnits,
   );
@@ -166,8 +169,8 @@ function concentrationSegmentHtml(
 
   const rows = getConversionTooltipRows(
     parsed,
-    unit,
-    displayUnit,
+    conversionUnit,
+    preferred ? preferred.unit : conversionUnit,
     molecularWeight,
     enabledUnits,
   );
@@ -241,7 +244,7 @@ function annotateConcentrationUnits(
       const template = parsed.createElement("template");
       template.innerHTML = concentrationSegmentHtml(
         segment.value,
-        canonicalConcentrationUnit(segment.unit),
+        segment.unit,
         molecularWeight,
         enabledUnits,
         `unit-conversion-tooltip-${textNodeIndex}-${tooltipIndex}`,

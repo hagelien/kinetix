@@ -66,6 +66,9 @@ describe('splitConcentrationText', () => {
       'AUC 5 mg/L . minutes',
       'AUC 5 mg/L·døgn',
       'AUC 5 mg/L dag',
+      'Clearance 5 mg/L∕h',
+      'Clearance 5 mg/L⁄h',
+      'Clearance 5 mg/L÷h',
     ]) {
       expect(splitConcentrationText(text)).toEqual([{ kind: 'text', text }]);
       expect(containsConcentration(text)).toBe(false);
