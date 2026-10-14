@@ -2713,3 +2713,25 @@ describe('drug merge', () => {
     expect(profile!.referenceIds).toEqual([10, 20, 30]);
   });
 });
+
+describe('drug merge — a legacy monograph keyed by the loser\'s CID', () => {
+  it('refuses while freeing the loser\'s CID would expose the page', async () => {
+    // Deleting the loser frees its CID; a page migration 0148 left keyed by
+    // that CID is shielded from the per-deploy link repair only while some
+    // drug carries it.
+    const winnerId = await seedDrug(db, { slug: 'eslicarbazepine' });
+    const loserId = await seedDrug(db, { slug: 'eslicarbazepine-dup', pubchemCid: 9881504 });
+    await db.insert(wikiPages).values({
+      slug: 'eslikarbazepin-gammel',
+      title: 'Eslikarbazepin',
+      pageType: 'drug_monograph',
+      drugCid: 9881504,
+      createdBy: userId,
+      updatedBy: userId,
+    });
+
+    const conflicts = await dataConflictsFor(winnerId, loserId);
+
+    expect(conflicts.map((c) => c.message?.code)).toContain('dataConflict.legacyCidMonograph');
+  });
+});

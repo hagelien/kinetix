@@ -56,6 +56,10 @@ import {
   wikiRevisions,
 } from '../../db/schema.js';
 import type { getDb } from './db.js';
+import {
+  findLegacyCidKeyedMonographs,
+  legacyCidMonographRefusal,
+} from './monograph-helpers.js';
 import { buildSearchKey } from './drugs-helpers.js';
 import {
   recomputeSummariesForDrug,
@@ -1120,6 +1124,26 @@ export async function detectDataConflicts(
         fallback: 'the loser has more than one monograph page keyed by its id. The merge would delete only one, leaving the other attached to a deleted drug. Delete or merge the extra page(s) first, then merge.',
       },
     });
+  }
+  // The loser's row goes, and with it the PubChem CID it holds. A legacy
+  // monograph migration 0148 left keyed by that CID is shielded from the
+  // per-deploy link repair only while some drug carries the number; freeing
+  // it would let the next deploy relink the page by title or recreate a drug
+  // for it, quietly undoing the merge.
+  if (loser.pubchemCid != null) {
+    const legacyPages = await findLegacyCidKeyedMonographs(db, loser.pubchemCid);
+    if (legacyPages.length > 0) {
+      const pages = legacyPages.map((p) => `/${p.slug}`).join(', ');
+      conflicts.push({
+        table: 'wiki_pages',
+        identity: `${legacyPages.length} legacy monograph page(s) keyed by loser CID ${loser.pubchemCid}`,
+        message: {
+          code: 'dataConflict.legacyCidMonograph',
+          params: { cid: loser.pubchemCid, pages },
+          fallback: legacyCidMonographRefusal(loser.pubchemCid, legacyPages),
+        },
+      });
+    }
   }
   const winnerPagesRows = await db.execute<{ n: number }>(sql`
     SELECT count(*)::int AS n FROM wiki_pages

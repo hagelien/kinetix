@@ -36,6 +36,46 @@ type Db = ReturnType<typeof getDb>;
 const EMPTY_DOC = { type: 'doc', content: [] } as const;
 
 /**
+ * Monograph pages still keyed by a legacy PubChem CID: `drug_monograph` rows
+ * whose `drug_cid` is `cid` while no drug has `cid` as its `drugs.id`.
+ * Migration 0148 leaves such a page where it cannot place it unambiguously
+ * (its drug already had a monograph, or two pages shared the CID), and the
+ * per-deploy link repair (`scripts/fix-monograph-links-build.ts`) keeps its
+ * hands off it only while some drug still carries `cid` as its PubChem CID.
+ *
+ * So every path that retires a CID — deleting or merging away the drug that
+ * holds it, or moving it with `retarget:cid` — must refuse while this returns
+ * rows. Otherwise the next deploy links the page by title or creates a drug
+ * for it, quietly reversing the delete or merge. Pass the transaction handle
+ * so the check sees the same rows the retiring write does.
+ */
+export async function findLegacyCidKeyedMonographs(
+  db: Db,
+  cid: number,
+): Promise<{ id: number; slug: string }[]> {
+  const res = await db.execute<{ id: number; slug: string }>(sql`
+    SELECT wp.id, wp.slug FROM wiki_pages wp
+    WHERE wp.page_type = 'drug_monograph'
+      AND wp.drug_cid = ${cid}
+      AND NOT EXISTS (SELECT 1 FROM drugs WHERE id = ${cid})`);
+  return res.rows.map((r) => ({ id: Number(r.id), slug: String(r.slug) }));
+}
+
+/** English refusal for {@link findLegacyCidKeyedMonographs} rows (scripts and API logs). */
+export function legacyCidMonographRefusal(
+  cid: number,
+  pages: { slug: string }[],
+): string {
+  return (
+    `${pages.length} monograph page(s) are still keyed by the legacy CID ${cid} ` +
+    `(${pages.map((p) => `/${p.slug}`).join(', ')}), which migration 0148 could ` +
+    `not place. Retiring the CID would leave them unprotected, and the next deploy ` +
+    `would link them by title or create a drug for them. Settle them with ` +
+    `scripts/fix-monograph-drug-links.ts first`
+  );
+}
+
+/**
  * The `drugs.id` that owns a monograph's `wiki_pages.drug_cid`, or null when
  * no drug does (the page is dangling). Despite its name the column holds
  * `drugs.id` and nothing else — the PubChem CIDs the retired monograph seed

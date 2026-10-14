@@ -41,9 +41,9 @@ import { embeddedComponents } from '../data/components';
 import { lockDrugForRetarget, rewriteCaseKeysAndCid } from './lib/retarget-cid-apply';
 import { seedSourceRefusal, seedSourcesFor } from './pubchem/seed-sources';
 import {
-  legacyCidKeyedMonographsRefusal,
-  legacyCidKeyedMonographsSql,
-} from './lib/monograph-legacy-cid-remap-sql';
+  findLegacyCidKeyedMonographs,
+  legacyCidMonographRefusal,
+} from '../api/_lib/monograph-helpers';
 
 if (!process.env.DATABASE_URL) {
   console.error('DATABASE_URL is required');
@@ -220,11 +220,9 @@ async function buildPlan(db: Db, drugId: number, to: number, lock: boolean): Pro
   // deploy-time repair only while some drug carries that CID, so retiring the
   // number would expose it. Refuse until it is settled.
   if (drug.pubchemCid != null) {
-    const legacyPages = rowsOf(
-      await db.execute(sql.raw(legacyCidKeyedMonographsSql(drug.pubchemCid))),
-    );
+    const legacyPages = await findLegacyCidKeyedMonographs(db, drug.pubchemCid);
     if (legacyPages.length > 0) {
-      refusals.push(legacyCidKeyedMonographsRefusal(drug.pubchemCid, legacyPages));
+      refusals.push(legacyCidMonographRefusal(drug.pubchemCid, legacyPages));
     }
   }
 

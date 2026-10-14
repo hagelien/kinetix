@@ -56,9 +56,9 @@ import {
 import { embeddedComponents } from '../data/components';
 import { seedSourceRefusal, seedSourcesFor } from './pubchem/seed-sources';
 import {
-  legacyCidKeyedMonographsRefusal,
-  legacyCidKeyedMonographsSql,
-} from './lib/monograph-legacy-cid-remap-sql';
+  findLegacyCidKeyedMonographs,
+  legacyCidMonographRefusal,
+} from '../api/_lib/monograph-helpers';
 
 if (!process.env.DATABASE_URL) {
   console.error('DATABASE_URL is required');
@@ -868,11 +868,9 @@ async function buildPlan(
   // not place) is protected from the deploy-time repair only while some drug
   // carries that number. Freeing it would expose the page.
   if (freedCid != null) {
-    const legacyPages = rowsOf(
-      await db.execute(sql.raw(legacyCidKeyedMonographsSql(freedCid))),
-    );
+    const legacyPages = await findLegacyCidKeyedMonographs(db, freedCid);
     if (legacyPages.length > 0) {
-      refusalList.push(legacyCidKeyedMonographsRefusal(freedCid, legacyPages));
+      refusalList.push(legacyCidMonographRefusal(freedCid, legacyPages));
     }
   }
   if (adoptCid && loser.pubchemCid == null) {

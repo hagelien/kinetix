@@ -260,8 +260,13 @@ function mockDeleteQuery(existingRow: unknown, atlasCount = 0) {
   const del = vi.fn().mockReturnValue({ where: deleteWhere });
 
   // The teardown's in-transaction count of open proposals naming this drug in
-  // their dose context (Cmax release B): none in these scenarios.
-  const execute = vi.fn().mockResolvedValue({ rows: [{ n: 0 }] });
+  // their dose context (Cmax release B), and its lookup of legacy monographs
+  // keyed by the CID the delete frees: none of either in these scenarios.
+  const execute = vi.fn().mockImplementation(async (query: unknown) =>
+    JSON.stringify(query).includes('drug_monograph')
+      ? { rows: [] }
+      : { rows: [{ n: 0 }] },
+  );
 
   getDbMock.mockReturnValue({ select, delete: del, execute });
   return { select, delete: del, deleteWhere, execute };

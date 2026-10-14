@@ -29,39 +29,6 @@ export const LEGACY_CID_COLLISION_SQL = `
   )
 `;
 
-/**
- * The pages {@link LEGACY_CID_COLLISION_SQL} protects that are keyed by `cid`:
- * `drug_monograph` pages whose `drug_cid` is that number while no drug has it
- * as its `drugs.id`. That protection lasts only while some drug still carries
- * `cid` as its PubChem CID, so a script that retires a CID (a retarget, or a
- * merge that frees one) must refuse while this returns rows — otherwise the
- * next deploy's repair attaches the page by title or invents a drug for it.
- * `cid` must be an integer; it is interpolated.
- */
-export function legacyCidKeyedMonographsSql(cid: number): string {
-  if (!Number.isSafeInteger(cid)) throw new Error(`not an integer CID: ${cid}`);
-  return `
-  SELECT wp.id, wp.slug FROM wiki_pages wp
-  WHERE wp.page_type = 'drug_monograph'
-    AND wp.drug_cid = ${cid}
-    AND NOT EXISTS (SELECT 1 FROM drugs WHERE id = ${cid})
-`;
-}
-
-/** The refusal both CID-retiring scripts give for {@link legacyCidKeyedMonographsSql} rows. */
-export function legacyCidKeyedMonographsRefusal(
-  cid: number,
-  pages: Record<string, unknown>[],
-): string {
-  return (
-    `${pages.length} monograph page(s) are still keyed by the legacy CID ${cid} ` +
-    `(${pages.map((p) => `/${String(p.slug)}`).join(', ')}), which migration 0148 ` +
-    `could not place. Retiring the CID would leave them unprotected, and the next ` +
-    `deploy would attach them by title or create a drug for them. Settle them with ` +
-    `scripts/fix-monograph-drug-links.ts first`
-  );
-}
-
 // Case 1: NULL or dangling drug_cid but title matches an existing drug name
 // in any language slot of the `names` jsonb.
 export const NAME_MATCH_SQL = `

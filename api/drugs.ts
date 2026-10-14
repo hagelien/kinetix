@@ -39,7 +39,11 @@ import {
   isForeignKeyViolation,
   isUniqueViolation,
 } from './_lib/drugs-helpers.js';
-import { ensureDrugMonograph } from './_lib/monograph-helpers.js';
+import {
+  ensureDrugMonograph,
+  findLegacyCidKeyedMonographs,
+  legacyCidMonographRefusal,
+} from './_lib/monograph-helpers.js';
 import { drugAliasesSchema, drugNamesSchema } from './_lib/schemas.js';
 import { normalizeAliases } from '../src/lib/drugNames.js';
 import { lockDrugForEntryApplicability } from './_lib/parameterApplicabilityStore.js';
@@ -820,6 +824,16 @@ async function handleUpdate(
 const DRUG_SCOPED_EDIT_TYPES = ['parameter', 'metabolism', 'receptor_targets'];
 
 /** Thrown inside the delete transaction to roll it back and answer 409. */
+class LegacyCidMonographError extends Error {
+  constructor(
+    readonly cid: number,
+    readonly pages: { slug: string }[],
+  ) {
+    super('legacy monograph keyed by the CID this delete would free');
+  }
+}
+
+/** Thrown inside the delete transaction to roll it back and answer 409. */
 class NestedProposalReferenceError extends Error {
   constructor(readonly count: number) {
     super('drug named by open proposals');
@@ -994,6 +1008,21 @@ async function handleDelete(
       );
       if (nested > 0) throw new NestedProposalReferenceError(nested);
 
+      // Deleting the row frees its PubChem CID. A legacy monograph migration
+      // 0148 left keyed by that CID is shielded from the per-deploy link
+      // repair only while some drug carries the number, so freeing it would
+      // let the next deploy relink the page by title or recreate a drug for
+      // it. Refuse until the page is settled.
+      if (existing.pubchemCid != null) {
+        const legacyPages = await findLegacyCidKeyedMonographs(
+          tx,
+          existing.pubchemCid,
+        );
+        if (legacyPages.length > 0) {
+          throw new LegacyCidMonographError(existing.pubchemCid, legacyPages);
+        }
+      }
+
       // Only delete monographs that actually belong to this drug: the pages
       // keyed by its id. Never by its PubChem CID — that number can be a
       // *different* drug's id, and a page keyed by it is that drug's monograph
@@ -1104,6 +1133,15 @@ async function handleDelete(
       message: err instanceof Error ? err.message : String(err),
       cause: (err as { cause?: unknown })?.cause,
     });
+    if (err instanceof LegacyCidMonographError) {
+      error(
+        res,
+        409,
+        legacyCidMonographRefusal(err.cid, err.pages),
+        'drug_cid_keys_legacy_monograph',
+      );
+      return;
+    }
     if (err instanceof NestedProposalReferenceError) {
       error(
         res,

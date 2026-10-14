@@ -20,7 +20,6 @@ import { drugs, wikiPages } from '../../db/schema.js';
 import {
   NAME_MATCH_SQL,
   DANGLING_MONOGRAPH_PAGES_SQL,
-  legacyCidKeyedMonographsSql,
 } from '../../scripts/lib/monograph-legacy-cid-remap-sql.js';
 import {
   resetIntegrationDb,
@@ -29,6 +28,7 @@ import {
   type IntegrationDb,
 } from './setup/harness.js';
 import { seedDrug, seedUser } from './setup/seed.js';
+import { findLegacyCidKeyedMonographs } from '../../api/_lib/monograph-helpers.js';
 
 let db: IntegrationDb;
 let userId: number;
@@ -163,10 +163,13 @@ describe('fix-monograph-links-build — a page 0148 declined stays dangling', ()
   });
 });
 
-describe('legacyCidKeyedMonographsSql — what a CID-retiring script must refuse on', () => {
+describe('findLegacyCidKeyedMonographs — what a CID-retiring path must refuse on', () => {
   async function legacyPagesFor(cid: number): Promise<number[]> {
-    const res = await db.execute(sql.raw(legacyCidKeyedMonographsSql(cid)));
-    return rowsOf(res).map((r) => r.id as number);
+    const rows = await findLegacyCidKeyedMonographs(
+      db as unknown as Parameters<typeof findLegacyCidKeyedMonographs>[0],
+      cid,
+    );
+    return rows.map((r) => r.id);
   }
 
   it('finds a declined legacy page keyed by the CID', async () => {
@@ -191,9 +194,5 @@ describe('legacyCidKeyedMonographsSql — what a CID-retiring script must refuse
     await seedMonograph(a, { slug: 'drug-a', title: 'Drug A' });
 
     expect(await legacyPagesFor(a)).toEqual([]);
-  });
-
-  it('refuses a non-integer CID instead of interpolating it', () => {
-    expect(() => legacyCidKeyedMonographsSql(1.5)).toThrow();
   });
 });
