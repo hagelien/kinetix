@@ -1,0 +1,119 @@
+name: agent-credit-burst
+
+# Runs the same T1/T2/T3 drug-db agents as the Claude Code Routines
+# (agents/remote-routine-setup.md), but billed to Anthropic API credits instead
+# of the claude.ai plan. Manual only: Actions → agent-credit-burst → Run workflow.
+#
+# Same prompts, same agent identities, same tool discipline as the Routines
+# (Bash, Read, WebSearch, WebFetch only — agents/drug-db-maintainer.md §0).
+# Each identity runs its cycles back-to-back in one job, never two at once, so
+# it cannot collide with itself. Pause that identity's Routine while this runs.
+#
+# Secrets (Settings → Secrets and variables → Actions):
+#   ANTHROPIC_API_KEY                required
+#   KINETIX_TOKEN_PRODUCER           T1 producer's kxat_ token (mid tier)
+#   KINETIX_TOKEN_REVIEWER           T2 reviewer's kxat_ token (flagship tier)
+#   KINETIX_TOKEN_ADJUDICATOR_A/_B   optional T3 panel seats (flagship tier)
+# A role whose token secret is absent is skipped.
+#
+# Optional variables: KINETIX_BASE_URL, CLAUDE_CODE_AGENT_HOOKS_DISABLED, and
+# PRODUCER_MODEL / REVIEWER_MODEL / ADJUDICATOR_A_MODEL / ADJUDICATOR_B_MODEL.
+# A model must match its identity's agents.model_tier (remote-routine-setup §2).
+#
+# This repository is public, so run logs are public. Only each cycle's final
+# end-of-cycle paragraph and its cost are printed; delete the run afterwards
+# if even that should not stay up.
+
+on:
+  workflow_dispatch:
+    inputs:
+      total_budget_usd:
+        description: "Total API spend across all agents, in USD"
+        default: "190"
+        required: true
+      hours:
+        description: "Stop starting new cycles after this many hours (max 5.5)"
+        default: "5.5"
+        required: true
+      dry_run:
+        description: "Dry run (agents plan but write nothing)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - id: plan
+        env:
+          HAS_PRODUCER: ${{ secrets.KINETIX_TOKEN_PRODUCER != '' }}
+          HAS_REVIEWER: ${{ secrets.KINETIX_TOKEN_REVIEWER != '' }}
+          HAS_ADJ_A: ${{ secrets.KINETIX_TOKEN_ADJUDICATOR_A != '' }}
+          HAS_ADJ_B: ${{ secrets.KINETIX_TOKEN_ADJUDICATOR_B != '' }}
+          TOTAL: ${{ inputs.total_budget_usd }}
+        run: |
+          # Budget weights: the T2 reviewer's shadow audit (escalation §2) is
+          # the most valuable use; the T3 case feed is rare, so seats get less.
+          roles='[]'
+          add() { roles=$(jq -c --arg r "$1" --argjson w "$2" '. + [{role: $r, weight: $w}]' <<<"$roles"); }
+          [ "$HAS_PRODUCER" = true ] && add producer 2
+          [ "$HAS_REVIEWER" = true ] && add reviewer 3
+          [ "$HAS_ADJ_A" = true ] && add adjudicator-a 1
+          [ "$HAS_ADJ_B" = true ] && add adjudicator-b 1
+          if [ "$roles" = '[]' ]; then
+            echo "::error::No KINETIX_TOKEN_* secrets are set; nothing to run."
+            exit 1
+          fi
+          matrix=$(jq -c --argjson total "$TOTAL" '
+            (map(.weight) | add) as $sum
+            | map(. + {budget: (($total * .weight / $sum) * 100 | floor / 100)})
+            | {include: .}' <<<"$roles")
+          echo "$matrix" | jq .
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  run:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
+    concurrency:
+      group: agent-credit-burst-${{ matrix.role }}
+      cancel-in-progress: false
+    env:
+      ROLE: ${{ matrix.role }}
+      BUDGET: ${{ matrix.budget }}
+      HOURS: ${{ inputs.hours }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      KINETIX_BASE_URL: ${{ vars.KINETIX_BASE_URL || 'https://www.kinetix.no' }}
+      KINETIX_AGENT_DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+      CLAUDE_CODE_AGENT_HOOKS_DISABLED: ${{ vars.CLAUDE_CODE_AGENT_HOOKS_DISABLED }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Install Claude Code and Poppler
+        run: |
+          npm install -g @anthropic-ai/claude-code@2.1.299
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends poppler-utils
+      - name: Run cycles until budget or time runs out
+        env:
+          TOKEN_PRODUCER: ${{ secrets.KINETIX_TOKEN_PRODUCER }}
+          TOKEN_REVIEWER: ${{ secrets.KINETIX_TOKEN_REVIEWER }}
+          TOKEN_ADJ_A: ${{ secrets.KINETIX_TOKEN_ADJUDICATOR_A }}
+          TOKEN_ADJ_B: ${{ secrets.KINETIX_TOKEN_ADJUDICATOR_B }}
+          PRODUCER_MODEL: ${{ vars.PRODUCER_MODEL || 'claude-sonnet-5-5' }}
+          REVIEWER_MODEL: ${{ vars.REVIEWER_MODEL || 'claude-opus-5-5' }}
+          ADJ_A_MODEL: ${{ vars.ADJUDICATOR_A_MODEL || 'claude-opus-5-5' }}
+          ADJ_B_MODEL: ${{ vars.ADJUDICATOR_B_MODEL || 'claude-fable-5-1' }}
+        run: scripts/agent-credit-burst.sh
