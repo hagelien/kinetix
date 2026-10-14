@@ -37,6 +37,7 @@ import {
 } from '../../src/lib/citationHandles.js';
 import {
   doseContextValuesForWrite,
+  lockCitationMembershipsShared,
   recomputeSummariesForDrug,
 } from './parameter-entries-store.js';
 import { parameterDoseContextMode } from '../../src/lib/drugParameters.js';
@@ -323,8 +324,26 @@ export async function runImport(
   // across both seeders also makes their view of applicability consistent —
   // the value and its source entries cannot disagree about whether the pair is
   // allowed.
+  //
+  // First under that lock, before either seeder locks a row: the shared
+  // citation-membership key of every paper a source value may file an entry
+  // against (#254; `CITATION_MEMBERSHIP_LOCK_NAMESPACE`). Every entry insert
+  // takes it, and `seedParameterEntries` inserts directly. Taken here rather
+  // than at each insert because by then this transaction may hold rows a fold
+  // of the same paper rewrites — an entry `rewriteExistingEntry` rewrote, the
+  // proposals it marked conflicted — and a wait there, for a fold that holds
+  // the key and is queued on those rows, would be a cycle. Waiting while
+  // holding only the drug lock cannot be.
   await withDrugApplicabilityLock(drugId, async () => {
     const tx = getDb();
+    await lockCitationMembershipsShared(
+      data.parameters.flatMap((p) =>
+        p.sourceValues.flatMap((sv) => {
+          const citationId = citationMap.get(sv.sourceId);
+          return citationId == null ? [] : [citationId];
+        }),
+      ),
+    );
     await seedParameters(tx, drugId, data, citationMap, opts, stats);
     await seedParameterEntries(tx, drugId, data, citationMap, opts, stats);
   });
@@ -1197,6 +1216,8 @@ async function seedParameterEntries(
         continue;
       }
 
+      // No membership key taken here: `runImport` took it for every cited
+      // paper before this transaction locked its first row (#254).
       await db.insert(parameterEntries).values({
         drugId,
         parameter: p.parameter,

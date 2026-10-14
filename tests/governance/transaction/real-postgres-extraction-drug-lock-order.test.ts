@@ -812,7 +812,10 @@ describe.skipIf(!hasRealPostgres)(
     // up-front scan covers the entries citing its paper when it starts; a
     // drug whose first such entry lands after it is reached only at the
     // recompute, by which point the re-score holds the review row — the row a
-    // fold that saw the new entry, and so holds that drug, is waiting for.
+    // fold that saw the new entry, and so holds that drug, was waiting for.
+    // Since #254 the re-score also holds the paper's citation-membership key
+    // from before its first write, which keeps that fold out altogether; the
+    // late try remains for whatever else holds the drug.
     describe('a drug whose first entry citing the paper lands mid-re-score', () => {
       /** A duplicate whose read-in-full review the fold moves onto the winner. */
       let loser: number;
@@ -888,63 +891,90 @@ describe.skipIf(!hasRealPostgres)(
         'stands the re-score aside with nothing written, instead of deadlocking against the fold',
         async () => {
           // Pauses the re-score at its review row: after its up-front scan
-          // (which finds no entry, so no drug), before it holds anything.
+          // (which finds no entry, so no drug) and its try of the paper's
+          // citation-membership key (#254), before it writes anything.
           const reviewHold = holdWinnerReview();
           await reviewHold.taken;
           const rescoring = rescore();
           await blockedOn('paper_reviews');
 
-          // Another writer's entry on the late drug, citing the winner,
-          // commits; a fold of the loser sees it, takes that drug, and queues
-          // on the winner's review row behind the re-score.
+          // An entry on the late drug, citing the winner, that the scan
+          // missed — one that committed between the re-score's drug scan and
+          // its try of the key, written here by hand since a writer going
+          // through the store would now wait for that key.
           await seedEntry(lateDrug, winner);
-          const folding = runInPoolTransaction(() =>
+
+          // A fold of the loser used to see that entry, take the late drug,
+          // and queue on the winner's review row behind the re-score — which
+          // then needed the drug the fold held. The membership key the
+          // re-score holds now stands the fold aside before it scans or
+          // writes anything, so it never holds the drug or waits on the row.
+          const fold = await runInPoolTransaction(() =>
             mergeCitations(getDb(), winner, loser, { actorUserId: authorId }),
           );
-          await blockedCount('paper_reviews', 2);
+          expect(fold).toMatchObject({
+            deferred: true,
+            deferredReason: 'entry_in_flight',
+            rowsRepointed: 0,
+            reviewsDropped: 0,
+          });
+
+          // Any other writer holding the late drug still turns the re-score's
+          // late try into a refusal rather than a wait behind the review row.
+          const drugTaken = gate();
+          const drugRelease = gate();
+          const drugHold = runInPoolTransaction(async () => {
+            await getDb().execute(sql`SELECT pg_advisory_xact_lock(${lateDrug}::bigint)`);
+            drugTaken.open();
+            await drugRelease.wait;
+          });
+          held.push({ release: drugRelease.open, done: drugHold });
+          await drugTaken.wait;
           reviewHold.release();
 
-          const [rescoreOutcome, foldOutcome] = await Promise.allSettled([rescoring, folding]);
-          for (const outcome of [rescoreOutcome, foldOutcome]) {
-            if (outcome.status === 'rejected') {
-              expect(sqlState(outcome.reason)).not.toBe(DEADLOCK_DETECTED);
-            }
-          }
-          expect(rescoreOutcome.status).toBe('rejected');
-          expect((rescoreOutcome as PromiseRejectedResult).reason).toBeInstanceOf(
-            PaperReviewDrugLockedError,
+          const rescoreOutcome = await rescoring.then(
+            () => null,
+            (err: unknown) => err,
           );
-          expect((rescoreOutcome as PromiseRejectedResult).reason).toMatchObject({
-            citationId: winner,
-            drugId: lateDrug,
-          });
-          expect(foldOutcome.status).toBe('fulfilled');
-          const fold = (foldOutcome as PromiseFulfilledResult<CitationMergeStats>).value;
-          expect(fold.deferred).toBeUndefined();
-          expect(fold).toMatchObject({ reviewsDropped: 1, summaryRecompute: 'ran' });
+          expect(sqlState(rescoreOutcome)).not.toBe(DEADLOCK_DETECTED);
+          expect(rescoreOutcome).toBeInstanceOf(PaperReviewDrugLockedError);
+          expect(rescoreOutcome).toMatchObject({ citationId: winner, drugId: lateDrug });
 
-          // Nothing of the re-score landed: the winner kept the loser's
-          // read-in-full review, and no revision carries the re-score's text.
+          // Nothing of the re-score landed, and nothing of the fold: both
+          // reviews stand as they were, and no revision carries the
+          // re-score's text.
           const reviews = await db
             .select({ citationId: paperReviews.citationId, overallScore: paperReviews.overallScore })
             .from(paperReviews);
-          expect(reviews).toEqual([{ citationId: winner, overallScore: 70 }]);
+          expect(reviews.sort((a, b) => a.citationId - b.citationId)).toEqual([
+            { citationId: winner, overallScore: 50 },
+            { citationId: loser, overallScore: 70 },
+          ]);
           const revisions = await db
             .select({ id: paperReviewRevisions.id })
             .from(paperReviewRevisions)
             .where(eq(paperReviewRevisions.reviewMarkdown, RESCORED));
           expect(revisions).toEqual([]);
 
-          // Submitted again, the re-score records and recomputes the drug.
+          // Submitted again once the drug is free, the re-score records and
+          // recomputes the drug; the fold then goes through.
+          drugRelease.open();
+          await drugHold;
           await rescore();
           const after = await db
             .select({ citationId: paperReviews.citationId, overallScore: paperReviews.overallScore })
-            .from(paperReviews);
+            .from(paperReviews)
+            .where(eq(paperReviews.citationId, winner));
           expect(after).toEqual([{ citationId: winner, overallScore: 60 }]);
           const summaries = await db
             .select({ drugId: drugParameters.drugId })
             .from(drugParameters);
           expect(summaries.map((row) => row.drugId)).toEqual([lateDrug]);
+          const refold = await runInPoolTransaction(() =>
+            mergeCitations(getDb(), winner, loser, { actorUserId: authorId }),
+          );
+          expect(refold.deferred).toBeUndefined();
+          expect(refold).toMatchObject({ reviewsDropped: 1, summaryRecompute: 'ran' });
         },
         LOCK_TIMEOUT_MS * 3,
       );

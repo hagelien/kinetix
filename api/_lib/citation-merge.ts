@@ -46,6 +46,7 @@ import {
 // absorb.
 import { isUniqueViolation } from './drugs-helpers.js';
 import {
+  CITATION_MEMBERSHIP_LOCK_NAMESPACE,
   findParametersCitingCitation,
   recomputeSummariesCitingCitation,
 } from './parameter-entries-store.js';
@@ -192,6 +193,28 @@ export async function lockCitationAgainstFold(
 }
 
 /**
+ * The exclusive side of the citation-membership key
+ * ({@link CITATION_MEMBERSHIP_LOCK_NAMESPACE}, #254), with the merge's bounded
+ * retries: while held, no new entry citing `citationId` can be written, so a
+ * scan of the entries citing it is the whole membership until this
+ * transaction ends. Taken by the two writes that move every citing entry's
+ * aggregation weight and then recompute the drugs the scan found — a fold
+ * ({@link mergeCitations}, on both rows) and a re-score (`recordPaperReview`).
+ *
+ * A try, never a wait: either may already hold rows an entry writer is queued
+ * behind (a fold earlier folds' job rows and rewrites, an approval its
+ * `pending_edits` row), and the entry writers wait for this key, so waiting
+ * for them could close a cycle. The writer holding it shared is finishing one
+ * insert or update under its own drug lock, so the retries usually outlast it;
+ * one that does not stands the caller aside before it has written anything.
+ * Succeeds outside a pool transaction, like the other tries, where it would
+ * hold nothing.
+ */
+export async function tryLockCitationMembership(db: Db, citationId: number): Promise<boolean> {
+  return tryAdvisoryXactLock(db, CITATION_MEMBERSHIP_LOCK_NAMESPACE, citationId);
+}
+
+/**
  * The per-drug lock every parameter-summary recompute takes
  * (`lockDrugForRecompute` in `parameter-entries-store`, the same key as
  * `lockDrugForEntryApplicability`): the single-argument form on the drug id.
@@ -242,6 +265,27 @@ export async function lockCitationAgainstFold(
  * that holds nothing yet, so where they sit relative to a drug lock cannot form
  * a cycle. The two-argument keys and this single-argument one are distinct
  * lock spaces in Postgres, so a drug id never collides with a namespace pair.
+ *
+ * **The citation-membership key (1089, #254) sits between the two sides.**
+ * Entry writers take it shared, waiting, after their drug locks and before any
+ * row lock: drug locks → 1089 shared → the entry row (an approval takes it in
+ * its preflight, before the `pending_edits` row; a research import before its
+ * first seeded row). A fold takes it exclusively by try, on the winner and the
+ * loser: 1087 → 1088 → 1089 → the drug tries → job rows → its writes. A
+ * re-score takes the drug locks it needs (waiting, or trying under
+ * `drugLocks: 'try'`), then tries 1089, then writes the review row. No cycle
+ * can run through it: a writer waiting for it shared holds drug locks and no
+ * row, and the exclusive holders never wait for it — and, having taken it,
+ * never wait for a drug lock they do not hold either: the fold only tries, and
+ * a re-score waits for drug locks only before it, and only under
+ * `drugLocks: 'wait'`, where it holds nothing yet. The writer, for
+ * its part, already holds every drug lock it will need when it waits, and
+ * takes every key it needs before its first row lock, so once it holds a row
+ * an exclusive holder could queue on, it never waits for this key again.
+ * Holding the key also narrows the late-drug tries to what is left: an entry
+ * that committed between a re-score's drug scan and its try of the key (the
+ * fold tries the key before it scans), or one a drug merge moved to another
+ * drug while the re-score was still waiting for the scanned drug's lock.
  *
  * **A transaction that folds and then writes a review (#246).** Conversation
  * ingestion (`commitSourcesFor`) resolves a source — which may fold, and so
@@ -380,6 +424,11 @@ export function describeDeferredMerge(stats: CitationMergeStats): string {
         `drug ${stats.lockedDrugId}, whose parameter summaries the fold recomputes, was locked` +
         ' by another write. Re-run to pick it up.'
       );
+    case 'entry_in_flight':
+      return (
+        `a source value citing #${stats.winnerId} or #${stats.loserId} was being written, or` +
+        ' one of them re-scored or folded elsewhere. Re-run to pick it up.'
+      );
     default:
       return 'another merge into this paper was running. Re-run to pick it up.';
   }
@@ -460,13 +509,18 @@ export interface CitationMergeStats {
    * by another write, and the fold does not wait for a drug once it may hold
    * job rows (see `tryLockDrugForRecompute`) — whether found held at the
    * up-front scan, before any write, or at the recompute, where the fold's
-   * writes are rolled back to their savepoint first.
+   * writes are rolled back to their savepoint first. `entry_in_flight`: the
+   * citation-membership key of the winner or the loser
+   * (`CITATION_MEMBERSHIP_LOCK_NAMESPACE`) was held — a source value citing
+   * one of them being written, a re-score of one of them, or another fold of
+   * one — so the fold could not settle which drugs' summaries it moves (#254).
    */
   deferredReason?:
     | 'merge_in_progress'
     | 'loser_locked'
     | 'extraction_in_flight'
-    | 'drug_locked';
+    | 'drug_locked'
+    | 'entry_in_flight';
   /** The loser's claimed extraction job, when that is what deferred the merge. */
   inFlightExtractionJobId?: number;
   /** The drug whose held lock deferred the merge (`drug_locked`). */
@@ -1575,6 +1629,22 @@ export async function mergeCitations(
   if (!(await tryLockFoldedCitation(db, loserId))) {
     stats.deferred = true;
     stats.deferredReason = 'loser_locked';
+    return stats;
+  }
+
+  // Before the drug scan below (#254): with both rows' citation-membership
+  // keys held, no new entry citing either can be written until this
+  // transaction commits, so the scan sees every drug whose summary the fold
+  // moves. Without them, an entry filed on another drug and committed after
+  // the fold's last scan would have recomputed that drug against the weights
+  // from before the fold, and kept them once both commit. Tries, like the two
+  // keys above: standing aside here writes nothing.
+  if (
+    !(await tryLockCitationMembership(db, winnerId)) ||
+    !(await tryLockCitationMembership(db, loserId))
+  ) {
+    stats.deferred = true;
+    stats.deferredReason = 'entry_in_flight';
     return stats;
   }
 
