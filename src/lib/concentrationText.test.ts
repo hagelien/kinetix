@@ -67,6 +67,9 @@ describe('splitConcentrationText', () => {
       'snitt 84 +/- 14 ng/mL',
       'reseptor β5 mg/L',
       'prøve Ж5 mg/L',
+      '95% KI −1–3 ng/mL',
+      '95% KI -1-3 ng/mL',
+      'endring +2 mg/L',
     ]) {
       expect(splitConcentrationText(text)).toEqual([{ kind: 'text', text }]);
       expect(containsConcentration(text)).toBe(false);
