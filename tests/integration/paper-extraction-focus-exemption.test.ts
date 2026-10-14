@@ -9,7 +9,8 @@
  *
  * The exemption must not become a general bypass, so the other half of this
  * file pins what it requires: the caller's own live claim, the matching
- * token, and a fact that cites the job's paper.
+ * token, and a fact that cites the job's paper — and that the claim still
+ * holds when the fact is inserted, not just when the request began.
  */
 import {
   beforeAll,
@@ -23,14 +24,39 @@ import {
 import { Readable } from "node:stream";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-const { authMock } = vi.hoisted(() => ({ authMock: vi.fn() }));
+const { authMock, claimHooks } = vi.hoisted(() => ({
+  authMock: vi.fn(),
+  // Runs after the route's first, unlocked claim check — the window between
+  // that check and the insert in which a claim can be lost.
+  claimHooks: { afterUnlockedCheck: null as null | (() => Promise<void>) },
+}));
 vi.mock("../../api/_lib/auth.js", () => ({ getUserFromRequest: authMock }));
+vi.mock("../../api/_lib/paper-extraction-store.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("../../api/_lib/paper-extraction-store.js")
+    >();
+  return {
+    ...actual,
+    liveClaimCitationId: async (
+      input: Parameters<typeof actual.liveClaimCitationId>[0],
+    ) => {
+      const result = await actual.liveClaimCitationId(input);
+      if (!input.forShare && claimHooks.afterUnlockedCheck) {
+        await claimHooks.afterUnlockedCheck();
+      }
+      return result;
+    },
+  };
+});
 
+import { eq } from "drizzle-orm";
 import handler from "../../api/pending-edits.js";
 import {
   agentFocusConfig,
   agents,
   paperExtractionJobs,
+  pendingEdits,
   wikiPages,
 } from "../../db/schema.js";
 import { STALE_CLAIM_MS } from "../../src/lib/paperExtraction.js";
@@ -40,7 +66,7 @@ import {
   teardownIntegrationDb,
   type IntegrationDb,
 } from "./setup/harness.js";
-import { seedAdmissibleCitation, seedUser } from "./setup/seed.js";
+import { seedAdmissibleCitation, seedDrug, seedUser } from "./setup/seed.js";
 
 let db: IntegrationDb;
 
@@ -53,6 +79,7 @@ afterAll(async () => {
 beforeEach(async () => {
   await resetIntegrationDb(db);
   authMock.mockReset();
+  claimHooks.afterUnlockedCheck = null;
 });
 
 const TOKEN = "a".repeat(32);
@@ -64,14 +91,33 @@ async function seedAuthor(): Promise<number> {
   });
 }
 
-async function seedPage(authorId: number): Promise<number> {
+async function seedPage(
+  authorId: number,
+  pageType: "drug_monograph" | "topic" = "drug_monograph",
+  drugCid: number | null = null,
+): Promise<number> {
   const [row] = await db
     .insert(wikiPages)
     .values({
       slug: "a-page",
       title: "A page",
-      content: {},
-      pageType: "drug_monograph",
+      // A topic page's sections come from its headings; a monograph's from
+      // the fixed schema. Either way the facts below file under "pk".
+      content:
+        pageType === "topic"
+          ? {
+              type: "doc",
+              content: [
+                {
+                  type: "heading",
+                  attrs: { sectionId: "pk", level: 2 },
+                  content: [{ type: "text", text: "Farmakokinetikk" }],
+                },
+              ],
+            }
+          : {},
+      pageType,
+      drugCid,
       status: "published",
       createdBy: authorId,
       updatedBy: authorId,
@@ -298,5 +344,86 @@ describe("POST /api/pending-edits — paper-extraction focus exemption", () => {
     expect(JSON.parse(state.body)).toMatchObject({
       code: "paper_extraction_reference_mismatch",
     });
+  });
+});
+
+describe("POST /api/pending-edits — claim re-checked with the insert", () => {
+  // The claim is lost after the route's up-front check passes but before the
+  // insert. Checked only up front, the fact would land under a claim the run
+  // no longer holds — exempt from the focus gate, after an editor's cancel.
+  // The route inserts under one of two locks, so both are exercised: a
+  // monograph bound to a drug takes the per-drug lock, a topic page the
+  // page's row lock.
+  const shapes = [
+    { label: "drug-locked monograph", pageType: "drug_monograph", drug: true },
+    { label: "page-locked topic page", pageType: "topic", drug: false },
+  ] as const;
+  for (const shape of shapes) {
+    it(`refuses a fact whose job is cancelled mid-request (${shape.label})`, async () => {
+      const author = await seedAuthor();
+      const agent = await seedAgent();
+      const page = await seedPage(
+        author,
+        shape.pageType,
+        shape.drug ? await seedDrug(db) : null,
+      );
+      const citationId = await seedAdmissibleCitation(db, {
+        createdBy: author,
+      });
+      const jobId = await seedClaimedJob(citationId, agent);
+      claimHooks.afterUnlockedCheck = async () => {
+        await db
+          .update(paperExtractionJobs)
+          .set({ status: "cancelled" })
+          .where(eq(paperExtractionJobs.id, jobId));
+      };
+
+      const state = await submitFact(agent, page, citationId, {
+        jobId,
+        claimToken: TOKEN,
+      });
+      expect(state.statusCode).toBe(409);
+      expect(JSON.parse(state.body)).toMatchObject({
+        code: "paper_extraction_not_claim_holder",
+      });
+      expect(await db.select().from(pendingEdits)).toHaveLength(0);
+    });
+  }
+
+  it("refuses a fact whose claim is taken over mid-request", async () => {
+    // A reclaim mints a fresh token, which is what retires the old run's.
+    const author = await seedAuthor();
+    const agent = await seedAgent();
+    const page = await seedPage(author);
+    const citationId = await seedAdmissibleCitation(db, { createdBy: author });
+    const jobId = await seedClaimedJob(citationId, agent);
+    claimHooks.afterUnlockedCheck = async () => {
+      await db
+        .update(paperExtractionJobs)
+        .set({ claimToken: "c".repeat(32), claimedAt: new Date() })
+        .where(eq(paperExtractionJobs.id, jobId));
+    };
+
+    const state = await submitFact(agent, page, citationId, {
+      jobId,
+      claimToken: TOKEN,
+    });
+    expect(state.statusCode).toBe(409);
+    expect(await db.select().from(pendingEdits)).toHaveLength(0);
+  });
+
+  it("files the fact when the claim still holds at insert time", async () => {
+    const author = await seedAuthor();
+    const agent = await seedAgent();
+    const page = await seedPage(author);
+    const citationId = await seedAdmissibleCitation(db, { createdBy: author });
+    const jobId = await seedClaimedJob(citationId, agent);
+
+    const state = await submitFact(agent, page, citationId, {
+      jobId,
+      claimToken: TOKEN,
+    });
+    expect(state.statusCode).toBe(201);
+    expect(await db.select().from(pendingEdits)).toHaveLength(1);
   });
 });

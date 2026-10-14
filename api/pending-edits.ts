@@ -2295,22 +2295,19 @@ async function handleCreate(
   // narrower and more recent instruction than the standing focus, so the
   // focus must not leave the queue stranded. The claim is verified here —
   // same identity, same token, not stale, and the fact cites the job's paper —
-  // so the exemption cannot be borrowed for unrelated content.
-  if (parsed.data.paperExtraction) {
+  // so the exemption cannot be borrowed for unrelated content. This first
+  // check fails fast; it is repeated under a row lock inside the insert's
+  // transaction below, since the claim can be cancelled, expire or be taken
+  // over during the queries in between.
+  const paperExtraction = parsed.data.paperExtraction;
+  if (paperExtraction) {
     const claimCitationId = await liveClaimCitationId({
-      jobId: parsed.data.paperExtraction.jobId,
-      claimToken: parsed.data.paperExtraction.claimToken,
+      jobId: paperExtraction.jobId,
+      claimToken: paperExtraction.claimToken,
       userId: auth.userId,
     });
     if (claimCitationId === null) {
-      error(
-        res,
-        409,
-        'You no longer hold this paper-extraction claim: the job was ' +
-          'cancelled or the claim expired. Stop the run and submit nothing ' +
-          'further for it.',
-        'paper_extraction_not_claim_holder',
-      );
+      refuseLostPaperExtractionClaim(res);
       return;
     }
     const cited =
@@ -2715,9 +2712,26 @@ async function handleCreate(
       .returning();
   };
 
+  // The paper-extraction claim, re-verified in the insert's transaction. The
+  // job row stays share-locked until commit, so an editor's cancel or a
+  // takeover of the claim either lands before this check and refuses the
+  // fact, or waits until the fact is in — never in between. The fact is
+  // exempt from the agent-focus gate on the strength of this claim, and agent
+  // consensus can publish it without a human, so a fact filed after the claim
+  // was lost is not one a reviewer is guaranteed to catch.
+  const paperExtractionClaimHeld = async (): Promise<boolean> =>
+    !paperExtraction ||
+    (await liveClaimCitationId({
+      jobId: paperExtraction.jobId,
+      claimToken: paperExtraction.claimToken,
+      userId: auth.userId,
+      forShare: true,
+    })) !== null;
+
   type SubmitOutcome =
     | { kind: 'ok'; row: typeof pendingEdits.$inferSelect }
-    | { kind: 'gone' };
+    | { kind: 'gone' }
+    | { kind: 'claim_lost' };
   let outcome: SubmitOutcome;
   if (lockDrugId != null) {
     outcome = await runInPoolTransaction<SubmitOutcome>(async () => {
@@ -2743,6 +2757,7 @@ async function handleCreate(
           .limit(1);
         if (!drugInTx) return { kind: 'gone' };
       }
+      if (!(await paperExtractionClaimHeld())) return { kind: 'claim_lost' };
       const [row] = await insertPending();
       if (!row) throw new Error('pendingEdits insert returned no row');
       return { kind: 'ok', row };
@@ -2760,11 +2775,18 @@ async function handleCreate(
     const pageId = parsed.data.targetId;
     outcome = await runInPoolTransaction<SubmitOutcome>(async () => {
       if (!(await lockWikiPageShared(pageId))) return { kind: 'gone' };
+      if (!(await paperExtractionClaimHeld())) return { kind: 'claim_lost' };
       const [row] = await insertPending();
       if (!row) throw new Error('pendingEdits insert returned no row');
       return { kind: 'ok', row };
     });
   } else {
+    // `paperExtraction` rides only on wiki_fact, which requires a targetId, so
+    // it always takes a branch above. Fail closed rather than insert without
+    // the in-transaction claim check should that ever change.
+    if (paperExtraction) {
+      throw new Error('paper-extraction fact reached the unlocked insert');
+    }
     const [rowNoLock] = await insertPending();
     outcome = rowNoLock
       ? { kind: 'ok', row: rowNoLock }
@@ -2773,6 +2795,10 @@ async function handleCreate(
 
   if (outcome.kind === 'gone') {
     error(res, 404, 'Target no longer exists');
+    return;
+  }
+  if (outcome.kind === 'claim_lost') {
+    refuseLostPaperExtractionClaim(res);
     return;
   }
   const row = outcome.row;
@@ -2807,6 +2833,18 @@ async function handleCreate(
       await callerCan(auth.role, CAP['wiki.draft.read']),
     ),
   });
+}
+
+/** The 409 for a fact filed under a paper-extraction claim the caller no longer holds. */
+function refuseLostPaperExtractionClaim(res: ServerResponse): void {
+  error(
+    res,
+    409,
+    'You no longer hold this paper-extraction claim: the job was ' +
+      'cancelled or the claim expired. Stop the run and submit nothing ' +
+      'further for it.',
+    'paper_extraction_not_claim_holder',
+  );
 }
 
 /**
