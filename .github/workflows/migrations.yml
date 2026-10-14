@@ -300,3 +300,9 @@ jobs:
         run: |
           npx vitest run --config vitest.integration.config.ts \
             tests/governance/transaction/real-postgres-extraction-drug-lock-order.test.ts
+      - name: Real-Postgres ingestion review write vs. extraction-job lock order
+        env:
+          KINETIX_TEST_PG_URL: postgres://postgres:postgres@localhost:5432/kinetix_test
+        run: |
+          npx vitest run --config vitest.integration.config.ts \
+            tests/governance/transaction/real-postgres-ingestion-review-drug-lock-order.test.ts

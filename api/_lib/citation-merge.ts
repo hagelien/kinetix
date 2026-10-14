@@ -242,6 +242,18 @@ export async function lockCitationAgainstFold(
  * that holds nothing yet, so where they sit relative to a drug lock cannot form
  * a cycle. The two-argument keys and this single-argument one are distinct
  * lock spaces in Postgres, so a drug id never collides with a namespace pair.
+ *
+ * **A transaction that folds and then writes a review (#246).** Conversation
+ * ingestion (`commitSourcesFor`) resolves a source — which may fold, and so
+ * lock job rows — and then records the source's review, whose recompute needs
+ * the drugs citing the paper. `recordPaperReview` waiting for those after a
+ * fold is the same job-then-drug cycle again. So that transaction takes the
+ * drug locks of every row its sources' resolutions can reach as its first
+ * statements, waiting while it still holds nothing (ascending, before the
+ * 1087/1088 tries and before any job row), and the review write afterwards
+ * only *tries* (`drugLocks: 'try'`, through this function) — taken already for
+ * every drug the up-front scan saw, and refusing the whole source commit
+ * rather than waiting for one it did not.
  */
 export async function tryLockDrugForRecompute(db: Db, drugId: number): Promise<boolean> {
   return retryTryLock(db, sql`SELECT pg_try_advisory_xact_lock(${drugId}::bigint) AS locked`);
