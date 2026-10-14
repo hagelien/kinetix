@@ -29,11 +29,20 @@ interface DrugState {
    * next render.
    */
   pendingColumnPreset: string[] | null;
+  /**
+   * Slug of the drug monograph the wiki route has resolved and is showing, or
+   * null when the page on screen is anything else (a topic, a missing page, a
+   * non-wiki route). A `/wiki/<slug>/<tab>` URL is accepted by the generic wiki
+   * route whatever `<slug>` is, so the header cannot tell a monograph from the
+   * path alone; it reads this instead.
+   */
+  monographPageSlug: string | null;
 
   // Actions
   setComponents: (components: DrugComponent[]) => void;
   setMethods: (methods: AnalyticalMethod[]) => void;
   setActiveDrug: (drug: DrugComponent | null) => void;
+  setMonographPageSlug: (slug: string | null) => void;
   setSearchQuery: (query: string) => void;
   setSelectedMethod: (methodId: string | null) => void;
   setSorting: (column: string, direction: 'asc' | 'desc') => void;
@@ -58,10 +67,12 @@ export const useDrugStore = create<DrugState>()(
       sortDirection: 'desc',
       tableView: 'full',
       pendingColumnPreset: null,
+      monographPageSlug: null,
 
       setComponents: (components) => set({ components }),
       setMethods: (methods) => set({ methods }),
       setActiveDrug: (drug) => set({ activeDrug: drug }),
+      setMonographPageSlug: (slug) => set({ monographPageSlug: slug }),
       setSearchQuery: (query) => set({ searchQuery: query }),
       setSelectedMethod: (methodId) => set({ selectedMethod: methodId }),
       setSorting: (column, direction) =>

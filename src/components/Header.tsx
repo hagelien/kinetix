@@ -29,6 +29,14 @@ import {
 
 const MONOGRAPH_TAB_PATH_RE = /^\/wiki\/([^/]+)\/([^/]+)\/?$/;
 
+function safeDecode(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
 export function Header() {
   const { t, i18n } = useTranslation();
   const location = useLocation();
@@ -69,16 +77,23 @@ export function Header() {
   const setTableView = useDrugStore((s) => s.setTableView);
   const setActiveDrug = useDrugStore((s) => s.setActiveDrug);
   const activeDrug = useDrugStore((s) => s.activeDrug);
+  const monographPageSlug = useDrugStore((s) => s.monographPageSlug);
 
   // The active drug stays in the header on every page, with its monograph's
   // tabs in the row below, so one click leads back to it. On a monograph tab
   // the URL is the source of truth for which tab is current and for the
   // page's slug (a drug row loaded by id may not carry its monograph slug).
   const tabMatch = MONOGRAPH_TAB_PATH_RE.exec(location.pathname);
+  // A tab-shaped URL is not enough: the wiki route also serves topics and
+  // missing pages there, so the resolved page must be this slug's monograph.
   const currentTab: MonographTabId | null =
-    tabMatch && isMonographTabId(tabMatch[2]) ? tabMatch[2] : null;
+    tabMatch &&
+    isMonographTabId(tabMatch[2]) &&
+    monographPageSlug === safeDecode(tabMatch[1]!)
+      ? tabMatch[2]
+      : null;
   const monographSlug =
-    (currentTab && tabMatch ? decodeURIComponent(tabMatch[1]!) : null) ??
+    (currentTab && tabMatch ? safeDecode(tabMatch[1]!) : null) ??
     activeDrug?._monographSlug ??
     null;
   const activeDrugName = activeDrug
