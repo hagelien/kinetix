@@ -65,6 +65,8 @@ describe('splitConcentrationText', () => {
       'grense 5 · 10\u22123 mg/L',
       'snitt 84 ± 14 ng/mL',
       'snitt 84 +/- 14 ng/mL',
+      'reseptor β5 mg/L',
+      'prøve Ж5 mg/L',
     ]) {
       expect(splitConcentrationText(text)).toEqual([{ kind: 'text', text }]);
       expect(containsConcentration(text)).toBe(false);
@@ -89,6 +91,7 @@ describe('splitConcentrationText', () => {
 });
 
 describe('parseConcentrationValue', () => {
+
   it('reads both decimal conventions, ranges and bounds', () => {
     expect(parseConcentrationValue('0,5')).toEqual({ value: 0.5 });
     expect(parseConcentrationValue('1.000')).toEqual({ value: 1000 });

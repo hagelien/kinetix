@@ -38,14 +38,14 @@ const CONCENTRATION_UNIT_PATTERN = [
  * So the figure is refused when, looking back across anything that is neither
  * a letter nor a digit (spaces, `±`, `×`, `^`, dashes, brackets, colons), the
  * nearest character is a digit — the figure is then part of something
- * numeric that started earlier. Also refused: a letter, `_` or decimal mark
- * directly before it (`A5`), an exponent marker (`1e-3`, `1E3`), and a digit
+ * numeric that started earlier. Also refused: a letter of any script, `_` or
+ * decimal mark directly before it (`A5`, `β5`), an exponent marker (`1e-3`, `1E3`), and a digit
  * then the letter `x` used as a multiplication sign (`5 x 10-3`). A real range
  * (`1–3 mg/L`) is matched from its first figure and is unaffected. The cost is
  * the safe one: a concentration written straight after an unrelated number
  * (`dag 1: 5 mg/L`) is left unannotated rather than ever converted wrongly.
  */
-const LETTER = String.raw`A-Za-z\u00C0-\u024F`;
+const LETTER = String.raw`\p{L}`;
 const CONCENTRATION_NUMBER_START_GUARD = String.raw`(?<!\d[^${LETTER}\d]*|\d\s*[xX]\s*|[${LETTER}_.,]|[eE][+\-\u2212]?)`;
 
 /**
@@ -57,7 +57,7 @@ const CONCENTRATION_NUMBER_START_GUARD = String.raw`(?<!\d[^${LETTER}\d]*|\d\s*[
 const CONCENTRATION_SOURCE = `((?:<=|>=|[<>≤≥])?\\s*${CONCENTRATION_NUMBER_START_GUARD}${CONCENTRATION_NUMBER_PATTERN}(?:\\s*${CONCENTRATION_RANGE_SEPARATOR_PATTERN}\\s*${CONCENTRATION_NUMBER_PATTERN})?)\\s*(${CONCENTRATION_UNIT_PATTERN})(?!\\s*(?:/|·|\\*|per\\b))\\b`;
 
 /** Non-global, so testing it carries no `lastIndex` state between calls. */
-const CONCENTRATION_TEST_RE = new RegExp(CONCENTRATION_SOURCE, "i");
+const CONCENTRATION_TEST_RE = new RegExp(CONCENTRATION_SOURCE, "iu");
 
 /** True when `text` contains at least one concentration. */
 export function containsConcentration(text: string): boolean {
@@ -93,10 +93,18 @@ export function splitConcentrationText(text: string): ConcentrationTextSegment[]
 
   let lastIndex = 0;
   // `matchAll` works on a copy of the regex, so no shared `lastIndex` leaks.
-  for (const match of text.matchAll(new RegExp(CONCENTRATION_SOURCE, "gi"))) {
+  for (const match of text.matchAll(new RegExp(CONCENTRATION_SOURCE, "giu"))) {
     const index = match.index ?? 0;
     const raw = match[0];
     const leading = /^\s*/.exec(raw)?.[0] ?? "";
+    const value = (match[1] ?? "").trim();
+    // A figure the value parser cannot read stays plain text rather than
+    // carrying a tooltip with nothing to convert.
+    if (Object.keys(parseConcentrationValue(value)).length === 0) {
+      pushText(text.slice(lastIndex, index + raw.length));
+      lastIndex = index + raw.length;
+      continue;
+    }
     pushText(text.slice(lastIndex, index) + leading);
     segments.push({
       kind: "concentration",
