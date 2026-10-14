@@ -28,7 +28,12 @@ const { authMock, claimHooks } = vi.hoisted(() => ({
   authMock: vi.fn(),
   // Runs after the route's first, unlocked claim check — the window between
   // that check and the insert in which a claim can be lost.
-  claimHooks: { afterUnlockedCheck: null as null | (() => Promise<void>) },
+  claimHooks: {
+    afterUnlockedCheck: null as null | (() => Promise<void>),
+    // Runs once, after the first in-transaction (FOR SHARE) check: the window
+    // in which a topic-page fact waits for the page lock.
+    afterFirstLockedCheck: null as null | (() => Promise<void>),
+  },
 }));
 vi.mock("../../api/_lib/auth.js", () => ({ getUserFromRequest: authMock }));
 vi.mock("../../api/_lib/paper-extraction-store.js", async (importOriginal) => {
@@ -45,6 +50,11 @@ vi.mock("../../api/_lib/paper-extraction-store.js", async (importOriginal) => {
       if (!input.forShare && claimHooks.afterUnlockedCheck) {
         await claimHooks.afterUnlockedCheck();
       }
+      if (input.forShare && claimHooks.afterFirstLockedCheck) {
+        const hook = claimHooks.afterFirstLockedCheck;
+        claimHooks.afterFirstLockedCheck = null;
+        await hook();
+      }
       return result;
     },
   };
@@ -52,6 +62,7 @@ vi.mock("../../api/_lib/paper-extraction-store.js", async (importOriginal) => {
 
 import { eq } from "drizzle-orm";
 import handler from "../../api/pending-edits.js";
+import { getDb } from "../../api/_lib/db.js";
 import {
   agentFocusConfig,
   agents,
@@ -80,6 +91,7 @@ beforeEach(async () => {
   await resetIntegrationDb(db);
   authMock.mockReset();
   claimHooks.afterUnlockedCheck = null;
+  claimHooks.afterFirstLockedCheck = null;
 });
 
 const TOKEN = "a".repeat(32);
@@ -389,6 +401,31 @@ describe("POST /api/pending-edits — claim re-checked with the insert", () => {
       expect(await db.select().from(pendingEdits)).toHaveLength(0);
     });
   }
+
+  it("refuses a topic-page fact whose claim goes stale while it waits for the page", async () => {
+    // The job is share-locked first (#223), then the page; the lock blocks a
+    // cancel or takeover but not time. Expire the claim in that window.
+    const author = await seedAuthor();
+    const agent = await seedAgent();
+    const page = await seedPage(author, "topic");
+    const citationId = await seedAdmissibleCitation(db, { createdBy: author });
+    const jobId = await seedClaimedJob(citationId, agent);
+    claimHooks.afterFirstLockedCheck = async () => {
+      // Inside the route's transaction (PGlite has one connection): the
+      // transaction's own write stands in for the clock moving on.
+      await getDb()
+        .update(paperExtractionJobs)
+        .set({ claimedAt: new Date(Date.now() - STALE_CLAIM_MS - 60_000) })
+        .where(eq(paperExtractionJobs.id, jobId));
+    };
+
+    const state = await submitFact(agent, page, citationId, {
+      jobId,
+      claimToken: TOKEN,
+    });
+    expect(state.statusCode).toBe(409);
+    expect(await db.select().from(pendingEdits)).toHaveLength(0);
+  });
 
   it("refuses a fact whose claim is taken over mid-request", async () => {
     // A reclaim mints a fresh token, which is what retires the old run's.
