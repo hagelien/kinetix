@@ -165,6 +165,35 @@ export function handleMatch(handles: ReadonlyArray<CitationHandle>) {
   );
 }
 
+/** The handle `resolveCitation` files `input` under, with its alt ids. */
+function canonicalHandleFor(input: ResolveCitationInput) {
+  return canonicalCitationHandle(
+    { type: input.type, identifier: input.identifier },
+    mergeAltIds(normalizeReferenceMetadata(input.metadata)?.altIds, input.crosswalk),
+  );
+}
+
+/**
+ * The existing rows `resolveCitation` would find for `input` under its
+ * handles — the survivor and every duplicate it would fold — without writing
+ * anything. Free-text fuzzy matching is not included: it runs only when no
+ * handle matches.
+ *
+ * For a caller that must take locks on what the resolution will touch before
+ * the resolution itself takes any (`commitSourcesFor` in the conversation
+ * importer, #246).
+ */
+export async function findCitationIdsMatching(
+  db: Db,
+  input: ResolveCitationInput,
+): Promise<number[]> {
+  const rows = await db
+    .select({ id: citations.id })
+    .from(citations)
+    .where(handleMatch(addressableHandles(canonicalHandleFor(input))));
+  return rows.map((row) => row.id);
+}
+
 /**
  * Resolve — or create — the one citation row for a paper.
  *
@@ -179,10 +208,7 @@ export async function resolveCitation(
   holdsFreetextLock = false,
 ): Promise<ResolveCitationResult> {
   const incomingMetadata = normalizeReferenceMetadata(input.metadata);
-  const canonical = canonicalCitationHandle(
-    { type: input.type, identifier: input.identifier },
-    mergeAltIds(incomingMetadata?.altIds, input.crosswalk),
-  );
+  const canonical = canonicalHandleFor(input);
   const handles = addressableHandles(canonical);
 
   const existing = await db

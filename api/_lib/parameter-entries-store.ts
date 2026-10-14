@@ -878,16 +878,42 @@ export async function findParametersCitingCitation(
  * the drugs it locked.
  */
 export async function lockDrugsCitingCitation(citationId: number): Promise<number[]> {
-  const drugIds = await findDrugsCitingCitation(citationId);
-  for (const drugId of drugIds) await lockDrugForRecompute(drugId);
-  return drugIds;
+  return lockDrugsCitingCitations([citationId]);
 }
 
 /** Drugs with an entry citing this citation, ascending. */
 export async function findDrugsCitingCitation(citationId: number): Promise<number[]> {
-  return [
-    ...new Set((await findParametersCitingCitation(citationId)).map((row) => row.drugId)),
-  ].sort((a, b) => a - b);
+  return findDrugsCitingCitations([citationId]);
+}
+
+/**
+ * Drugs with an entry citing any of these citations, ascending — the order
+ * every path that takes several drug locks walks them in.
+ */
+export async function findDrugsCitingCitations(
+  citationIds: readonly number[],
+): Promise<number[]> {
+  if (citationIds.length === 0) return [];
+  const rows = await getDb()
+    .selectDistinct({ drugId: parameterEntries.drugId })
+    .from(parameterEntries)
+    .where(inArray(parameterEntries.citationId, [...citationIds]));
+  return rows.map((row) => row.drugId).sort((a, b) => a - b);
+}
+
+/**
+ * {@link lockDrugsCitingCitation} over several citations at once, still in one
+ * ascending walk: two separate walks would each be ascending but together could
+ * take a higher drug before a lower one. Waits, so it is only safe while the
+ * transaction holds no row lock another drug-first writer could be waiting for
+ * — in practice, as its first statement. Returns the drugs it locked.
+ */
+export async function lockDrugsCitingCitations(
+  citationIds: readonly number[],
+): Promise<number[]> {
+  const drugIds = await findDrugsCitingCitations(citationIds);
+  for (const drugId of drugIds) await lockDrugForRecompute(drugId);
+  return drugIds;
 }
 
 /**

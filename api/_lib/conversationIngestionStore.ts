@@ -57,9 +57,11 @@ import {
 import { getDb, runInPoolTransaction } from './db.js';
 import { lockWikiPageShared } from './wiki-page-lock.js';
 import {
+  findCitationIdsMatching,
   followFoldedCitations,
   handleMatch,
   resolveCitation,
+  type ResolveCitationInput,
 } from './citation-store.js';
 import { recordPaperReview } from './paper-review-store.js';
 import { recordApproval } from './approvals.js';
@@ -82,6 +84,7 @@ import {
   recomputeParameterAndDependents,
   findDuplicateEntry,
   attachSourceQuoteIfMissing,
+  lockDrugsCitingCitations,
 } from './parameter-entries-store.js';
 import { applyApprovedEdit } from './pending-edits-helpers.js';
 import { ensureDrugMonograph } from './monograph-helpers.js';
@@ -798,24 +801,54 @@ async function commitSourcesFor(
       recorded: boolean;
     }> = [];
 
-    for (const source of pending) {
-      // Alternate handles come from the ID converter, never from the bundle:
-      // `resolveCitation` treats a crosswalk as authoritative and may merge two
-      // rows on the strength of it, and a merge of two different papers
-      // repoints their references and reviews. A model's well-formed guess is
-      // not bibliographic identity.
-      const verified = crosswalk.get(source.key) ?? {};
-      const handle = effectiveHandle(source);
-      const resolved = await resolveCitation(
-        tx,
-        {
+    // Alternate handles come from the ID converter, never from the bundle:
+    // `resolveCitation` treats a crosswalk as authoritative and may merge two
+    // rows on the strength of it, and a merge of two different papers
+    // repoints their references and reviews. A model's well-formed guess is
+    // not bibliographic identity.
+    const resolveInputs = new Map(
+      pending.map((source) => {
+        const verified = crosswalk.get(source.key) ?? {};
+        const handle = effectiveHandle(source);
+        const input: ResolveCitationInput = {
           type: handle.type,
           identifier: handle.identifier,
           metadata: source.metadata
             ? { ...source.metadata, altIds: verified }
             : { altIds: verified },
           crosswalk: verified,
-        },
+        };
+        return [source.key, input] as const;
+      }),
+    );
+
+    // The drug locks the reviews below will need, taken first (#246). A
+    // resolution can fold duplicates, and a fold locks extraction-job rows,
+    // which this transaction then holds until it commits; a review write that
+    // waited for a drug after that would be job-then-drug — the order #243
+    // removed from `mergeCitations` — and close a cycle with any drug-first
+    // writer (a paper-extraction fact on a monograph, a drug merge) waiting
+    // for one of those rows. Here, before anything else, the transaction holds
+    // nothing, so waiting is safe; and one ascending walk over every row the
+    // sources can resolve to (survivor and duplicates alike — a fold leaves
+    // the losers' entries citing the survivor) covers what each review's
+    // recompute will scan. The folds' own tries then find these drugs held
+    // already, as do the reviews', which only try (`drugLocks: 'try'`): a drug
+    // the scan could not see (an entry that landed since, a free-text paper
+    // matched by fuzzy work identity) refuses this commit rather than waiting
+    // while holding job rows. The 1087/1088 merge keys and the free-text key
+    // stay tries after these, and the job-before-page order (#223) is untouched:
+    // nothing here locks a page.
+    const candidateCitationIds = new Set<number>();
+    for (const input of resolveInputs.values()) {
+      for (const id of await findCitationIdsMatching(tx, input)) candidateCitationIds.add(id);
+    }
+    await lockDrugsCitingCitations([...candidateCitationIds]);
+
+    for (const source of pending) {
+      const resolved = await resolveCitation(
+        tx,
+        resolveInputs.get(source.key)!,
         actor.userId,
       );
 
@@ -858,6 +891,8 @@ async function commitSourcesFor(
           readInFull: appraisal.verification.readInFull,
           editSummary: `Innlesing fra samtale (${bundle.idempotencyKey})`,
         },
+        // Taken above for every drug the scan saw; see the note there.
+        drugLocks: 'try',
       });
       results.push({
         key: source.key,
