@@ -15,10 +15,11 @@
  *   - Must NEVER block or fail the stop: every path exits 0, nothing is
  *     written to stdout (a Stop hook's stdout JSON can ask for another turn),
  *     and errors are swallowed. The logger's own output goes to stderr only.
- *   - Stop fires after every turn, so a session may be re-logged several
- *     times; the endpoint upserts on (agent_id, session_id), so that is
- *     idempotent. The spawned logger is a plain process, not a model turn,
- *     so the hook cannot re-enter itself.
+ *   - Stop fires after every turn, so the marker is consumed on the first
+ *     one (the routine's closing turn) and a marker older than
+ *     RELOG_WINDOW_MS is refused: a follow-up or resumed session must not
+ *     fold later work into the logged run. The spawned logger is a plain
+ *     process, not a model turn, so the hook cannot re-enter itself.
  *   - Codex has no equivalent hook; its runs keep the gap (see the logger's
  *     header and docs/ops/agent-tier-benchmark.md).
  */
@@ -43,7 +44,7 @@ function readInput() {
 async function main() {
   // Imported inside the try below, so even a missing or broken module ends in
   // exit 0 rather than a hook error.
-  const { RELOG_ENV, planRelog, readMarker } = await import(
+  const { RELOG_ENV, consumeMarker, planRelog } = await import(
     '../../scripts/lib/run-usage-marker.mjs'
   );
   // A re-log's own process tree must not recurse (defensive: the logger is
@@ -52,7 +53,7 @@ async function main() {
   const input = readInput();
   const sessionId =
     input && typeof input === 'object' ? input.session_id : undefined;
-  const plan = planRelog(input, readMarker(sessionId));
+  const plan = planRelog(input, consumeMarker(sessionId));
   if (!plan.relog) return;
 
   const tsx = path.join(root, 'node_modules', 'tsx', 'dist', 'cli.mjs');

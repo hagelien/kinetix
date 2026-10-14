@@ -43,6 +43,14 @@ export const MARKER_VERSION = 1;
 export const MARKER_TTL_MS = 7 * 24 * 60 * 60_000;
 
 /**
+ * How long after the log the closing turn may end and still be re-logged. The
+ * closing turn follows the logger call within the same turn, so minutes is
+ * ample; a marker older than this belongs to a run that already finished, and
+ * re-logging it would fold later, unrelated work into that run.
+ */
+export const RELOG_WINDOW_MS = 30 * 60_000;
+
+/**
  * Set by the hook on the logger it spawns, so a re-log neither rewrites the
  * routine's own marker nor depends on how the hook environment differs.
  */
@@ -169,6 +177,38 @@ export function readMarker(sessionId, env = process.env) {
 }
 
 /**
+ * Take the marker for `sessionId` so it is used exactly once: renamed away
+ * (atomic, so two hooks racing on one session cannot both get it), read,
+ * then deleted. The first Stop after the log is the run's closing turn; any
+ * later Stop in the same session — a follow-up or a resumed session — is work
+ * that does not belong to the run, and finds no marker.
+ *
+ * @param {unknown} sessionId
+ * @param {NodeJS.ProcessEnv} [env]
+ */
+export function consumeMarker(sessionId, env = process.env) {
+  const file = markerPath(sessionId, env);
+  if (!file || !existsSync(file)) return null;
+  const claimed = `${file}.${process.pid}.consumed`;
+  try {
+    renameSync(file, claimed);
+  } catch {
+    return null; // another hook took it first
+  }
+  try {
+    return parseMarker(JSON.parse(readFileSync(claimed, 'utf8')));
+  } catch {
+    return null;
+  } finally {
+    try {
+      unlinkSync(claimed);
+    } catch {
+      // already gone
+    }
+  }
+}
+
+/**
  * Decide what the Stop hook does for one hook payload. Pure: the caller reads
  * the marker and runs the logger.
  *
@@ -178,11 +218,15 @@ export function readMarker(sessionId, env = process.env) {
  * marker's transcript and flags so it lands on the same
  * (agent_id, session_id) row.
  *
+ * A marker logged more than RELOG_WINDOW_MS ago is refused: it is not this
+ * session's closing turn.
+ *
  * @param {unknown} input  the hook's stdin JSON
  * @param {import('./run-usage-marker.d.mts').RunUsageMarker | null} marker
+ * @param {number} [now]
  * @returns {import('./run-usage-marker.d.mts').RelogPlan}
  */
-export function planRelog(input, marker) {
+export function planRelog(input, marker, now = Date.now()) {
   const sessionId =
     input && typeof input === 'object'
       ? safeSessionId(/** @type {Record<string, unknown>} */ (input).session_id)
@@ -191,6 +235,10 @@ export function planRelog(input, marker) {
   if (!marker) return { relog: false, reason: 'no marker' };
   if (marker.runtime !== 'claude-code') {
     return { relog: false, reason: `runtime ${marker.runtime}` };
+  }
+  const loggedAt = Date.parse(marker.loggedAt);
+  if (!Number.isFinite(loggedAt) || now - loggedAt > RELOG_WINDOW_MS) {
+    return { relog: false, reason: 'marker expired' };
   }
   const args = [
     '--workflow',

@@ -15,6 +15,8 @@ import {
   markerPath,
   planRelog,
   readMarker,
+  consumeMarker,
+  RELOG_WINDOW_MS,
   safeSessionId,
   writeMarker,
 } from '../../scripts/lib/run-usage-marker.mjs';
@@ -103,9 +105,12 @@ describe('writeMarker / readMarker', () => {
 });
 
 describe('planRelog', () => {
+  // Five minutes after the marker was logged: the closing turn.
+  const NOW = Date.parse('2026-10-14T10:05:00.000Z');
+
   it('re-logs a marked Claude Code session with the flags it logged with', () => {
     expect(
-      planRelog({ session_id: 'sess-1' }, marker({ notes: 'cycle 7' })),
+      planRelog({ session_id: 'sess-1' }, marker({ notes: 'cycle 7' }), NOW),
     ).toEqual({
       relog: true,
       cwd: '/repo',
@@ -123,27 +128,53 @@ describe('planRelog', () => {
   });
 
   it('omits --notes when the run logged none', () => {
-    const plan = planRelog({ session_id: 'sess-1' }, marker());
+    const plan = planRelog({ session_id: 'sess-1' }, marker(), NOW);
     expect(plan.relog && plan.args).not.toContain('--notes');
   });
 
   it('does nothing for a session without a marker (developer sessions)', () => {
-    expect(planRelog({ session_id: 'dev' }, null)).toEqual({
+    expect(planRelog({ session_id: 'dev' }, null, NOW)).toEqual({
       relog: false,
       reason: 'no marker',
     });
   });
 
   it('does nothing without a usable session id', () => {
-    expect(planRelog(null, marker()).relog).toBe(false);
-    expect(planRelog({}, marker()).relog).toBe(false);
-    expect(planRelog('garbage', marker()).relog).toBe(false);
+    expect(planRelog(null, marker(), NOW).relog).toBe(false);
+    expect(planRelog({}, marker(), NOW).relog).toBe(false);
+    expect(planRelog('garbage', marker(), NOW).relog).toBe(false);
   });
 
   it('leaves a non-Claude Code marker alone', () => {
     expect(
-      planRelog({ session_id: 'sess-1' }, marker({ runtime: 'codex' })).relog,
+      planRelog({ session_id: 'sess-1' }, marker({ runtime: 'codex' }), NOW).relog,
     ).toBe(false);
+  });
+
+  it('refuses a marker logged longer ago than the closing turn can be', () => {
+    // A follow-up or resumed session long after the run must not fold its
+    // work into the logged run.
+    const later = Date.parse('2026-10-14T10:00:00.000Z') + RELOG_WINDOW_MS + 1;
+    expect(planRelog({ session_id: 'sess-1' }, marker(), later)).toEqual({
+      relog: false,
+      reason: 'marker expired',
+    });
+  });
+});
+
+describe('consumeMarker', () => {
+  it('hands the marker out once and removes it', () => {
+    const env = { KINETIX_RUN_USAGE_MARKER_DIR: tmp() };
+    writeMarker('sess-1', marker(), { env });
+
+    expect(consumeMarker('sess-1', env)).toEqual(marker());
+    // The next Stop in the same session is later work, not the run's.
+    expect(consumeMarker('sess-1', env)).toBeNull();
+    expect(readMarker('sess-1', env)).toBeNull();
+  });
+
+  it('returns null when there is no marker', () => {
+    expect(consumeMarker('none', { KINETIX_RUN_USAGE_MARKER_DIR: tmp() })).toBeNull();
   });
 });
 
@@ -230,7 +261,9 @@ describe('relog-run-usage Stop hook', () => {
       }),
     );
     const env = { KINETIX_RUN_USAGE_MARKER_DIR: path.join(dir, 'markers') };
-    writeMarker('sess-1', marker({ transcript, cwd: process.cwd() }), { env });
+    const fresh = () =>
+      marker({ transcript, cwd: process.cwd(), loggedAt: new Date().toISOString() });
+    writeMarker('sess-1', fresh(), { env });
     const stdin = JSON.stringify({
       session_id: 'sess-1',
       transcript_path: transcript,
@@ -244,6 +277,13 @@ describe('relog-run-usage Stop hook', () => {
     expect(dry.stdout).toBe('');
     expect(dry.stderr).toContain('[dry-run] agent_run_usage API request');
     expect(dry.stderr).toContain('"sessionId":"sess-1"');
+    // Consumed: a later Stop in the same session re-logs nothing.
+    expect(readMarker('sess-1', env)).toBeNull();
+    const again = runHook(stdin, { ...env, KINETIX_AGENT_DRY_RUN: '1' });
+    expect(again.status).toBe(0);
+    expect(again.stderr).toBe('');
+
+    writeMarker('sess-1', fresh(), { env });
 
     const failing = runHook(stdin, {
       ...env,

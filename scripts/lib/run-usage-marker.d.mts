@@ -21,6 +21,7 @@ export type RelogPlan =
 
 export declare const MARKER_VERSION: 1;
 export declare const MARKER_TTL_MS: number;
+export declare const RELOG_WINDOW_MS: number;
 export declare const RELOG_ENV: 'KINETIX_RUN_USAGE_RELOG';
 
 export declare function markerDir(env?: NodeJS.ProcessEnv): string;
@@ -39,7 +40,12 @@ export declare function readMarker(
   sessionId: unknown,
   env?: NodeJS.ProcessEnv,
 ): RunUsageMarker | null;
+export declare function consumeMarker(
+  sessionId: unknown,
+  env?: NodeJS.ProcessEnv,
+): RunUsageMarker | null;
 export declare function planRelog(
   input: unknown,
   marker: RunUsageMarker | null,
+  now?: number,
 ): RelogPlan;
