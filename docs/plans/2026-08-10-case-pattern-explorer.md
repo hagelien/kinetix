@@ -2241,6 +2241,14 @@ Case CRUD continues through:
 
 with `kind=pattern-case` for listing.
 
+Inference overrides (section 30.12) are stored beside the case, not inside it, through their own owner-scoped route, added in Phase 5:
+
+```text
+/api/pattern/inference-overrides?caseId=<id>   -- CRUD, scoped by the parent case's created_by
+```
+
+It persists an expert's text and the engine text it superseded, exactly as case CRUD persists the case; it computes nothing, so it is not an analysis endpoint in the sense of section 41.1.
+
 ## 36. State management
 
 Create a dedicated store:
@@ -2596,7 +2604,16 @@ src/lib/pattern/interpretation.ts
 src/components/modeling/pattern/SimilarCases.tsx
 src/components/modeling/pattern/SourceResolver.tsx
 src/components/modeling/pattern/QualityPanel.tsx
+drizzle/00xx_pattern_inference_overrides.sql
+api/_lib/patternInferenceOverrideStore.ts
+api/pattern/inference-overrides.ts
 ```
+
+The inference override layer (section 30.12) gets its storage here, with the inferences it overrides. Nothing earlier writes to `pattern_inference_overrides`, and `/api/simulator/cases` reads and writes `simulator_cases` only, so the table needs its own plumbing:
+
+- **Migration.** Creates `pattern_inference_overrides` as sketched in section 30.12, with `case_id` a foreign key to `simulator_cases` `ON DELETE CASCADE`. The existing case DELETE path removes the case row directly and cleans up no children, so a restricting key would make any case with an override undeletable.
+- **Store and route, scoped by owner.** Create, read, update and delete each resolve the parent case first and check its `created_by` against the authenticated user, answering as `/api/simulator/cases` does when the case is missing (404) or not the caller's (403). The foreign key alone does not establish that the caller owns the case it points at.
+- **Attribution stamped server-side.** `author_user_id` and `created_at` come from the authenticated session on every write. A request body that supplies either is rejected or has it overwritten, never stored as sent — invariant 42 in section 40 tests exactly this.
 
 Acceptance:
 
@@ -2640,7 +2657,7 @@ The Pattern UI should consume a versioned scenario-comparison result rather than
 | Concern | Existing files to reuse/extend | New files |
 |---|---|---|
 | Modeling shell | `src/pages/ModelingPage.tsx`, `src/components/modeling/ModelingWorkspace.tsx`, `src/router.tsx` | `PatternCasePage.tsx`, `ModelingModeTabs.tsx` |
-| Case persistence | `api/simulator/cases.ts` | `src/types/patternCase.ts`, `src/lib/patternCases.ts`, `patternCaseStore.ts` |
+| Case persistence | `api/simulator/cases.ts` | `src/types/patternCase.ts`, `src/lib/patternCases.ts`, `patternCaseStore.ts`; inference overrides: `patternInferenceOverrideStore.ts`, `api/pattern/inference-overrides.ts` (Phase 5) |
 | Unit conversion | `src/lib/unitConversion.ts` | pattern normalization wrapper only |
 | Metabolism | `src/lib/metabolism.ts`, `api/_lib/metabolismStore.ts`, `drug_metabolites` | graph API/store + edge semantic fields |
 | Analytical methods | `analytical_method_components`, `src/lib/drugApi.ts`, method editor/API | measurand semantics + contributor model |
