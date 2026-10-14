@@ -56,7 +56,16 @@ const CONCENTRATION_NUMBER_START_GUARD = String.raw`(?<!\d[^${LETTER}\d]*|\d\s*[
  * Named explicitly so a sentence-ending full stop before ordinary prose
  * (`5 mg/L. Hver dag`) is still a concentration.
  */
-const TIME_UNIT_PATTERN = String.raw`(?:h|hrs?|hours?|t|timer?|min)`;
+const TIME_UNIT_PATTERN = String.raw`(?:${[
+  // seconds
+  "s", "secs?", "seconds?", "sekunder", "sekund",
+  // minutes
+  "mins?", "minutes?", "minutter", "minutt",
+  // hours
+  "h", "hrs?", "hours?", "t", "timer?",
+  // days, weeks
+  "d", "days?", "døgn", "dager", "dag", "wks?", "weeks?", "uker?",
+].join("|")})`;
 
 /**
  * Group 1: the (optionally qualified, optionally ranged) figure — it may carry
