@@ -25,17 +25,20 @@ case "$ROLE" in
 esac
 unset TOKEN_PRODUCER TOKEN_REVIEWER TOKEN_ADJ_A TOKEN_ADJ_B
 
-# Keep ANTHROPIC_API_KEY out of the agent's Bash and hook subprocesses, so a
-# prompt injection in fetched or database content cannot read it. The Kinetix
-# token stays visible to Bash because the helpers need it — the same exposure
-# the Routines have (agents/drug-db-maintainer.md §0).
-export CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1
+# Claude Code scrubs subprocess env by default under GitHub Actions. That strips
+# every *TOKEN* variable from Bash, including KINETIX_TOKEN, which the helpers
+# need (agents/drug-db-maintainer.md §0), and it will not start without
+# bubblewrap. So scrubbing is off, and ANTHROPIC_API_KEY is visible to the
+# agent's Bash just as KINETIX_TOKEN already is in the Routines. Owner decision:
+# use a dedicated API key for this workflow and delete it after the burst.
+export CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=0
 
 # A cycle may not spend more than this; it guards against a runaway cycle, not
 # the total, which the loop below tracks.
 cycle_cap=15
 deadline=$(( $(date +%s) + $(awk -v h="$HOURS" 'BEGIN { if (h > 5.5) h = 5.5; print int(h * 3600) }') ))
 spent=0; cycle=0; failures=0; status=0
+errlog=$(mktemp)
 
 while :; do
   remaining=$(awk -v b="$BUDGET" -v s="$spent" 'BEGIN { printf "%.2f", b - s }')
@@ -50,7 +53,7 @@ while :; do
     --allowedTools Bash Read WebSearch WebFetch \
     --disallowedTools Edit Write NotebookEdit \
     --max-budget-usd "$cap" \
-    --output-format json 2>/dev/null)
+    --output-format json 2>"$errlog")
 
   # A killed or crashed cycle reports no cost, but may already have spent up
   # to its cap. Count the whole cap so the total stays an upper bound.
@@ -68,6 +71,9 @@ while :; do
     failures=0
   else
     failures=$((failures + 1))
+    # Show why. stderr carries CLI errors, not agent output, and the Actions
+    # log masks any secret value that appears in it.
+    grep -v -e '\$bunfs' -e '^ *[0-9]* |' "$errlog" | tail -n 15
     if [ "$failures" -ge 3 ]; then
       echo "::error::Three failed cycles in a row; stopping."
       status=1
