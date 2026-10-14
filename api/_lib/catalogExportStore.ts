@@ -74,6 +74,7 @@ async function readCatalogRows(): Promise<CatalogDrugRow[]> {
       id: drugs.id,
       pubchemCid: drugs.pubchemCid,
       names: drugs.names,
+      slug: drugs.slug,
     })
     .from(drugs)
     .orderBy(asc(drugs.id));
@@ -85,6 +86,7 @@ async function readCatalogRows(): Promise<CatalogDrugRow[]> {
     byId.set(row.id, {
       pubchemCid: row.pubchemCid,
       names: row.names,
+      slug: row.slug,
       parameters: {},
       enzymes: [],
       metabolites: [],

@@ -14,6 +14,12 @@ interface RangeData {
 export interface RawComponent {
   name: string;
   nameEn?: string;
+  // The drug's catalog slug (`drugs.slug`). Optional because hand-written
+  // entries predate it; `npm run catalog:export` writes it from the database.
+  // The offline fallback maps it to `DrugComponent._slug`, which is the key a
+  // catalog-derived kinetics-core model is looked up by — and that key is not
+  // always derivable from the name (e.g. `paracetamol-acetaminophen`).
+  slug?: string;
   pubchemCid: number;
   molecularWeight?: number;
   bioavailability?: RangeData;

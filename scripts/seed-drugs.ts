@@ -135,7 +135,12 @@ async function seedDrugs(): Promise<SeedIndex> {
   const skippedNotApplicable: string[] = [];
 
   for (const c of embeddedComponents) {
-    const baseSlug = generateSlug(c.nameEn || c.name);
+    // Prefer the slug the fixture carries (written by `catalog:export` from the
+    // database): registry keys such as `paracetamol-acetaminophen` are not
+    // derivable from the name, and a fresh seed should mint the same slug the
+    // fixture's offline fallback resolves kinetics-core models by. Entries
+    // without one keep the name-derived slug.
+    const baseSlug = c.slug?.trim() || generateSlug(c.nameEn || c.name);
     let slug = baseSlug;
     let suffix = 2;
     while (slugsSeen.has(slug)) {
