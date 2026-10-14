@@ -322,6 +322,15 @@ export function WikiPage() {
     setFactDiscussion({ factId: linkedFactId });
   }, [linkedFactId, drug]);
 
+  // Tell the header which monograph is on screen, so it only draws the tab
+  // menu for a page that really is one.
+  const setMonographPageSlug = useDrugStore((s) => s.setMonographPageSlug);
+  const monographSlug = isMonograph ? (page?.slug ?? null) : null;
+  useEffect(() => {
+    setMonographPageSlug(monographSlug);
+    return () => setMonographPageSlug(null);
+  }, [monographSlug, setMonographPageSlug]);
+
   useEffect(() => {
     let cancelled = false;
     setDiscussionCounts({});

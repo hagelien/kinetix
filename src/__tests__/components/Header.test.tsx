@@ -301,6 +301,7 @@ describe('Header', () => {
         _dbId: 7,
       } as never,
     });
+    useDrugStore.setState({ monographPageSlug: 'paracetamol' });
     renderHeader('/wiki/paracetamol/postmortem');
 
     const tabs = screen.getByTestId('monograph-tab-nav');
@@ -312,6 +313,27 @@ describe('Header', () => {
         .getByRole('link', { name: 'monographTabs.overview' })
         .getAttribute('href'),
     ).toBe('/wiki/paracetamol/chemistry');
+  });
+
+  it('does not treat a tab-shaped URL as a monograph unless the page is one', () => {
+    useDrugStore.setState({
+      activeDrug: {
+        id: '1',
+        names: { nb: 'paracetamol' },
+        _dbId: 7,
+      } as never,
+      monographPageSlug: null,
+    });
+    renderHeader('/wiki/some-topic/postmortem');
+
+    const tabs = screen.getByTestId('monograph-tab-nav');
+    // No link is built from the topic's slug, and no tab is marked current.
+    expect(
+      within(tabs)
+        .getAllByRole('link')
+        .some((a) => a.getAttribute('href')?.includes('some-topic')),
+    ).toBe(false);
+    expect(within(tabs).queryByRole('link', { current: 'page' })).toBeNull();
   });
 
   it('keeps the header nav items identical across modules', () => {
