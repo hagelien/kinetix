@@ -496,8 +496,8 @@ function aboutColumnsSql(targetType: SQL, targetId: SQL): SQL {
     WHEN 'drug_discussion' THEN (
       SELECT dr.names FROM drug_parameter_discussions d JOIN drugs dr ON dr.id = d.drug_id
       WHERE d.id = ${targetId})
-    WHEN 'pending_edit' THEN (
-      SELECT dr.names FROM ${pe} e JOIN drugs dr ON dr.id = (
+    WHEN 'pending_edit' THEN COALESCE(
+      (SELECT dr.names FROM ${pe} e JOIN drugs dr ON dr.id = (
         CASE
           WHEN e.edit_type IN ('parameter', 'metabolism', 'receptor_targets') THEN e.target_id
           -- A param_entry create stores the drug id in target_id; an update or
@@ -505,7 +505,15 @@ function aboutColumnsSql(targetType: SQL, targetId: SQL): SQL {
           WHEN e.edit_type = 'param_entry' AND e.proposed_value->>'op' = 'create' THEN e.target_id
           WHEN e.edit_type = 'param_entry'
             THEN (SELECT pen.drug_id FROM parameter_entries pen WHERE pen.id = e.target_id)
-        END))
+        END)),
+      -- An approved delete removed the entry and may since have lost its drug
+      -- to a merge, so applying it kept a snapshot of the names. proposed_meta
+      -- is contributor-writable: trust the marker only on an approved
+      -- param_entry delete, and only when it has the expected shape.
+      (SELECT e.proposed_meta->'deletedEntry'->'drugNames' FROM ${pe} e
+        WHERE e.edit_type = 'param_entry' AND e.status = 'approved'
+          AND e.proposed_value->>'op' = 'delete'
+          AND jsonb_typeof(e.proposed_meta->'deletedEntry'->'drugNames') = 'object'))
   END`;
   const parameter = sql`CASE ${targetType}
     WHEN 'drug_parameter_revision' THEN (
@@ -518,7 +526,11 @@ function aboutColumnsSql(targetType: SQL, targetId: SQL): SQL {
         WHEN e.edit_type = 'param_entry' AND e.proposed_value->>'op' = 'create'
           THEN COALESCE(e.parameter, e.proposed_value->'input'->>'parameter')
         WHEN e.edit_type = 'param_entry'
-          THEN (SELECT pen.parameter FROM parameter_entries pen WHERE pen.id = e.target_id)
+          THEN COALESCE(
+            (SELECT pen.parameter FROM parameter_entries pen WHERE pen.id = e.target_id),
+            -- An approved delete removed the entry; its parameter was stored on
+            -- the edit at submission.
+            CASE WHEN e.status = 'approved' THEN e.parameter END)
       END FROM ${pe} e)
   END`;
   const detail = sql`CASE ${targetType}
