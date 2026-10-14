@@ -1422,13 +1422,23 @@ export async function retryAgentConsensus(
 export const CONSENSUS_SWEEP_LIMIT = 25;
 
 /**
+ * Most of a person's calculation-driving entry updates one sweep call retries,
+ * on top of {@link CONSENSUS_SWEEP_LIMIT}; each can cost a full apply.
+ */
+export const PERSON_ENTRY_UPDATE_SWEEP_LIMIT = 10;
+
+/**
  * The retry sweep: every pending edit with enough explicit approvals to
  * plausibly clear the active pool's quorum and no dispute verdict, oldest
  * first, re-run through consensus. Cheap to call often — an edit still short
  * of quorum is a read and a no-op.
+ *
+ * A person's calculation-driving entry update is not in that window; a second,
+ * separately bounded pass retries those whose effective quote resolves.
  */
 export async function sweepAgentConsensus(
   limit = CONSENSUS_SWEEP_LIMIT,
+  opts: { personEntryUpdateLimit?: number; personEntryUpdateScanBudget?: number } = {},
 ): Promise<Array<{ pendingEditId: number } & AgentConsensusOutcome>> {
   const db = getDb();
   const unansweredDisputeVerdict = db
@@ -1468,27 +1478,37 @@ export async function sweepAgentConsensus(
       and su.role in (${sql.join(ACTIVE_AGENT_ROLES.map((r) => sql`${r}`), sql`, `)})
   )`;
   const blankQuote = (expr: ReturnType<typeof sql>) => sql`nullif(btrim(${expr}), '') is null`;
+  const highRiskParameterIds = DRUG_PARAMETER_IDS.filter((id) =>
+    isHighRiskPendingEdit({ editType: 'parameter', parameter: id }),
+  );
+  const highRiskParameterSql = sql`${pendingEdits.parameter} in (${sql.join(
+    highRiskParameterIds.map((id) => sql`${id}`),
+    sql`, `,
+  )})`;
+  // A person's calculation-driving entry update. Whether the write keeps a
+  // quote turns on the stored row and the evidence fields the patch moves
+  // (quoteAfterUpdate), which no bulk filter can evaluate, and a person's held
+  // update is not returned to them. So it stays out of the main window (25 of
+  // them at quorum would otherwise hold every slot on `source_quote_missing`)
+  // and gets its own bounded pass below, which asks the write row by row
+  // (issue #70).
+  const personEntryUpdateSql = sql`(
+    ${highRiskParameterSql}
+    and ${pendingEdits.editType} = 'param_entry'
+    and ${pendingEdits.proposedValue}->>'op' = 'update'
+    and not ${submitterIsActiveAgentSql}
+  )`;
   const unquotedCalculationDriving = sql`(
-    ${pendingEdits.parameter} in (${sql.join(
-      DRUG_PARAMETER_IDS.filter((id) =>
-        isHighRiskPendingEdit({ editType: 'parameter', parameter: id }),
-      ).map((id) => sql`${id}`),
-      sql`, `,
-    )})
+    ${highRiskParameterSql}
     and (
       (${pendingEdits.editType} = 'parameter'
         and ${blankQuote(sql`${pendingEdits.proposedMeta}->>'sourceQuote'`)})
       or (${pendingEdits.editType} = 'param_entry'
         and ${pendingEdits.proposedValue}->>'op' = 'create'
         and ${blankQuote(sql`${pendingEdits.proposedValue}->'input'->>'quote'`)})
-      -- A person's entry update, whatever its payload says: whether the write
-      -- keeps a quote turns on the stored row and the evidence fields the
-      -- patch moves (quoteAfterUpdate), which this filter cannot evaluate in
-      -- bulk, and a person's held update is not returned to them. Left out
-      -- conservatively; a new verdict on it still runs consensus directly.
-      or (${pendingEdits.editType} = 'param_entry'
-        and ${pendingEdits.proposedValue}->>'op' = 'update'
-        and not ${submitterIsActiveAgentSql})
+      -- A person's entry update, whatever its payload says: retried by the
+      -- separate pass instead (personEntryUpdateSql).
+      or ${personEntryUpdateSql}
     )
   )`;
   // An ingested fact (one carrying `unverifiedReferenceIds`) citing a paper
@@ -1549,9 +1569,6 @@ export async function sweepAgentConsensus(
     quorumFloor,
     AGENT_CONSENSUS_APPROVE_QUORUM,
   );
-  const highRiskParameterIds = DRUG_PARAMETER_IDS.filter((id) =>
-    isHighRiskPendingEdit({ editType: 'parameter', parameter: id }),
-  );
   // Edits that consensus can never publish are filtered out here, before the
   // LIMIT, not left to `legacyConsensusHold`: otherwise 25 old unattributed
   // or clinical rows would fill every sweep and starve the edits behind them
@@ -1601,44 +1618,49 @@ export async function sweepAgentConsensus(
         eq(disputes.status, 'open'),
       ),
     );
+  // What every retry candidate has to satisfy, in either pass.
+  const retryable = [
+    eq(pendingEdits.status, 'pending'),
+    ne(pendingEdits.editType, 'clinical_case'),
+    // A person's proposal is retried too: it publishes on consensus like
+    // an agent's. Only an unattributed one never can.
+    isNotNull(pendingEdits.submittedBy),
+    exists(approvalsAtLeastQuorumFloor),
+    // An unanswered agent objection holds the proposal; one a moderator
+    // or the T3 panel has overruled no longer does (the gate's
+    // `excludeAnsweredDisputes`), so the sweep picks it up again.
+    not(exists(unansweredDisputeVerdict)),
+    not(exists(openHumanDispute)),
+    // COALESCE: a NULL from a missing field would make NOT drop a row the
+    // filter never meant to exclude.
+    not(sql`coalesce(${citesUnreadSources}, false)`),
+    // A reviewer's comment-only return keeps the approvals, so a row
+    // resubmitted unchanged sits at quorum and holds as
+    // `returned_unrevised` on every retry (`returnStandsUnrevised`). Only
+    // a revision can clear it, and that wipes the verdicts and re-runs
+    // consensus on its own, so the row has no business in the window.
+    // Both markers are the server's ISO-8601 stamps, which compare as
+    // text; anything else is left in and held by the gate as before.
+    not(returnStandsUnrevisedSql),
+    // Same content gate as the verifier queue: a wiki edit only while its
+    // page is published, so draft-backed rows neither publish nor fill
+    // the window.
+    pendingEditWikiVisibility(),
+  ];
   const candidates = await db
     .select({ id: pendingEdits.id })
     .from(pendingEdits)
     .where(
       and(
-        eq(pendingEdits.status, 'pending'),
-        ne(pendingEdits.editType, 'clinical_case'),
-        // A person's proposal is retried too: it publishes on consensus like
-        // an agent's. Only an unattributed one never can.
-        isNotNull(pendingEdits.submittedBy),
-        exists(approvalsAtLeastQuorumFloor),
-        // An unanswered agent objection holds the proposal; one a moderator
-        // or the T3 panel has overruled no longer does (the gate's
-        // `excludeAnsweredDisputes`), so the sweep picks it up again.
-        not(exists(unansweredDisputeVerdict)),
-        not(exists(openHumanDispute)),
+        ...retryable,
         // A calculation-driving proposal with no quote never publishes on
         // consensus. An agent's is returned to it by the unquoted sweep; a
         // person's stays pending for a moderator, and without this 25 of them
         // at quorum would hold every window on `source_quote_missing`. A
         // person's calculation-driving entry update is left out whatever its
-        // payload says (see `unquotedCalculationDriving`).
-        // COALESCE throughout: a NULL from a missing field would make NOT drop
-        // a row the filter never meant to exclude.
+        // payload says, and retried by the pass below once the write confirms
+        // it keeps a quote (see `personEntryUpdateSql`).
         not(sql`coalesce(${unquotedCalculationDriving}, false)`),
-        not(sql`coalesce(${citesUnreadSources}, false)`),
-        // A reviewer's comment-only return keeps the approvals, so a row
-        // resubmitted unchanged sits at quorum and holds as
-        // `returned_unrevised` on every retry (`returnStandsUnrevised`). Only
-        // a revision can clear it, and that wipes the verdicts and re-runs
-        // consensus on its own, so the row has no business in the window.
-        // Both markers are the server's ISO-8601 stamps, which compare as
-        // text; anything else is left in and held by the gate as before.
-        not(returnStandsUnrevisedSql),
-        // Same content gate as the verifier queue: a wiki edit only while its
-        // page is published, so draft-backed rows neither publish nor fill
-        // the window.
-        pendingEditWikiVisibility(),
       ),
     )
     .orderBy(asc(pendingEdits.submittedAt))
@@ -1646,6 +1668,58 @@ export async function sweepAgentConsensus(
   const results: Array<{ pendingEditId: number } & AgentConsensusOutcome> = [];
   for (const { id } of candidates) {
     try {
+      results.push({ pendingEditId: id, ...(await retryAgentConsensus(id)) });
+    } catch (err) {
+      // One bad row must not stop the sweep.
+      const detail = err instanceof Error ? err.message : String(err);
+      console.error(`[agent-consensus] sweep retry failed for ${id}: ${detail}`);
+      results.push({
+        pendingEditId: id,
+        outcome: 'held',
+        reason: 'apply_failed',
+        detail,
+      });
+    }
+  }
+
+  // A person's calculation-driving entry update (issue #70). The main window
+  // leaves every one out, since only the write can say whether it keeps a
+  // quote; without this pass one that reached quorum and then hit a transient
+  // failure (a quote-resolution fault, an apply refusal) stayed pending until
+  // a moderator or another verdict came along, unlike an agent's.
+  //
+  // Bounded twice: at most `scanBudget` rows are read, oldest first, and at
+  // most `retryLimit` of them retried. Each row's effective quote is asked of
+  // the write itself (`highRiskProposalWouldPublishUnquoted`), and only a row
+  // whose quote resolves is retried. One that would publish unquoted, or whose
+  // quote could not be resolved, is skipped rather than retried: consensus
+  // would only hold it on `source_quote_missing` again, and it is not
+  // returned to a person. Consensus re-runs the same gate before any write,
+  // so this check decides only what is worth retrying, never what publishes.
+  // More than `scanBudget` unquoted updates at quorum, older than a quoted
+  // one, would keep it out of reach; each of those is waiting in /review for
+  // a moderator.
+  const retryLimit = opts.personEntryUpdateLimit ?? PERSON_ENTRY_UPDATE_SWEEP_LIMIT;
+  const scanBudget = opts.personEntryUpdateScanBudget ?? retryLimit * 4;
+  if (retryLimit <= 0 || scanBudget <= 0) return results;
+  const entryUpdates = await db
+    .select({ id: pendingEdits.id })
+    .from(pendingEdits)
+    .where(and(...retryable, sql`coalesce(${personEntryUpdateSql}, false)`))
+    .orderBy(asc(pendingEdits.submittedAt), asc(pendingEdits.id))
+    .limit(scanBudget);
+  let retried = 0;
+  for (const { id } of entryUpdates) {
+    if (retried >= retryLimit) break;
+    try {
+      const pending = await readConsensusPendingRow(id);
+      if (!pending || pending.status !== 'pending') continue;
+      let unresolved = false;
+      const unquoted = await highRiskProposalWouldPublishUnquoted(pending, () => {
+        unresolved = true;
+      });
+      if (unquoted || unresolved) continue;
+      retried += 1;
       results.push({ pendingEditId: id, ...(await retryAgentConsensus(id)) });
     } catch (err) {
       // One bad row must not stop the sweep.
