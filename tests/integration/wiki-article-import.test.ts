@@ -271,6 +271,65 @@ describe("wiki article imports", () => {
     expect(await db.select().from(pendingEdits)).toHaveLength(0);
   });
 
+  it("folds a split source the page cites without reading the fold as a stale preview or undoing it (#247)", async () => {
+    // One paper under two rows, both knowing the article's DOI as an alt id.
+    // Resolving it finds both and folds the URL row into the PMID row.
+    const doi = bundle().sources[0]!.identifier;
+    const [survivor] = await db
+      .insert(citations)
+      .values({
+        type: "pmid",
+        identifier: "24500275",
+        metadata: { altIds: { doi } },
+        createdBy: userId,
+      })
+      .returning();
+    const [loser] = await db
+      .insert(citations)
+      .values({
+        type: "url",
+        identifier: "https://example.org/split",
+        metadata: { altIds: { doi } },
+        createdBy: userId,
+      })
+      .returning();
+    // The page already publishes F1, citing the row the fold removes.
+    const published = {
+      type: "fact",
+      attrs: { factId: "f1", referenceIds: [loser!.id] },
+      content: [{ type: "text", text: "Første testpåstand." }],
+    };
+    await db
+      .update(wikiPages)
+      .set({ content: { type: "doc", content: [...content.content, published] } })
+      .where(eq(wikiPages.id, pageId));
+    const b = bundle();
+    const plan = await planWikiArticle(b);
+    expect(plan.newSectionCount).toBe(1);
+
+    const result = await applyWikiArticle(b, userId, plan.fingerprint);
+
+    expect(await db.select({ id: citations.id }).from(citations)).toEqual([
+      { id: survivor!.id },
+    ]);
+    // The new section is written over the folded page, not over the snapshot
+    // the preview saw: the published fact keeps the survivor's id.
+    const [page] = await db.select().from(wikiPages);
+    expect(JSON.stringify(page!.content)).not.toContain(`[${loser!.id}]`);
+    expect(JSON.stringify(page!.content)).toContain(
+      `"referenceIds":[${survivor!.id}]`,
+    );
+    const sections = extractTopicSections(page!.content as typeof content);
+    expect(sections.map((s) => s.sectionId)).toEqual([
+      "existing",
+      plan.sections[1]!.sectionId,
+    ]);
+    // F1 is recognised as already published under the survivor; only F2 queues.
+    expect(result).toMatchObject({ queued: 1, skipped: 1, newSections: 1 });
+    const edits = await db.select().from(pendingEdits);
+    expect(edits.map((e) => e.referenceIds)).toEqual([[survivor!.id]]);
+  });
+
   it("refuses wrong identity, missing IDs and wrong heading order", async () => {
     const b = bundle();
     b.page.id = pageId + 1;

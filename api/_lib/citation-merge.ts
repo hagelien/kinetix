@@ -453,7 +453,9 @@ export interface CitationMergeStats {
    * another merge folding it — so its job list could not be settled (see
    * `CITATION_FOLD_LOCK_NAMESPACE`). `extraction_in_flight`: a run is
    * extracting the loser under its id right now (`inFlightExtractionJobId`),
-   * and the fold waits for that run to finish or be cancelled. `drug_locked`:
+   * or that job's row stayed locked by another write (see
+   * `lockLoserExtractionJobs`), and the fold waits for that run to finish or
+   * be cancelled. `drug_locked`:
    * a drug whose summaries the fold would recompute (`lockedDrugId`) was held
    * by another write, and the fold does not wait for a drug once it may hold
    * job rows (see `tryLockDrugForRecompute`) — whether found held at the
@@ -821,11 +823,21 @@ async function repointUniquePerCitation(
  *
  * Every open job is locked, not only the claimed ones, which is what makes the
  * check atomic: claiming is an UPDATE, so a queued job cannot become claimed
- * between this read and `repointExtractionJobs` moving it. A claim already
- * under way is waited out and its result re-read (READ COMMITTED re-checks a
- * locked row's newest version), and `claimNextJob` passes over a locked row
- * (`SKIP LOCKED`) rather than waiting on it. `NO KEY UPDATE` is enough to
- * conflict with every UPDATE that touches the row.
+ * between this read and `repointExtractionJobs` moving it. `claimNextJob`
+ * passes over a locked row (`SKIP LOCKED`) rather than waiting on it. `NO KEY
+ * UPDATE` is enough to conflict with every UPDATE that touches the row.
+ *
+ * **Tried, never waited for.** Every caller folds a whole group — a bundle's
+ * sources, or three or more rows of one paper — in one transaction, and an
+ * earlier fold's `rewriteJsonDocuments` may already hold a wiki page row. The
+ * job's holders are a claim under way and a run filing a fact (which holds its
+ * job `FOR SHARE` and then share-locks the page, #223), so waiting here is
+ * page-then-job against job-then-page — the cycle #247 removed from the wiki
+ * article import, reopened one fold later. So the rows are locked with `SKIP
+ * LOCKED` and compared with an unlocked read of the open set: an open job the
+ * lock skipped is held, retried briefly like the merge's advisory keys, and
+ * one that stays held defers the fold as in flight — which is what such a job
+ * almost always turns out to be (a run's claim check, or a claim landing).
  *
  * Two ways for an open job to appear *after* this scan are not rows it can
  * lock: an enqueue inserting one, and a requeue reopening a settled one. Both
@@ -839,18 +851,40 @@ async function repointUniquePerCitation(
  * advisory lock's does, and the check is only as good as a plain read.
  */
 async function lockLoserExtractionJobs(db: Db, loserId: number): Promise<number | null> {
-  const open = await db
-    .select({ id: paperExtractionJobs.id, status: paperExtractionJobs.status })
-    .from(paperExtractionJobs)
-    .where(
-      and(
-        eq(paperExtractionJobs.citationId, loserId),
-        inArray(paperExtractionJobs.status, ['queued', 'claimed']),
-      ),
-    )
-    .orderBy(paperExtractionJobs.id)
-    .for('no key update');
-  return open.find((job) => job.status === 'claimed')?.id ?? null;
+  for (let attempt = 0; ; attempt += 1) {
+    const open = await db
+      .select({ id: paperExtractionJobs.id })
+      .from(paperExtractionJobs)
+      .where(
+        and(
+          eq(paperExtractionJobs.citationId, loserId),
+          inArray(paperExtractionJobs.status, ['queued', 'claimed']),
+        ),
+      )
+      .orderBy(paperExtractionJobs.id);
+    if (open.length === 0) return null;
+    // The rows' newest versions, where this transaction could lock them.
+    const locked = await db
+      .select({ id: paperExtractionJobs.id, status: paperExtractionJobs.status })
+      .from(paperExtractionJobs)
+      .where(
+        inArray(
+          paperExtractionJobs.id,
+          open.map((job) => job.id),
+        ),
+      )
+      .orderBy(paperExtractionJobs.id)
+      .for('no key update', { skipLocked: true });
+    const claimed = locked.find((job) => job.status === 'claimed');
+    if (claimed) return claimed.id;
+    const lockedIds = new Set(locked.map((job) => job.id));
+    const held = open.find((job) => !lockedIds.has(job.id));
+    if (!held) return null;
+    if (!isInPoolTransaction() || attempt + 1 >= MERGE_LOCK_ATTEMPTS) return held.id;
+    await new Promise((resolve) => {
+      setTimeout(resolve, MERGE_LOCK_BACKOFF_MS * (attempt + 1));
+    });
+  }
 }
 
 /**
