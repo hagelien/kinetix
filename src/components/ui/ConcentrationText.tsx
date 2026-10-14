@@ -35,6 +35,7 @@ export function ConcentrationText({ text, molecularWeight }: ConcentrationTextPr
             key={index}
             {...concentrationTooltipArgs(segment.value)}
             unit={canonicalConcentrationUnit(segment.unit)}
+            triggerText={segment.unit}
             molecularWeight={molecularWeight}
           >
             {segment.text}
