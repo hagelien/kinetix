@@ -2481,38 +2481,28 @@ async function planWikiFactItem(
         });
       }
 
-      const [row] = await db2
-        .insert(pendingEdits)
-        .values(values)
-        .returning({ id: pendingEdits.id });
-      if (!row) return null;
-      try {
+      // Staging and approval are one unit of work. `applyApprovedEdit` joins this
+      // transaction, so the staged row never exists outside the approval: a page
+      // that is gone when the approval reads it (a delete that committed between
+      // planning and here) makes the approval throw, and the row rolls back with
+      // it. Nothing is left in the review queue for a reviewer who never saw
+      // this run, and nothing needs retiring afterwards.
+      //
+      // No page lock is taken up front on purpose. A share lock here would be
+      // held while the approval goes on to take its referenced-drug advisory
+      // locks and then upgrade the page row, which deadlocks against a drug
+      // merge (drug lock, then page row) and against a second ingestion
+      // upgrading the same lock. The approval orders its own locks.
+      return runInPoolTransaction(async () => {
+        const tx = getDb();
+        const [row] = await tx
+          .insert(pendingEdits)
+          .values(values)
+          .returning({ id: pendingEdits.id });
+        if (!row) return null;
         await applyApprovedEdit(row.id, actor.userId);
-      } catch (err) {
-        // The staging insert has already committed, so a failed approval would
-        // otherwise leave a live `pending` proposal in the review queue —
-        // content this run reported as FAILED, sitting where someone can
-        // approve it later, outside the receipt the admin was shown. Retire the
-        // row before surfacing the failure. Best-effort: if the cleanup itself
-        // fails, the original error is still what the admin hears about.
-        try {
-          await db2
-            .update(pendingEdits)
-            .set({
-              status: 'rejected',
-              rejectionReason: 'other',
-              rejectionComment:
-                'Conversation ingestion: approval failed, staged fact withdrawn',
-              reviewedBy: actor.userId,
-              reviewedAt: new Date(),
-            })
-            .where(eq(pendingEdits.id, row.id));
-        } catch {
-          // Fall through to the original error.
-        }
-        throw err;
-      }
-      return row.id;
+        return row.id;
+      });
     },
   };
 }

@@ -1,12 +1,12 @@
 /**
  * What conversation ingestion leaves behind when a fact's approval fails.
  *
- * Staging the `wiki_fact` pending edit and approving it are two commits: the
- * insert lands first, and if `applyApprovedEdit` then throws — a transient
- * database error, or a target that moved between the re-plan and the write —
- * the run reports the item as FAILED while a perfectly ordinary `pending`
- * proposal sits in the review queue, ready for someone to approve later. That
- * would publish content outside the receipt the admin was shown.
+ * Staging the `wiki_fact` pending edit and approving it share one transaction
+ * (under the page lock). If `applyApprovedEdit` throws — a transient database
+ * error, or a target that moved between the re-plan and the write — the run
+ * reports the item as FAILED and the staged row rolls back with it, so no
+ * ordinary `pending` proposal is left in the review queue to publish content
+ * outside the receipt the admin was shown.
  *
  * The failure is injected rather than provoked, and deliberately so: every
  * natural way to break the approval (a deleted page, a moved fact, a corrupted
@@ -136,17 +136,16 @@ function parse() {
 }
 
 describe('conversation ingestion — approval failure', () => {
-  it('retires the staged fact instead of leaving it in the review queue', async () => {
+  it('rolls the staged fact back instead of leaving it in the review queue', async () => {
     failApproval = true;
     const result = await applyIngestion(parse(), { userId, accept: [0] });
 
     expect(result.items[0]).toMatchObject({ status: 'failed', reason: 'write_failed' });
 
-    const rows = await db.select().from(pendingEdits);
-    expect(rows).toHaveLength(1);
-    // Not `pending`: a failed item must not be approvable by a reviewer who
-    // never saw this run.
-    expect(rows[0]).toMatchObject({ status: 'rejected', reviewedBy: userId });
+    // Staging and approval share one transaction, so the failed approval takes
+    // the staged row with it: a failed item must not be approvable by a
+    // reviewer who never saw this run.
+    expect(await db.select().from(pendingEdits)).toHaveLength(0);
 
     // And nothing reached the page.
     const [page] = await db
