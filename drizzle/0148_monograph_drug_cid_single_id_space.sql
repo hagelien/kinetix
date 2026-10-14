@@ -36,8 +36,15 @@
 -- `updated_at` is deliberately left alone: the page's content did not change,
 -- and the wiki shows that timestamp as the last edit.
 --
--- Idempotent. A moved page now holds a `drugs.id`, which the first condition
--- excludes, so a re-run finds nothing to do.
+-- Open `wiki_new` proposals carry the number the new page will get in
+-- `proposed_meta.drugCid`, and approval copies it into `drug_cid`. A proposal
+-- queued under the old two-space reading is normalized by the same rule
+-- (minus the page-count conditions, which apply only once a page exists);
+-- approval refuses whatever is left. Production had no open ones on
+-- 2026-10-14.
+--
+-- Idempotent. A moved page or proposal now holds a `drugs.id`, which the
+-- first condition excludes, so a re-run finds nothing to do.
 
 UPDATE "wiki_pages" AS "wp"
 SET "drug_cid" = "d"."id"
@@ -59,4 +66,20 @@ WHERE "wp"."page_type" = 'drug_monograph'
     WHERE "twin"."page_type" = 'drug_monograph'
       AND "twin"."drug_cid" = "wp"."drug_cid"
       AND "twin"."id" <> "wp"."id"
+  );
+--> statement-breakpoint
+
+UPDATE "pending_edits" AS "pe"
+SET "proposed_meta" = jsonb_set("pe"."proposed_meta", '{drugCid}', to_jsonb("d"."id"))
+FROM "drugs" AS "d"
+WHERE "pe"."edit_type" = 'wiki_new'
+  AND "pe"."status" IN ('pending', 'draft', 'returned')
+  AND jsonb_typeof("pe"."proposed_meta" -> 'drugCid') = 'number'
+  -- A whole number within int range, so the casts below cannot fail and
+  -- abort the migration on a malformed proposal.
+  AND ("pe"."proposed_meta" ->> 'drugCid') ~ '^[0-9]{1,9}$'
+  AND "d"."pubchem_cid" = ("pe"."proposed_meta" ->> 'drugCid')::int
+  AND NOT EXISTS (
+    SELECT 1 FROM "drugs" AS "owner"
+    WHERE "owner"."id" = ("pe"."proposed_meta" ->> 'drugCid')::int
   );

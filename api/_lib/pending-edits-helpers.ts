@@ -2006,6 +2006,23 @@ async function applyApprovedEditEffects(
     }
 
     const newPageType = (meta.pageType as string) ?? 'topic';
+    // `drug_cid` holds `drugs.id` and nothing else (migration 0148). A
+    // proposal queued before that may carry a PubChem CID, and copying it in
+    // would publish a monograph attached to no drug, or to whichever drug's
+    // id the CID happens to equal. Submission now refuses such numbers;
+    // approval refuses them too, so a stale proposal cannot slip through.
+    if (newPageType === 'drug_monograph' && finalDrugId != null && !newDrugInput) {
+      const [owner] = await db
+        .select({ id: drugs.id })
+        .from(drugs)
+        .where(eq(drugs.id, finalDrugId))
+        .limit(1);
+      if (!owner) {
+        throw new Error(
+          `This proposal links drug ${finalDrugId}, which is not an existing drug id. Return it so the author can re-select the drug, then approve.`,
+        );
+      }
+    }
     await assertDrugLinksResolve(db, edit.proposedValue, 'wiki_new');
     // Guarantee topic-page section anchors at approval time too, so an
     // agent- or human-authored wiki_new whose client skipped minting still

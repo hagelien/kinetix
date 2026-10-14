@@ -19,7 +19,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq, sql } from 'drizzle-orm';
-import { wikiPages } from '../../db/schema.js';
+import { pendingEdits, wikiPages } from '../../db/schema.js';
+import { applyApprovedEdit } from '../../api/_lib/pending-edits-helpers.js';
 import {
   ensureDrugMonograph,
   resolveOwningDrugIdForMonograph,
@@ -174,6 +175,70 @@ describe('migration 0148 — monograph drug_cid holds drugs.id only', () => {
     await runMigration();
 
     expect(await drugCidOf(page)).toBe(id);
+  });
+});
+
+describe('migration 0148 — queued wiki_new proposals', () => {
+  async function seedWikiNew(status: string, drugCid: unknown): Promise<number> {
+    const [row] = await db
+      .insert(pendingEdits)
+      .values({
+        editType: 'wiki_new',
+        status,
+        submittedBy: userId,
+        proposedValue: { type: 'doc', content: [] } as never,
+        proposedMeta: { title: 'Eslikarbazepin', pageType: 'drug_monograph', drugCid } as never,
+      })
+      .returning({ id: pendingEdits.id });
+    return row!.id;
+  }
+  async function metaCidOf(id: number): Promise<unknown> {
+    const [row] = await db
+      .select({ meta: pendingEdits.proposedMeta })
+      .from(pendingEdits)
+      .where(eq(pendingEdits.id, id));
+    return (row?.meta as { drugCid?: unknown } | null)?.drugCid;
+  }
+
+  it('moves an open proposal keyed by a CID onto the drug that carries it', async () => {
+    // Approval copies proposed_meta.drugCid into the new page's drug_cid,
+    // which readers now take as drugs.id only.
+    const id = await seedDrug(db, { slug: 'eslicarbazepine', pubchemCid: 9881504 });
+    const open = await seedWikiNew('pending', 9881504);
+
+    await runMigration();
+
+    expect(await metaCidOf(open)).toBe(id);
+  });
+
+  it('leaves proposals that already hold a drug id, are settled, or are malformed', async () => {
+    const a = await seedDrug(db, { slug: 'drug-a' });
+    await seedDrug(db, { slug: 'drug-b', pubchemCid: a });
+    const modern = await seedWikiNew('pending', a);
+    await seedDrug(db, { slug: 'eslicarbazepine', pubchemCid: 9881504 });
+    const settled = await seedWikiNew('rejected', 9881504);
+    const fractional = await seedWikiNew('pending', 1.5);
+
+    await runMigration();
+
+    expect(await metaCidOf(modern)).toBe(a);
+    expect(await metaCidOf(settled)).toBe(9881504);
+    expect(await metaCidOf(fractional)).toBe(1.5);
+  });
+
+  it('approval refuses a proposal whose drug id names no drug', async () => {
+    // Whatever the migration could not normalize must not publish a monograph
+    // attached to no drug.
+    await seedDrug(db, { slug: 'eslicarbazepine', pubchemCid: 9881504 });
+    await seedDrug(db, { slug: 'other', pubchemCid: 9881505 });
+    // Two drugs can't share a CID, but a CID nobody carries any more is the
+    // same shape: a number that is no drug's id.
+    const stale = await seedWikiNew('pending', 424242);
+
+    await expect(applyApprovedEdit(stale, userId)).rejects.toThrow(/not an existing drug id/);
+    expect(
+      await db.select({ id: wikiPages.id }).from(wikiPages).where(eq(wikiPages.slug, 'eslikarbazepin')),
+    ).toHaveLength(0);
   });
 });
 
