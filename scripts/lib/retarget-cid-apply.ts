@@ -5,9 +5,13 @@
  * The per-drug advisory lock is taken first, before any row lock. It is the
  * lock `saveCaseWithMergeLock` and the drug merge take, so a simulator case
  * saved while the CID moves either lands before the rewrite (and is repointed
- * by it) or waits for the commit. Without it a save could store the old key
- * after the only rewrite had run (#1076 item 4). Same order as the merge:
- * advisory lock, then row locks.
+ * by it) or waits for the commit. Waiting alone is not what makes the second
+ * case safe: the save resolved its keys before queueing on the lock, and
+ * after this commit the drug still exists, so an existence check would let
+ * the old CID through after the only rewrite had run (#1076 item 4). The save
+ * therefore re-resolves its keys once it holds the lock and refuses (409) when
+ * one no longer resolves or resolves to a different drug. Same order as the
+ * merge: advisory lock, then row locks.
  */
 import { eq, sql } from 'drizzle-orm';
 import { drugs } from '../../db/schema';
