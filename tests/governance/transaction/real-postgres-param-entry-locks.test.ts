@@ -114,7 +114,22 @@ describe.skipIf(!hasRealPostgres)('param_entry nested drug references under real
     return row!.id;
   }
 
-  function cmaxCreate(analyte: number, administeredDrugId: number) {
+  /**
+   * The two dose-context columns that name a drug. Every race below runs once
+   * per column (#19): the lock set, the delete's scan and the merge's repoint
+   * each handle them separately, so racing only the administered drug would
+   * leave the interacting one unproven.
+   */
+  const NESTED_KEYS = [['administeredDrugId'], ['interactingDrugId']] as const;
+  type NestedKey = (typeof NESTED_KEYS)[number][0];
+
+  /**
+   * A Cmax create naming `ref` under `key`. An interaction arm still names an
+   * administered drug — the analyte itself, so the only drug the payload
+   * names besides its owner is `ref`, and a merge into the winner cannot turn
+   * it into a drug interacting with itself.
+   */
+  function cmaxCreate(analyte: number, ref: number, key: NestedKey = 'administeredDrugId') {
     return {
       op: 'create' as const,
       input: {
@@ -128,7 +143,13 @@ describe.skipIf(!hasRealPostgres)('param_entry nested drug references under real
         valueBasis: 'concentration',
         doseValue: 2,
         doseUnit: 'mg',
-        administeredDrugId,
+        ...(key === 'administeredDrugId'
+          ? { administeredDrugId: ref }
+          : {
+              administeredDrugId: analyte,
+              interactingDrugId: ref,
+              coadministrationState: 'with_interacting_drug',
+            }),
       },
     };
   }
@@ -139,11 +160,12 @@ describe.skipIf(!hasRealPostgres)('param_entry nested drug references under real
    */
   function authorCreate(
     analyte: number,
-    administered: number,
+    ref: number,
+    key: NestedKey,
     hold?: Promise<void>,
     onLocked?: () => void,
   ): Promise<ParamEntryLockedResult<number>> {
-    const proposedValue = cmaxCreate(analyte, administered);
+    const proposedValue = cmaxCreate(analyte, ref, key);
     return runInPoolTransaction(() =>
       withParamEntryPayloadLocks(
         { op: 'create', targetId: analyte, proposedValue },
@@ -223,13 +245,13 @@ describe.skipIf(!hasRealPostgres)('param_entry nested drug references under real
     expect(inner).toBe(outer);
   });
 
-  it('author first: the delete waits for the proposal, then refuses', async () => {
+  it.each(NESTED_KEYS)('author first: the delete waits for the proposal, then refuses (%s)', async (key) => {
     const analyte = await seedDrug('benzoylekgonin');
     const parent = await seedDrug('kokain');
     const release = gate();
     const locked = gate();
 
-    const author = authorCreate(analyte, parent, release.wait, locked.open);
+    const author = authorCreate(analyte, parent, key, release.wait, locked.open);
     await locked.wait;
     const deletion = deleteDrug(parent);
     expect(await stillPending(deletion)).toBe(true);
@@ -243,7 +265,7 @@ describe.skipIf(!hasRealPostgres)('param_entry nested drug references under real
     expect(await exists(parent)).toBe(true);
   });
 
-  it('delete first: the author waits for the delete, then refuses', async () => {
+  it.each(NESTED_KEYS)('delete first: the author waits for the delete, then refuses (%s)', async (key) => {
     const analyte = await seedDrug('benzoylekgonin');
     const parent = await seedDrug('kokain');
     const release = gate();
@@ -259,7 +281,7 @@ describe.skipIf(!hasRealPostgres)('param_entry nested drug references under real
       await release.wait;
     });
     await locked.wait;
-    const author = authorCreate(analyte, parent);
+    const author = authorCreate(analyte, parent, key);
     expect(await stillPending(author)).toBe(true);
     release.open();
     await deletion;
@@ -268,14 +290,14 @@ describe.skipIf(!hasRealPostgres)('param_entry nested drug references under real
     expect(await db.select().from(pendingEdits)).toEqual([]);
   });
 
-  it('author first: the merge waits for the proposal, then repoints it', async () => {
+  it.each(NESTED_KEYS)('author first: the merge waits for the proposal, then repoints it (%s)', async (key) => {
     const analyte = await seedDrug('benzoylekgonin');
     const winner = await seedDrug('kokain');
     const loser = await seedDrug('kokain-dup');
     const release = gate();
     const locked = gate();
 
-    const author = authorCreate(analyte, loser, release.wait, locked.open);
+    const author = authorCreate(analyte, loser, key, release.wait, locked.open);
     await locked.wait;
     const merge = runInPoolTransaction(() =>
       mergeDrugs(getDb(), {
@@ -295,13 +317,11 @@ describe.skipIf(!hasRealPostgres)('param_entry nested drug references under real
     const [edit] = await db
       .select({ value: pendingEdits.proposedValue })
       .from(pendingEdits);
-    expect((edit!.value as { input: { administeredDrugId: number } }).input.administeredDrugId).toBe(
-      winner,
-    );
+    expect((edit!.value as { input: Record<NestedKey, number> }).input[key]).toBe(winner);
     expect(await exists(loser)).toBe(false);
   });
 
-  it('merge first: the author waits for the merge, then refuses', async () => {
+  it.each(NESTED_KEYS)('merge first: the author waits for the merge, then refuses (%s)', async (key) => {
     const analyte = await seedDrug('benzoylekgonin');
     const winner = await seedDrug('kokain');
     const loser = await seedDrug('kokain-dup');
@@ -320,7 +340,7 @@ describe.skipIf(!hasRealPostgres)('param_entry nested drug references under real
       await release.wait;
     });
     await merged.wait;
-    const author = authorCreate(analyte, loser);
+    const author = authorCreate(analyte, loser, key);
     expect(await stillPending(author)).toBe(true);
     release.open();
     await merge;
