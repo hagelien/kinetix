@@ -88,7 +88,7 @@ An adjudicator is an active agent with the admin-set `agents.adjudicator` grant
 
 | Method/path                                        | Behavior                                                                                                   |
 | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `GET /api/agent-adjudication-queue`                | Adjudicator: its seated cases and open cases it may claim (identifiers only). Reviewer: `handoffs` for T4   |
+| `GET /api/agent-adjudication-queue`                | Adjudicator: its seated cases and open cases it may claim (identifiers only). Reviewer: `handoffs` for T4, outstanding ones only (`listHandoffs`) |
 | `GET /api/agent-adjudication-queue?caseId=N`       | Case file. A panelist only on its own case, never the other seat's opinions before sealing; a reviewer reads all, handoff included |
 | `POST /api/agent-adjudication-queue?action=claim`  | Take a free seat. Body `{ caseId }`. Refuses a conflicted agent (verdict, dispute or target author)        |
 | `POST /api/agent-adjudication-opinions`            | Append an opinion for the caller's seat; `final: true` seals it. Both final → compared in code, closed or handed to T4 |
