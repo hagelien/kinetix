@@ -25,6 +25,13 @@ interface UnitTooltipProps {
   /** The unit that the visible content is rendered in. */
   unit: string | null | undefined;
   /**
+   * The unit's spelling as it appears in `children`, when that differs from
+   * `unit` — e.g. prose authored as `mg/l` or `ug/L` whose unit is passed in
+   * canonical form (`mg/L`, `µg/L`) for conversion. Only this text becomes the
+   * focusable trigger. Defaults to `unit`.
+   */
+  triggerText?: string | null;
+  /**
    * The unit the value was authored in, when the visible content has already
    * been converted into `unit` (the reader's preferred unit). The authored
    * figure then leads the tooltip, so the source's own numbers stay one hover
@@ -126,6 +133,7 @@ export function UnitTooltip({
   low,
   high,
   unit,
+  triggerText,
   sourceUnit,
   sourceFormatted,
   molecularWeight,
@@ -163,7 +171,7 @@ export function UnitTooltip({
       ? { ...alternative, formatted: sourceFormatted }
       : alternative,
   );
-  const split = splitChildrenOnUnit(children, unit);
+  const split = splitChildrenOnUnit(children, triggerText || unit);
 
   /**
    * Place the panel against the VIEWPORT rather than the trigger's box.
