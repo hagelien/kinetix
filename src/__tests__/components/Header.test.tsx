@@ -278,7 +278,10 @@ describe('Header', () => {
   });
 
   it('keeps the tab menu on a monograph route when the drug lookup failed', () => {
-    useDrugStore.setState({ activeDrug: null });
+    useDrugStore.setState({
+      activeDrug: null,
+      monographPageSlug: 'paracetamol',
+    });
     renderHeader('/wiki/paracetamol/postmortem');
 
     const tabs = screen.getByTestId('monograph-tab-nav');
@@ -334,6 +337,13 @@ describe('Header', () => {
         .some((a) => a.getAttribute('href')?.includes('some-topic')),
     ).toBe(false);
     expect(within(tabs).queryByRole('link', { current: 'page' })).toBeNull();
+  });
+
+  it('shows no tab menu on a tab-shaped topic URL without an active drug', () => {
+    useDrugStore.setState({ activeDrug: null, monographPageSlug: null });
+    renderHeader('/wiki/some-topic/postmortem');
+
+    expect(screen.queryByTestId('monograph-tab-nav')).toBeNull();
   });
 
   it('keeps the header nav items identical across modules', () => {
