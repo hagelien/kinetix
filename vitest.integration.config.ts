@@ -65,6 +65,7 @@ const MOCKED = [
   'tests/integration/paper-extraction-focus-exemption.test.ts',
   'tests/integration/pdf-inbox.test.ts',
   'tests/integration/pdf-requests-pubchem-queue.test.ts',
+  'tests/integration/pending-edit-run-session.test.ts',
   'tests/integration/pending-edits-consensus-status-batch.test.ts',
   'tests/integration/pending-edits-drug-lock.test.ts',
   'tests/integration/pending-edits-page-lock.test.ts',
