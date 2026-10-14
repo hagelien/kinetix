@@ -5,7 +5,7 @@
  * a source-diff list (added/removed citations) and a review-round list
  * (agent verdicts + human disputes).
  */
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18nApp from '@/i18n';
 import { ParameterHistoryDialog } from './ParameterHistoryDialog';
@@ -272,5 +272,45 @@ describe('ParameterHistoryDialog', () => {
     expect(await screen.findByText(/Recomputed from 3 source entries/)).toBeInTheDocument();
     expect(screen.queryByText('Sources')).not.toBeInTheDocument();
     expect(screen.queryByText('Review')).not.toBeInTheDocument();
+    // No approvers → no "approved by" line.
+    expect(screen.queryByTestId('revision-approvals')).not.toBeInTheDocument();
+  });
+
+  it('shows who approved a revision and when, read-only (#107)', async () => {
+    const approvedAt = '2026-09-22T11:30:00.000Z';
+    fetchDrugParameterHistoryMock.mockResolvedValue({
+      revisions: [
+        revision({
+          approvals: {
+            count: 1,
+            approvers: [
+              {
+                id: 7,
+                username: 'reviewer',
+                displayName: 'Kari Nordmann',
+                role: 'editor',
+                isAgent: false,
+                approvedAt,
+              },
+            ],
+            approvedByMe: false,
+          },
+        }),
+      ],
+    });
+
+    render(
+      <ParameterHistoryDialog drugId={51} parameter="tmax" onClose={() => {}} />,
+    );
+
+    const line = await screen.findByTestId('revision-approvals');
+    expect(line).toHaveTextContent('Approved by');
+    expect(line).toHaveTextContent('Kari Nordmann');
+    expect(line).toHaveTextContent(new Date(approvedAt).toLocaleString());
+    // Display only: the removed click-to-approve chip must not come back.
+    expect(within(line).queryByRole('button')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /approv/i }),
+    ).not.toBeInTheDocument();
   });
 });

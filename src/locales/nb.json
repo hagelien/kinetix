@@ -4002,6 +4002,7 @@
   "paramHistory": {
     "title": "Historikk",
     "dialogHeading": "{{parameter}} — historikk",
+    "approvedBy": "Godkjent av",
     "noRevisions": "Ingen revisjoner er registrert for denne parameteren ennå.",
     "before": "Før",
     "after": "Etter",
