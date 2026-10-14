@@ -13,7 +13,7 @@
  * row and append exactly one history revision.
  */
 import { and, desc, eq, sql } from 'drizzle-orm';
-import { getDb } from './db.js';
+import { getDb, isInPoolTransaction } from './db.js';
 import {
   agents,
   approvals,
@@ -27,9 +27,36 @@ import {
   recordImplicitAgentApproval,
 } from './agent-verifications.js';
 import {
+  findDrugsCitingCitation,
   lockDrugsCitingCitation,
   recomputeSummariesCitingCitation,
 } from './parameter-entries-store.js';
+import {
+  tryLockDrugForRecompute,
+  tryLockLateDrugsCitingCitation,
+} from './citation-merge.js';
+
+/**
+ * A review write that would have had to wait for a drug lock while holding
+ * rows a citation merge may be queued on, and so did not. Nothing is written —
+ * the write's own changes are rolled back to its savepoint first — so the
+ * caller's transaction is as it was; re-running the write records it.
+ */
+export class PaperReviewDrugLockedError extends Error {
+  readonly statusHint = 409;
+  readonly code = 'paper_review_drug_locked';
+
+  constructor(
+    readonly citationId: number,
+    readonly drugId: number,
+  ) {
+    super(
+      `paper review of citation ${citationId} not recorded: drug ${drugId}, whose ` +
+        'parameter summaries the review recomputes, was locked by another write. Retry to record it.',
+    );
+    this.name = 'PaperReviewDrugLockedError';
+  }
+}
 
 export interface PaperReviewInput {
   reviewMarkdown: string;
@@ -64,6 +91,16 @@ export async function recordPaperReview(args: {
   citationId: number;
   authorUserId: number;
   input: PaperReviewInput;
+  /**
+   * How to take the drug locks the recompute needs, up front. `wait` (the
+   * default) is right only for a caller whose transaction holds nothing yet —
+   * the public POST route. A caller that already holds rows passes `try`: the
+   * approval path holds the edit's `pending_edits` row, which a citation merge
+   * holding a drug rewrites, so waiting for a drug there closes the cycle
+   * #243 removed. A drug that stays held throws
+   * {@link PaperReviewDrugLockedError} before anything is written.
+   */
+  drugLocks?: 'wait' | 'try';
 }): Promise<RecordedPaperReview> {
   const db = getDb();
   const { citationId, authorUserId, input } = args;
@@ -84,8 +121,62 @@ export async function recordPaperReview(args: {
   // now, before the review row: a citation merge holds them (#243) while it
   // rewrites this row, so reaching them only after the upsert would wait on the
   // merge while holding the row it is waiting for.
-  if (recomputes) await lockDrugsCitingCitation(citationId);
+  const lockedDrugs = new Set<number>();
+  if (recomputes && args.drugLocks === 'try') {
+    for (const drugId of await findDrugsCitingCitation(citationId)) {
+      if (!(await tryLockDrugForRecompute(db, drugId))) {
+        throw new PaperReviewDrugLockedError(citationId, drugId);
+      }
+      lockedDrugs.add(drugId);
+    }
+  } else if (recomputes) {
+    for (const drugId of await lockDrugsCitingCitation(citationId)) lockedDrugs.add(drugId);
+  }
 
+  // Everything below runs under a savepoint when a recompute follows, so a
+  // drug that turns out late and held (see the recompute) can undo it all.
+  const atomic = recomputes && isInPoolTransaction();
+  if (atomic) await db.execute(sql`SAVEPOINT paper_review_write`);
+  try {
+    const recorded = await writeReview(db, citationId, authorUserId, input);
+    if (recomputes) {
+      // The scan above covers entries that cited the paper when it ran. A
+      // drug whose first such entry committed since is tried, never waited
+      // for: this transaction now holds the review row, and a citation merge
+      // that saw the new entry holds that drug and waits for the row.
+      const heldDrugId = await tryLockLateDrugsCitingCitation(db, citationId, lockedDrugs);
+      if (heldDrugId !== null) throw new PaperReviewDrugLockedError(citationId, heldDrugId);
+      // Refresh the cached value for every summarizable parameter whose
+      // entries cite this paper — but only when the score actually changed,
+      // so a prose-only re-review doesn't churn revisions or reset approval
+      // state.
+      await recomputeSummariesCitingCitation(citationId, authorUserId);
+    }
+    if (atomic) await db.execute(sql`RELEASE SAVEPOINT paper_review_write`);
+    return recorded;
+  } catch (err) {
+    if (atomic) {
+      // The original error is the one worth surfacing; a rollback that fails
+      // too leaves the transaction to the caller's own rollback.
+      await db
+        .execute(sql`ROLLBACK TO SAVEPOINT paper_review_write`)
+        .then(() => db.execute(sql`RELEASE SAVEPOINT paper_review_write`))
+        .catch(() => undefined);
+    }
+    throw err;
+  }
+}
+
+/**
+ * The review's own writes: the upserted row, its revision, the reset peer
+ * signals and the PDF request it settles.
+ */
+async function writeReview(
+  db: ReturnType<typeof getDb>,
+  citationId: number,
+  authorUserId: number,
+  input: PaperReviewInput,
+): Promise<RecordedPaperReview> {
   const [row] = await db
     .insert(paperReviews)
     .values({
@@ -170,13 +261,6 @@ export async function recordPaperReview(args: {
           eq(pdfRequests.status, 'open'),
         ),
       );
-  }
-
-  // Refresh the cached value for every summarizable parameter whose entries
-  // cite this paper — but only when the score actually changed, so a prose-only
-  // re-review doesn't churn revisions or reset approval state.
-  if (recomputes) {
-    await recomputeSummariesCitingCitation(citationId, authorUserId);
   }
 
   return { id: row.id, citationId, revisionId: rev?.id ?? 0 };

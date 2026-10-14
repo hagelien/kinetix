@@ -46,7 +46,10 @@ import { getDb, runInPoolTransaction } from '../../../api/_lib/db.js';
 import { mergeCitations, type CitationMergeStats } from '../../../api/_lib/citation-merge.js';
 import { mergeDrugs } from '../../../api/_lib/drug-merge.js';
 import { liveClaimCitationId } from '../../../api/_lib/paper-extraction-store.js';
-import { recordPaperReview } from '../../../api/_lib/paper-review-store.js';
+import {
+  PaperReviewDrugLockedError,
+  recordPaperReview,
+} from '../../../api/_lib/paper-review-store.js';
 import { lockDrugForEntryApplicability } from '../../../api/_lib/parameterApplicabilityStore.js';
 import {
   agents,
@@ -55,6 +58,7 @@ import {
   drugParameters,
   drugs,
   paperExtractionJobs,
+  paperReviewRevisions,
   paperReviews,
   parameterEntries,
   pendingEdits,
@@ -799,6 +803,212 @@ describe.skipIf(!hasRealPostgres)(
           expect(after.summaries).toEqual(
             [`${drugId}:halfLife`, `${lateDrug}:halfLife`].sort(),
           );
+        },
+        LOCK_TIMEOUT_MS * 3,
+      );
+    });
+
+    // The mirror of the case above, on the re-score's side. A re-score's
+    // up-front scan covers the entries citing its paper when it starts; a
+    // drug whose first such entry lands after it is reached only at the
+    // recompute, by which point the re-score holds the review row — the row a
+    // fold that saw the new entry, and so holds that drug, is waiting for.
+    describe('a drug whose first entry citing the paper lands mid-re-score', () => {
+      /** A duplicate whose read-in-full review the fold moves onto the winner. */
+      let loser: number;
+      /** The drug whose first entry citing the winner lands mid-re-score. */
+      let lateDrug: number;
+
+      beforeEach(async () => {
+        await db.insert(paperReviews).values([
+          { citationId: winner, reviewMarkdown: 'Sammendrag.', overallScore: 50, createdBy: authorId },
+        ]);
+        loser = await seedCitation('doi', '10.1000/split-review');
+        await db.insert(paperReviews).values({
+          citationId: loser,
+          reviewMarkdown: 'Lest i sin helhet.',
+          overallScore: 70,
+          readInFull: true,
+          createdBy: authorId,
+        });
+        lateDrug = await seedDrug('legemiddel-sent');
+      });
+
+      const RESCORED = 'Sammendrag, vurdert på nytt.';
+
+      function rescore(drugLocks?: 'wait' | 'try') {
+        return runInPoolTransaction(() =>
+          recordPaperReview({
+            citationId: winner,
+            authorUserId: authorId,
+            input: {
+              reviewMarkdown: RESCORED,
+              overallScore: 60,
+              conclusionSupport: null,
+              reviewConfidence: null,
+              readInFull: false,
+            },
+            drugLocks,
+          }),
+        );
+      }
+
+      /** Hold the winner's review row in a transaction of its own until released. */
+      function holdWinnerReview() {
+        const taken = gate();
+        const release = gate();
+        const done = runInPoolTransaction(async () => {
+          await getDb().execute(
+            sql`SELECT id FROM paper_reviews WHERE citation_id = ${winner} FOR UPDATE`,
+          );
+          taken.open();
+          await release.wait;
+        });
+        held.push({ release: release.open, done });
+        return { taken: taken.wait, release: release.open, done };
+      }
+
+      /** Resolve once `n` backends are blocked on a lock, their queries naming `table`. */
+      async function blockedCount(table: string, n: number): Promise<void> {
+        const deadline = Date.now() + LOCK_TIMEOUT_MS;
+        while (Date.now() < deadline) {
+          const result = await db.execute<{ n: number }>(sql`
+            SELECT count(*)::int AS n FROM pg_stat_activity
+            WHERE datname = current_database()
+              AND wait_event_type = 'Lock'
+              AND query ILIKE ${`%${table}%`}
+          `);
+          if ((result.rows[0]?.n ?? 0) >= n) return;
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+        throw new Error(`fewer than ${n} backends blocked on ${table} within ${LOCK_TIMEOUT_MS}ms`);
+      }
+
+      it(
+        'stands the re-score aside with nothing written, instead of deadlocking against the fold',
+        async () => {
+          // Pauses the re-score at its review row: after its up-front scan
+          // (which finds no entry, so no drug), before it holds anything.
+          const reviewHold = holdWinnerReview();
+          await reviewHold.taken;
+          const rescoring = rescore();
+          await blockedOn('paper_reviews');
+
+          // Another writer's entry on the late drug, citing the winner,
+          // commits; a fold of the loser sees it, takes that drug, and queues
+          // on the winner's review row behind the re-score.
+          await seedEntry(lateDrug, winner);
+          const folding = runInPoolTransaction(() =>
+            mergeCitations(getDb(), winner, loser, { actorUserId: authorId }),
+          );
+          await blockedCount('paper_reviews', 2);
+          reviewHold.release();
+
+          const [rescoreOutcome, foldOutcome] = await Promise.allSettled([rescoring, folding]);
+          for (const outcome of [rescoreOutcome, foldOutcome]) {
+            if (outcome.status === 'rejected') {
+              expect(sqlState(outcome.reason)).not.toBe(DEADLOCK_DETECTED);
+            }
+          }
+          expect(rescoreOutcome.status).toBe('rejected');
+          expect((rescoreOutcome as PromiseRejectedResult).reason).toBeInstanceOf(
+            PaperReviewDrugLockedError,
+          );
+          expect((rescoreOutcome as PromiseRejectedResult).reason).toMatchObject({
+            citationId: winner,
+            drugId: lateDrug,
+          });
+          expect(foldOutcome.status).toBe('fulfilled');
+          const fold = (foldOutcome as PromiseFulfilledResult<CitationMergeStats>).value;
+          expect(fold.deferred).toBeUndefined();
+          expect(fold).toMatchObject({ reviewsDropped: 1, summaryRecompute: 'ran' });
+
+          // Nothing of the re-score landed: the winner kept the loser's
+          // read-in-full review, and no revision carries the re-score's text.
+          const reviews = await db
+            .select({ citationId: paperReviews.citationId, overallScore: paperReviews.overallScore })
+            .from(paperReviews);
+          expect(reviews).toEqual([{ citationId: winner, overallScore: 70 }]);
+          const revisions = await db
+            .select({ id: paperReviewRevisions.id })
+            .from(paperReviewRevisions)
+            .where(eq(paperReviewRevisions.reviewMarkdown, RESCORED));
+          expect(revisions).toEqual([]);
+
+          // Submitted again, the re-score records and recomputes the drug.
+          await rescore();
+          const after = await db
+            .select({ citationId: paperReviews.citationId, overallScore: paperReviews.overallScore })
+            .from(paperReviews);
+          expect(after).toEqual([{ citationId: winner, overallScore: 60 }]);
+          const summaries = await db
+            .select({ drugId: drugParameters.drugId })
+            .from(drugParameters);
+          expect(summaries.map((row) => row.drugId)).toEqual([lateDrug]);
+        },
+        LOCK_TIMEOUT_MS * 3,
+      );
+
+      it(
+        'the pre-fix re-score order (review row, then a waiting late-drug lock) really does deadlock against it',
+        async () => {
+          const reviewHold = holdWinnerReview();
+          await reviewHold.taken;
+          const rescoring = runInPoolTransaction(async () => {
+            await getDb()
+              .update(paperReviews)
+              .set({ overallScore: 60 })
+              .where(eq(paperReviews.citationId, winner));
+            await getDb().execute(sql`SELECT pg_advisory_xact_lock(${lateDrug}::bigint)`);
+          });
+          await blockedOn('paper_reviews');
+
+          await seedEntry(lateDrug, winner);
+          const folding = runInPoolTransaction(() =>
+            mergeCitations(getDb(), winner, loser, { actorUserId: authorId }),
+          );
+          await blockedCount('paper_reviews', 2);
+          reviewHold.release();
+
+          const outcomes = await Promise.allSettled([rescoring, folding]);
+          const rejected = outcomes.filter(
+            (o): o is PromiseRejectedResult => o.status === 'rejected',
+          );
+          expect(rejected).toHaveLength(1);
+          expect(sqlState(rejected[0]!.reason)).toBe(DEADLOCK_DETECTED);
+        },
+        LOCK_TIMEOUT_MS * 3,
+      );
+
+      it(
+        "a 'try' re-score refuses up front, writing nothing, when a drug it needs is held",
+        async () => {
+          await seedEntry(lateDrug, winner);
+          const taken = gate();
+          const release = gate();
+          const done = runInPoolTransaction(async () => {
+            await getDb().execute(sql`SELECT pg_advisory_xact_lock(${lateDrug}::bigint)`);
+            taken.open();
+            await release.wait;
+          });
+          held.push({ release: release.open, done });
+          await taken.wait;
+
+          await expect(rescore('try')).rejects.toBeInstanceOf(PaperReviewDrugLockedError);
+          const reviews = await db
+            .select({ citationId: paperReviews.citationId, overallScore: paperReviews.overallScore })
+            .from(paperReviews)
+            .where(eq(paperReviews.citationId, winner));
+          expect(reviews).toEqual([{ citationId: winner, overallScore: 50 }]);
+
+          release.open();
+          await done;
+          await rescore('try');
+          const [after] = await db
+            .select({ overallScore: paperReviews.overallScore })
+            .from(paperReviews)
+            .where(eq(paperReviews.citationId, winner));
+          expect(after!.overallScore).toBe(60);
         },
         LOCK_TIMEOUT_MS * 3,
       );

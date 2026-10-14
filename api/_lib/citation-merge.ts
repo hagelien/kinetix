@@ -232,6 +232,9 @@ export async function lockCitationAgainstFold(
  * took a drug lock only after such a row now take it up front as well —
  * `recordPaperReview` before its review row, and approval of a `parameter` or
  * `paper_review` edit before the edit's row (`drugAdvisoryLockIdsForEdit`).
+ * Both meet the fold's late-drug problem from the other side — a drug whose
+ * first entry lands after their scan — and handle it the same way
+ * ({@link tryLockLateDrugsCitingCitation}): try, and undo rather than wait.
  *
  * Unchanged around it: job before wiki page (#223), and the winner's key
  * (namespace 1087) and the loser's fold key (1088) before the drug locks. Those
@@ -240,8 +243,34 @@ export async function lockCitationAgainstFold(
  * a cycle. The two-argument keys and this single-argument one are distinct
  * lock spaces in Postgres, so a drug id never collides with a namespace pair.
  */
-async function tryLockDrugForRecompute(db: Db, drugId: number): Promise<boolean> {
+export async function tryLockDrugForRecompute(db: Db, drugId: number): Promise<boolean> {
   return retryTryLock(db, sql`SELECT pg_try_advisory_xact_lock(${drugId}::bigint) AS locked`);
+}
+
+/**
+ * The drug locks a recompute over `citationId` still lacks, tried just before
+ * it runs: the drugs whose first entry citing the paper landed after the
+ * caller's up-front lock scan (`alreadyLocked`, which this extends). Tried in
+ * ascending order and never waited for — the caller by now holds rows a
+ * drug-first writer may be queued on (a fold its job rows and rewrites, a
+ * review its `paper_reviews` row) — so a drug that stays held is returned
+ * for the caller to undo its writes over, and null means every drug is held.
+ */
+export async function tryLockLateDrugsCitingCitation(
+  db: Db,
+  citationId: number,
+  alreadyLocked: Set<number>,
+): Promise<number | null> {
+  const lateDrugIds = [
+    ...new Set((await findParametersCitingCitation(citationId)).map((row) => row.drugId)),
+  ]
+    .filter((drugId) => !alreadyLocked.has(drugId))
+    .sort((a, b) => a - b);
+  for (const drugId of lateDrugIds) {
+    if (!(await tryLockDrugForRecompute(db, drugId))) return drugId;
+    alreadyLocked.add(drugId);
+  }
+  return null;
 }
 
 /**
@@ -1866,15 +1895,8 @@ async function applyFold(
       // lock scan. One whose entry arrived since is tried like the rest, in
       // ascending order — never waited for, as this transaction now holds job
       // rows — and one that stays held hands the fold back to be undone.
-      const lateDrugIds = [
-        ...new Set((await findParametersCitingCitation(winnerId)).map((row) => row.drugId)),
-      ]
-        .filter((drugId) => !lockedDrugs.has(drugId))
-        .sort((a, b) => a - b);
-      for (const drugId of lateDrugIds) {
-        if (!(await tryLockDrugForRecompute(db, drugId))) return drugId;
-        lockedDrugs.add(drugId);
-      }
+      const heldDrugId = await tryLockLateDrugsCitingCitation(db, winnerId, lockedDrugs);
+      if (heldDrugId !== null) return heldDrugId;
       await recomputeSummariesCitingCitation(winnerId, actorUserId);
       stats.summaryRecompute = 'ran';
     } else {

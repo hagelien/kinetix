@@ -25,7 +25,11 @@ vi.mock('../../api/_lib/auth.js', () => ({
   getUserFromRequest: getUserFromRequestMock,
 }));
 
-vi.mock('../../api/_lib/paper-review-store.js', () => ({
+vi.mock('../../api/_lib/paper-review-store.js', async (importOriginal) => ({
+  // The real error class, so the route's instanceof check sees what the store throws.
+  PaperReviewDrugLockedError: (
+    await importOriginal<typeof import('../../api/_lib/paper-review-store.js')>()
+  ).PaperReviewDrugLockedError,
   recordPaperReview: recordPaperReviewMock,
   listPaperReviewHistory: listPaperReviewHistoryMock,
 }));
@@ -195,6 +199,20 @@ describe('POST /api/paper-reviews (auto-publish)', () => {
         }),
       }),
     );
+  });
+
+  it('answers 409 with a retryable code when a drug the recompute needs is locked', async () => {
+    const { PaperReviewDrugLockedError } = await import(
+      '../../api/_lib/paper-review-store.js'
+    );
+    mockDb([[{ id: 9 }], [{ id: 12, type: 'doi' }]]);
+    recordPaperReviewMock.mockRejectedValue(new PaperReviewDrugLockedError(12, 3));
+    const { res, state } = createResponse();
+
+    await handler(createJsonRequest(validBody), res);
+
+    expect(state.statusCode).toBe(409);
+    expect(JSON.parse(state.body)).toMatchObject({ code: 'paper_review_drug_locked' });
   });
 
   it('rejects a review missing the read-in-full attestation', async () => {

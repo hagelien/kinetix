@@ -10,7 +10,10 @@ const {
   recordImplicitAgentApprovalMock: vi.fn(),
 }));
 
-vi.mock('../../api/_lib/db.js', () => ({ getDb: getDbMock }));
+vi.mock('../../api/_lib/db.js', () => ({
+  getDb: getDbMock,
+  isInPoolTransaction: () => false,
+}));
 vi.mock('../../api/_lib/agent-verifications.js', () => ({
   clearVerificationsForTarget: clearVerificationsForTargetMock,
   recordImplicitAgentApproval: recordImplicitAgentApprovalMock,
@@ -19,8 +22,13 @@ vi.mock('../../api/_lib/agent-verifications.js', () => ({
 // path has its own integration coverage, so stub it here to keep this a focused
 // unit test of the review upsert against the mock DB.
 vi.mock('../../api/_lib/parameter-entries-store.js', () => ({
-  lockDrugsCitingCitation: vi.fn(async () => undefined),
+  findDrugsCitingCitation: vi.fn(async () => []),
+  lockDrugsCitingCitation: vi.fn(async () => []),
   recomputeSummariesCitingCitation: vi.fn(async () => undefined),
+}));
+vi.mock('../../api/_lib/citation-merge.js', () => ({
+  tryLockDrugForRecompute: vi.fn(async () => true),
+  tryLockLateDrugsCitingCitation: vi.fn(async () => null),
 }));
 
 import {

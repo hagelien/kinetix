@@ -43,6 +43,7 @@ import {
   ReferenceGateError,
   WikiFactApprovalError,
 } from './_lib/pending-edits-helpers.js';
+import { PaperReviewDrugLockedError } from './_lib/paper-review-store.js';
 import {
   pendingEditPayloadFingerprint,
   pendingEditReviewToken,
@@ -4371,6 +4372,12 @@ async function handlePatch(
     // generic 500 for a condition the sequential path explains properly.
     if (err instanceof ParameterNotApplicableError) {
       error(res, 409, err.message, err.code);
+      return;
+    }
+    // A paper review whose recompute needed a drug a concurrent write held.
+    // Nothing was applied; approving again records it.
+    if (err instanceof PaperReviewDrugLockedError) {
+      error(res, err.statusHint, err.message, err.code);
       return;
     }
     if (

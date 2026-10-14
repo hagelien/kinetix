@@ -2194,6 +2194,10 @@ async function applyApprovedPaperReview(
   const recorded = await recordPaperReview({
     citationId: edit.targetId,
     authorUserId: edit.submittedBy,
+    // This transaction holds the edit's row (and its page's), which a citation
+    // merge holding a drug may be queued on: never wait for a drug from here.
+    // The drugs the paper's entries named at the preflight are already held.
+    drugLocks: 'try',
     input: {
       reviewMarkdown: value.reviewMarkdown,
       overallScore: value.overallScore,
