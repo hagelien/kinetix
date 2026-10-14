@@ -387,9 +387,11 @@ function factConflictKey(
  * most section changes leave other pending work untouched.
  *
  * - wiki_fact: stale only when it targets a section that was just removed.
- * - wiki_section on the same sectionId: stale after a rename or remove of
- *   that section (a second rename would silently overwrite the first; any
- *   op on a removed section can no longer apply).
+ * - wiki_section on the same sectionId: after a remove, every op on that
+ *   section is stale (it can no longer apply). After a rename, only another
+ *   pending rename is stale (it would silently overwrite the first); a
+ *   reorder or remove re-resolves the stable sectionId at approval and does
+ *   not depend on the heading text, so it stays approvable.
  * - wiki_section add/reorder: carry a position computed against the old
  *   heading list, so they are stale after any approved add/reorder/remove.
  */
@@ -412,7 +414,12 @@ export function wikiSectionSiblingConflictIds(
         return op === 'remove' && sameSection;
       }
       if (s.editType !== 'wiki_section') return false;
-      if (sameSection && (op === 'edit' || op === 'remove')) return true;
+      if (
+        sameSection &&
+        (op === 'remove' || (op === 'edit' && s.operation === 'edit'))
+      ) {
+        return true;
+      }
       return (
         shiftsPositions && (s.operation === 'add' || s.operation === 'reorder')
       );
