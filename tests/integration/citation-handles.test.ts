@@ -323,6 +323,26 @@ describe('resolveCitation — one paper, one row (#1018)', () => {
   });
 });
 
+describe('resolveCitation — concurrent free-text wordings of one work', () => {
+  it('files differently worded references to one unseen work as one row', async () => {
+    const title = 'Pharmacokinetics of diazepam in healthy volunteers after oral administration';
+    const rec = { authors: ['Klotz U'], year: 1975, title };
+
+    const [a, b] = await Promise.all([
+      resolveCitation(db, { type: 'freetext', identifier: 'Klotz U. ' + title, metadata: rec }, userId),
+      resolveCitation(
+        db,
+        { type: 'freetext', identifier: 'Klotz U (1975). ' + title + '.', metadata: rec },
+        userId,
+      ),
+    ]);
+
+    expect(b.id).toBe(a.id);
+    expect([a.created, b.created].filter(Boolean)).toHaveLength(1);
+    expect(await db.select({ id: citations.id }).from(citations)).toHaveLength(1);
+  });
+});
+
 describe('mergeCitations — folding a split pair (#1018)', () => {
   it('repoints every surface and deletes the loser', async () => {
     const drugId = await seedDrug(db);
