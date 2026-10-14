@@ -146,6 +146,18 @@ describe('PharmacodynamicsComparison', () => {
     consoleError.mockRestore();
   });
 
+  it('still warns about a failed drug when the loaded drugs have no targets', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    fetchDrugById.mockImplementation(async (id: number) => {
+      if (id === 1) throw Object.assign(new Error('Server error'), { status: 500 });
+      return { drug: { id, receptorTargets: [] } };
+    });
+    render(<Harness />);
+    expect(await screen.findByText('comparison.pd.noTargets')).toBeTruthy();
+    expect(screen.getByText('comparison.pd.partialLoadError')).toBeTruthy();
+    consoleError.mockRestore();
+  });
+
   it('falls back to a loaded drug when the reference drug fails to load', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     fetchDrugById.mockImplementation(async (id: number) => {
