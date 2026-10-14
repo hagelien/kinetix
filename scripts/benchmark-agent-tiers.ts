@@ -564,7 +564,8 @@ export function runInterval(r: RunUsageRecord): [number, number] | null {
  * The span runs from the start (`started_at`, or `created_at - duration_ms`
  * when only the duration was logged) to the later of the first log, where the
  * tier was read, and the run's last known end: a re-log refreshes the duration
- * but keeps the first snapshot. A change exactly at the start is not inside
+ * but keeps the first snapshot. With only a duration, the end is taken as
+ * `created_at + duration_ms`, since a re-log may have moved it that far. A change exactly at the start is not inside
  * the run. With neither a start nor a duration the span is unknown and the run
  * is kept: nothing says it began before the change.
  *
@@ -581,7 +582,12 @@ export function straddlesTierChange(r: RunUsageRecord): boolean {
     start = r.startedAt.getTime();
     if (r.durationMs != null) end = Math.max(end, start + r.durationMs);
   } else if (r.durationMs != null) {
+    // Duration only. A re-log keeps the first created_at but refreshes the
+    // duration, so the run could have ended up to `durationMs` after the first
+    // log. Take the widest span either reading allows: leaving out a run that
+    // did not straddle costs one sample, keeping one that did misfiles it.
     start = logged - r.durationMs;
+    end = logged + r.durationMs;
   } else {
     return false;
   }

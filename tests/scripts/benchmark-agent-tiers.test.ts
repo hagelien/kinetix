@@ -433,6 +433,20 @@ describe('measured run usage', () => {
       ).toBe(true);
     });
 
+    it('reaches past the first log for a re-logged duration-only run', () => {
+      // First logged at 01:00, re-logged later with a 2 h duration: the run may
+      // have ended as late as 03:00, so a change at 02:30 can be inside it.
+      expect(
+        straddlesTierChange(
+          run({
+            startedAt: null,
+            durationMs: 7_200_000,
+            ...changedAt('2026-10-02T02:30:00Z'),
+          }),
+        ),
+      ).toBe(true);
+    });
+
     it('places a run without a start from its duration, and keeps one with neither', () => {
       expect(
         straddlesTierChange(

@@ -1709,7 +1709,7 @@ export async function updateAgentWithTierRestamp(
       ? {
           ...update,
           modelTierChangedAt: sql`CASE
-            WHEN ${agents.modelTier} IS DISTINCT FROM ${newTier}::varchar THEN now()
+            WHEN ${agents.modelTier} IS DISTINCT FROM ${newTier}::varchar THEN clock_timestamp()
             ELSE ${agents.modelTierChangedAt}
           END`,
         }
