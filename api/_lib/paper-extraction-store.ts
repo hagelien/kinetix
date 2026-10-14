@@ -596,17 +596,25 @@ export async function listJobsClaimedBy(
  * identity, the same token, a claim that has not gone stale. The citation is
  * returned so the caller can also require the fact to cite the job's paper;
  * holding a claim on one paper must not unlock unscoped writes from another.
+ *
+ * `forShare` share-locks the job row for the rest of the transaction, which is
+ * how the route makes the check atomic with its insert: a cancel, release or
+ * outcome report (`applyJobAction`'s UPDATE) waits for the insert to commit,
+ * and `claimNextJob`'s `FOR UPDATE SKIP LOCKED` passes the row over rather
+ * than reclaiming it underneath. Must run inside runInPoolTransaction: on the
+ * auto-commit client the lock is released at once.
  */
 export async function liveClaimCitationId(input: {
   jobId: number;
   claimToken: string;
   userId: number;
   now?: Date;
+  forShare?: boolean;
 }): Promise<number | null> {
   const db = getDb();
   const now = input.now ?? new Date();
   const staleBefore = new Date(now.getTime() - STALE_CLAIM_MS);
-  const [row] = await db
+  const query = db
     .select({ citationId: paperExtractionJobs.citationId })
     .from(paperExtractionJobs)
     .where(
@@ -619,5 +627,6 @@ export async function liveClaimCitationId(input: {
       ),
     )
     .limit(1);
+  const [row] = input.forShare ? await query.for('share') : await query;
   return row?.citationId ?? null;
 }
