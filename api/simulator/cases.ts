@@ -65,24 +65,41 @@ function extractCaseDrugRefs(
 }
 
 /**
+ * What a case payload's drug references resolved to. `keyIds` / `slugIds`
+ * map every requested ref to the sorted ids of the drugs it matched (empty
+ * when it matched none), so two resolutions can be compared ref by ref.
+ */
+export interface CaseDrugResolution {
+  drugIds: number[];
+  keyIds: Map<string, number[]>;
+  slugIds: Map<string, number[]>;
+  missingKeys: string[];
+  missingSlugs: string[];
+}
+
+/**
  * Resolve every drug reference in a case payload to a canonical drug id.
- * Returns the found ids and the requested refs that didn't resolve — the
- * caller uses the missing set to build the 409 error, and the id set to
- * take per-drug advisory locks in a well-defined order in the save
- * transaction below.
+ * Returns the found ids, the per-ref mapping and the requested refs that
+ * didn't resolve — the caller uses the missing set to build the 409 error,
+ * the id set to take per-drug advisory locks in a well-defined order in the
+ * save transaction below, and the mapping to notice a ref that moved while
+ * it waited for those locks.
  */
 async function resolveCaseDrugRefs(
   db: ReturnType<typeof getDb>,
   caseData: Record<string, unknown>,
-): Promise<{
-  drugIds: number[];
-  missingKeys: string[];
-  missingSlugs: string[];
-}> {
+): Promise<CaseDrugResolution> {
   const { keys, slugs } = extractCaseDrugRefs(caseData);
-  if (keys.size === 0 && slugs.size === 0) {
-    return { drugIds: [], missingKeys: [], missingSlugs: [] };
-  }
+  // Nothing queryable (no refs, or only keys that are neither `drug:<id>` nor
+  // a positive integer): nothing to lock and, as before, nothing reported.
+  const empty = (): CaseDrugResolution => ({
+    drugIds: [],
+    keyIds: new Map(),
+    slugIds: new Map(),
+    missingKeys: [],
+    missingSlugs: [],
+  });
+  if (keys.size === 0 && slugs.size === 0) return empty();
   // A `drug:<id>` key (#1256) names an internal id unambiguously and is
   // looked up by id alone. A bare numeric key predates that fix (or names a
   // CID under it) and keeps the old dual lookup, so an already-saved case
@@ -107,46 +124,86 @@ async function resolveCaseDrugRefs(
     conditions.push(inArray(drugs.pubchemCid, legacyNumericKeys));
   }
   if (slugs.size > 0) conditions.push(inArray(drugs.slug, Array.from(slugs)));
-  if (conditions.length === 0) {
-    return { drugIds: [], missingKeys: [], missingSlugs: [] };
-  }
+  if (conditions.length === 0) return empty();
   const rows = await db
     .select({ id: drugs.id, pubchemCid: drugs.pubchemCid, slug: drugs.slug })
     .from(drugs)
     .where(or(...conditions));
-  const foundKeys = new Set<string>();
-  const foundSlugs = new Set<string>();
-  const drugIds: number[] = [];
+  const keyIds = new Map<string, Set<number>>([...keys].map((k) => [k, new Set()]));
+  const slugIds = new Map<string, Set<number>>([...slugs].map((s) => [s, new Set()]));
+  const drugIds = new Set<number>();
   for (const r of rows) {
     // Every spelling this row could legitimately be referenced by — id and
-    // pubchemCid are both globally unique, so adding all of them can never
-    // mark a different drug's key as found.
-    foundKeys.add(String(r.id));
-    foundKeys.add(`drug:${r.id}`);
-    if (r.pubchemCid != null) foundKeys.add(String(r.pubchemCid));
-    if (r.slug) foundSlugs.add(r.slug);
-    drugIds.push(r.id);
+    // pubchemCid are both globally unique, so matching on all of them can
+    // never attribute a different drug's key to this row.
+    const spellings = [String(r.id), `drug:${r.id}`];
+    if (r.pubchemCid != null) spellings.push(String(r.pubchemCid));
+    for (const s of spellings) keyIds.get(s)?.add(r.id);
+    if (r.slug) slugIds.get(r.slug)?.add(r.id);
+    drugIds.add(r.id);
   }
-  const missingKeys = [...keys].filter((k) => !foundKeys.has(k));
-  const missingSlugs = [...slugs].filter((s) => !foundSlugs.has(s));
+  const sorted = (ids: Set<number>) => [...ids].sort((a, b) => a - b);
+  const keyMap = new Map([...keyIds].map(([k, ids]) => [k, sorted(ids)]));
+  const slugMap = new Map([...slugIds].map(([s, ids]) => [s, sorted(ids)]));
   return {
-    drugIds: Array.from(new Set(drugIds)).sort((a, b) => a - b),
-    missingKeys,
-    missingSlugs,
+    drugIds: sorted(drugIds),
+    keyIds: keyMap,
+    slugIds: slugMap,
+    missingKeys: [...keyMap].filter(([, ids]) => ids.length === 0).map(([k]) => k),
+    missingSlugs: [...slugMap].filter(([, ids]) => ids.length === 0).map(([s]) => s),
   };
+}
+
+/**
+ * Compare the resolution taken before the per-drug locks with the one taken
+ * under them. Returns null when every ref still names the same drug(s) and
+ * the id set is unchanged; otherwise the refs whose mapping moved. A non-null
+ * result with both lists empty means the id sets differ without any single
+ * ref accounting for it — still a change, still refused.
+ */
+export function caseDrugResolutionDrift(
+  before: Pick<CaseDrugResolution, 'drugIds' | 'keyIds' | 'slugIds'>,
+  after: Pick<CaseDrugResolution, 'drugIds' | 'keyIds' | 'slugIds'>,
+): { changedKeys: string[]; changedSlugs: string[] } | null {
+  const sameIds = (a: readonly number[] | undefined, b: readonly number[] | undefined) =>
+    (a ?? []).length === (b ?? []).length &&
+    (a ?? []).every((id, i) => id === (b ?? [])[i]);
+  const changed = (
+    x: ReadonlyMap<string, number[]>,
+    y: ReadonlyMap<string, number[]>,
+  ) =>
+    [...new Set([...x.keys(), ...y.keys()])].filter(
+      (ref) => !sameIds(x.get(ref), y.get(ref)),
+    );
+  const changedKeys = changed(before.keyIds, after.keyIds);
+  const changedSlugs = changed(before.slugIds, after.slugIds);
+  if (
+    changedKeys.length === 0 &&
+    changedSlugs.length === 0 &&
+    sameIds(before.drugIds, after.drugIds)
+  ) {
+    return null;
+  }
+  return { changedKeys, changedSlugs };
 }
 
 /**
  * Save a case inside a transaction that holds `lockDrugForEntryApplicability`
  * on every referenced drug (sorted, so a merge and multiple concurrent
- * saves can't deadlock) and re-verifies existence AFTER acquiring the
- * lock. The outer resolve-drugs pass rejects the common shape (a case
- * authored against a since-deleted drug), but a merge that commits
- * between the resolve and the write would otherwise slip a stale ref
- * through — closing that check-to-write window requires validating +
- * saving while holding the same per-drug lock the merge holds. If the
- * lock re-verify fails (a merge committed between the two SELECTs),
- * returns `stale` so the caller responds 409.
+ * saves can't deadlock) and re-resolves every ref AFTER acquiring the lock.
+ *
+ * The outer resolve-drugs pass rejects the common shape (a case authored
+ * against a since-deleted drug) and picks which drugs to lock, but it runs
+ * unlocked. A writer holding one of those locks — a merge deleting the drug,
+ * a merge `--adopt-cid` or `retarget:cid` moving its CID and rewriting the
+ * saved cases — can commit between that pass and the lock grant. Checking
+ * only that the locked ids still exist is not enough: after a CID move the
+ * drug is still there, but the case's bare-CID key no longer names it, and
+ * the writer's one rewrite of `simulator_cases` has already run. So the refs
+ * are resolved again under the lock: one that no longer resolves returns
+ * `missing`, and one that now resolves differently returns `changed` — the
+ * locks held are then for the wrong drugs, so the save is refused (409)
+ * rather than continued, and the client re-selects and saves again.
  */
 async function saveCaseWithMergeLock<T>(
   caseData: Record<string, unknown>,
@@ -154,6 +211,7 @@ async function saveCaseWithMergeLock<T>(
 ): Promise<
   | { kind: 'ok'; result: T }
   | { kind: 'missing'; missingKeys: string[]; missingSlugs: string[] }
+  | { kind: 'changed'; changedKeys: string[]; changedSlugs: string[] }
 > {
   const db = getDb();
   const resolved = await resolveCaseDrugRefs(db, caseData);
@@ -172,23 +230,17 @@ async function saveCaseWithMergeLock<T>(
     for (const drugId of resolved.drugIds) {
       await lockDrugForEntryApplicability(drugId);
     }
-    // Re-verify every drug still exists under the lock — a merge that
-    // committed between the outer resolve and the lock acquisition would
-    // have removed one of them.
-    const txDb = getDb();
-    const stillRows = await txDb
-      .select({ id: drugs.id })
-      .from(drugs)
-      .where(inArray(drugs.id, resolved.drugIds));
-    if (stillRows.length !== resolved.drugIds.length) {
-      const foundIds = new Set(stillRows.map((r) => r.id));
-      const gone = resolved.drugIds.filter((id) => !foundIds.has(id));
+    // Re-resolve under the lock, on the transaction's own client.
+    const locked = await resolveCaseDrugRefs(getDb(), caseData);
+    if (locked.missingKeys.length > 0 || locked.missingSlugs.length > 0) {
       return {
         kind: 'missing' as const,
-        missingKeys: gone.map((id) => String(id)),
-        missingSlugs: [],
+        missingKeys: locked.missingKeys,
+        missingSlugs: locked.missingSlugs,
       };
     }
+    const drift = caseDrugResolutionDrift(resolved, locked);
+    if (drift) return { kind: 'changed' as const, ...drift };
     return { kind: 'ok' as const, result: await work() };
   });
 }
@@ -207,6 +259,32 @@ function respondCaseDrugMissing(
     `Case references drug(s) that no longer exist: ${detail}. Reload the drug picker and re-select the surviving entry.`,
     'case_drug_missing',
   );
+}
+
+function respondCaseDrugChanged(
+  res: ServerResponse,
+  changed: { changedKeys: string[]; changedSlugs: string[] },
+): void {
+  const detail = [
+    ...changed.changedKeys.map((k) => `drugId=${k}`),
+    ...changed.changedSlugs.map((s) => `analyte=${s}`),
+  ].join(', ');
+  error(
+    res,
+    409,
+    `Case references drug(s) that changed while it was being saved${detail ? `: ${detail}` : ''}. Reload the drug picker, re-select the entry and save again.`,
+    'case_drug_changed',
+  );
+}
+
+function respondCaseDrugConflict(
+  res: ServerResponse,
+  outcome:
+    | { kind: 'missing'; missingKeys: string[]; missingSlugs: string[] }
+    | { kind: 'changed'; changedKeys: string[]; changedSlugs: string[] },
+): void {
+  if (outcome.kind === 'missing') respondCaseDrugMissing(res, outcome);
+  else respondCaseDrugChanged(res, outcome);
 }
 
 export default withErrorHandling(async function handler(
@@ -333,8 +411,8 @@ async function handleCreate(
       .returning();
     return row;
   });
-  if (outcome.kind === 'missing') {
-    respondCaseDrugMissing(res, outcome);
+  if (outcome.kind !== 'ok') {
+    respondCaseDrugConflict(res, outcome);
     return;
   }
   json(res, 201, outcome.result);
@@ -379,8 +457,8 @@ async function handleUpdate(
       .returning();
     return updated;
   });
-  if (outcome.kind === 'missing') {
-    respondCaseDrugMissing(res, outcome);
+  if (outcome.kind !== 'ok') {
+    respondCaseDrugConflict(res, outcome);
     return;
   }
   json(res, 200, outcome.result);
