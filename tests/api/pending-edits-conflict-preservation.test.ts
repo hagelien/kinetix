@@ -523,6 +523,23 @@ describe('/api/pending-edits — resubmitting an additive wiki edit', () => {
     expect(revisesPayloadFlag(capturedProposedMeta(set))).toBe(true);
   });
 
+  it('keeps the marker when a new section changes its heading but not its position', async () => {
+    const { set } = mockDb(sectionAdd());
+    await handler(
+      createPatchRequest({
+        status: 'pending',
+        proposedValue: {
+          operation: 'add',
+          headingText: 'Farmakodynamikk',
+          headingLevel: 3,
+          position: 2,
+        },
+      }),
+      createResponse().res,
+    );
+    expect(revisesPayloadFlag(capturedProposedMeta(set))).toBe(false);
+  });
+
   it('keeps the marker on a plain resubmit of a section rename', async () => {
     const { set } = mockDb(
       pendingEdit({

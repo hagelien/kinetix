@@ -728,6 +728,22 @@ function isAdditiveWikiEdit(
   return edit.editType === 'wiki_fact' && edit.factOperation === 'add';
 }
 
+/**
+ * A new section's `position` was computed against the heading list a sibling
+ * approval has since changed, so it is the only part of the proposal that can
+ * go stale. Retitling or re-referencing it while keeping the old number
+ * rebases nothing, and approval would still insert at the stale slot.
+ */
+export function sectionAddKeepsStalePosition(
+  editType: string,
+  next: unknown,
+  prev: unknown,
+): boolean {
+  if (editType !== 'wiki_section') return false;
+  if (!isRecord(prev) || prev.operation !== 'add') return false;
+  return !isRecord(next) || next.position === prev.position;
+}
+
 function conflictMarkerAcknowledged(
   snapshotProposedMeta: unknown,
   acknowledgedConflictId: string | null | undefined,
@@ -3375,6 +3391,14 @@ async function handlePatch(
     // marker nobody could clear without rewording a correct fact.
     const resubmitRebasesAdditiveWikiEdit =
       requestedStatus === 'pending' && isAdditiveWikiEdit(edit);
+    // A section add is rebased by moving its position, nothing else (#195).
+    const contentRebasesConflict =
+      contentActuallyRevised &&
+      !sectionAddKeepsStalePosition(
+        edit.editType,
+        nextProposedValue,
+        edit.proposedValue,
+      );
 
     const nextRevisedAt = payloadActuallyRevised
       ? new Date().toISOString()
@@ -3515,7 +3539,7 @@ async function handlePatch(
               // marker they were shown (#1258) — a revision that happens to
               // land while a marker sits on the row, without the author having
               // been shown and answered that specific one, leaves it in place.
-              (contentActuallyRevised || resubmitRebasesAdditiveWikiEdit) &&
+              (contentRebasesConflict || resubmitRebasesAdditiveWikiEdit) &&
                 conflictAcknowledged,
             ) as never,
             referenceId: nextReferenceId,
