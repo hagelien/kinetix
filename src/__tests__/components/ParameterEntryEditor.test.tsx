@@ -596,3 +596,155 @@ describe('ParameterEntryEditor — the reported statistic', () => {
     expect(screen.getByLabelText('parameterEntries.editor.intervalKind')).toHaveValue('sd');
   });
 });
+
+/**
+ * #12 — formulation and population on an absorption reading. The scope
+ * fields (release profile, form, regimen + interval, population + qualifier)
+ * are offered on exactly the `doseContext: 'optional'` parameters, and a save
+ * always states all six — `null` for "not stated" — because the server
+ * refuses an update that names none of them against a row that records some.
+ */
+describe('#12 — ParameterEntryEditor formulation and population', () => {
+  function type(label: string, value: string) {
+    fireEvent.change(screen.getByLabelText(label), { target: { value } });
+  }
+
+  it('offers the scope fields on Tmax and submits them with the reading', () => {
+    render(
+      <ParameterEntryEditor drugId={7} parameter="tmax" isAdmin onSaved={() => {}} onCancel={() => {}} />,
+    );
+    expect(screen.getByTestId('entry-scope-fields')).toBeTruthy();
+    type('parameterEntries.editor.centralValue', '5');
+    type('parameterEntries.editor.centralStatistic', 'median');
+    type('cmax.editor.releaseProfile', 'modified');
+    type('cmax.editor.physicalForm', 'tablet_capsule');
+    type('doseContext.fields.population', 'healthy_adult');
+    fireEvent.click(screen.getByText('pick-citation'));
+    fireEvent.click(screen.getByText('parameterEntries.editor.save'));
+
+    expect(createParameterEntry).toHaveBeenCalledTimes(1);
+    const arg = createParameterEntry.mock.calls[0]![0] as Record<string, unknown>;
+    expect(arg).toMatchObject({
+      parameter: 'tmax',
+      centralValue: 5,
+      centralStatistic: 'median',
+      releaseProfile: 'modified',
+      physicalForm: 'tablet_capsule',
+      pkPopulation: 'healthy_adult',
+      // Stated, as "not stated" — never left out.
+      doseRegimen: null,
+      doseIntervalHours: null,
+      populationQualifier: null,
+    });
+  });
+
+  it('takes a depot interval and a qualified population on a categorical absorption model', () => {
+    render(
+      <ParameterEntryEditor drugId={7} parameter="absorptionModel" isAdmin onSaved={() => {}} onCancel={() => {}} />,
+    );
+    fireEvent.change(selectWithOptionValue('first-order'), { target: { value: 'zero-order' } });
+    type('cmax.editor.releaseProfile', 'modified');
+    type('doseContext.fields.regimen', 'multiple');
+    type('cmax.editor.doseIntervalHours', '168');
+    // The qualifier is offered only beside a non-healthy-adult population.
+    expect(screen.queryByLabelText('cmax.editor.populationQualifier')).toBeNull();
+    type('doseContext.fields.population', 'patients_unspecified');
+    type('cmax.editor.populationQualifier', 'opioid use disorder');
+    fireEvent.click(screen.getByText('pick-citation'));
+    fireEvent.click(screen.getByRole('button', { name: /save|lagre/i }));
+
+    expect(createParameterEntry).toHaveBeenCalledTimes(1);
+    const arg = createParameterEntry.mock.calls[0]![0] as Record<string, unknown>;
+    expect(arg).toMatchObject({
+      categoricalValue: 'zero-order',
+      releaseProfile: 'modified',
+      doseRegimen: 'multiple',
+      doseIntervalHours: 168,
+      pkPopulation: 'patients_unspecified',
+      populationQualifier: 'opioid use disorder',
+    });
+  });
+
+  it('hides the interval for a single dose and sends none', () => {
+    render(
+      <ParameterEntryEditor drugId={7} parameter="tmax" isAdmin onSaved={() => {}} onCancel={() => {}} />,
+    );
+    type('cmax.editor.doseIntervalHours', '12');
+    type('doseContext.fields.regimen', 'single');
+    expect(screen.queryByLabelText('cmax.editor.doseIntervalHours')).toBeNull();
+    type('parameterEntries.editor.low', '1');
+    type('parameterEntries.editor.high', '2');
+    fireEvent.click(screen.getByText('pick-citation'));
+    fireEvent.click(screen.getByText('parameterEntries.editor.save'));
+
+    const arg = createParameterEntry.mock.calls[0]![0] as Record<string, unknown>;
+    expect(arg).toMatchObject({ doseRegimen: 'single', doseIntervalHours: null });
+  });
+
+  it('prefills a stored scope and restates it on an unrelated edit', () => {
+    render(
+      <ParameterEntryEditor
+        drugId={7}
+        parameter="tmax"
+        row={storedRow({
+          parameter: 'tmax',
+          low: 4,
+          high: 6,
+          doseContext: {
+            centralValue: 5,
+            centralStatistic: 'median',
+            intervalKind: 'range',
+            releaseProfile: 'modified',
+            doseRegimen: 'steady_state',
+            doseIntervalHours: 12,
+          },
+        })}
+        isAdmin
+        onSaved={() => {}}
+        onCancel={() => {}}
+      />,
+    );
+    expect((screen.getByLabelText('cmax.editor.releaseProfile') as HTMLSelectElement).value).toBe('modified');
+    expect((screen.getByLabelText('cmax.editor.doseIntervalHours') as HTMLInputElement).value).toBe('12');
+    fireEvent.click(screen.getByText('parameterEntries.editor.save'));
+
+    expect(updateParameterEntry).toHaveBeenCalledTimes(1);
+    const patch = updateParameterEntry.mock.calls[0]![1] as Record<string, unknown>;
+    expect(patch).toMatchObject({
+      releaseProfile: 'modified',
+      doseRegimen: 'steady_state',
+      doseIntervalHours: 12,
+      physicalForm: null,
+      pkPopulation: null,
+      populationQualifier: null,
+    });
+  });
+
+  it('names the formulation fields when a non-positive interval is what fails', () => {
+    render(
+      <ParameterEntryEditor drugId={7} parameter="ka" isAdmin onSaved={() => {}} onCancel={() => {}} />,
+    );
+    fireEvent.change(selectWithOptionValue('oral'), { target: { value: 'oral' } });
+    type('parameterEntries.editor.low', '0.5');
+    type('parameterEntries.editor.high', '1');
+    type('cmax.editor.doseIntervalHours', '0');
+    fireEvent.click(screen.getByText('pick-citation'));
+    fireEvent.click(screen.getByText('parameterEntries.editor.save'));
+
+    expect(createParameterEntry).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert').textContent).toBe('parameterEntries.editor.errorScopeInvalid');
+  });
+
+  it('offers no scope fields on a parameter that cannot store them', () => {
+    render(
+      <ParameterEntryEditor drugId={7} parameter="halfLife" isAdmin onSaved={() => {}} onCancel={() => {}} />,
+    );
+    expect(screen.queryByTestId('entry-scope-fields')).toBeNull();
+    type('parameterEntries.editor.low', '4');
+    type('parameterEntries.editor.high', '6');
+    fireEvent.click(screen.getByText('pick-citation'));
+    fireEvent.click(screen.getByText('parameterEntries.editor.save'));
+    const arg = createParameterEntry.mock.calls[0]![0] as Record<string, unknown>;
+    expect('releaseProfile' in arg).toBe(false);
+  });
+});

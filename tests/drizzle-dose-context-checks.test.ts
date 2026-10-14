@@ -13,6 +13,7 @@ import {
   CMAX_CONCENTRATION_UNITS,
   COADMINISTRATION_STATES,
   DOSE_CONTEXT_FIELD_KEYS,
+  ENTRY_SCOPE_FIELD_KEYS,
   REPORTED_STATISTIC_FIELD_KEYS,
   DOSE_BASES,
   DOSE_CONTEXT_DOSE_UNITS,
@@ -111,5 +112,48 @@ describe('0135 reported-statistic CHECKs', () => {
   it('holds the statistic rules to every parameter but the dose-context one', () => {
     expect(sql0135).toContain('ADD CONSTRAINT "parameter_entries_reported_statistic"');
     expect(sql0135).toMatch(/"parameter_entries_reported_statistic"\s+CHECK \(\s+"parameter" = 'cmax'/);
+  });
+});
+
+/**
+ * Migration 0153 (#12) re-states the forbidden CHECK once more: the absorption
+ * parameters (registry `doseContext: 'optional'`) may carry the scope columns,
+ * and only those. Each list is pinned to the application's — a scope column
+ * the API accepts and the CHECK refuses is an opaque 500; a parameter the
+ * CHECK admits and the registry does not is a direct writer storing what the
+ * app would refuse.
+ */
+describe('0153 formulation/population CHECK', () => {
+  const sql0153 = readFileSync(
+    path.resolve(__dirname, '../drizzle/0153_parameter_entries_absorption_scope.sql'),
+    'utf8',
+  );
+  const block = sql0153.match(
+    /ADD CONSTRAINT "parameter_entries_dose_context_forbidden"([\s\S]*?)\);\s*$/,
+  );
+  const snake = (k: string) => k.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
+
+  it('lets exactly the optional-mode parameters carry scope', () => {
+    expect(block).not.toBeNull();
+    const m = block![1]!.match(/"parameter" IN \(([^)]*)\)/);
+    expect(m).not.toBeNull();
+    const listed = [...m![1]!.matchAll(/'([^']*)'/g)].map((x) => x[1]!);
+    const optional = DRUG_PARAMETER_IDS.filter((id) => parameterDoseContextMode(id) === 'optional');
+    expect(listed).toEqual(optional);
+    expect(listed).toEqual(['bioavailability', 'tmax', 'ka', 'absorptionModel']);
+  });
+
+  it('forbids every other dose column outside Cmax, and the scope columns outside those parameters', () => {
+    const body = block![1]!;
+    const split = body.indexOf('"parameter" IN (');
+    const always = [...body.slice(0, split).matchAll(/"([a-z_]+)" IS NULL/g)].map((m) => m[1]!);
+    const scoped = [...body.slice(split).matchAll(/"([a-z_]+)" IS NULL/g)].map((m) => m[1]!);
+    const statistic: readonly string[] = REPORTED_STATISTIC_FIELD_KEYS;
+    const scope: readonly string[] = ENTRY_SCOPE_FIELD_KEYS;
+    expect(always).toEqual(
+      DOSE_CONTEXT_FIELD_KEYS.filter((k) => !statistic.includes(k) && !scope.includes(k)).map(snake),
+    );
+    expect(scoped).toEqual(ENTRY_SCOPE_FIELD_KEYS.map(snake));
+    expect(body).toMatch(/^\s*CHECK \(\s+"parameter" = 'cmax'/);
   });
 });

@@ -181,6 +181,24 @@ function formatMeta(
     const key = ROUTE_LABEL_KEYS[row.route as RouteId];
     parts.push(key ? t(key) : row.route);
   }
+  // Formulation and population (#12): beside the route, because together they
+  // say which product and which subjects the reading is of — and readings of
+  // different formulations are not pooled together.
+  const dc = row.doseContext;
+  const vocab = (field: string, value: string | null | undefined) =>
+    value ? t(`doseContext.values.${field}.${value}`, { defaultValue: value }) : null;
+  for (const part of [
+    vocab('releaseProfile', dc?.releaseProfile),
+    vocab('physicalForm', dc?.physicalForm),
+    vocab('doseRegimen', dc?.doseRegimen),
+    dc?.doseIntervalHours != null
+      ? t('doseContext.everyHours', { hours: dc.doseIntervalHours })
+      : null,
+    vocab('pkPopulation', dc?.pkPopulation),
+    dc?.populationQualifier ?? null,
+  ]) {
+    if (part) parts.push(part);
+  }
   // Matrix and scenario are concentration dimensions; a matrix-independent
   // parameter (half-life, logP, B/P, …) stores null for both and its meta line
   // is just the sample size, if reported.

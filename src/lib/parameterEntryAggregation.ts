@@ -18,6 +18,8 @@ import type { ReferenceMatrix } from './referenceConcentrations.js';
 import {
   ARITHMETIC_INTERVAL_KINDS,
   entryCentralValue,
+  roundToScale,
+  storedScaleOf,
 } from './entryDoseContext.js';
 
 /** Matrices that convert to whole blood via the blood:plasma ratio. */
@@ -74,6 +76,75 @@ export interface ParameterEntryValue {
    * parameter has no real entries. Undefined is treated as a real source.
    */
   origin?: string | null;
+  /**
+   * The formulation the reading is of (#12): `parameter_entries.release_profile`
+   * and `dose_interval_hours`. Entries pool only within one formulation — see
+   * `formulationKey` and `selectPooledFormulation`. Optional so a caller with no
+   * formulation columns (every parameter but the absorption ones) still
+   * compiles; absent reads as "not stated", which is how every such row pooled
+   * before.
+   */
+  releaseProfile?: string | null;
+  doseIntervalHours?: number | null;
+}
+
+/** The formulation key of an entry that states none (the pre-#12 pool). */
+export const UNSTATED_FORMULATION_KEY = '|';
+
+/**
+ * Which formulation an entry's reading is of, as a pooling key (#12): its
+ * release profile and its dosing interval, so an immediate-release tablet, a
+ * weekly depot (168 h) and a monthly one (~720 h) are three keys.
+ *
+ * A release profile of `'unknown'` is the source saying nothing, the same
+ * information as no release profile at all, so the two share a key; any other
+ * stated profile (`not_applicable` included) is its own. The interval is
+ * compared at the column's scale, as stored.
+ */
+export function formulationKey(entry: {
+  releaseProfile?: string | null;
+  doseIntervalHours?: number | null;
+}): string {
+  const profile =
+    entry.releaseProfile == null || entry.releaseProfile === 'unknown'
+      ? ''
+      : entry.releaseProfile;
+  const interval =
+    entry.doseIntervalHours == null || !Number.isFinite(entry.doseIntervalHours)
+      ? ''
+      : String(roundToScale(entry.doseIntervalHours, storedScaleOf('doseIntervalHours')));
+  return `${profile}|${interval}`;
+}
+
+/** An immediate-release reading with no dosing interval: the conventional figure. */
+const IMMEDIATE_RELEASE_KEY = 'immediate|';
+
+/**
+ * The one formulation whose entries a summary pools, given the keys of the
+ * entries that COULD pool — or null when the choice is not the data's to make.
+ *
+ * Two formulations are never pooled together: an SL tablet and a monthly depot
+ * of the same drug have nothing in common but the molecule, and their median
+ * is a Tmax no product has. So the pool is one formulation's entries:
+ *
+ *   1. only one formulation present — that one (in particular, a drug whose
+ *      entries state none pools exactly as it did before #12);
+ *   2. otherwise the entries that state no formulation, when there are any —
+ *      the pool the drug-level value has always meant, which a newly tagged
+ *      reading must not move;
+ *   3. otherwise an immediate-release reading with no dosing interval, the
+ *      conventional single-dose figure;
+ *   4. otherwise nothing: two stated formulations with no conventional one
+ *      among them (a weekly and a monthly depot) pool to no value rather than
+ *      to an arbitrary pick. Per-formulation values are #82's.
+ */
+export function selectPooledFormulation(keys: Iterable<string>): string | null {
+  const distinct = new Set(keys);
+  if (distinct.size === 0) return null;
+  if (distinct.size === 1) return [...distinct][0]!;
+  if (distinct.has(UNSTATED_FORMULATION_KEY)) return UNSTATED_FORMULATION_KEY;
+  if (distinct.has(IMMEDIATE_RELEASE_KEY)) return IMMEDIATE_RELEASE_KEY;
+  return null;
 }
 
 /**
@@ -162,6 +233,18 @@ export interface ParameterSummary {
   byMatrix: MatrixSummary[];
   /** Per-source normalized intervals for the forest plot (one row each). */
   points: EntrySummaryPoint[];
+  /**
+   * The formulation the pool was drawn from (`formulationKey`'s two parts), or
+   * null when it is the unstated one or nothing pooled. Optional so a summary
+   * built before #12 (a cached client response) still type-checks.
+   */
+  pooledFormulation?: { releaseProfile: string | null; doseIntervalHours: number | null } | null;
+  /**
+   * Entries that would have pooled but are of a different formulation from the
+   * pooled one (`selectPooledFormulation`), so were left out of the number.
+   * They are still counted in `entryCount` and plotted in `points`.
+   */
+  formulationExcludedCount?: number;
   /**
    * True when the plotted/pooled values are matrix-normalized to whole blood
    * (matrixRelevant): a serum/plasma point's value is its whole-blood equivalent,
@@ -398,6 +481,11 @@ export function aggregateEntries(
   const bounds: number[] = [];
   const citationIds = new Set<number>();
 
+  // The entries that could pool, before the formulation is chosen: which
+  // formulation pools is decided among readings that would actually reach the
+  // number, so a censored or unconvertible row cannot claim the pool for its
+  // formulation and leave it empty.
+  const candidates: { e: ParameterEntryValue; repN: number }[] = [];
   for (const e of entries) {
     // A censored threshold ("< 120") is not a point observation — keep it in
     // byMatrix but never pool its bound as an exact value.
@@ -410,6 +498,17 @@ export function aggregateEntries(
 
     const repN = normalizeBound(rep, e.unit, e.matrix, ctx, ratio);
     if (repN == null) continue;
+    candidates.push({ e, repN });
+  }
+  // One formulation per pool (#12) — see `selectPooledFormulation`.
+  const pooledKey = selectPooledFormulation(candidates.map(({ e }) => formulationKey(e)));
+  let formulationExcludedCount = 0;
+
+  for (const { e, repN } of candidates) {
+    if (formulationKey(e) !== pooledKey) {
+      formulationExcludedCount += 1;
+      continue;
+    }
     pool.push({ value: repN, weight: entryWeight(e) });
     bounds.push(repN);
     const loN =
@@ -439,7 +538,21 @@ export function aggregateEntries(
     contributingCitationIds: [...citationIds].sort((a, b) => a - b),
     byMatrix: buildMatrixSummaries(entries, ctx, ratio),
     points: buildEntryPoints(entries, ctx, ratio),
+    pooledFormulation: describeFormulation(pooledKey),
+    formulationExcludedCount,
     normalizedToWholeBlood: ctx.matrixRelevant,
+  };
+}
+
+/** A pooled formulation key back as its two fields; null for the unstated one or none. */
+function describeFormulation(
+  key: string | null,
+): { releaseProfile: string | null; doseIntervalHours: number | null } | null {
+  if (key === null || key === UNSTATED_FORMULATION_KEY) return null;
+  const [profile = '', interval = ''] = key.split('|');
+  return {
+    releaseProfile: profile === '' ? null : profile,
+    doseIntervalHours: interval === '' ? null : Number(interval),
   };
 }
 

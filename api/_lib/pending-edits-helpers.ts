@@ -37,6 +37,7 @@ import {
   entryDuplicateExists,
   getParameterEntryRowById,
   updateParameterEntryRow,
+  updateWouldEraseEntryScope,
   deleteParameterEntryRow,
   recomputeParameterAndDependents,
   recomputeSummariesForDrug,
@@ -54,6 +55,7 @@ import {
   validateEntryForParameter,
 } from '../../src/lib/parameterEntries.js';
 import { parameterAcceptsAuthoredValue } from '../../src/lib/drugParameters.js';
+import { SCOPE_OMITTED_MESSAGE } from '../../src/lib/entryDoseContext.js';
 import {
   replaceDrugMetabolism,
   toMetabolismWriteInput,
@@ -1274,6 +1276,22 @@ async function applyApprovedParameterEntry(
           `Approval rejected: ${invalid}`,
           400,
           'param_entry_invalid_for_parameter',
+        );
+      }
+      // A proposal that says nothing about formulation/population — one queued
+      // before #12, or from a writer unaware of the fields — must not erase what
+      // the live row records. Asked here, under the approval's drug locks.
+      if (
+        await updateWouldEraseEntryScope(
+          edit.targetId,
+          current.parameter,
+          parsed.data.patch,
+        )
+      ) {
+        throw new ParameterApplyError(
+          `Approval rejected: ${SCOPE_OMITTED_MESSAGE}`,
+          400,
+          'param_entry_scope_omitted',
         );
       }
     }

@@ -562,6 +562,10 @@ export async function readDrugRouteAssemblyInputs(
         n: parameterEntries.n,
         citationId: parameterEntries.citationId,
         origin: parameterEntries.origin,
+        // The formulation (#12): a route's entries pool only within one
+        // (`selectPooledFormulation`), so an SL tablet's and a depot's ka never meet.
+        releaseProfile: parameterEntries.releaseProfile,
+        doseIntervalHours: parameterEntries.doseIntervalHours,
         reviewScore: paperReviews.overallScore,
       })
       .from(parameterEntries)
@@ -725,6 +729,8 @@ export async function readDrugRouteAssemblyInputs(
       n: row.n ?? null,
       reviewScore: row.reviewScore ?? null,
       origin: row.origin ?? null,
+      releaseProfile: row.releaseProfile ?? null,
+      doseIntervalHours: parseNumericColumn(row.doseIntervalHours),
     });
   }
   // Every route that carries a route-scoped entry for a parameter at all, whether or not it pools

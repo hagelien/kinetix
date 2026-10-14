@@ -275,7 +275,8 @@ Two of these, citing two different sources, is the minimum for any one parameter
 A source's central number is a mean, a median or one subject's value, and its
 bounds are an SD, a CI or an observed range. Say which, on **every** numeric
 parameter, through a `doseContext` block that carries only these three fields
-(the dose fields are Cmax-only and refused elsewhere):
+(the dose fields are Cmax-only and refused elsewhere — except the formulation
+and population fields below, on the absorption parameters):
 
 ```jsonc
 {
@@ -304,6 +305,25 @@ parameter, through a `doseContext` block that carries only these three fields
   `low`/`high`/`median` — with no statistic.
 - When the source does not say which statistic it reports, use `unknown`;
   never guess.
+
+#### Tmax, ka, F, absorption model: formulation and population
+
+`tmax`, `ka`, `bioavailability` and `absorptionModel` may also carry, in the
+same `doseContext` block, which product and which subjects the reading is of —
+and nothing else of the dose context:
+
+- `releaseProfile`: `immediate | modified | not_applicable | unknown`
+- `physicalForm`: `tablet_capsule | solution | suspension | other | unknown`
+- `doseRegimen`: `single | multiple | steady_state | unknown`, and
+  `doseIntervalHours` for a repeated or depot product (a weekly depot is
+  `168`, a monthly one about `720`; never with `single`)
+- `pkPopulation` (the Cmax vocabulary) and `populationQualifier` (only beside
+  a population other than `healthy_adult`)
+
+State them when the source does: an extended-release Tmax filed without
+`releaseProfile: "modified"` stands as the drug's general Tmax. Readings of
+different formulations are never pooled together. Leave a field out when the
+source does not say; never infer a population the source does not name.
 
 #### Cmax: structured dose context
 

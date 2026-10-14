@@ -137,6 +137,11 @@ export type ValueBasis = (typeof VALUE_BASES)[number];
  * `median` column, so a mean was stored as a median. On a `'forbidden'`
  * parameter the statistic is therefore OPTIONAL (see
  * `REPORTED_STATISTIC_FIELD_KEYS` and `validateDoseContext`).
+ *
+ * `'optional'` (#12: the absorption parameters) admits the entry's SCOPE —
+ * its formulation and population, `ENTRY_SCOPE_FIELD_KEYS` — and nothing
+ * else of the dose context; each scope field may be stated or left out, and
+ * the reported statistic is optional exactly as on a `'forbidden'` parameter.
  */
 export type DoseContextMode = 'required' | 'optional' | 'forbidden';
 
@@ -268,6 +273,59 @@ const REPORTED_STATISTIC_FIELDS: ReadonlySet<DoseContextFieldKey> = new Set(
   REPORTED_STATISTIC_FIELD_KEYS,
 );
 
+/**
+ * The scope fields a `doseContext: 'optional'` parameter may carry (#12,
+ * owner decision of 2026-10-07): which formulation the reading is of
+ * (`releaseProfile`, `physicalForm`, and — to tell a weekly depot from a
+ * monthly one — `doseRegimen` + `doseIntervalHours`) and whom it was measured
+ * in (`pkPopulation`, `populationQualifier`). The vocabularies are Cmax's,
+ * reused rather than restated.
+ *
+ * Migration 0153 lists exactly these columns as the ones its CHECK lets an
+ * absorption parameter carry (asserted by tests/drizzle-dose-context-checks).
+ */
+export const ENTRY_SCOPE_FIELD_KEYS = [
+  'doseRegimen',
+  'doseIntervalHours',
+  'releaseProfile',
+  'physicalForm',
+  'pkPopulation',
+  'populationQualifier',
+] as const satisfies readonly DoseContextFieldKey[];
+
+const ENTRY_SCOPE_FIELDS: ReadonlySet<DoseContextFieldKey> = new Set(ENTRY_SCOPE_FIELD_KEYS);
+
+/** Does this entry state any part of its formulation/population scope? */
+export function hasEntryScope(entry: { [K in DoseContextFieldKey]?: unknown }): boolean {
+  return ENTRY_SCOPE_FIELD_KEYS.some((k) => entry[k] !== null && entry[k] !== undefined);
+}
+
+/**
+ * Whether an update `patch` would silently erase a stored row's scope.
+ *
+ * An entry update replaces the dose-context columns whole, an ABSENT field
+ * written as NULL (`doseContextValuesForWrite`). That was safe while only Cmax
+ * carried them, because every Cmax writer is new; a Tmax or F writer is not —
+ * a cached editor bundle, an agent or a proposal queued before #12 says
+ * nothing about formulation, and taking that silence as "clear it" would drop
+ * an extended-release tag and pool the reading back with the immediate-release
+ * ones. So a patch that states NONE of the scope fields, against a row that
+ * holds some, is refused (loudly, as a legacy Cmax write without `valueBasis`
+ * is) rather than applied. Stating any of them — `null` included — is a
+ * writer that knows the group, and its statement is taken whole.
+ */
+export function patchOmitsStoredScope(
+  stored: { [K in DoseContextFieldKey]?: unknown } | null | undefined,
+  patch: { [K in DoseContextFieldKey]?: unknown },
+): boolean {
+  if (!stored || !hasEntryScope(stored)) return false;
+  return ENTRY_SCOPE_FIELD_KEYS.every((k) => patch[k] === undefined);
+}
+
+/** The refusal message for `patchOmitsStoredScope` (stable; code `param_entry_scope_omitted`). */
+export const SCOPE_OMITTED_MESSAGE =
+  'This source value records its formulation or population; restate those fields (or send null to clear them) when updating it';
+
 if (
   Object.keys(DOSE_CONTEXT_FIELDS).join() !== DOSE_CONTEXT_FIELD_KEYS_TUPLE.join()
 ) {
@@ -295,18 +353,20 @@ export const NO_DOSE_CONTEXT: { readonly [K in DoseContextFieldKey]: null } =
  * `centralValue` is left out: it is the READING, compared with low/high/median
  * by the caller's same-reading test, not part of which observation this is.
  *
- * On a parameter without dose context (`mode: 'forbidden'`) the whole
- * reported statistic is left out for the same reason: there it is only ever a
- * label on the reading, and every row stored before migration 0135 lacks it.
- * Keyed on it, a document re-imported with labels would find no counterpart
- * for the unlabelled row it wrote earlier and insert the paper a second time.
+ * On a parameter whose reading is not defined by its dose context
+ * (`mode: 'forbidden'`, and `'optional'`, whose scope fields stay IN the key)
+ * the whole reported statistic is left out for the same reason: there it is
+ * only ever a label on the reading, and every row stored before migration 0135
+ * lacks it. Keyed on it, a document re-imported with labels would find no
+ * counterpart for the unlabelled row it wrote earlier and insert the paper a
+ * second time.
  */
 export function doseContextIdentityKey(
   entry: { [K in DoseContextFieldKey]?: unknown },
   mode: DoseContextMode = 'required',
 ): string {
   return DOSE_CONTEXT_FIELD_KEYS.filter((k) =>
-    mode === 'forbidden' ? !REPORTED_STATISTIC_FIELDS.has(k) : k !== 'centralValue',
+    mode !== 'required' ? !REPORTED_STATISTIC_FIELDS.has(k) : k !== 'centralValue',
   )
     .map((k) => {
       const v = entry[k];
@@ -688,15 +748,40 @@ function validateReportedStatistic(
 }
 
 /**
+ * The rules among the scope fields of an `'optional'` parameter's entry — the
+ * same ones a Cmax's regimen and population are held to below, and the same
+ * ones migration 0129's `parameter_entries_dose_context_dependencies` CHECK
+ * holds every row to: a dosing interval is positive and belongs to a regimen
+ * that is not a single dose, and a population qualifier qualifies a stated,
+ * non-healthy-adult population. `entry` is at stored scale, so an interval the
+ * column would round to zero is refused here rather than by the CHECK.
+ */
+function validateEntryScope(entry: DoseContextFields): string | null {
+  if (present(entry.doseIntervalHours)) {
+    if (!(entry.doseIntervalHours > 0)) return 'doseIntervalHours must be positive';
+    if (entry.doseRegimen === 'single') return 'A single dose has no dosing interval';
+  }
+  if (
+    present(entry.populationQualifier) &&
+    (!present(entry.pkPopulation) || entry.pkPopulation === 'healthy_adult')
+  ) {
+    return 'populationQualifier qualifies a non-healthy-adult pkPopulation';
+  }
+  return null;
+}
+
+/**
  * The write-time rules for an entry's dose context, given how the parameter
  * relates to it. Returns the first violated rule's message, or null.
  *
  * `'forbidden'` (every parameter today but the dose-context ones): no dose
  * field may carry a value, and the reported statistic is optional — held to
  * the same shape rules as a Cmax's when stated, but never required, because
- * every entry written before it existed has none. `'required'` (Cmax): the
- * RFC's *Validation invariants* and the storage column of *Required to store
- * is not required to normalize*.
+ * every entry written before it existed has none. `'optional'` (the
+ * absorption parameters, #12): the same, except that the scope fields
+ * (`ENTRY_SCOPE_FIELD_KEYS`) may be stated, each held to the rules it has on
+ * a Cmax. `'required'` (Cmax): the RFC's *Validation invariants* and the
+ * storage column of *Required to store is not required to normalize*.
  * Expects the entry already through `canonicalizeReportedStatistic`.
  */
 export function validateDoseContext(
@@ -704,11 +789,22 @@ export function validateDoseContext(
   mode: DoseContextMode,
   input: DoseContextFields & DoseContextCoreFields,
 ): string | null {
-  if (mode === 'forbidden') {
+  if (mode === 'forbidden' || mode === 'optional') {
     const stray = DOSE_CONTEXT_FIELD_KEYS.find(
-      (k) => !REPORTED_STATISTIC_FIELDS.has(k) && present(input[k]),
+      (k) =>
+        !REPORTED_STATISTIC_FIELDS.has(k) &&
+        !(mode === 'optional' && ENTRY_SCOPE_FIELDS.has(k)) &&
+        present(input[k]),
     );
-    if (stray) return `${parameter} takes no dose context; "${stray}" must not be set`;
+    if (stray) {
+      return mode === 'optional'
+        ? `${parameter} takes only formulation and population context (${ENTRY_SCOPE_FIELD_KEYS.join(', ')}); "${stray}" must not be set`
+        : `${parameter} takes no dose context; "${stray}" must not be set`;
+    }
+    if (mode === 'optional') {
+      const scopeMessage = validateEntryScope(atStoredScale(input));
+      if (scopeMessage) return scopeMessage;
+    }
     if (!hasReportedStatistic(input)) return null;
     return validateReportedStatistic(input, atStoredScale(input), 'optional');
   }

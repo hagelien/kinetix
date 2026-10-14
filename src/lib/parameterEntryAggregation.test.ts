@@ -8,6 +8,9 @@ import {
   summaryToNumericRange,
   isAggregateCacheValue,
   REVIEW_SCORE_WEIGHT_FLOOR,
+  formulationKey,
+  selectPooledFormulation,
+  UNSTATED_FORMULATION_KEY,
   type ParameterEntryValue,
   type AggregationContext,
 } from './parameterEntryAggregation';
@@ -488,5 +491,101 @@ describe('aggregateEntries — the reported statistic', () => {
     });
     const s = aggregateEntries([e], { targetUnit: '', matrixRelevant: false })!;
     expect(s.min).toBe(-0.5);
+  });
+});
+
+/**
+ * #12 — entries pool only within one formulation (release profile + dosing
+ * interval). An SL tablet and a monthly depot of the same drug have nothing in
+ * common but the molecule; their median is a Tmax no product has.
+ */
+describe('aggregateEntries — formulation partitioning (#12)', () => {
+  const H: AggregationContext = { targetUnit: 'h', matrixRelevant: false };
+  const tmax = (median: number, over: Partial<ParameterEntryValue> = {}) =>
+    entry({ unit: 'h', matrix: null, median, citationId: median, ...over });
+
+  it('pools entries that state no formulation exactly as before', () => {
+    const summary = aggregateEntries([tmax(1), tmax(2), tmax(3)], H)!;
+    expect(summary.pooledCount).toBe(3);
+    expect(summary.representative).toBe(2);
+    expect(summary.pooledFormulation).toBeNull();
+    expect(summary.formulationExcludedCount).toBe(0);
+  });
+
+  it('never pools a weekly depot with a monthly one', () => {
+    const summary = aggregateEntries(
+      [
+        tmax(24, { releaseProfile: 'modified', doseIntervalHours: 168 }),
+        tmax(30, { releaseProfile: 'modified', doseIntervalHours: 168 }),
+        tmax(120, { releaseProfile: 'modified', doseIntervalHours: 720 }),
+      ],
+      H,
+    )!;
+    // Two stated formulations and no conventional one: no value, not a pick.
+    expect(summary.pooledCount).toBe(0);
+    expect(summary.representative).toBeNull();
+    expect(summary.formulationExcludedCount).toBe(3);
+    // Still listed: every entry is counted and plotted.
+    expect(summary.entryCount).toBe(3);
+    expect(summary.points).toHaveLength(3);
+    expect(summaryToNumericRange(summary)).toBeNull();
+  });
+
+  it('keeps a tagged extended-release reading out of the unstated pool (the OPANA ER case)', () => {
+    const summary = aggregateEntries(
+      [tmax(0.5), tmax(1), tmax(8, { releaseProfile: 'modified' })],
+      H,
+    )!;
+    expect(summary.pooledCount).toBe(2);
+    expect(summary.max).toBe(1);
+    expect(summary.contributingCitationIds).toEqual([0.5, 1]);
+    expect(summary.formulationExcludedCount).toBe(1);
+    expect(summary.pooledFormulation).toBeNull();
+  });
+
+  it('pools a single stated formulation on its own, and says which', () => {
+    const summary = aggregateEntries(
+      [
+        tmax(24, { releaseProfile: 'modified', doseIntervalHours: 168 }),
+        tmax(30, { releaseProfile: 'modified', doseIntervalHours: 168.00001 }),
+      ],
+      H,
+    )!;
+    // 168.00001 h is 168 at the column's scale: the same formulation.
+    expect(summary.pooledCount).toBe(2);
+    expect(summary.pooledFormulation).toEqual({ releaseProfile: 'modified', doseIntervalHours: 168 });
+  });
+
+  it('prefers the immediate-release single-dose reading over a depot when nothing is unstated', () => {
+    const summary = aggregateEntries(
+      [tmax(1, { releaseProfile: 'immediate' }), tmax(96, { releaseProfile: 'modified', doseIntervalHours: 720 })],
+      H,
+    )!;
+    expect(summary.pooledCount).toBe(1);
+    expect(summary.representative).toBe(1);
+    expect(summary.pooledFormulation).toEqual({ releaseProfile: 'immediate', doseIntervalHours: null });
+  });
+
+  it("treats a release profile of 'unknown' as unstated", () => {
+    expect(formulationKey({ releaseProfile: 'unknown' })).toBe(UNSTATED_FORMULATION_KEY);
+    const summary = aggregateEntries([tmax(1), tmax(2, { releaseProfile: 'unknown' })], H)!;
+    expect(summary.pooledCount).toBe(2);
+  });
+
+  it('decides the formulation among entries that can pool, not censored ones', () => {
+    const summary = aggregateEntries(
+      [tmax(5, { qualifier: '<' }), tmax(24, { releaseProfile: 'modified', doseIntervalHours: 168 })],
+      H,
+    )!;
+    expect(summary.pooledCount).toBe(1);
+    expect(summary.representative).toBe(24);
+  });
+
+  it('selectPooledFormulation: one key, then unstated, then immediate release, else none', () => {
+    expect(selectPooledFormulation([])).toBeNull();
+    expect(selectPooledFormulation(['modified|168'])).toBe('modified|168');
+    expect(selectPooledFormulation(['modified|168', '|'])).toBe('|');
+    expect(selectPooledFormulation(['modified|168', 'immediate|'])).toBe('immediate|');
+    expect(selectPooledFormulation(['modified|168', 'immediate|12'])).toBeNull();
   });
 });

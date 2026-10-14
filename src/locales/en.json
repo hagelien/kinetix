@@ -4031,7 +4031,11 @@
       "modelStructureValue": "Model structure",
       "modelStructureHint": "A model-structure declaration is a cited choice, not a measured value — pick the shape this source supports.",
       "errorModelStructureRequired": "Choose a model-structure value.",
-      "errorIncompatibleCombination": "The administration route, absorption model, and parameter are not compatible."
+      "errorIncompatibleCombination": "The administration route, absorption model, and parameter are not compatible.",
+      "scopeLegend": "Formulation and population",
+      "scopeHint": "What the source measured: the release profile and form of the product, a repeat-dosing interval (a weekly or monthly depot), and the population studied. Values for different formulations are never pooled together; leave a field as “not stated” when the source does not say.",
+      "errorScopeInvalid": "Check the formulation fields: a dosing interval must be a positive number of hours.",
+      "error_param_entry_scope_omitted": "This source value records a formulation or population. Reload the form and save again so those fields are included."
     },
     "summary": {
       "line": "Pooled: {{value}} · {{count}} sources",

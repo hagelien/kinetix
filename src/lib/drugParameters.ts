@@ -379,6 +379,12 @@ interface BaseParameterSpec {
    * (the default, absent) rejects every dose field but leaves the reported
    * statistic (`centralValue` / `centralStatistic` / `intervalKind`) optional,
    * because what a number IS (mean, median, …) is not dose context.
+   * `'optional'` (#12) additionally admits the entry's formulation and
+   * population (`ENTRY_SCOPE_FIELD_KEYS`) and nothing else of the dose: set on
+   * the absorption parameters, whose value depends on the product (an
+   * immediate- vs an extended-release Tmax; a weekly vs a monthly depot) and
+   * the population studied. Entries pool only within one formulation
+   * (`parameterEntryAggregation.ts`). Migration 0153 mirrors the list.
    */
   doseContext?: DoseContextMode;
   /**
@@ -600,6 +606,9 @@ export const DRUG_PARAMETERS: Record<DrugParameterId, ParameterSpec> = {
     // derivation reads the route-specific ones — so a route-specific F never mixes into the drug-level F.
     routeOptional: true,
     requiresAdministration: true,
+    // Formulation and population scope (#12): an extended-release F is not an
+    // immediate-release one.
+    doseContext: 'optional',
     zod: rangeSchema({
       min: 0,
       max: 1,
@@ -671,6 +680,10 @@ export const DRUG_PARAMETERS: Record<DrugParameterId, ParameterSpec> = {
     forensic: false,
     summarizable: true,
     routeOptional: true,
+    // Formulation and population scope (#12): the OPANA ER case — an
+    // extended-release Tmax filed as bare `oral` stood as the drug's general
+    // oral Tmax, and `ka` inference reads exactly this value.
+    doseContext: 'optional',
     zod: rangeSchema({
       min: 0,
       max: 240,
@@ -929,6 +942,9 @@ export const DRUG_PARAMETERS: Record<DrugParameterId, ParameterSpec> = {
     // compound) — the substance-class barrier must reject it, exactly as it does
     // bioavailability and the dose quantities.
     requiresAdministration: true,
+    // Formulation and population scope (#12): one route can hold several
+    // products with very different absorption (SL tablet vs SC depot).
+    doseContext: 'optional',
     zod: rangeSchema({ min: 0.001, max: 100, allowedUnits: ['1/h'], requiresMinMax: false }),
     format: rangeFormatter,
   },
@@ -1089,6 +1105,9 @@ export const DRUG_PARAMETERS: Record<DrugParameterId, ParameterSpec> = {
     // would offer "absorption model" for every metabolite on a screening panel
     // and re-offer it forever, since no study can ever answer it.
     requiresAdministration: true,
+    // Formulation and population scope (#12): a weekly and a monthly depot
+    // of one route are different input shapes.
+    doseContext: 'optional',
     zod: z.enum([...ABSORPTION_KINDS] as [string, ...string[]]),
     format: textFormatter,
   },

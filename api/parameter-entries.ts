@@ -71,8 +71,10 @@ import {
   listEntriesForDrug,
   recomputeParameterAndDependents,
   updateParameterEntryRow,
+  updateWouldEraseEntryScope,
 } from './_lib/parameter-entries-store.js';
 import { validateEntryForParameter } from '../src/lib/parameterEntries.js';
+import { SCOPE_OMITTED_MESSAGE } from '../src/lib/entryDoseContext.js';
 import {
   agentProposalLacksSourceQuote,
   agentWriteMustCarryQuote,
@@ -525,6 +527,13 @@ async function handleUpdate(
     error(res, 400, invalid, 'param_entry_invalid_for_parameter');
     return;
   }
+  // A writer that says nothing about formulation/population must not erase
+  // what the row records (#12). Early answer for both branches; the direct
+  // write asks again under its lock, a queued proposal again at approval.
+  if (await updateWouldEraseEntryScope(id, existing.parameter, patch)) {
+    error(res, 400, SCOPE_OMITTED_MESSAGE, 'param_entry_scope_omitted');
+    return;
+  }
   if (!(await gateCitation(patch.citationId, auth.userId, res))) return;
 
   // Before choosing queued versus direct: an agent granted direct writes
@@ -664,6 +673,9 @@ async function handleUpdate(
   try {
     directOutcome = await inTransaction<DirectOutcome>(async () => {
       await lockDrugForEntryApplicability(existing.drugId);
+      if (await updateWouldEraseEntryScope(id, existing.parameter, patch)) {
+        throw new ScopeOmittedDirectWrite();
+      }
       const row = await updateParameterEntryRow(id, patch);
       if (!row) return { kind: 'gone' };
       if (mustCarryQuote && !row.sourceQuote?.trim()) throw new UnquotedDirectWrite();
@@ -672,6 +684,10 @@ async function handleUpdate(
       return { kind: 'ok' };
     });
   } catch (err) {
+    if (err instanceof ScopeOmittedDirectWrite) {
+      error(res, 400, SCOPE_OMITTED_MESSAGE, 'param_entry_scope_omitted');
+      return;
+    }
     if (!(err instanceof UnquotedDirectWrite)) throw err;
     error(res, 400, SOURCE_QUOTE_REQUIRED_MESSAGE, 'source_quote_required');
     return;
@@ -685,6 +701,9 @@ async function handleUpdate(
 
 /** Rolls back an agent's direct update that would have left no quote. */
 class UnquotedDirectWrite extends Error {}
+
+/** Refuses a direct update that would erase the row's formulation/population (#12). */
+class ScopeOmittedDirectWrite extends Error {}
 
 async function handleDelete(
   req: IncomingMessage,

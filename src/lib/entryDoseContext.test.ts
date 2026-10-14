@@ -26,6 +26,8 @@ import {
   PRANDIAL_STATES,
   RELEASE_PROFILES,
   roundToScale,
+  ENTRY_SCOPE_FIELD_KEYS,
+  patchOmitsStoredScope,
   VALUE_BASES,
   validateDoseContext,
   type DoseContextCoreFields,
@@ -36,6 +38,7 @@ import {
   sourceQuoteEvidenceUnchanged,
   validateEntryForParameter,
 } from './parameterEntries';
+import { DRUG_PARAMETER_IDS, parameterDoseContextMode } from './drugParameters';
 
 type Entry = DoseContextFields & DoseContextCoreFields;
 
@@ -369,19 +372,19 @@ describe('validateDoseContext — required', () => {
 describe('dose context on a parameter that does not declare it', () => {
   it('rejects every dose field through validateEntryForParameter', () => {
     const legacy = { low: 1, high: 2, unit: 'h' };
-    expect(validateEntryForParameter('tmax', legacy)).toBeNull();
+    expect(validateEntryForParameter('halfLife', legacy)).toBeNull();
     const statistic: readonly string[] = REPORTED_STATISTIC_FIELD_KEYS;
     for (const key of DOSE_CONTEXT_FIELD_KEYS.filter((k) => !statistic.includes(k))) {
       const value = key === 'priorDosingRegular' ? true : key.endsWith('Id') ? 1 : 1;
       expect(
-        validateEntryForParameter('tmax', { ...legacy, [key]: value }),
+        validateEntryForParameter('halfLife', { ...legacy, [key]: value }),
         key,
       ).toMatch(/takes no dose context/);
     }
   });
   it('treats explicit nulls as absent', () => {
     expect(
-      validateEntryForParameter('tmax', {
+      validateEntryForParameter('halfLife', {
         low: 1,
         high: 2,
         unit: 'h',
@@ -389,6 +392,132 @@ describe('dose context on a parameter that does not declare it', () => {
         administeredDrugId: null,
       }),
     ).toBeNull();
+  });
+});
+
+/**
+ * #12 — formulation and population on the absorption parameters. They take
+ * the scope fields (`ENTRY_SCOPE_FIELD_KEYS`) and nothing else of the dose
+ * context; every other parameter keeps refusing all of it.
+ */
+describe("dose context on an 'optional' parameter (formulation and population)", () => {
+  const tmax = { low: 1, high: 2, unit: 'h' };
+  const scopeValues = {
+    doseRegimen: 'multiple',
+    doseIntervalHours: 168,
+    releaseProfile: 'modified',
+    physicalForm: 'suspension',
+    pkPopulation: 'patients_unspecified',
+    populationQualifier: 'opioid use disorder',
+  } as const;
+
+  it('registers exactly the absorption parameters as optional', () => {
+    const optional = DRUG_PARAMETER_IDS.filter((id) => parameterDoseContextMode(id) === 'optional');
+    expect(optional).toEqual(['bioavailability', 'tmax', 'ka', 'absorptionModel']);
+  });
+
+  it('accepts every scope field, alone and together, on each absorption parameter', () => {
+    const readings: Record<string, Record<string, unknown>> = {
+      tmax,
+      bioavailability: { low: 0.2, high: 0.4, unit: 'fraction', route: 'sublingual' },
+      ka: { low: 0.1, high: 0.3, unit: '1/h', route: 'im' },
+      absorptionModel: { categoricalValue: 'first-order', unit: '' },
+    };
+    for (const [parameter, reading] of Object.entries(readings)) {
+      expect(validateEntryForParameter(parameter, { ...reading, ...scopeValues }), parameter).toBeNull();
+      for (const key of ENTRY_SCOPE_FIELD_KEYS) {
+        if (key === 'populationQualifier') continue; // needs its population
+        expect(
+          validateEntryForParameter(parameter, { ...reading, [key]: scopeValues[key] }),
+          `${parameter}.${key}`,
+        ).toBeNull();
+      }
+    }
+  });
+
+  it('refuses every other dose-context field, naming the ones it takes', () => {
+    const statistic: readonly string[] = REPORTED_STATISTIC_FIELD_KEYS;
+    const scope: readonly string[] = ENTRY_SCOPE_FIELD_KEYS;
+    const others = DOSE_CONTEXT_FIELD_KEYS.filter((k) => !statistic.includes(k) && !scope.includes(k));
+    expect(others).toContain('doseValue');
+    expect(others).toContain('valueBasis');
+    for (const key of others) {
+      const value = key === 'priorDosingRegular' ? true : 1;
+      expect(validateEntryForParameter('tmax', { ...tmax, [key]: value }), key).toMatch(
+        /takes only formulation and population context/,
+      );
+    }
+  });
+
+  it('holds the scope fields to the rules they have on a Cmax', () => {
+    expect(
+      validateEntryForParameter('tmax', { ...tmax, doseRegimen: 'single', doseIntervalHours: 12 }),
+    ).toMatch(/single dose has no dosing interval/);
+    expect(validateEntryForParameter('tmax', { ...tmax, doseIntervalHours: 0 })).toMatch(
+      /must be positive/,
+    );
+    // Rounds to zero at the column's scale (numeric(10, 4)), so it is zero.
+    expect(validateEntryForParameter('tmax', { ...tmax, doseIntervalHours: 0.00001 })).toMatch(
+      /must be positive/,
+    );
+    expect(validateEntryForParameter('tmax', { ...tmax, populationQualifier: 'CYP2D6 PM' })).toMatch(
+      /populationQualifier/,
+    );
+    expect(
+      validateEntryForParameter('tmax', {
+        ...tmax,
+        pkPopulation: 'healthy_adult',
+        populationQualifier: 'CYP2D6 PM',
+      }),
+    ).toMatch(/populationQualifier/);
+    // An interval with no regimen stated is a depot's ordinary shape.
+    expect(validateEntryForParameter('tmax', { ...tmax, releaseProfile: 'modified', doseIntervalHours: 720 })).toBeNull();
+  });
+
+  it('refuses a value outside the reused vocabulary at the schema', () => {
+    const parsed = parameterEntryPatchSchema.safeParse({
+      low: 1,
+      high: 2,
+      unit: 'h',
+      citationId: 1,
+      releaseProfile: 'extended',
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it('still refuses the scope fields on a parameter outside the decision', () => {
+    // The dose-context rule runs before the unit rule, so the unit is moot.
+    for (const parameter of ['halfLife', 'volumeOfDistribution', 'clearance', 'proteinBinding']) {
+      for (const key of ENTRY_SCOPE_FIELD_KEYS) {
+        expect(
+          validateEntryForParameter(parameter, { low: 1, high: 2, unit: 'h', [key]: scopeValues[key] }),
+          `${parameter}.${key}`,
+        ).toMatch(/takes no dose context/);
+      }
+    }
+  });
+
+  it('keeps the scope in the identity key and the label out of it', () => {
+    const ir = { releaseProfile: 'immediate' } as const;
+    const er = { releaseProfile: 'modified' } as const;
+    expect(doseContextIdentityKey(ir, 'optional')).not.toBe(doseContextIdentityKey(er, 'optional'));
+    expect(doseContextIdentityKey({ ...ir, centralStatistic: 'median' }, 'optional')).toBe(
+      doseContextIdentityKey(ir, 'optional'),
+    );
+  });
+});
+
+describe('patchOmitsStoredScope — an unaware update must not erase a stored scope', () => {
+  it('refuses a patch that names none of the scope fields against a row that has one', () => {
+    expect(patchOmitsStoredScope({ releaseProfile: 'modified' }, { centralValue: 5 })).toBe(true);
+  });
+  it('lets a patch that states the group, even as null, through', () => {
+    expect(patchOmitsStoredScope({ releaseProfile: 'modified' }, { releaseProfile: null })).toBe(false);
+    expect(patchOmitsStoredScope({ releaseProfile: 'modified' }, { pkPopulation: 'healthy_adult' })).toBe(false);
+  });
+  it('has nothing to protect on a row without a scope', () => {
+    expect(patchOmitsStoredScope({ releaseProfile: null }, {})).toBe(false);
+    expect(patchOmitsStoredScope(undefined, {})).toBe(false);
   });
 });
 

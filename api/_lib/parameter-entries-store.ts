@@ -46,6 +46,7 @@ import {
 import {
   getRangeSpec,
   isDrugParameterId,
+  parameterDoseContextMode,
   parameterIsMatrixRelevant,
   parameterIsSummarizable,
   SUMMARIZED_PARAMETER_IDS,
@@ -61,7 +62,9 @@ import {
 import {
   canonicalizeReportedStatistic,
   DOSE_CONTEXT_FIELD_KEYS,
+  ENTRY_SCOPE_FIELD_KEYS,
   doseContextNumericType,
+  patchOmitsStoredScope,
   NUMERIC_DOSE_CONTEXT_FIELDS,
   type DoseContextFieldKey,
   type DoseContextFields,
@@ -236,6 +239,10 @@ export async function loadEntryValuesForParameter(
       matrix: parameterEntries.matrix,
       n: parameterEntries.n,
       origin: parameterEntries.origin,
+      // The formulation (#12): entries pool only within one
+      // (`selectPooledFormulation`).
+      releaseProfile: parameterEntries.releaseProfile,
+      doseIntervalHours: parameterEntries.doseIntervalHours,
       reviewScore: paperReviews.overallScore,
     })
     .from(parameterEntries)
@@ -266,6 +273,8 @@ export async function loadEntryValuesForParameter(
     matrix: r.matrix as ReferenceMatrix | null,
     n: r.n,
     origin: r.origin,
+    releaseProfile: r.releaseProfile,
+    doseIntervalHours: toNum(r.doseIntervalHours),
     reviewScore: r.reviewScore ?? null,
   }));
 }
@@ -373,6 +382,10 @@ export async function getParameterSummariesWithRoutes(
       matrix: parameterEntries.matrix,
       n: parameterEntries.n,
       origin: parameterEntries.origin,
+      // The formulation (#12): entries pool only within one
+      // (`selectPooledFormulation`).
+      releaseProfile: parameterEntries.releaseProfile,
+      doseIntervalHours: parameterEntries.doseIntervalHours,
       reviewScore: paperReviews.overallScore,
     })
     .from(parameterEntries)
@@ -410,6 +423,8 @@ export async function getParameterSummariesWithRoutes(
       matrix: r.matrix as ReferenceMatrix | null,
       n: r.n,
       origin: r.origin,
+      releaseProfile: r.releaseProfile,
+      doseIntervalHours: toNum(r.doseIntervalHours),
       reviewScore: r.reviewScore ?? null,
     });
     byParam.set(key, list);
@@ -2065,4 +2080,40 @@ export async function getParameterEntryRowById(
     .where(eq(parameterEntries.id, id))
     .limit(1);
   return row ?? null;
+}
+
+/**
+ * Whether applying `patch` to entry `id` would silently erase the
+ * formulation/population scope it stores (#12; `patchOmitsStoredScope`). Only
+ * an `'optional'` parameter is asked: a Cmax update's absent-means-NULL rule
+ * predates #12 and every Cmax writer states its dose context.
+ *
+ * A read beside the write rather than inside it. Where the answer decides a
+ * write — the direct update and the approval — it is asked under the owning
+ * drug's advisory lock, which every entry write takes, so the row cannot gain
+ * a scope between this read and the update; the check when a proposal is
+ * queued is early feedback, asked again at approval.
+ */
+export async function updateWouldEraseEntryScope(
+  id: number,
+  parameter: string,
+  patch: DoseContextFields,
+): Promise<boolean> {
+  if (parameterDoseContextMode(parameter) !== 'optional') return false;
+  // Every scope column (`ENTRY_SCOPE_FIELD_KEYS`), named one by one so the
+  // select keeps its column types; `satisfies` fails the build if the list
+  // and this select drift apart.
+  const [row] = await getDb()
+    .select({
+      doseRegimen: parameterEntries.doseRegimen,
+      doseIntervalHours: parameterEntries.doseIntervalHours,
+      releaseProfile: parameterEntries.releaseProfile,
+      physicalForm: parameterEntries.physicalForm,
+      pkPopulation: parameterEntries.pkPopulation,
+      populationQualifier: parameterEntries.populationQualifier,
+    } satisfies Record<(typeof ENTRY_SCOPE_FIELD_KEYS)[number], AnyColumn>)
+    .from(parameterEntries)
+    .where(eq(parameterEntries.id, id))
+    .limit(1);
+  return patchOmitsStoredScope(row, patch);
 }

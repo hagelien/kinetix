@@ -17,6 +17,7 @@ import {
   getRangeSpec,
   isDrugParameterId,
   isModelStructureParameter,
+  parameterDoseContextMode,
   parameterIsMatrixRelevant,
   parameterIsRouteOptional,
   parameterIsRouteScoped,
@@ -37,6 +38,12 @@ import {
   type CentralStatistic,
   type IntervalKind,
 } from '@/lib/entryDoseContext';
+import {
+  EntryScopeFields,
+  entryScopeForWrite,
+  NO_ENTRY_SCOPE,
+  useEntryScope,
+} from '@/components/wiki/EntryScopeFields';
 import {
   createParameterEntry,
   updateParameterEntry,
@@ -114,6 +121,10 @@ export function ParameterEntryEditor({
   const showRoute =
     known && (parameterIsRouteScoped(parameter) || parameterIsRouteOptional(parameter));
   const routeRequired = known && parameterIsRouteScoped(parameter);
+  // The formulation and population of an absorption reading (#12): offered
+  // on exactly the parameters that may store them (`doseContext: 'optional'`).
+  const showScope = known && parameterDoseContextMode(parameter) === 'optional';
+  const [scope, setScope] = useEntryScope(row?.doseContext);
   // Units the parameter itself accepts (every concentration unit for a
   // concentration; 'h', 'fraction', 'ratio' … otherwise; a single empty string
   // for the dimensionless logP/logD/pKa, which render no unit control at all).
@@ -212,7 +223,18 @@ export function ParameterEntryEditor({
     base: Omit<ParameterEntryWriteInput, 'drugId' | 'parameter'>,
   ): Promise<void> {
     if (validateEntryForParameter(parameter, base)) {
-      setError(t('parameterEntries.editor.errorIncompatibleCombination'));
+      // Name the formulation fields when they are what fails — the same entry
+      // without them passing — rather than blaming route and model.
+      const scopeAtFault =
+        showScope &&
+        !validateEntryForParameter(parameter, { ...base, ...NO_ENTRY_SCOPE });
+      setError(
+        t(
+          scopeAtFault
+            ? 'parameterEntries.editor.errorScopeInvalid'
+            : 'parameterEntries.editor.errorIncompatibleCombination',
+        ),
+      );
       return;
     }
     setSaving(true);
@@ -259,6 +281,7 @@ export function ParameterEntryEditor({
       categoricalValue,
       unit: '',
       ...(showRoute && route ? { route } : {}),
+      ...(showScope ? entryScopeForWrite(scope) : {}),
       observationContext: submittedObservationContext(),
       quote: submittedQuote(),
       citationId,
@@ -368,6 +391,7 @@ export function ParameterEntryEditor({
       qualifier: qualifier || undefined,
       unit,
       route: showRoute && route ? route : undefined,
+      ...(showScope ? entryScopeForWrite(scope) : {}),
       matrix: showMatrix ? matrix : undefined,
       scenario: showScenario ? scenario : undefined,
       n: numOrUndef(n),
@@ -477,6 +501,8 @@ export function ParameterEntryEditor({
         </p>
 
         {routeField && <div className="mt-2">{routeField}</div>}
+
+        {showScope && <EntryScopeFields value={scope} onChange={setScope} />}
 
         {quoteField}
         {observationContextField}
@@ -679,6 +705,8 @@ export function ParameterEntryEditor({
         )}
         {routeField}
       </div>
+
+      {showScope && <EntryScopeFields value={scope} onChange={setScope} />}
 
       {/* Without a matrix/scenario dropdown, the study context (population,
           route, assay — why this source differs from the next) has nowhere to

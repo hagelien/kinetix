@@ -149,6 +149,19 @@ export interface ParameterEntryWriteInput {
   centralValue?: DoseContextFields['centralValue'];
   centralStatistic?: DoseContextFields['centralStatistic'];
   intervalKind?: DoseContextFields['intervalKind'];
+  /**
+   * The formulation and population of an absorption reading (#12; Tmax, ka,
+   * F, absorption model — registry `doseContext: 'optional'`). An update that
+   * names none of them is refused when the stored row records any
+   * (`param_entry_scope_omitted`), so a writer that knows them sends all six,
+   * `null` for "not stated".
+   */
+  doseRegimen?: DoseContextFields['doseRegimen'];
+  doseIntervalHours?: DoseContextFields['doseIntervalHours'];
+  releaseProfile?: DoseContextFields['releaseProfile'];
+  physicalForm?: DoseContextFields['physicalForm'];
+  pkPopulation?: DoseContextFields['pkPopulation'];
+  populationQualifier?: DoseContextFields['populationQualifier'];
   editSummary?: string;
   submitForReview?: boolean;
 }

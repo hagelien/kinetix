@@ -4031,7 +4031,11 @@
       "modelStructureValue": "Modellstruktur",
       "modelStructureHint": "En modellstruktur-angivelse er et kildebelagt valg, ikke en målt verdi — velg formen denne kilden støtter.",
       "errorModelStructureRequired": "Velg en modellstruktur-verdi.",
-      "errorIncompatibleCombination": "Administrasjonsveien, absorpsjonsmodellen og parameteren er ikke kompatible."
+      "errorIncompatibleCombination": "Administrasjonsveien, absorpsjonsmodellen og parameteren er ikke kompatible.",
+      "scopeLegend": "Formulering og populasjon",
+      "scopeHint": "Hva kilden målte: produktets frisettingsprofil og form, doseringsintervall ved gjentatt dosering (depot hver uke eller hver måned) og populasjonen som ble studert. Verdier for ulike formuleringer slås aldri sammen; la et felt stå som «ikke oppgitt» når kilden ikke sier det.",
+      "errorScopeInvalid": "Sjekk formuleringsfeltene: et doseringsintervall må være et positivt antall timer.",
+      "error_param_entry_scope_omitted": "Denne kildeverdien har registrert formulering eller populasjon. Last skjemaet på nytt og lagre igjen slik at disse feltene blir med."
     },
     "summary": {
       "line": "Samlet: {{value}} · {{count}} kilder",
