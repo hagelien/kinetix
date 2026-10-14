@@ -212,6 +212,15 @@ const ENTITY_HUB_TITLE = 'Bioentiteter';
  * topic: the wiki index hides drafts and non-topic pages, so adopting one would
  * hang every entity monograph under a hub nobody can see. Such a page is
  * refused (thrown) rather than silently repaired, since it is editor content.
+ *
+ * The lookup share-locks the hub row. Inside a transaction (entity creation in
+ * api/bio-entities.ts, a queued create's approval) the lock holds until
+ * commit, so a concurrent PUT or DELETE of the hub page waits for the new
+ * monograph to commit under it; if that demotion or delete commits first, the
+ * locked read sees the result and refuses (or recreates a deleted hub) instead
+ * of filing the monograph under a hub that is no longer a published topic. On
+ * the auto-commit client (the build sweep) the lock lasts one statement and
+ * costs nothing.
  */
 export async function ensureEntityHubPage(
   db: Db,
@@ -226,7 +235,8 @@ export async function ensureEntityHubPage(
       })
       .from(wikiPages)
       .where(eq(wikiPages.slug, ENTITY_HUB_SLUG))
-      .limit(1);
+      .limit(1)
+      .for('share');
     if (!row) return null;
     if (row.pageType !== 'topic' || row.status !== 'published') {
       throw new Error(
