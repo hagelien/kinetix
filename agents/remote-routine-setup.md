@@ -293,6 +293,13 @@ The helper reads the invoking session's own transcript when the runner
 exposes its id (Claude Code always does). Without one, it refuses to guess
 while another transcript on the machine is active, so two local workers
 running at once log a failure rather than each other's tokens.
+Because it is the last tool call, the turn that writes the closing paragraph
+comes after the log. On Claude Code the repository's `Stop` hook
+(`.claude/hooks/relog-run-usage.mjs`, registered in `.claude/settings.json`)
+re-runs the helper for that session once the turn ends, so the row is
+refreshed to include it; this needs the routine to run in this repository's
+checkout with its project hooks enabled, and nothing else. Codex has no Stop
+hook, so a Codex run's row still omits that last turn (issue 213).
 Pause a routine before changing its agent's model tier: a run's tier is read
 when its usage is logged at the end, so a run in flight during the change would
 be filed under the new tier (issue 1444). The benchmark leaves out a run whose
