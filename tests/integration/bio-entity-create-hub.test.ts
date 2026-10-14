@@ -14,6 +14,20 @@ vi.mock('../../api/_lib/auth.js', () => ({
   requestHasAuthCookie: () => true,
 }));
 
+const { failMonograph } = vi.hoisted(() => ({ failMonograph: { on: false } }));
+vi.mock('../../api/_lib/monograph-helpers.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../api/_lib/monograph-helpers.js')>();
+  return {
+    ...actual,
+    // Stands in for another admin demoting the hub after the preflight passed.
+    ensureEntityMonograph: (...args: Parameters<typeof actual.ensureEntityMonograph>) => {
+      if (failMonograph.on) throw new Error('hub became unusable');
+      return actual.ensureEntityMonograph(...args);
+    },
+  };
+});
+
 import handler from '../../api/bio-entities.js';
 import { bioEntities, wikiPages } from '../../db/schema.js';
 import { ENTITY_HUB_SLUG } from '../../api/_lib/monograph-helpers.js';
@@ -36,6 +50,7 @@ afterAll(async () => {
 beforeEach(async () => {
   await resetIntegrationDb(db);
   authMock.mockReset();
+  failMonograph.on = false;
 });
 
 async function createEntity(userId: number) {
@@ -103,5 +118,15 @@ describe('POST /api/bio-entities with an unusable hub page', () => {
       .from(wikiPages)
       .where(eq(wikiPages.parentId, hub!.id));
     expect(children).toHaveLength(1);
+  });
+
+  it('rolls the entity back when the monograph step fails after the preflight', async () => {
+    const userId = await seedUser(db);
+    failMonograph.on = true;
+
+    const state = await createEntity(userId);
+
+    expect(state.statusCode).toBe(500);
+    expect(await db.select().from(bioEntities)).toHaveLength(0);
   });
 });
