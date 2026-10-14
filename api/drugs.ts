@@ -34,10 +34,12 @@ import { getDb, runInPoolTransaction } from './_lib/db.js';
 import { getUserFromRequest, requestHasAuthCookie } from './_lib/auth.js';
 import { assertSameOrigin, parseAndValidate } from './_lib/validate.js';
 import {
+  assertPubchemCidWritable,
   buildSearchKey,
   insertDrug,
   isForeignKeyViolation,
   isUniqueViolation,
+  ParameterApplyError,
 } from './_lib/drugs-helpers.js';
 import {
   ensureDrugMonograph,
@@ -723,6 +725,7 @@ async function handleUpdate(
   type UpdateOutcome =
     | { kind: 'ok'; applied: Awaited<ReturnType<typeof applyDrugRowUpdate>> }
     | { kind: 'gone' }
+    | { kind: 'cid_refused'; error: ParameterApplyError }
     | { kind: 'not_applicable'; error: ParameterNotApplicableError };
   let outcome: UpdateOutcome;
   try {
@@ -740,6 +743,17 @@ async function handleUpdate(
         .where(eq(drugs.id, id))
         .limit(1);
       if (!existing) return { kind: 'gone' };
+
+      if (data.pubchemCid !== undefined) {
+        try {
+          await assertPubchemCidWritable(id, data.pubchemCid);
+        } catch (err: unknown) {
+          if (err instanceof ParameterApplyError) {
+            return { kind: 'cid_refused', error: err };
+          }
+          throw err;
+        }
+      }
 
       const updates: Record<string, unknown> = { updatedAt: new Date() };
       let nextNames = existing.names;
@@ -808,6 +822,10 @@ async function handleUpdate(
   }
   if (outcome.kind === 'gone') {
     error(res, 404, 'Drug not found');
+    return;
+  }
+  if (outcome.kind === 'cid_refused') {
+    error(res, 409, outcome.error.message, outcome.error.code);
     return;
   }
   if (outcome.kind === 'not_applicable') {
