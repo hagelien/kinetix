@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canonicalConcentrationUnit,
   concentrationTooltipArgs,
   containsConcentration,
   parseConcentrationValue,
@@ -45,7 +46,14 @@ describe('splitConcentrationText', () => {
   });
 
   it('leaves a compound unit (a rate, a per-dose figure) alone', () => {
-    for (const text of ['Clearance 2 mg/L/h', 'Økning 3 mg/L per dose']) {
+    for (const text of [
+      'Clearance 2 mg/L/h',
+      'Økning 3 mg/L per dose',
+      'AUC 5 mg/L⋅h',
+      'AUC 5 mg/L×h',
+      'AUC 5 mg/L · h',
+      'AUC 5 mg/L x h',
+    ]) {
       expect(splitConcentrationText(text)).toEqual([{ kind: 'text', text }]);
       expect(containsConcentration(text)).toBe(false);
     }
@@ -93,6 +101,16 @@ describe('splitConcentrationText', () => {
     expect(containsConcentration(text)).toBe(true);
     expect(splitConcentrationText(text)).toHaveLength(2);
     expect(splitConcentrationText(text)).toHaveLength(2);
+  });
+});
+
+describe('canonicalConcentrationUnit', () => {
+  it('maps authored spellings to the registry unit', () => {
+    expect(canonicalConcentrationUnit('mg/l')).toBe('mg/L');
+    expect(canonicalConcentrationUnit('NG/ML')).toBe('ng/mL');
+    expect(canonicalConcentrationUnit('ug/L')).toBe('µg/L');
+    expect(canonicalConcentrationUnit('μmol/l')).toBe('µmol/L');
+    expect(canonicalConcentrationUnit('mg/dl')).toBe('mg/dL');
   });
 });
 

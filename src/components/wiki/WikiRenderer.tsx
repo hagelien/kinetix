@@ -25,6 +25,7 @@ import {
 } from "@/lib/unitTooltip";
 import {
   containsConcentration,
+  canonicalConcentrationUnit,
   parseConcentrationValue,
   preserveStrictOperator,
   splitConcentrationText,
@@ -240,7 +241,7 @@ function annotateConcentrationUnits(
       const template = parsed.createElement("template");
       template.innerHTML = concentrationSegmentHtml(
         segment.value,
-        segment.unit,
+        canonicalConcentrationUnit(segment.unit),
         molecularWeight,
         enabledUnits,
         `unit-conversion-tooltip-${textNodeIndex}-${tooltipIndex}`,

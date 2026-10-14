@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import {
+  canonicalConcentrationUnit,
   concentrationTooltipArgs,
   splitConcentrationText,
 } from '@/lib/concentrationText';
@@ -33,7 +34,7 @@ export function ConcentrationText({ text, molecularWeight }: ConcentrationTextPr
           <UnitTooltip
             key={index}
             {...concentrationTooltipArgs(segment.value)}
-            unit={segment.unit}
+            unit={canonicalConcentrationUnit(segment.unit)}
             molecularWeight={molecularWeight}
           >
             {segment.text}

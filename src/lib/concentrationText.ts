@@ -56,7 +56,23 @@ const CONCENTRATION_NUMBER_START_GUARD = String.raw`(?<!\d[^${LETTER}\d]*|\d\s*[
  * itself the numerator of a compound unit (`mg/L/h`, `mg/L per dose`) is not a
  * concentration and is left alone.
  */
-const CONCENTRATION_SOURCE = `((?:<=|>=|[<>≤≥])?\\s*${CONCENTRATION_NUMBER_START_GUARD}${CONCENTRATION_NUMBER_PATTERN}(?:\\s*${CONCENTRATION_RANGE_SEPARATOR_PATTERN}\\s*${CONCENTRATION_NUMBER_PATTERN})?)\\s*(${CONCENTRATION_UNIT_PATTERN})(?!\\s*(?:/|·|\\*|per\\b))\\b`;
+const CONCENTRATION_SOURCE = `((?:<=|>=|[<>≤≥])?\\s*${CONCENTRATION_NUMBER_START_GUARD}${CONCENTRATION_NUMBER_PATTERN}(?:\\s*${CONCENTRATION_RANGE_SEPARATOR_PATTERN}\\s*${CONCENTRATION_NUMBER_PATTERN})?)\\s*(${CONCENTRATION_UNIT_PATTERN})(?!\\s*(?:/|[·⋅∙•×*]|x\\s+\\p{L}|per\\b))\\b`;
+
+const CANONICAL_CONCENTRATION_UNITS = [
+  "mmol/dL", "µmol/dL", "nmol/dL", "mmol/L", "µmol/L", "nmol/L",
+  "ng/mL", "µg/mL", "mg/L", "µg/L", "ng/L", "mg/dL", "µg/dL", "ng/dL",
+];
+
+/**
+ * The registry spelling of a matched unit. The pattern matches case-
+ * insensitively and accepts `u`/`μ` for micro, so `mg/l`, `NG/ML` and `ug/L`
+ * reach here as written; the conversion registry only knows `mg/L`, `ng/mL`,
+ * `µg/L`. Use this for the conversion; keep the authored spelling on screen.
+ */
+export function canonicalConcentrationUnit(unit: string): string {
+  const key = unit.replace(/^[uμ]/i, "µ").toLowerCase();
+  return CANONICAL_CONCENTRATION_UNITS.find((u) => u.toLowerCase() === key) ?? unit;
+}
 
 /** Non-global, so testing it carries no `lastIndex` state between calls. */
 const CONCENTRATION_TEST_RE = new RegExp(CONCENTRATION_SOURCE, "iu");
