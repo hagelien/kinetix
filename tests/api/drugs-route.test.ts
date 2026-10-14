@@ -753,6 +753,39 @@ describe('POST /api/drugs', () => {
       drug: expect.objectContaining({ id: 42 }),
     });
   });
+
+  it('answers a shadowing CID with 409 and the guard\'s code, as PATCH does', async () => {
+    const { ParameterApplyError } = await import(
+      '../../api/_lib/drugs-helpers.js'
+    );
+    parseAndValidateMock.mockResolvedValue({
+      data: { names: { nb: 'Nytt stoff' }, pubchemCid: 12 },
+    });
+    insertDrugMock.mockRejectedValue(
+      new ParameterApplyError(
+        'PubChem CID 12 is also the internal id of drug 12',
+        409,
+        'pubchem_cid_shadows_drug_id',
+      ),
+    );
+    const { res, state } = createMockResponse();
+
+    await handler(
+      {
+        method: 'POST',
+        url: '/api/drugs',
+        headers: { host: 'localhost' },
+      } as IncomingMessage,
+      res,
+    );
+
+    expect(state.statusCode).toBe(409);
+    expect(JSON.parse(state.body)).toEqual({
+      error: 'PubChem CID 12 is also the internal id of drug 12',
+      code: 'pubchem_cid_shadows_drug_id',
+    });
+    expect(ensureDrugMonographMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('PATCH /api/drugs', () => {

@@ -14,7 +14,7 @@
 import 'dotenv/config';
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { embeddedComponents } from '../data/components';
 import { seededSubstanceClass } from '../data/substanceClasses';
 import {
@@ -22,6 +22,7 @@ import {
   withDrugApplicabilityLock,
 } from '../api/_lib/parameterApplicabilityStore';
 import { getDb } from '../api/_lib/db';
+import { findPubchemCidShadows } from '../api/_lib/drugs-helpers';
 import {
   drugs,
   drugParameters,
@@ -421,7 +422,44 @@ async function seedMetabolism(index: SeedIndex): Promise<void> {
   );
 }
 
+/**
+ * Refuse the seed, before it writes anything, when a fixture CID that no drug
+ * holds yet is another, CID-less drug's internal id. Inserting it would make
+ * that drug's bare-key saved simulator cases load the fixture substance
+ * instead — the check PATCH /api/drugs runs (`assertPubchemCidShadowsNoDrug`),
+ * batched. A CID some drug already holds is an upsert onto that row and adds
+ * no new number, so it is not asked about. Every row this seed inserts carries
+ * a CID, so the run cannot create a shadowed drug of its own mid-way.
+ */
+async function refuseShadowingFixtureCids(): Promise<void> {
+  const cids = [...new Set(embeddedComponents.map((c) => c.pubchemCid))];
+  const held = new Set(
+    (
+      await db
+        .select({ pubchemCid: drugs.pubchemCid })
+        .from(drugs)
+        .where(inArray(drugs.pubchemCid, cids))
+    ).map((r) => r.pubchemCid),
+  );
+  const shadowed = await findPubchemCidShadows(
+    cids.filter((cid) => !held.has(cid)),
+    null,
+  );
+  if (shadowed.length === 0) return;
+  const names = new Map(embeddedComponents.map((c) => [c.pubchemCid, c.name]));
+  throw new Error(
+    'Refusing to seed: these fixture PubChem CIDs are also the internal id of a ' +
+      'drug with no CID of its own, whose saved simulator cases would load the ' +
+      'fixture substance instead. Give each such drug its own CID first (or ' +
+      'merge it into the fixture substance), then re-run.\n' +
+      shadowed
+        .map((cid) => `  - CID ${cid} (${names.get(cid) ?? '?'}) = drugs.id ${cid}`)
+        .join('\n'),
+  );
+}
+
 async function main(): Promise<void> {
+  await refuseShadowingFixtureCids();
   const seedIndex = await seedDrugs();
   await seedMetabolism(seedIndex);
   console.log('Done.');

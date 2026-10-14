@@ -39,6 +39,7 @@ import {
   withDrugApplicabilityLock,
 } from '../api/_lib/parameterApplicabilityStore';
 import { getDb } from '../api/_lib/db';
+import { findPubchemCidShadows } from '../api/_lib/drugs-helpers';
 import { generateSlug } from '../api/_lib/slug';
 import { buildDrugSearchKey } from '../src/lib/drugNames';
 import { farmakologiportalenUrl } from '../src/lib/farmakologiportalen';
@@ -253,11 +254,15 @@ async function main(): Promise<void> {
     .select({ id: drugs.id, slug: drugs.slug, pubchemCid: drugs.pubchemCid, names: drugs.names, aliases: drugs.aliases, source: drugs.source })
     .from(drugs);
   const byCid = new Map<number, number>();
+  const idsWithCid = new Set<number>();
   const byName = new Map<string, number>();
   const slugsSeen = new Set<string>();
   for (const d of existing) {
     slugsSeen.add(d.slug);
-    if (d.pubchemCid) byCid.set(d.pubchemCid, d.id);
+    if (d.pubchemCid) {
+      byCid.set(d.pubchemCid, d.id);
+      idsWithCid.add(d.id);
+    }
     for (const n of Object.values(d.names ?? {})) {
       const k = normalizeMetabolismName(String(n));
       if (k && !byName.has(k)) byName.set(k, d.id);
@@ -297,11 +302,38 @@ async function main(): Promise<void> {
     paramsNotApplicable: 0,
     skipped: 0,
     cidBackfilled: 0,
+    // Resolved CIDs NOT written because the number is another, CID-less
+    // drug's internal id (see `cidUnlessShadowing`).
+    cidShadowSkipped: 0,
     // Pre-existing rows whose portal link was written or corrected. New rows
     // are counted by `created` — they always carry the link.
     linked: 0,
   };
   const idByPrepared = new Map<Prepared, number>();
+
+  // A CID equal to another, CID-less drug's internal id would make that drug's
+  // bare-key saved simulator cases load this substance instead — the check
+  // PATCH /api/drugs runs (`assertPubchemCidShadowsNoDrug`). This importer
+  // already treats an unusable CID as "leave it off" rather than failing the
+  // run (a CID another drug holds is dropped the same way), so a shadowing
+  // one is dropped too and reported. Asked of the database at write time, not
+  // of the index loaded above, so a drug this run created is seen too.
+  async function cidUnlessShadowing(
+    cid: number | null,
+    takerId: number | null,
+    label: string,
+  ): Promise<number | null> {
+    if (cid === null) return null;
+    const [shadowed] = await findPubchemCidShadows([cid], takerId);
+    if (shadowed === undefined) return cid;
+    stats.cidShadowSkipped++;
+    console.warn(
+      `  [warn] ${label}: PubChem CID ${cid} not written — it is also the internal id of ` +
+        `CID-less drug ${shadowed}, whose saved cases would load this substance. Give that ` +
+        'drug its own CID first.',
+    );
+    return null;
+  }
 
   for (const p of prepared) {
     const names: Record<string, string> = { nb: p.base };
@@ -315,8 +347,13 @@ async function main(): Promise<void> {
       // New substance.
       const slug = uniqueSlug(p.base, String(p.item.associationId));
       const searchKey = buildDrugSearchKey({ names, aliases });
-      // Only attach a resolved CID if it isn't already taken by another drug.
-      const cid = p.cid && !byCid.has(p.cid) ? p.cid : null;
+      // Only attach a resolved CID if it isn't already taken by another drug
+      // and doesn't shadow a CID-less one.
+      const cid = await cidUnlessShadowing(
+        p.cid && !byCid.has(p.cid) ? p.cid : null,
+        null,
+        p.base,
+      );
       if (opts.dryRun) {
         console.log(`  [new] ${p.base}  cid=${cid ?? '-'}  slug=${slug}`);
         stats.created++;
@@ -338,7 +375,10 @@ async function main(): Promise<void> {
       drugId = inserted.id;
       stats.created++;
       stats.flagged++;
-      if (cid) byCid.set(cid, drugId);
+      if (cid) {
+        byCid.set(cid, drugId);
+        idsWithCid.add(drugId);
+      }
       byName.set(normalizeMetabolismName(p.base), drugId);
       if (p.alias) byName.set(normalizeMetabolismName(p.alias), drugId);
     } else {
@@ -346,7 +386,13 @@ async function main(): Promise<void> {
       // backfill the PubChem CID when the row lacks one and we resolved an
       // unclaimed CID, so CID-based lookups/dedupe work for it afterwards.
       stats.matched++;
-      const backfillCid = p.cid && !byCid.has(p.cid) ? p.cid : null;
+      // A row that already has a CID keeps it (the UPDATE below only fills a
+      // NULL), so there is nothing to check — or warn about — for it.
+      const backfillCid = await cidUnlessShadowing(
+        p.cid && !byCid.has(p.cid) && !idsWithCid.has(drugId) ? p.cid : null,
+        drugId,
+        p.base,
+      );
       if (!opts.dryRun) {
         const res = await db
           .update(drugs)
@@ -379,6 +425,7 @@ async function main(): Promise<void> {
             .returning({ id: drugs.id });
           if (cidRes.length) {
             byCid.set(backfillCid, drugId);
+            idsWithCid.add(drugId);
             stats.cidBackfilled++;
           }
         }
@@ -493,6 +540,9 @@ async function main(): Promise<void> {
   console.log(`  existing drugs matched: ${stats.matched}`);
   console.log(`  rows flagged '${SOURCE}': ${stats.flagged}`);
   console.log(`  CIDs backfilled      : ${stats.cidBackfilled}`);
+  if (stats.cidShadowSkipped) {
+    console.log(`  CIDs left off (shadow a CID-less drug's id): ${stats.cidShadowSkipped}`);
+  }
   console.log(`  portal links written : ${stats.linked} (existing rows)`);
   console.log(`  parameters written   : ${stats.params}`);
   if (stats.paramsNotApplicable) {

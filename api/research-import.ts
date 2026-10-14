@@ -32,6 +32,7 @@ import {
   type NormalizedResearchImport,
 } from '../src/lib/deepResearchImport.js';
 import { runImport } from './_lib/researchImportStore.js';
+import { ParameterApplyError } from './_lib/drugs-helpers.js';
 import { resolveImportCrosswalk } from './_lib/citation-crosswalk.js';
 
 // Research documents carry every source-level observation, so they can be
@@ -101,11 +102,23 @@ export default withErrorHandling(async function handler(req, res): Promise<void>
   // under the handle it declared.
   const crosswalk = await resolveImportCrosswalk(data.sources);
 
-  const stats = await runImport(getDb(), data, {
-    userId: auth.userId,
-    overwrite,
-    crosswalk,
-  });
+  let stats: Awaited<ReturnType<typeof runImport>>;
+  try {
+    stats = await runImport(getDb(), data, {
+      userId: auth.userId,
+      overwrite,
+      crosswalk,
+    });
+  } catch (err) {
+    // The document's PubChem CID would shadow another, CID-less drug's
+    // internal id (new drug or first-CID backfill). Refused before the drug
+    // row is written, and answered as PATCH /api/drugs answers it.
+    if (err instanceof ParameterApplyError) {
+      error(res, err.statusHint, err.message, err.code);
+      return;
+    }
+    throw err;
+  }
   // Coverage is recounted against the crosswalk: two sources the ID converter
   // placed on one article became one citation row, so the parse-time count the
   // preview showed could have credited a parameter with two papers it does not

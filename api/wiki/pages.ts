@@ -57,6 +57,7 @@ function withPageWriteLock<T>(
 import {
   insertDrug,
   isUniqueViolation,
+  ParameterApplyError,
   validateParameterBag,
   applyInitialParameters,
 } from '../_lib/drugs-helpers.js';
@@ -896,6 +897,12 @@ async function handleCreate(
       });
       finalDrugId = drugRow.id;
     } catch (err) {
+      // insertDrug's PubChem CID shadow refusal — answered like PATCH
+      // /api/drugs answers it.
+      if (err instanceof ParameterApplyError) {
+        error(res, err.statusHint, err.message, err.code);
+        return;
+      }
       if (isUniqueViolation(err)) {
         error(res, 409, 'A drug with this slug or PubChem CID already exists');
         return;

@@ -534,6 +534,11 @@ async function handleCreate(
     const paramMap = await getDrugParameterMap(db, row.id);
     json(res, 201, { drug: serializeDrugRow(row, paramMap) });
   } catch (err: unknown) {
+    // insertDrug's PubChem CID shadow refusal — answered like PATCH's.
+    if (err instanceof ParameterApplyError) {
+      error(res, err.statusHint, err.message, err.code);
+      return;
+    }
     if (isUniqueViolation(err)) {
       error(res, 409, 'Drug with this slug or pubchem cid already exists');
       return;

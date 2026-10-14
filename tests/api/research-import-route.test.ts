@@ -186,4 +186,33 @@ describe('POST /api/research-import', () => {
     expect(payload.dryRun).toBe(true);
     expect(runImportMock).not.toHaveBeenCalled();
   });
+
+  it('answers a refused CID with 409 and the guard\'s code, as PATCH /api/drugs does', async () => {
+    const { ParameterApplyError } = await import(
+      '../../api/_lib/drugs-helpers.js'
+    );
+    getUserFromRequestMock.mockResolvedValue({ userId: 42, role: 'admin' });
+    runImportMock.mockRejectedValue(
+      new ParameterApplyError(
+        'PubChem CID 446220 is also the internal id of drug 446220',
+        409,
+        'pubchem_cid_shadows_drug_id',
+      ),
+    );
+    const { res, state } = createResponse();
+    await handler(createRequest({ document: VALID_DOC, dryRun: false }), res);
+    expect(state.statusCode).toBe(409);
+    expect(JSON.parse(state.body)).toEqual({
+      error: 'PubChem CID 446220 is also the internal id of drug 446220',
+      code: 'pubchem_cid_shadows_drug_id',
+    });
+  });
+
+  it('still surfaces an unrelated import failure as an error, not a 409', async () => {
+    getUserFromRequestMock.mockResolvedValue({ userId: 42, role: 'admin' });
+    runImportMock.mockRejectedValue(new Error('boom'));
+    const { res, state } = createResponse();
+    await handler(createRequest({ document: VALID_DOC, dryRun: false }), res);
+    expect(state.statusCode).toBe(500);
+  });
 });
