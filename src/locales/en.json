@@ -4002,6 +4002,7 @@
   "paramHistory": {
     "title": "History",
     "dialogHeading": "{{parameter}} — history",
+    "approvedBy": "Approved by",
     "noRevisions": "No revisions recorded for this parameter yet.",
     "before": "Before",
     "after": "After",

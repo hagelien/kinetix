@@ -10,6 +10,7 @@ import { getDb } from '../../api/_lib/db.js';
 interface ApprovalRow {
   targetId: number;
   approvedBy: number;
+  createdAt: Date;
   approver: {
     id: number;
     username: string;
@@ -18,6 +19,8 @@ interface ApprovalRow {
     isAgent: boolean;
   } | null;
 }
+
+const at = new Date('2026-09-22T11:00:00.000Z');
 
 function mockSelectQueue(rows: ApprovalRow[]): void {
   const builder: Record<string, unknown> = {};
@@ -50,9 +53,9 @@ describe('summariseApprovalsForTargets', () => {
     const me = { id: 1, username: 'me', displayName: 'Me', role: 'editor', isAgent: false };
     const you = { id: 2, username: 'you', displayName: null, role: 'admin', isAgent: false };
     mockSelectQueue([
-      { targetId: 5, approvedBy: 1, approver: me },
-      { targetId: 5, approvedBy: 2, approver: you },
-      { targetId: 7, approvedBy: 2, approver: you },
+      { targetId: 5, approvedBy: 1, createdAt: at, approver: me },
+      { targetId: 5, approvedBy: 2, createdAt: at, approver: you },
+      { targetId: 7, approvedBy: 2, createdAt: at, approver: you },
     ]);
 
     const map = await summariseApprovalsForTargets({
@@ -64,6 +67,9 @@ describe('summariseApprovalsForTargets', () => {
     expect(map.get(5)?.count).toBe(2);
     expect(map.get(5)?.approvers.map((a) => a.id)).toEqual([1, 2]);
     expect(map.get(5)?.approvedByMe).toBe(true);
+    // Each approver carries when they stamped, for the read-only
+    // "approved by" line in revision history.
+    expect(map.get(5)?.approvers[0]?.approvedAt).toBe('2026-09-22T11:00:00.000Z');
     expect(map.get(7)?.count).toBe(1);
     expect(map.get(7)?.approvedByMe).toBe(false);
     // Targets with no approvals are absent from the map; callers fall back
@@ -76,6 +82,7 @@ describe('summariseApprovalsForTargets', () => {
       {
         targetId: 5,
         approvedBy: 1,
+        createdAt: at,
         approver: { id: 1, username: 'a', displayName: null, role: 'editor', isAgent: false },
       },
     ]);
@@ -89,7 +96,7 @@ describe('summariseApprovalsForTargets', () => {
 
   it('skips approver entries whose user row is missing (post-cascade)', async () => {
     mockSelectQueue([
-      { targetId: 5, approvedBy: 99, approver: null },
+      { targetId: 5, approvedBy: 99, createdAt: at, approver: null },
     ]);
     const map = await summariseApprovalsForTargets({
       targetType: 'wiki_revision',

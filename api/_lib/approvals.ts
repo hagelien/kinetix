@@ -39,9 +39,15 @@ export interface ApprovalRow {
   approver: ApproverRef | null;
 }
 
+/** An approver in a summary, with when they stamped the target. */
+export interface SummaryApprover extends ApproverRef {
+  /** ISO timestamp of the approval row. */
+  approvedAt: string;
+}
+
 export interface ApprovalSummary {
   count: number;
-  approvers: ApproverRef[];
+  approvers: SummaryApprover[];
   /** Set when a request includes auth context and the caller has stamped this target. */
   approvedByMe?: boolean;
 }
@@ -146,6 +152,7 @@ export async function summariseApprovalsForTargets(args: {
     .select({
       targetId: approvals.targetId,
       approvedBy: approvals.approvedBy,
+      createdAt: approvals.createdAt,
       approver: approverSelect,
     })
     .from(approvals)
@@ -168,7 +175,12 @@ export async function summariseApprovalsForTargets(args: {
       out.set(row.targetId, summary);
     }
     summary.count += 1;
-    if (row.approver?.id) summary.approvers.push(row.approver as ApproverRef);
+    if (row.approver?.id) {
+      summary.approvers.push({
+        ...(row.approver as ApproverRef),
+        approvedAt: row.createdAt.toISOString(),
+      });
+    }
     if (
       args.callerUserId !== undefined &&
       row.approvedBy === args.callerUserId

@@ -15,6 +15,7 @@ import {
   type DrugParameterRevisionVerificationDTO,
 } from '@/lib/drugApi';
 import { UserBadge } from '@/components/ui/UserBadge';
+import type { ApprovalSummary } from '@/lib/approvalsApi';
 import type { VerificationLevelInfo } from '@/lib/verificationLevel';
 import { VerificationRationaleList } from '@/components/review/VerificationRationaleList';
 import { VerificationSummary } from './VerificationSummary';
@@ -219,6 +220,42 @@ function ReviewRoundSection({
   );
 }
 
+/**
+ * Who approved a revision and when, as plain text (#107). Review status
+ * belongs in revision history rather than on the browse surfaces (AGENTS.md
+ * "Review status is not an inline badge"), so this keeps the approvals the
+ * history endpoint returns visible. It is deliberately read-only: the
+ * click-to-approve chip was removed (05c5484) and stays removed. Rendered
+ * only when at least one approver resolves to a user.
+ */
+function ApprovalsLine({
+  approvals,
+  t,
+}: {
+  approvals: ApprovalSummary | undefined;
+  t: (key: string, opts?: Record<string, unknown>) => string;
+}) {
+  const approvers = approvals?.approvers ?? [];
+  if (approvers.length === 0) return null;
+  return (
+    <div
+      className="text-xs text-muted-foreground mb-2"
+      data-testid="revision-approvals"
+    >
+      <span>{t('paramHistory.approvedBy')} </span>
+      {approvers.map((a, i) => (
+        <span key={a.id}>
+          {i > 0 ? ', ' : null}
+          <UserBadge user={a} />
+          {a.approvedAt ? (
+            <> ({new Date(a.approvedAt).toLocaleString()})</>
+          ) : null}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 /** Explicit verdict count for a revision's linked pending edit; implicit
  * self-approve rows aren't part of "the debate" and don't count. */
 function verdictCount(v: DrugParameterRevisionDTO['verifications']): number {
@@ -308,6 +345,7 @@ export function ParameterHistoryDialog({
                   <UserBadge user={rev.author} /> ·{' '}
                   {new Date(rev.createdAt).toLocaleString()}
                 </div>
+                <ApprovalsLine approvals={rev.approvals} t={t} />
                 {rev.editSummary && (
                   <div className="text-sm italic mb-2">
                     “{formatEditSummary(rev.editSummary, t)}”
