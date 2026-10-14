@@ -14,6 +14,8 @@
 #                       is the only accepted credential here.
 #
 # Optional env:
+#   CLAUDE_CODE_SESSION_ID / CODEX_SESSION_ID / CODEX_THREAD_ID — when the
+#                       runner sets one, it is sent as X-Kinetix-Run-Session.
 #   KINETIX_AGENT_DRY_RUN — when "1", prints the request it would send and
 #                           exits 0 without hitting the network.
 #
@@ -78,6 +80,12 @@ if [[ "${KINETIX_AGENT_DRY_RUN:-0}" == "1" ]]; then
   exit 0
 fi
 
+# Declare the runner session so the server can stamp it on what this agent
+# writes and the tier benchmark can match outputs to runs by id. Same ids the
+# usage logger binds to (scripts/kinetix-log-run-usage.ts); absent = no header.
+RUN_SESSION_ID="${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-}}}"
+RUN_SESSION_ID="${RUN_SESSION_ID:0:128}"
+
 CURL_ARGS=(
   -sS
   --fail-with-body
@@ -85,6 +93,10 @@ CURL_ARGS=(
   -H "Content-Type: application/json; charset=utf-8"
   -H "Cookie: __Host-kinetix-auth=${KINETIX_TOKEN}"
 )
+
+if [[ -n "$RUN_SESSION_ID" ]]; then
+  CURL_ARGS+=(-H "X-Kinetix-Run-Session: ${RUN_SESSION_ID}")
+fi
 
 if [[ -n "$BODY_ARG" ]]; then
   # Keep JSON out of argv. Git Bash -> native Windows curl converts argv to

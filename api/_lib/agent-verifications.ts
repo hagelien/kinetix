@@ -32,6 +32,7 @@ import {
   type AgentVerificationVerdict,
   type DisputeTargetType,
 } from '../../db/schema.js';
+import { currentRunSessionId } from '../../db/run-session.js';
 import {
   DisputeVerdictGoneError,
   StaleDisputeTargetError,
@@ -278,6 +279,7 @@ async function upsertVerification(
         verifierTier: verifierTierSql,
         recordedVerifierTier: verifierTierSql,
         isImplicit: args.isImplicit ?? false,
+        runSessionId: currentRunSessionId(),
         updatedAt: now,
       },
     })
@@ -390,6 +392,7 @@ export async function recordImplicitAgentApprovals(args: {
         evidenceRefs: [] as never,
         model: null,
         isImplicit: true,
+        runSessionId: currentRunSessionId(),
         updatedAt: now,
       },
       // Never over a verdict frozen by a control-phase disclosure (see
