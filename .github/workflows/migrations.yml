@@ -121,6 +121,17 @@ on:
       # real-Postgres suite races (#127).
       - 'api/_lib/citation-merge.ts'
       - 'api/_lib/paper-extraction-store.ts'
+      # The other files the lock-order suites race: the ingestion review
+      # drug locks (#246), the citation resolve/fold entry points, the drug
+      # lock helpers and recompute, the paper-review re-score order (#243)
+      # and the wiki page-lock suites (#223, #247).
+      - 'api/_lib/conversationIngestionStore.ts'
+      - 'api/_lib/citation-store.ts'
+      - 'api/_lib/parameter-entries-store.ts'
+      - 'api/_lib/paper-review-store.ts'
+      - 'api/paper-reviews.ts'
+      - 'api/_lib/wikiArticleImportStore.ts'
+      - 'api/_lib/wiki-page-lock.ts'
   push:
     branches: [main]
     paths:
@@ -163,6 +174,17 @@ on:
       # real-Postgres suite races (#127).
       - 'api/_lib/citation-merge.ts'
       - 'api/_lib/paper-extraction-store.ts'
+      # The other files the lock-order suites race: the ingestion review
+      # drug locks (#246), the citation resolve/fold entry points, the drug
+      # lock helpers and recompute, the paper-review re-score order (#243)
+      # and the wiki page-lock suites (#223, #247).
+      - 'api/_lib/conversationIngestionStore.ts'
+      - 'api/_lib/citation-store.ts'
+      - 'api/_lib/parameter-entries-store.ts'
+      - 'api/_lib/paper-review-store.ts'
+      - 'api/paper-reviews.ts'
+      - 'api/_lib/wikiArticleImportStore.ts'
+      - 'api/_lib/wiki-page-lock.ts'
 
 # Supersede an in-flight PR run when a newer commit lands on the same PR — this
 # repo iterates fast (many "Address Codex Nth pass" commits per PR), so a run
