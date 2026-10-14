@@ -30,12 +30,22 @@ const CONCENTRATION_UNIT_PATTERN = [
 ].join("|");
 
 /**
+ * The figure must start a number, not continue one the pattern cannot read.
+ * Without this, a space-grouped value (`2 500 mg/L`) or scientific notation
+ * (`1e-3 mg/L`) matched from partway through — `500 mg/L`, `3 mg/L` — and the
+ * tooltip converted the wrong value. Such forms are left unannotated instead:
+ * no digit (or letter, decimal mark) may come before the figure, even across
+ * spaces, and no exponent marker.
+ */
+const CONCENTRATION_NUMBER_START_GUARD = String.raw`(?<!\d[\s]*|[A-Za-zÀ-ɏ_.,]|[eE][+-]?)`;
+
+/**
  * Group 1: the (optionally qualified, optionally ranged) figure — it may carry
  * the whitespace that precedes it. Group 2: the unit as written. A unit that is
  * itself the numerator of a compound unit (`mg/L/h`, `mg/L per dose`) is not a
  * concentration and is left alone.
  */
-const CONCENTRATION_SOURCE = `((?:<=|>=|[<>≤≥])?\\s*${CONCENTRATION_NUMBER_PATTERN}(?:\\s*${CONCENTRATION_RANGE_SEPARATOR_PATTERN}\\s*${CONCENTRATION_NUMBER_PATTERN})?)\\s*(${CONCENTRATION_UNIT_PATTERN})(?!\\s*(?:/|·|\\*|per\\b))\\b`;
+const CONCENTRATION_SOURCE = `((?:<=|>=|[<>≤≥])?\\s*${CONCENTRATION_NUMBER_START_GUARD}${CONCENTRATION_NUMBER_PATTERN}(?:\\s*${CONCENTRATION_RANGE_SEPARATOR_PATTERN}\\s*${CONCENTRATION_NUMBER_PATTERN})?)\\s*(${CONCENTRATION_UNIT_PATTERN})(?!\\s*(?:/|·|\\*|per\\b))\\b`;
 
 /** Non-global, so testing it carries no `lastIndex` state between calls. */
 const CONCENTRATION_TEST_RE = new RegExp(CONCENTRATION_SOURCE, "i");

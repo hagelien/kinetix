@@ -51,6 +51,28 @@ describe('splitConcentrationText', () => {
     }
   });
 
+  it('never annotates the tail of a number it cannot read', () => {
+    // A suffix-only match would convert the wrong value in the tooltip.
+    for (const text of [
+      'Cmax 2 500 mg/L',
+      'Cmax 2\u00a0500 mg/L',
+      'grense 1e-3 mg/L',
+      'grense 1E3 mg/L',
+      'prøve A5 mg/L',
+    ]) {
+      expect(splitConcentrationText(text)).toEqual([{ kind: 'text', text }]);
+      expect(containsConcentration(text)).toBe(false);
+    }
+  });
+
+  it('still reads a figure after a word, a qualifier or a range dash', () => {
+    expect(
+      splitConcentrationText('nivå 5 mg/L, < 2 µg/L og 1–3 ng/mL')
+        .filter((s) => s.kind === 'concentration')
+        .map((s) => (s.kind === 'concentration' ? s.value : '')),
+    ).toEqual(['5', '< 2', '1–3']);
+  });
+
   it('agrees with containsConcentration and has no state between calls', () => {
     const text = 'cut-off 1 µg/L';
     expect(containsConcentration(text)).toBe(true);
