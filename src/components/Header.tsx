@@ -357,9 +357,13 @@ export function Header() {
       </div>
 
       {/* The active drug's monograph, one tab per former parameter box. */}
-      {activeDrug && drugHomeHref && (
+      {/* Also shown when the optional drug-row lookup failed: the validated
+          monograph route alone is enough to navigate between tabs. */}
+      {(activeDrug || currentTab) && drugHomeHref && (
         <nav
-          aria-label={t('monographTabs.navLabel', { drug: activeDrugName })}
+          aria-label={t('monographTabs.navLabel', {
+            drug: activeDrugName || monographSlug,
+          })}
           className="flex gap-0.5 overflow-x-auto border-t border-white/10 px-3 sm:px-5"
           data-testid="monograph-tab-nav"
         >

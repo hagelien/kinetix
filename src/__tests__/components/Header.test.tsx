@@ -277,6 +277,22 @@ describe('Header', () => {
     expect(within(tabs).queryByRole('link', { current: 'page' })).toBeNull();
   });
 
+  it('keeps the tab menu on a monograph route when the drug lookup failed', () => {
+    useDrugStore.setState({ activeDrug: null });
+    renderHeader('/wiki/paracetamol/postmortem');
+
+    const tabs = screen.getByTestId('monograph-tab-nav');
+    expect(
+      within(tabs)
+        .getByRole('link', { name: 'parameterGroups.pharmacokinetics' })
+        .getAttribute('href'),
+    ).toBe('/wiki/paracetamol/pharmacokinetics');
+    expect(
+      within(tabs).getByRole('link', { current: 'page' }).textContent,
+    ).toBe('parameterGroups.postmortem');
+    expect(screen.queryByTestId('header-active-drug')).toBeNull();
+  });
+
   it('marks the tab in the URL as current on a monograph', () => {
     useDrugStore.setState({
       activeDrug: {
