@@ -2782,11 +2782,18 @@ async function handleCreate(
     // Postgres breaks by aborting one side (40P01). Job-then-page waits for the
     // merge holding nothing it needs. The page check still answers first, so
     // a deleted page reads as 404 whatever the claim's state.
+    //
+    // The job lock stops a cancel or takeover, not time: a claim can go stale
+    // while this waits for the page. So freshness is judged again once the
+    // page is held — the job row is already share-locked by this transaction,
+    // so the second check does not wait.
     const pageId = parsed.data.targetId;
     outcome = await runInPoolTransaction<SubmitOutcome>(async () => {
       const claimHeld = await paperExtractionClaimHeld();
       if (!(await lockWikiPageShared(pageId))) return { kind: 'gone' };
-      if (!claimHeld) return { kind: 'claim_lost' };
+      if (!claimHeld || !(await paperExtractionClaimHeld())) {
+        return { kind: 'claim_lost' };
+      }
       const [row] = await insertPending();
       if (!row) throw new Error('pendingEdits insert returned no row');
       return { kind: 'ok', row };
