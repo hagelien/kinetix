@@ -529,6 +529,12 @@ interface SourceContext {
   citationIdByKey: Map<string, number>;
   plans: SourcePlan[];
   citationsCreated: number;
+  /**
+   * The citations this apply created that still exist. `citationsCreated` is
+   * its size: a later source can fold a row an earlier one created (#253), and
+   * a folded row was not, in the end, a citation added.
+   */
+  createdCitationIds: Set<number>;
   reviewsRecorded: number;
   /** Keys already written, so a source shared by two items is committed once. */
   committedKeys: Set<string>;
@@ -740,6 +746,7 @@ async function planSources(
     citationIdByKey,
     plans,
     citationsCreated: 0,
+    createdCitationIds: new Set(),
     reviewsRecorded: 0,
     committedKeys: new Set(),
   };
@@ -858,6 +865,8 @@ async function commitSourcesFor(
         (r) => r.id,
         (r, id) => {
           r.id = id;
+          // The row it created is gone; the survivor it now names is not new.
+          r.created = false;
         },
       );
       folds.push(resolved);
@@ -908,6 +917,7 @@ async function commitSourcesFor(
   // counter reports a write — that a rollback has undone.
   // Earlier items' ids, kept in the context, may name a citation this
   // transaction folded away.
+  // So may the rows earlier items created.
   for (const resolved of folds) {
     followFoldedCitations(
       [...ctx.citationIdByKey],
@@ -915,13 +925,15 @@ async function commitSourcesFor(
       ([, id]) => id,
       ([key]) => ctx.citationIdByKey.set(key, resolved.id),
     );
+    for (const id of resolved.mergedIds) ctx.createdCitationIds.delete(id);
   }
   for (const outcome of outcomes) {
     ctx.citationIdByKey.set(outcome.key, outcome.id);
-    if (outcome.created) ctx.citationsCreated += 1;
+    if (outcome.created) ctx.createdCitationIds.add(outcome.id);
     if (outcome.recorded) ctx.reviewsRecorded += 1;
     ctx.committedKeys.add(outcome.key);
   }
+  ctx.citationsCreated = ctx.createdCitationIds.size;
 }
 
 /**
