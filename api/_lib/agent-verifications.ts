@@ -74,6 +74,7 @@ import {
   type LegacyConsensusHoldReason,
 } from '../../src/lib/assurance/projection.js';
 import { drugDiscussionUrl } from './discussion-urls.js';
+import { runSessionInsert } from './run-session.js';
 
 export const ACTIVE_AGENT_ROLES: readonly string[] = [
   ROLES.contributor,
@@ -153,6 +154,12 @@ export async function recordVerification(args: {
   model?: string | null;
   isImplicit?: boolean;
   /**
+   * The agent run casting the verdict (run-session.ts). Stamped with
+   * `updatedAt`, so it always names the run whose judgment the row holds;
+   * omitted, the row's stamp is cleared rather than left naming an earlier run.
+   */
+  runSessionId?: string | null;
+  /**
    * The target version the caller validated, re-checked inside this write.
    *
    * The route's own 409 is a check-then-act: it reads
@@ -230,6 +237,7 @@ async function upsertVerification(
     evidenceRefs: AgentVerificationEvidenceRef[];
     model?: string | null;
     isImplicit?: boolean;
+    runSessionId?: string | null;
   },
 ): Promise<{ id: number; inserted: boolean }> {
   const now = new Date();
@@ -261,6 +269,7 @@ async function upsertVerification(
       verifierTier: verifierTierSql,
       recordedVerifierTier: verifierTierSql,
       isImplicit: args.isImplicit ?? false,
+      ...runSessionInsert(args),
       createdAt: now,
       updatedAt: now,
     })
@@ -278,6 +287,7 @@ async function upsertVerification(
         verifierTier: verifierTierSql,
         recordedVerifierTier: verifierTierSql,
         isImplicit: args.isImplicit ?? false,
+        runSessionId: args.runSessionId ?? null,
         updatedAt: now,
       },
     })
@@ -390,6 +400,9 @@ export async function recordImplicitAgentApprovals(args: {
         evidenceRefs: [] as never,
         model: null,
         isImplicit: true,
+        // Like recordVerification without a run: the row no longer holds the
+        // judgment an earlier run's stamp named.
+        runSessionId: null,
         updatedAt: now,
       },
       // Never over a verdict frozen by a control-phase disclosure (see

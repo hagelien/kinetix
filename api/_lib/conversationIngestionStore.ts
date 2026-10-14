@@ -118,6 +118,7 @@ import {
   type CitationHandleType,
 } from '../../src/lib/citationHandles.js';
 import { unverifiedSourceKeys } from '../../src/lib/conversationIngestion.js';
+import { runSessionInsert } from './run-session.js';
 import type {
   IngestionBlockedCandidate,
   IngestionDrugTarget,
@@ -424,6 +425,8 @@ export interface IngestionApplyResult {
 
 export interface IngestionActor {
   userId: number;
+  /** The agent run applying the bundle (run-session.ts); absent for people. */
+  runSessionId?: string;
 }
 
 /**
@@ -2397,6 +2400,7 @@ async function planWikiFactItem(
         factOperation: item.operation,
         factTargetAnchor: anchorFactId ? ({ factId: anchorFactId } as never) : null,
         submittedBy: actor.userId,
+        ...runSessionInsert(actor),
       };
 
       if (queued) {
@@ -2883,7 +2887,10 @@ export async function applyIngestion(
 ): Promise<IngestionApplyResult> {
   const db = getDb();
   const accepted = new Set(opts.accept);
-  const actor: IngestionActor = { userId: opts.userId };
+  const actor: IngestionActor = {
+    userId: opts.userId,
+    runSessionId: opts.runSessionId,
+  };
   // Resolved once: the answer cannot change mid-run, and asking per item would
   // put a join in front of every row for a question about the caller.
   const actorIsAgent = await isActiveAgentUser(opts.userId);

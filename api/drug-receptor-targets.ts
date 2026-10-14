@@ -14,6 +14,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { json, error, withErrorHandling } from './_lib/response.js';
 import { getDb, runInPoolTransaction } from './_lib/db.js';
 import { getUserFromRequest } from './_lib/auth.js';
+import { runSessionInsert } from './_lib/run-session.js';
 import { assertSameOrigin, parseAndValidate } from './_lib/validate.js';
 import { receptorTargetsWriteSchema } from './_lib/schemas.js';
 import { CAP } from '../src/lib/permissions.js';
@@ -160,6 +161,7 @@ async function handlePut(
             proposedMeta: (editSummary ? { editSummary } : null) as never,
             status: 'pending',
             submittedBy: auth.userId,
+            ...runSessionInsert(auth),
           })
           .returning({ id: pendingEdits.id });
         if (!row) throw new Error('pendingEdits insert returned no row');

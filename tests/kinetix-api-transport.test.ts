@@ -41,6 +41,7 @@ describe("scheduled-agent HTTP transport", () => {
             method: req.method,
             url: req.url,
             contentType: req.headers["content-type"],
+            runSession: req.headers["x-kinetix-run-session"] ?? null,
           }),
         );
       });
@@ -69,6 +70,8 @@ describe("scheduled-agent HTTP transport", () => {
       apiPath?: string;
       dryRun?: boolean;
       powershell?: boolean;
+      /** Runner session env; the host's own is cleared unless set here. */
+      sessionEnv?: Record<string, string>;
     } = {},
   ) {
     return new Promise<{ code: number | null; stdout: string; stderr: string }>(
@@ -116,6 +119,10 @@ describe("scheduled-agent HTTP transport", () => {
             TEST_BASH: bash,
             TEST_API: apiScript,
             TEST_JSON: sample,
+            CLAUDE_CODE_SESSION_ID: "",
+            CODEX_SESSION_ID: "",
+            CODEX_THREAD_ID: "",
+            ...options.sessionEnv,
           },
           stdio: "pipe",
           timeout: 10_000,
@@ -208,6 +215,54 @@ describe("scheduled-agent HTTP transport", () => {
     expect(result.stderr).toContain(`[dry-run-body] ${sample}`);
     expect(result.stderr).not.toContain("kxat_test-not-a-real-token");
     expect(requests).toBe(before);
+  });
+
+  it("sends no run session header outside a runner session", async () => {
+    const result = await request(undefined, undefined, { method: "GET" });
+    expect(result.code, result.stderr).toBe(0);
+    expect(JSON.parse(result.stdout).runSession).toBeNull();
+  });
+
+  it("sends the runner session id so the server can stamp the run (#214)", async () => {
+    const claude = await request(undefined, undefined, {
+      method: "GET",
+      sessionEnv: {
+        CLAUDE_CODE_SESSION_ID: "0f9c2b1e-7d4a-4c1b-9e2f-3a5b6c7d8e9f",
+        CODEX_THREAD_ID: "codex-thread",
+      },
+    });
+    expect(claude.code, claude.stderr).toBe(0);
+    // The same precedence kinetix-log-run-usage.ts uses for the transcript.
+    expect(JSON.parse(claude.stdout).runSession).toBe(
+      "0f9c2b1e-7d4a-4c1b-9e2f-3a5b6c7d8e9f",
+    );
+
+    const codex = await request(undefined, undefined, {
+      method: "GET",
+      sessionEnv: { CODEX_THREAD_ID: "codex-thread" },
+    });
+    expect(JSON.parse(codex.stdout).runSession).toBe("codex-thread");
+  });
+
+  it("does not send a session id the server would refuse", async () => {
+    for (const bad of ["a b", "x".repeat(129), "bad\r\nX-Injected: 1"]) {
+      const result = await request(undefined, undefined, {
+        method: "GET",
+        sessionEnv: { CLAUDE_CODE_SESSION_ID: bad },
+      });
+      expect(result.code, result.stderr).toBe(0);
+      expect(JSON.parse(result.stdout).runSession).toBeNull();
+    }
+  });
+
+  it("names the run session in a dry run", async () => {
+    const result = await request(undefined, undefined, {
+      method: "GET",
+      dryRun: true,
+      sessionEnv: { CODEX_SESSION_ID: "codex-session" },
+    });
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stderr).toContain("run-session=codex-session");
   });
 
   it("refuses a missing body file before contacting the server", async () => {

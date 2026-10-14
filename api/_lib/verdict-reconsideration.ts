@@ -558,6 +558,11 @@ export async function reconsiderDispute(args: {
   peerDigest: string;
   /** Model id the agent decided under; may differ from the blind verdict's. */
   model: string;
+  /**
+   * The agent run deciding (run-session.ts). The decision rewrites the live
+   * verdict and its updatedAt, so it re-stamps the row's run with it.
+   */
+  runSessionId?: string | null;
 }): Promise<{
   reconsiderationId: number;
   verificationId: number;
@@ -644,6 +649,7 @@ export async function reconsiderDispute(args: {
           rationaleMd: rationale,
           model: args.model,
           verifierTier: decisionTier,
+          runSessionId: args.runSessionId ?? null,
           updatedAt: now,
         })
         .where(eq(agentVerifications.id, own.id));
@@ -674,6 +680,7 @@ export async function reconsiderDispute(args: {
         rationaleMd: rationale,
         model: args.model,
         verifierTier: decisionTier,
+        runSessionId: args.runSessionId ?? null,
         updatedAt: now,
       })
       .where(eq(agentVerifications.id, own.id));

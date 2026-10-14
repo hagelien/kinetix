@@ -13,6 +13,10 @@
  * egress path the rest of the routine already uses. The shell helper reads
  * KINETIX_BASE_URL / KINETIX_TOKEN / KINETIX_AGENT_DRY_RUN from the environment
  * itself, attaches the agent cookie, and returns the response body on stdout.
+ * It also sends the runner session id (CLAUDE_CODE_SESSION_ID, CODEX_SESSION_ID
+ * or CODEX_THREAD_ID) as X-Kinetix-Run-Session, so what these helpers write is
+ * attributed to the run that wrote it (issue #214); the child inherits this
+ * process's environment, so nothing needs passing here.
  */
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';

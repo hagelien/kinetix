@@ -496,6 +496,7 @@ async function handlePost(
       evidenceRefs,
       model: parsed.data.model ?? null,
       isImplicit: false,
+      runSessionId: auth.runSessionId,
     });
   } catch (err) {
     if (err instanceof StaleVerificationTargetError) {

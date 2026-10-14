@@ -95,6 +95,69 @@ describe('benchmark cost-per-output bounds', () => {
     expect(sonnet!.costPerVerdict).toBeCloseTo(4.5);
   });
 
+  it('attributes two overlapping runs of one identity by session id (#214)', async () => {
+    // Two routines on one token: s1 (00:00–01:00, logged by seedRun) and s2
+    // (00:30–01:30) overlap. s2's usage log failed, so only s1 has a row.
+    const { agentId, userId, humanId } = await seedRun();
+    const edit = (minute: string, runSessionId: string | null) => ({
+      editType: 'parameter',
+      proposedValue: { min: 1, max: 2 },
+      status: 'approved',
+      submittedBy: userId,
+      reviewedBy: humanId,
+      submittedAt: at(minute),
+      runSessionId,
+    });
+    await db.insert(pendingEdits).values([
+      edit('00:10', 's1'),
+      // Inside s1's window, but s2's work: no cost was logged for it.
+      edit('00:40', 's2'),
+      edit('00:45', 's2'),
+      edit('00:50', 's2'),
+      // An older row with no stamp still falls back to s1's window.
+      edit('00:55', null),
+    ]);
+    await db.insert(agentVerifications).values(
+      [1, 2, 3].map((targetId) => ({
+        agentId,
+        targetType: 'pending_edit',
+        targetId,
+        verdict: 'approve',
+        rationaleMd: 'Checked against the primary source.',
+        updatedAt: at('00:45'),
+        runSessionId: targetId === 1 ? 's1' : 's2',
+      })),
+    );
+
+    const report = await runBenchmark({ since: null, rateCard });
+    const [sonnet] = report.agentCosts;
+    expect(sonnet).toMatchObject({ runs: 1, acceptedEdits: 2, verdicts: 1 });
+    expect(sonnet!.costPerAcceptedEdit).toBeCloseTo(4.5 / 2);
+    expect(sonnet!.costPerVerdict).toBeCloseTo(4.5);
+
+    // Once s2's usage is logged too, each run is credited with its own work.
+    await db.insert(agentRunUsage).values({
+      agentId,
+      createdBy: userId,
+      modelTier: 'mid',
+      workflow: 'extraction',
+      runtime: 'claude-code',
+      model: 'claude-sonnet-5',
+      sessionId: 's2',
+      startedAt: at('00:30'),
+      durationMs: 3_600_000,
+      createdAt: at('01:30'),
+      inputTokens: 1_000_000,
+      outputTokens: 100_000,
+    });
+    const both = await runBenchmark({ since: null, rateCard });
+    expect(both.agentCosts[0]).toMatchObject({
+      runs: 2,
+      acceptedEdits: 5,
+      verdicts: 3,
+    });
+  });
+
   it('credits a run under way at --since with its outputs from before the cutoff', async () => {
     const { userId, humanId } = await seedRun();
     await db.insert(pendingEdits).values({

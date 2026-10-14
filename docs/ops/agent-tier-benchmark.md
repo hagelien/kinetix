@@ -56,10 +56,10 @@ capability tier on the row. The report adds two measured sections:
 - **Measured cost per useful output, by agent identity** — cost per accepted edit
   (human-approved + consensus-applied) for producers and cost per peer verdict
   for reviewers. Shown only when every run of the identity is priced. An
-  output counts only if it was made during one of the identity's logged runs
-  (`started_at` to `started_at + duration_ms`), and only those runs' cost is
-  divided by it — so work before telemetry, or from a run whose usage log
-  failed, can never make a tier look cheaper than it is.
+  output counts only if it was made in one of the identity's logged runs, and
+  only those runs' cost is divided by it — so work before telemetry, or from a
+  run whose usage log failed, can never make a tier look cheaper than it is.
+  See [Matching outputs to runs](#matching-outputs-to-runs).
 
 Each run also stores its tokens split by model, so a subagent on a cheaper (or
 dearer) model is priced at its own rate; a run using any model the rate card
@@ -91,9 +91,38 @@ history exists (`agents/remote-routine-setup.md` §7), read the shadow audit's
 results the same way any other `agent_verifications` row is read today, via
 `GET /api/agent-verifications`.
 
+## Matching outputs to runs
+
+Since migration 0150 (issue #214) each output carries the run that wrote it:
+`pending_edits.run_session_id` and `agent_verifications.run_session_id`.
+
+- **How it gets there.** `scripts/kinetix-api.sh` (and so every helper built
+  on `scripts/kinetix-http.ts`) sends the runner's session id —
+  `CLAUDE_CODE_SESSION_ID`, else `CODEX_SESSION_ID`, else `CODEX_THREAD_ID` —
+  as the `X-Kinetix-Run-Session` header. That is the id
+  `scripts/kinetix-log-run-usage.ts` logs as `agent_run_usage.session_id` for
+  the same run. The server reads the header only on agent-token (`kxat_`)
+  requests and drops a value over 128 characters or outside
+  `[A-Za-z0-9._:-]` (`api/_lib/run-session.ts`); a person's rows are never
+  stamped.
+- **What is stamped.** A pending edit gets the run that submitted it, and a
+  submitter's revision or resubmission re-stamps it along with `submitted_at`.
+  A verdict gets the run that last wrote it — an explicit verdict or a
+  reconsideration, the writes that move `updated_at`. Implicit approvals are
+  not outputs and are left unstamped.
+- **How the report matches.** A stamped output counts for the logged run of
+  the same identity with that session id, and for no other run, whenever it
+  was made. If that run was never logged (its usage log failed), the output
+  is left out of `$/accepted` and `$/verdict` like any other unlogged work.
+- **Fallback.** A row with no stamp — written before migration 0150, or by a
+  client that sent no header — falls back to the time window: it counts for a
+  logged run of its identity whose `started_at` to `started_at + duration_ms`
+  covers it.
+
 ## Known limits of the measured cost (issue 1444)
 
-Four residual gaps are accepted for now and tracked in issue 1444:
+Four residual gaps are accepted for now and tracked in issue 1444 (the second
+is closed for stamped rows by issue #214):
 
 - **The closing inference is counted on Claude Code only.** Routines log usage
   as their last tool call, so the one model turn that writes the final
@@ -110,11 +139,12 @@ Four residual gaps are accepted for now and tracked in issue 1444:
   about the same share in every tier, so tier-vs-tier comparisons are largely
   unaffected; a Codex run's absolute cost reads slightly low, which matters
   only when comparing Codex runs against Claude Code ones.
-- **Concurrent runs of one identity can be confused.** Outputs are matched to
-  runs by time window. If two routines share one agent token, overlap, and one
-  of them fails to log, the failed run's outputs are credited to the other and
-  its `$/accepted` or `$/verdict` reads low. Giving each routine its own
-  identity removes the risk.
+- **Concurrent runs of one identity can be confused — unstamped rows only.**
+  Rows without a `run_session_id` are matched by time window. If two routines
+  share one agent token, overlap, and one of them fails to log, the failed
+  run's unstamped outputs are credited to the other and its `$/accepted` or
+  `$/verdict` reads low. Stamped rows are matched by session id and are not
+  affected. Giving each routine its own identity removes the residual risk.
 - **The tier is read when the run is logged, not when it starts.** An agent
   reclassified while one of its runs is in flight has that run filed under
   the new tier. Since issue 216 the admin edit stamps

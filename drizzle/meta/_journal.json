@@ -1051,6 +1051,13 @@
       "when": 1791158400000,
       "tag": "0149_agent_model_tier_changed_at",
       "breakpoints": true
+    },
+    {
+      "idx": 150,
+      "version": "7",
+      "when": 1791244800000,
+      "tag": "0150_output_run_session",
+      "breakpoints": true
     }
   ]
 }

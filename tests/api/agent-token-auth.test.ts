@@ -162,3 +162,50 @@ describe('getUserFromRequest with a persistent agent token', () => {
     expect(await getUserFromRequest(requestWithToken(token))).toBeNull();
   });
 });
+
+describe('getUserFromRequest — the run an agent request belongs to (issue #214)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const liveToken = () =>
+    mockDb({
+      tokenRow: {
+        tokenId: 7,
+        expiresAt: null,
+        revokedAt: null,
+        agentStatus: 'active',
+        userId: 42,
+        role: 'contributor',
+      },
+    });
+
+  function withRunSession(token: string, runSession: string): IncomingMessage {
+    const req = requestWithToken(token);
+    req.headers['x-kinetix-run-session'] = runSession;
+    return req;
+  }
+
+  it('carries a valid X-Kinetix-Run-Session on the agent context', async () => {
+    const { token } = generateAgentToken();
+    getDbMock.mockReturnValue(liveToken());
+    const ctx = await getUserFromRequest(
+      withRunSession(token, '0f9c2b1e-7d4a-4c1b-9e2f-3a5b6c7d8e9f'),
+    );
+    expect(ctx?.runSessionId).toBe('0f9c2b1e-7d4a-4c1b-9e2f-3a5b6c7d8e9f');
+  });
+
+  it('leaves the context without a run when the header is malformed', async () => {
+    const { token } = generateAgentToken();
+    getDbMock.mockReturnValue(liveToken());
+    const ctx = await getUserFromRequest(withRunSession(token, 'a b'));
+    expect(ctx).not.toBeNull();
+    expect(ctx).not.toHaveProperty('runSessionId');
+  });
+
+  it('never resolves a run for a token that does not authenticate', async () => {
+    const { token } = generateAgentToken();
+    getDbMock.mockReturnValue(mockDb({ tokenRow: null }));
+    expect(
+      await getUserFromRequest(withRunSession(token, 'sess-1')),
+    ).toBeNull();
+  });
+});

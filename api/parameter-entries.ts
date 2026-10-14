@@ -30,6 +30,7 @@ import {
 // for the endpoints: outside a transaction `inTransaction` opens one.
 import { getDb, inTransaction } from './_lib/db.js';
 import { getUserFromRequest } from './_lib/auth.js';
+import { runSessionInsert } from './_lib/run-session.js';
 import { assertSameOrigin, parseAndValidate } from './_lib/validate.js';
 import { CAP } from '../src/lib/permissions.js';
 import { callerCan } from './_lib/permissions-store.js';
@@ -405,6 +406,7 @@ async function handleCreate(
             referenceIds: [input.citationId],
             status: 'pending',
             submittedBy: auth.userId,
+            ...runSessionInsert(auth),
           })
           .returning();
         if (!row) throw new Error('pendingEdits insert returned no row');
@@ -582,6 +584,7 @@ async function handleUpdate(
               referenceIds: [patch.citationId],
               status: 'pending',
               submittedBy: auth.userId,
+              ...runSessionInsert(auth),
             })
             .returning();
           if (!row) throw new Error('pendingEdits insert returned no row');
@@ -747,6 +750,7 @@ async function handleDelete(
               proposedValue: { op: 'delete' } as never,
               status: 'pending',
               submittedBy: auth.userId,
+              ...runSessionInsert(auth),
             })
             .returning();
           if (!row) throw new Error('pendingEdits insert returned no row');

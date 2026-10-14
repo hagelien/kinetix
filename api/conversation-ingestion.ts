@@ -149,6 +149,7 @@ export default withErrorHandling(async function handler(req, res): Promise<void>
           article.data,
           auth.userId,
           envelope.expectedFingerprint as string,
+          auth.runSessionId,
         );
         json(res, 200, { ok: true, applied: true, result });
       } else {
@@ -280,6 +281,7 @@ export default withErrorHandling(async function handler(req, res): Promise<void>
 
   const result = await applyIngestion(bundle, {
     userId: auth.userId,
+    runSessionId: auth.runSessionId,
     accept,
     crosswalk,
     expectedReviewActions,

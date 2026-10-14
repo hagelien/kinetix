@@ -2067,6 +2067,15 @@ export const pendingEdits = pgTable(
     // failed to apply, or meaningless once the token no longer matches the
     // current proposal — readers must check the token, not just presence.
     lastConsensusApplyFailure: jsonb('last_consensus_apply_failure'),
+    /**
+     * Runner session id of the agent run that submitted (or last resubmitted)
+     * this edit — the X-Kinetix-Run-Session header, stamped only for agent
+     * tokens (api/_lib/run-session.ts). Equals agent_run_usage.session_id of
+     * that run, so the tier benchmark ties the output to the run that paid for
+     * it. NULL for people, and for agent rows written without the header
+     * (migration 0150, issue #214).
+     */
+    runSessionId: varchar('run_session_id', { length: 128 }),
   },
   (t) => [
     index('pending_edits_status_idx').on(t.status),
@@ -2221,6 +2230,14 @@ export const agentVerifications = pgTable(
     isImplicit: boolean('is_implicit').notNull().default(false),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    /**
+     * Runner session id of the agent run whose judgment this row holds — set
+     * with `updatedAt` by an explicit verdict or a reconsideration, from the
+     * X-Kinetix-Run-Session header (api/_lib/run-session.ts). Matches
+     * agent_run_usage.session_id; NULL when the request carried none
+     * (migration 0150, issue #214).
+     */
+    runSessionId: varchar('run_session_id', { length: 128 }),
   },
   (t) => [
     uniqueIndex('agent_verifs_unique_idx').on(

@@ -16,7 +16,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { json, error, withErrorHandling } from './_lib/response.js';
 import { getDb, runInPoolTransaction } from './_lib/db.js';
-import { getUserFromRequest } from './_lib/auth.js';
+import { getUserFromRequest, type AuthContext } from './_lib/auth.js';
+import { runSessionInsert } from './_lib/run-session.js';
 import { assertSameOrigin, parseAndValidate } from './_lib/validate.js';
 import {
   bioEntityCreateRequestSchema,
@@ -98,7 +99,8 @@ async function requireEntityDeleter(
   return { userId: auth.userId };
 }
 
-type ContributorAuth = { userId: number; role: string };
+/** The submitting caller; `runSessionId` names the agent run, if any. */
+type ContributorAuth = Pick<AuthContext, 'userId' | 'role' | 'runSessionId'>;
 
 async function requireContributor(
   req: IncomingMessage,
@@ -113,7 +115,11 @@ async function requireContributor(
     error(res, 403, 'Contributor role or higher required to edit entities');
     return null;
   }
-  return { userId: auth.userId, role: auth.role };
+  return {
+    userId: auth.userId,
+    role: auth.role,
+    runSessionId: auth.runSessionId,
+  };
 }
 
 async function handleGet(
@@ -214,6 +220,7 @@ async function queueBioEntityEdit(
       proposedMeta: (Object.keys(meta).length > 0 ? meta : null) as never,
       status: 'pending',
       submittedBy: actor.userId,
+      ...runSessionInsert(actor),
     })
     .returning({ id: pendingEdits.id });
   if (!row) throw new Error('pendingEdits insert returned no row');

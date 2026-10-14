@@ -17,6 +17,7 @@ import {
 } from '../_lib/response.js';
 import { getDb } from '../_lib/db.js';
 import { getUserFromRequest, requestHasAuthCookie } from '../_lib/auth.js';
+import { runSessionInsert } from '../_lib/run-session.js';
 import { assertSameOrigin, parseAndValidate } from '../_lib/validate.js';
 import { createPageSchema, updatePageSchema } from '../_lib/schemas.js';
 import { generateSlug } from '../_lib/slug.js';
@@ -829,6 +830,7 @@ async function handleCreate(
           referenceId: data.parametersReferenceId,
           status: 'pending',
           submittedBy: auth.userId,
+          ...runSessionInsert(auth),
         })
         .returning();
 
@@ -1236,6 +1238,7 @@ async function handleUpdate(
           } as never,
           status: 'pending',
           submittedBy: auth.userId,
+          ...runSessionInsert(auth),
         })
         .returning();
       if (!row) throw new Error('Failed to submit page for review');

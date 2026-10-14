@@ -390,6 +390,108 @@ describe('measured run usage', () => {
     expect(flagship.costPerAcceptedEdit).toBeCloseTo(7.5);
   });
 
+  // Issue #214: two routines sharing one token, overlapping, one usage log
+  // failed. By time window alone the failed run's outputs fall inside the
+  // logged run and are credited to it without their cost.
+  const stamped = (agentSlug: string, iso: string, runSessionId: string, n = 1) =>
+    out(agentSlug, iso, n).map((o) => ({ ...o, runSessionId }));
+
+  it('credits a stamped output only to the run its session id names', () => {
+    const [sonnet] = computeAgentCostMetrics(
+      // Run "a" is logged (00:00–01:00); run "b" overlapped it but its usage
+      // log failed, so there is no row for it.
+      [run({ sessionId: 'a' })],
+      rateCard,
+      [
+        ...stamped('claude-sonnet-5', '2026-10-02T00:20:00Z', 'a', 1),
+        // Inside a's window, but written by b: not a's work.
+        ...stamped('claude-sonnet-5', '2026-10-02T00:40:00Z', 'b', 4),
+      ],
+      [
+        ...stamped('claude-sonnet-5', '2026-10-02T00:30:00Z', 'a', 2),
+        ...stamped('claude-sonnet-5', '2026-10-02T00:30:00Z', 'b', 3),
+      ],
+    );
+    expect(sonnet).toMatchObject({ acceptedEdits: 1, verdicts: 2 });
+    expect(sonnet!.costPerAcceptedEdit).toBeCloseTo(4.5);
+    expect(sonnet!.costPerVerdict).toBeCloseTo(4.5 / 2);
+  });
+
+  it('attributes the outputs of two overlapping logged runs to each by session', () => {
+    const metrics = computeAgentCostMetrics(
+      [
+        run({ sessionId: 'a' }),
+        // Same identity, overlapping a, reclassified in between: its own row.
+        run({
+          sessionId: 'b',
+          modelTier: 'flagship',
+          model: 'claude-opus-5',
+          startedAt: new Date('2026-10-02T00:30:00Z'),
+          createdAt: new Date('2026-10-02T01:30:00Z'),
+        }),
+      ],
+      rateCard,
+      [
+        ...stamped('claude-sonnet-5', '2026-10-02T00:45:00Z', 'a', 3),
+        ...stamped('claude-sonnet-5', '2026-10-02T00:45:00Z', 'b', 1),
+      ],
+      [],
+    );
+    expect(metrics.find((m) => m.tier === 'mid')).toMatchObject({
+      acceptedEdits: 3,
+    });
+    expect(metrics.find((m) => m.tier === 'flagship')).toMatchObject({
+      acceptedEdits: 1,
+    });
+  });
+
+  it('credits a stamped output to its run even outside the logged window', () => {
+    // The run kept working after its last usage log (the closing turn).
+    const [sonnet] = computeAgentCostMetrics(
+      [run({ sessionId: 'a' })],
+      rateCard,
+      stamped('claude-sonnet-5', '2026-10-02T01:05:00Z', 'a'),
+      [],
+    );
+    expect(sonnet!.acceptedEdits).toBe(1);
+  });
+
+  it('never credits a stamped output to another identity sharing the session id', () => {
+    const [sonnet] = computeAgentCostMetrics(
+      [run({ sessionId: 'a' })],
+      rateCard,
+      stamped('gpt-5-6-terra', '2026-10-02T00:30:00Z', 'a'),
+      [],
+    );
+    expect(sonnet!.acceptedEdits).toBe(0);
+  });
+
+  it('falls back to the time window for unstamped rows only', () => {
+    const [sonnet] = computeAgentCostMetrics(
+      [run({ sessionId: 'a' })],
+      rateCard,
+      [
+        // Pre-migration rows (and clients that sent no header).
+        ...out('claude-sonnet-5', '2026-10-02T00:30:00Z', 2),
+        { agentSlug: 'claude-sonnet-5', at: new Date('2026-10-02T00:30:00Z'), runSessionId: null },
+        ...out('claude-sonnet-5', '2026-10-02T03:00:00Z', 1),
+      ],
+      [],
+    );
+    expect(sonnet!.acceptedEdits).toBe(3);
+  });
+
+  it('does not credit a stamped output to an unplaced run, whose cost is left out', () => {
+    const [sonnet] = computeAgentCostMetrics(
+      [run({ sessionId: 'a', startedAt: null })],
+      rateCard,
+      stamped('claude-sonnet-5', '2026-10-02T00:30:00Z', 'a'),
+      [],
+    );
+    expect(sonnet).toMatchObject({ unplacedRuns: 1, acceptedEdits: 0 });
+    expect(sonnet!.costPerAcceptedEdit).toBeNull();
+  });
+
   it('reads outputs from the start of a run already under way at --since', () => {
     // --since 00:30 selects this run (logged 01:00) although it began at 00:00;
     // its outputs must be read from 00:00, not from the cutoff.

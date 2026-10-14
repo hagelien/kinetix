@@ -12,6 +12,7 @@ import {
   type ParamEntryLockRefusal,
 } from './_lib/param-entry-payload-locks.js';
 import { getUserFromRequest } from './_lib/auth.js';
+import { runSessionInsert } from './_lib/run-session.js';
 import { assertSameOrigin, parseAndValidate } from './_lib/validate.js';
 import {
   createPendingEditSchema,
@@ -2703,6 +2704,7 @@ async function handleCreate(
         referenceIds: referenceIds ?? undefined,
         status: parsed.data.status ?? 'pending',
         submittedBy: auth.userId,
+        ...runSessionInsert(auth),
         sectionId: factColumns.sectionId ?? wikiSectionColumns.sectionId,
         fieldId: factColumns.fieldId,
         factStatement: factColumns.factStatement,
@@ -3592,7 +3594,14 @@ async function handlePatch(
             // snapshot a reviewer took before the return/resubmit cycle (#592)
             // and the edit floats to the top of the submitted_at-ordered queue.
             requestedStatus === 'pending'
-              ? { submittedAt: new Date() }
+              ? {
+                  submittedAt: new Date(),
+                  // The run credited with an edit is the one that last moved
+                  // its submittedAt (the benchmark's fallback key as well),
+                  // so a revision re-stamps it — to null when this request
+                  // named no run, so an earlier run is not credited with it.
+                  runSessionId: auth.runSessionId ?? null,
+                }
               : {}),
             status: nextStatus,
             ...(shouldClearReviewFields

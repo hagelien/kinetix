@@ -10,6 +10,7 @@ import {
   userGroups,
   users,
 } from "../../db/schema.js";
+import { readRunSessionHeader } from "./run-session.js";
 
 // Use a __Host- cookie so sibling subdomains cannot shadow or inject the
 // session cookie with a broader Domain attribute.
@@ -60,6 +61,12 @@ export interface AuthContext {
   userId: number;
   role: string;
   groups?: AuthGroup[];
+  /**
+   * The agent run this request belongs to (X-Kinetix-Run-Session, see
+   * run-session.ts). Present only on agent-token requests that named a valid
+   * one; a person's session never carries it, whatever headers it sends.
+   */
+  runSessionId?: string;
 }
 
 function getSecret(): Uint8Array {
@@ -154,7 +161,10 @@ export async function getUserFromRequest(
   // Persistent agent tokens are opaque, DB-backed credentials — resolve
   // them by hash rather than verifying a JWT signature.
   if (authToken.token.startsWith(AGENT_TOKEN_PREFIX)) {
-    return resolveAgentTokenContext(authToken.token);
+    const agent = await resolveAgentTokenContext(authToken.token);
+    if (!agent) return null;
+    const runSessionId = readRunSessionHeader(req);
+    return runSessionId ? { ...agent, runSessionId } : agent;
   }
 
   const verified = await verifyToken(authToken.token);

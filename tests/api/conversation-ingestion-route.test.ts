@@ -216,6 +216,8 @@ describe('POST /api/conversation-ingestion', () => {
       article,
       7,
       "a".repeat(64),
+      // A person's session names no agent run (#214).
+      undefined,
     );
     expect(applyIngestionMock).not.toHaveBeenCalled();
   });

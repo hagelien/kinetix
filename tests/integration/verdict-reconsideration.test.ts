@@ -200,8 +200,14 @@ async function call(
   method: 'GET' | 'POST',
   url: string,
   body?: unknown,
+  /** Extra context fields, e.g. the agent run (`runSessionId`). */
+  extraAuth: Record<string, unknown> = {},
 ) {
-  getUserFromRequestMock.mockResolvedValue({ userId, role: 'contributor' });
+  getUserFromRequestMock.mockResolvedValue({
+    userId,
+    role: 'contributor',
+    ...extraAuth,
+  });
   const raw = body === undefined ? '' : JSON.stringify(body);
   const req = Readable.from([raw]) as IncomingMessage;
   req.method = method;
@@ -347,6 +353,50 @@ describe('dispute reconsideration', () => {
       .from(disputes);
     expect(mirror).toEqual({ status: 'resolved', resolution: 'withdrawn' });
   });
+
+  it.each(['maintain', 'withdraw'] as const)(
+    'stamps a %s decision with the run that made it (#214)',
+    async (outcome) => {
+      const author = await seedAgent('author');
+      const b = await seedAgent('b');
+      const c = await seedAgent('c');
+      const sol = await seedAgent('sol');
+      const editId = await seedWikiFactEdit(author.userId);
+      await approve(b.agentId, editId);
+      await approve(c.agentId, editId);
+      const version = await dispute(sol, editId);
+      // The blind dispute was cast by an earlier run.
+      await db
+        .update(agentVerifications)
+        .set({ runSessionId: 'run-1' })
+        .where(eq(agentVerifications.agentId, sol.agentId));
+
+      const posted = await call(
+        reconsiderHandler,
+        sol.userId,
+        'POST',
+        RECONSIDER,
+        {
+          targetType: 'pending_edit',
+          targetId: editId,
+          targetVersion: version,
+          outcome,
+          model: 'gpt-5.7-sol',
+          peerDigest: await digestFor(sol.userId),
+          addendumMd: 'Peer-begrunnelsene er lest, og avgjørelsen er tatt nå.',
+        },
+        { runSessionId: 'run-2' },
+      );
+      expect(posted.statusCode).toBe(200);
+
+      // The live row holds this run's judgment, so it names this run.
+      const [live] = await db
+        .select({ runSessionId: agentVerifications.runSessionId })
+        .from(agentVerifications)
+        .where(eq(agentVerifications.agentId, sol.agentId));
+      expect(live!.runSessionId).toBe('run-2');
+    },
+  );
 
   it('keeps a maintained dispute blocking and refuses a later non-blind verdict', async () => {
     const author = await seedAgent('author');

@@ -16,6 +16,7 @@ import { json, error, withErrorHandling } from './_lib/response.js';
 // for the endpoints: outside a transaction `inTransaction` opens one.
 import { getDb, inTransaction } from './_lib/db.js';
 import { getUserFromRequest } from './_lib/auth.js';
+import { runSessionInsert } from './_lib/run-session.js';
 import { assertSameOrigin, parseAndValidate } from './_lib/validate.js';
 import { updateDrugParameterSchema } from './_lib/schemas.js';
 import {
@@ -396,6 +397,7 @@ async function handleUpdate(
               : null,
             status: 'pending',
             submittedBy: auth.userId,
+            ...runSessionInsert(auth),
           })
           .returning();
         return inserted;

@@ -9,6 +9,7 @@ import { wikiContentFocusRefusal } from "../agent-focus.js";
 import { renderHtml, extractPlaintext } from "./tiptap-utils.js";
 import { applyAddSection } from "../../src/lib/topicSectionOps.js";
 import { extractTopicSections } from "../../src/lib/topicSections.js";
+import { runSessionInsert } from "./run-session.js";
 import {
   createFactNode,
   isFactNode,
@@ -150,6 +151,8 @@ export async function applyWikiArticle(
   bundle: WikiArticleBundle,
   userId: number,
   expectedFingerprint: string,
+  /** The agent run applying the article (run-session.ts); absent for people. */
+  runSessionId?: string,
 ) {
   return runInPoolTransaction(async () => {
     const db = getDb();
@@ -295,6 +298,7 @@ export async function applyWikiArticle(
           referenceIds,
           status: "pending",
           submittedBy: userId,
+          ...runSessionInsert({ runSessionId }),
         });
       }
     }

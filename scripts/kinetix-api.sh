@@ -17,6 +17,13 @@
 #   KINETIX_AGENT_DRY_RUN — when "1", prints the request it would send and
 #                           exits 0 without hitting the network.
 #
+# Run attribution (issue #214): the runner's session id — CLAUDE_CODE_SESSION_ID,
+# else CODEX_SESSION_ID, else CODEX_THREAD_ID, the same order
+# scripts/kinetix-log-run-usage.ts uses to find the run's transcript — is sent
+# as X-Kinetix-Run-Session, so the server stamps the edits and verdicts this
+# run writes with the session its usage log names. A value outside
+# [A-Za-z0-9._:-] or over 128 characters is not sent (the server would drop it).
+#
 # Usage:
 #   scripts/kinetix-api.sh <METHOD> <PATH> [@body.json | -]
 #
@@ -64,8 +71,13 @@ if [[ -n "$BODY_ARG" ]]; then
   fi
 fi
 
+RUN_SESSION="${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-}}}"
+if [[ ! "$RUN_SESSION" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$ ]]; then
+  RUN_SESSION=""
+fi
+
 if [[ "${KINETIX_AGENT_DRY_RUN:-0}" == "1" ]]; then
-  echo "[dry-run] ${METHOD} ${URL}  body=${BODY_DESCR}" >&2
+  echo "[dry-run] ${METHOD} ${URL}  body=${BODY_DESCR}  run-session=${RUN_SESSION:-none}" >&2
   if [[ -n "$BODY_ARG" ]]; then
     printf '[dry-run-body] ' >&2
     if [[ -n "$BODY_FILE" ]]; then
@@ -85,6 +97,10 @@ CURL_ARGS=(
   -H "Content-Type: application/json; charset=utf-8"
   -H "Cookie: __Host-kinetix-auth=${KINETIX_TOKEN}"
 )
+
+if [[ -n "$RUN_SESSION" ]]; then
+  CURL_ARGS+=(-H "X-Kinetix-Run-Session: ${RUN_SESSION}")
+fi
 
 if [[ -n "$BODY_ARG" ]]; then
   # Keep JSON out of argv. Git Bash -> native Windows curl converts argv to

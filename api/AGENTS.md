@@ -28,6 +28,7 @@ Multi-action routes such as `auth.ts` dispatch via `?action=` rather than separa
 | `pdf-storage.ts`  | Vercel Blob helpers for citation PDFs: size cap, hashing, `readStoredPdfBytes()` (proxy path, used by both agent reads and share redemption up to `PROXYABLE_PDF_MAX_BYTES`), `presignStoredPdfUrl()` (short-lived redirect path used by both routes for objects over the 4.5 MB function response cap), `recordCitationPdf()` |
 | `pdf-share-token.ts` | Signed, ten-minute download tokens for stored PDFs (`citation.pdf.share`); key derived from `JWT_SECRET` under its own label |
 | `rate-limit.ts`   | Best-effort in-memory request throttles for abuse-prone endpoints               |
+| `run-session.ts`  | `X-Kinetix-Run-Session` parsing; `runSessionInsert(auth)` stamps the agent run on `pending_edits` / `agent_verifications` (agent tokens only, issue #214) |
 | `response.ts`     | `json(res, status, data)`, `error(res, status, msg)`, `withErrorHandling()`     |
 | `schemas.ts`      | Zod schemas for request validation                                              |
 | `slug.ts`         | URL slug generation for wiki pages                                              |

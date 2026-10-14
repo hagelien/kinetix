@@ -178,6 +178,7 @@ export default withErrorHandling(async function handler(req, res): Promise<void>
       addendumMd: parsed.data.addendumMd,
       peerDigest: parsed.data.peerDigest,
       model: parsed.data.model,
+      runSessionId: auth.runSessionId,
     });
   } catch (err) {
     if (err instanceof ReconsiderationRefusedError) {

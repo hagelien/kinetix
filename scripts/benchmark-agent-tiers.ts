@@ -37,6 +37,9 @@
  * The tier is snapshotted when a run is logged, at its end, so a run whose span
  * contains its agent's latest tier change (`agents.model_tier_changed_at`) is
  * left out of those measured sections and counted instead.
+ * Each output is tied to the run that wrote it by `run_session_id` (migration
+ * 0150), falling back to the identity's run time windows only for rows that
+ * carry none.
  * The older rate-card projection (price × estimated tokens per action) is kept
  * for configs not yet run, and stays visually separate from measured cost.
  *
@@ -377,6 +380,11 @@ export interface RunUsageRecord extends TokenCounts {
   durationMs: number | null;
   /** The agent's latest tier change (agents.model_tier_changed_at). */
   tierChangedAt: Date | null;
+  /**
+   * Runner session id (agent_run_usage.session_id) — what an output's
+   * run_session_id names when the run stamped it.
+   */
+  sessionId?: string | null;
 }
 
 const runTokens = (r: RunUsageRecord): number =>
@@ -528,13 +536,14 @@ export interface AgentCostMetrics {
   pricedRuns: number;
   cost: number | null;
   /**
-   * Human-approved + consensus-applied edits this identity submitted DURING
-   * one of its logged runs. Outputs of a run whose usage was never logged
-   * (before telemetry, or a failed log) have no cost in the numerator, so
-   * they are left out of the denominator too.
+   * Human-approved + consensus-applied edits this identity submitted in one
+   * of its logged runs: the run its run_session_id names, or, for a row that
+   * names none, a run whose time window holds it. Outputs of a run whose
+   * usage was never logged (before telemetry, or a failed log) have no cost in
+   * the numerator, so they are left out of the denominator too.
    */
   acceptedEdits: number;
-  /** Non-implicit peer verdicts cast during one of its logged runs. */
+  /** Non-implicit peer verdicts cast in one of its logged runs, matched the same way. */
   verdicts: number;
   /** Logged runs with no start time, so no outputs can be tied to them. */
   unplacedRuns: number;
@@ -545,6 +554,31 @@ export interface AgentCostMetrics {
 export interface AgentOutputRecord {
   agentSlug: string;
   at: Date;
+  /**
+   * The run that wrote the output (run_session_id, issue #214); null for a
+   * row written before the column existed or without the run header.
+   */
+  runSessionId?: string | null;
+}
+
+/**
+ * Whether an output belongs to one of these runs of its identity.
+ *
+ * An output stamped with its run's session id belongs to that run and no
+ * other: two routines sharing one token can overlap in time, and when one of
+ * their usage logs fails its outputs must not be credited to the other just
+ * because they fall inside its window — that would put them in the
+ * denominator without their cost. Only an unstamped (older) output falls back
+ * to the time window, which is all that can place it.
+ */
+export function outputInRuns(
+  output: AgentOutputRecord,
+  sessions: ReadonlySet<string>,
+  intervals: readonly [number, number][],
+): boolean {
+  if (output.runSessionId) return sessions.has(output.runSessionId);
+  const t = output.at.getTime();
+  return intervals.some(([start, end]) => t >= start && t <= end);
 }
 
 /** The [start, end] a logged run covered, or null when it cannot be placed. */
@@ -612,12 +646,13 @@ export function earliestRunStart(runs: RunUsageRecord[]): Date | null {
 
 /**
  * Cost per unit of useful output, per identity — the §D headline metric.
- * An output counts only when it falls inside one of the identity's logged
- * runs, and only the cost of runs that can be placed in time is divided by
- * them, so numerator and denominator always cover the same work: neither
- * pre-telemetry history nor a run whose usage log failed can make a tier look
- * cheaper than it is. Only computed when every run of the identity is priced,
- * so a partly priced identity never looks cheaper either.
+ * An output counts only when it belongs to one of the identity's logged runs
+ * (by session id, else by time window: see outputInRuns), and only the cost
+ * of runs that can be placed in time is divided by them, so numerator and
+ * denominator always cover the same work: neither pre-telemetry history nor a
+ * run whose usage log failed can make a tier look cheaper than it is. Only
+ * computed when every run of the identity is priced, so a partly priced
+ * identity never looks cheaper either.
  */
 export function computeAgentCostMetrics(
   runs: RunUsageRecord[],
@@ -627,7 +662,11 @@ export function computeAgentCostMetrics(
 ): AgentCostMetrics[] {
   const bySlug = new Map<
     string,
-    AgentCostMetrics & { placedCost: number; intervals: [number, number][] }
+    AgentCostMetrics & {
+      placedCost: number;
+      intervals: [number, number][];
+      sessions: Set<string>;
+    }
   >();
   for (const r of runs) {
     if (!r.agentSlug) continue;
@@ -648,6 +687,7 @@ export function computeAgentCostMetrics(
         costPerVerdict: null,
         placedCost: 0,
         intervals: [],
+        sessions: new Set(),
       };
       bySlug.set(key, m);
     }
@@ -660,25 +700,32 @@ export function computeAgentCostMetrics(
     const interval = runInterval(r);
     if (interval) {
       m.intervals.push(interval);
+      if (r.sessionId) m.sessions.add(r.sessionId);
       m.placedCost += cost ?? 0;
     } else {
       m.unplacedRuns += 1;
     }
   }
-  const countDuringRuns = (
+  // Only placed runs' sessions are matched: an unplaced run's cost is not in
+  // placedCost, so crediting it with outputs would understate $/output.
+  const countInRuns = (
     outputs: AgentOutputRecord[],
     slug: string,
+    sessions: Set<string>,
     intervals: [number, number][],
   ) =>
-    outputs.filter((o) => {
-      if (o.agentSlug !== slug) return false;
-      const t = o.at.getTime();
-      return intervals.some(([start, end]) => t >= start && t <= end);
-    }).length;
+    outputs.filter(
+      (o) => o.agentSlug === slug && outputInRuns(o, sessions, intervals),
+    ).length;
   return [...bySlug.values()]
-    .map(({ placedCost, intervals, ...m }) => {
-      m.acceptedEdits = countDuringRuns(acceptedEdits, m.agentSlug, intervals);
-      m.verdicts = countDuringRuns(verdicts, m.agentSlug, intervals);
+    .map(({ placedCost, intervals, sessions, ...m }) => {
+      m.acceptedEdits = countInRuns(
+        acceptedEdits,
+        m.agentSlug,
+        sessions,
+        intervals,
+      );
+      m.verdicts = countInRuns(verdicts, m.agentSlug, sessions, intervals);
       if (m.cost != null && m.pricedRuns === m.runs) {
         m.costPerAcceptedEdit =
           m.acceptedEdits > 0 ? placedCost / m.acceptedEdits : null;
@@ -780,11 +827,15 @@ function formatReport(report: BenchmarkReport): string {
       'accepted = human-approved + consensus-applied edits; accepted and verdicts',
     );
     lines.push(
-      'count only when made during a logged run, and $/output divides only the',
+      'count only when made in a logged run — the run named by the output\'s',
     );
     lines.push(
-      'cost of runs that can be placed in time — both sides cover the same work.',
+      'run_session_id, or for older unstamped rows a run whose time window holds',
     );
+    lines.push(
+      'it — and $/output divides only the cost of runs that can be placed in',
+    );
+    lines.push('time, so both sides cover the same work.');
     const unplaced = report.agentCosts.reduce((n, m) => n + m.unplacedRuns, 0);
     if (unplaced > 0) {
       lines.push(
@@ -950,6 +1001,7 @@ export async function runBenchmark(opts: {
       startedAt: agentRunUsage.startedAt,
       durationMs: agentRunUsage.durationMs,
       tierChangedAt: agents.modelTierChangedAt,
+      sessionId: agentRunUsage.sessionId,
     })
     .from(agentRunUsage)
     .leftJoin(agents, eq(agents.id, agentRunUsage.agentId))
@@ -985,6 +1037,7 @@ export async function runBenchmark(opts: {
         submittedBy: pendingEdits.submittedBy,
         reviewedBy: pendingEdits.reviewedBy,
         submittedAt: pendingEdits.submittedAt,
+        runSessionId: pendingEdits.runSessionId,
         agentSlug: agents.slug,
       })
       .from(pendingEdits)
@@ -997,7 +1050,11 @@ export async function runBenchmark(opts: {
         e.reviewedBy != null && e.reviewedBy === e.submittedBy,
       );
       if (outcome === 'approved' || outcome === 'agent_applied') {
-        acceptedOutputs.push({ agentSlug: e.agentSlug, at: e.submittedAt });
+        acceptedOutputs.push({
+          agentSlug: e.agentSlug,
+          at: e.submittedAt,
+          runSessionId: e.runSessionId,
+        });
       }
     }
   }
@@ -1006,7 +1063,12 @@ export async function runBenchmark(opts: {
         // updated_at, not created_at: a verdict revised during a logged run
         // keeps its first created_at, but the run paid for the judgment that
         // survives — the upsert and reconsideration paths stamp updated_at.
-        .select({ agentSlug: agents.slug, at: agentVerifications.updatedAt })
+        // run_session_id is stamped with updated_at, so it names that run.
+        .select({
+          agentSlug: agents.slug,
+          at: agentVerifications.updatedAt,
+          runSessionId: agentVerifications.runSessionId,
+        })
         .from(agentVerifications)
         .innerJoin(agents, eq(agents.id, agentVerifications.agentId))
         .where(
