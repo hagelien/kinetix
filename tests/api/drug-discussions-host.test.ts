@@ -398,7 +398,7 @@ describe('GET /api/drug-discussions?id= (following a "discussion #N" reference)'
     );
   });
 
-  it('keeps the bare monograph url for a fact-keyed drug comment', async () => {
+  it('links a fact-keyed drug comment to the fact', async () => {
     const comment = {
       id: 8,
       drugId: 12,
@@ -410,6 +410,21 @@ describe('GET /api/drug-discussions?id= (following a "discussion #N" reference)'
     mockSequence([comment], []);
     const { res, state } = createResponse();
     await handler(createRequest('id=8'), res);
+    expect(JSON.parse(state.body).url).toBe('/wiki/drug/12?fact=3&comment=8');
+  });
+
+  it('keeps the bare monograph url for a whole-monograph drug comment', async () => {
+    const comment = {
+      id: 9,
+      drugId: 12,
+      wikiPageId: null,
+      parameter: null,
+      parentId: null,
+      body: 'b',
+    };
+    mockSequence([comment], []);
+    const { res, state } = createResponse();
+    await handler(createRequest('id=9'), res);
     expect(JSON.parse(state.body).url).toBe('/wiki/drug/12');
   });
 
