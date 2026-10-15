@@ -961,45 +961,80 @@ export async function readDrugRouteAssemblyInputs(
   // another product's), so the route stays incomplete rather than running on a guess.
   type FallbackParameter = 'tmax' | 'bioavailability';
   interface FallbackPool {
+    /** The drug-level cache value, when the cache holds one. */
     cached: SourcedValue[];
-    /** The route-null entries behind a marked aggregate; null for a hand-authored value. */
-    entries: ParameterEntryValue[] | null;
+    /** The formulation the cached value is of: the one its entries pooled in, or the unstated
+     *  one for a hand-authored value (or an aggregate none of whose entries pools any more). */
+    cachedFormulation: string | null;
+    /** EVERY route-null entry for the parameter, read whether or not the cache holds a value: an
+     *  ambiguous pool leaves the cache empty while one formulation's readings are still there. */
+    entries: ParameterEntryValue[];
     ctx: AggregationContext;
-    /** The formulations its readings could pool in — what a joint choice is made among. */
+    /** The formulations its readings could give a value in — what a joint choice is made among.
+     *  Empty when there is nothing to fall back on at all. */
     keys: string[];
-    /** The formulation the cached value was pooled from; null when that choice was ambiguous. */
-    own: string | null;
   }
-  const fallbackPool = (parameter: FallbackParameter, cached: SourcedValue[]): FallbackPool => {
+  const cacheRowFor = (parameter: FallbackParameter) =>
+    drugLevelRows.find((row) => row.parameter === parameter);
+  const fallbackPool = async (
+    parameter: FallbackParameter,
+    cached: SourcedValue[],
+    needed: boolean,
+  ): Promise<FallbackPool> => {
     const ctx: AggregationContext = {
       targetUnit: getRangeSpec(parameter).canonicalUnit,
       matrixRelevant: parameterIsMatrixRelevant(parameter),
       molecularWeight,
       valueBounds: getRangeSpec(parameter).bounds,
     };
-    const entries = drugLevelEntries.get(parameter) ?? null;
-    const keys = entries ? poolableFormulationKeys(entries, ctx) : [];
-    // No entry that could pool (a hand-authored value, or a cache whose entries no longer pool):
-    // nothing about the value states a formulation, so it is the unstated pool.
-    if (keys.length === 0) {
-      return { cached, entries, ctx, keys: [UNSTATED_FORMULATION_KEY], own: UNSTATED_FORMULATION_KEY };
-    }
-    return { cached, entries, ctx, keys, own: selectPooledFormulation(keys) };
+    // Read the entries independently of the cache (#12): the cache can be empty (an ambiguous
+    // pool), hand-authored (its entries never loaded for a source), or present — and in every case
+    // the readings of the route's formulation are what the route may fall back on.
+    const entries = !needed
+      ? []
+      : (drugLevelEntries.get(parameter) ?? (await loadEntryValuesForParameter(drugId, parameter)));
+    const entryKeys = poolableFormulationKeys(entries, ctx);
+    const aggregate = isAggregateCacheValue(cacheRowFor(parameter)?.value);
+    // A value no entry stands behind states no formulation: the unstated pool, as every value was
+    // before formulations were recorded. It is a reading the joint choice counts as such.
+    const cachedIsUnstated = cached.length > 0 && (!aggregate || entryKeys.length === 0);
+    return {
+      cached,
+      cachedFormulation: cachedIsUnstated ? UNSTATED_FORMULATION_KEY : selectPooledFormulation(entryKeys),
+      entries,
+      ctx,
+      keys: [...entryKeys, ...(cachedIsUnstated ? [UNSTATED_FORMULATION_KEY] : [])],
+    };
   };
+  // Only a route that may fall back reads the entries: an attributed or oral route without its own
+  // F (the F fallback), and a drug's only route (the Tmax fallback).
+  const mayFallBackOnF = derivations.some(
+    (derived) =>
+      (derived.routeProvenance === 'attributed' || derived.route === 'oral') &&
+      !routesWithScopedF.has(derived.route),
+  );
   const fallbackPools: Record<FallbackParameter, FallbackPool> = {
-    tmax: fallbackPool('tmax', drugLevelTmax),
-    bioavailability: fallbackPool('bioavailability', drugLevelBioavailability),
+    tmax: await fallbackPool('tmax', drugLevelTmax, isSoleRoute),
+    bioavailability: await fallbackPool('bioavailability', drugLevelBioavailability, mayFallBackOnF),
   };
-  /** A fallback held to `formulation`: its value when it is that formulation's, else nothing. */
+  /**
+   * A fallback held to `formulation`. Nothing to fall back on — no cache value and no reading that
+   * could give one in any formulation — is the old "missing" path. Otherwise the route takes the
+   * cached value when it is of `formulation`, else the value recomputed from that formulation's
+   * entries; when there is none (or the formulation is ambiguous) the fallback is HELD OUT: there is
+   * curated evidence, it is another product's, and nothing may stand in for it.
+   */
   const heldFallback = (
     parameter: FallbackParameter,
     formulation: string | null,
   ): { values: SourcedValue[]; heldOut: boolean } => {
     const pool = fallbackPools[parameter];
-    if (pool.cached.length === 0) return { values: [], heldOut: false };
+    if (pool.keys.length === 0) return { values: [], heldOut: false };
+    if (formulation === null) return { values: [], heldOut: true };
     // Pooled from this formulation already: the cached value, exactly as before.
-    if (formulation !== null && pool.own === formulation) return { values: pool.cached, heldOut: false };
-    if (formulation === null || pool.entries === null) return { values: [], heldOut: true };
+    if (pool.cached.length > 0 && pool.cachedFormulation === formulation) {
+      return { values: pool.cached, heldOut: false };
+    }
     const summary = aggregateEntries(pool.entries, { ...pool.ctx, pooledFormulationKey: formulation });
     if (!summary || summary.representative === null) return { values: [], heldOut: true };
     return {

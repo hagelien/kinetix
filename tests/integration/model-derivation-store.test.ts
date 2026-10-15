@@ -2000,6 +2000,92 @@ describe('#12 — the drug-level values a route falls back on are held to its fo
     expect((await readLiveDerivedModel('ir-route-mixed-drug-f')).status).toBe('assembled');
   });
 
+  const MONTHLY_DEPOT: FormulationScope = { ...WEEKLY_DEPOT, doseIntervalHours: '720' };
+
+  /** The drug-level cache row for `parameter`, if any. */
+  async function cachedValue(drugId: number, parameter: string): Promise<unknown> {
+    const [row] = await db
+      .select({ value: drugParameters.value })
+      .from(drugParameters)
+      .where(and(eq(drugParameters.drugId, drugId), eq(drugParameters.parameter, parameter)));
+    return row?.value ?? null;
+  }
+
+  it('takes the weekly drug-level F for a weekly route even when the drug-level cache is empty', async () => {
+    const { drugId, userId } = await seedMolecule('weekly-route-two-depot-f');
+    await insertAxis(drugId, userId, 'absorptionModel', 'first-order', 'oral', WEEKLY_DEPOT);
+    await insertNumeric(drugId, userId, 'ka', 'oral', { low: 0.02, high: 0.04, median: 0.03, unit: '1/h', scope: WEEKLY_DEPOT });
+    // Weekly and monthly readings with no conventional one: the drug-level pool has no value.
+    await insertNumeric(drugId, userId, 'bioavailability', null, { low: 0.9, high: 0.9, median: 0.9, unit: 'fraction', scope: WEEKLY_DEPOT });
+    await insertNumeric(drugId, userId, 'bioavailability', null, { low: 0.8, high: 0.8, median: 0.8, unit: 'fraction', scope: MONTHLY_DEPOT });
+    await recompute(drugId, userId, 'bioavailability');
+    expect(await cachedValue(drugId, 'bioavailability')).toBeNull();
+
+    const [oral] = await readDrugRouteAssemblyInputs(drugId);
+    expect(oral!.values.bioavailability).toBe(0.9);
+    expect(oral!.defaultedParameters ?? []).not.toContain('bioavailability');
+  });
+
+  it('solves ka from the weekly drug-level Tmax for a weekly route even when the cache is empty', async () => {
+    const { drugId, userId } = await seedMolecule('weekly-route-two-depot-tmax');
+    await insertAxis(drugId, userId, 'absorptionModel', 'first-order', 'oral', WEEKLY_DEPOT);
+    await insertNumeric(drugId, userId, 'bioavailability', 'oral', { low: 0.9, high: 0.9, median: 0.9, unit: 'fraction', scope: WEEKLY_DEPOT });
+    // Values chosen inside the inferable regime (t½ = 4 h); what matters is which one is read.
+    await insertNumeric(drugId, userId, 'tmax', null, { low: 1, high: 1, median: 1, unit: 'h', scope: WEEKLY_DEPOT });
+    await insertNumeric(drugId, userId, 'tmax', null, { low: 2, high: 2, median: 2, unit: 'h', scope: MONTHLY_DEPOT });
+    await recompute(drugId, userId, 'tmax');
+    expect(await cachedValue(drugId, 'tmax')).toBeNull();
+
+    const [oral] = await readDrugRouteAssemblyInputs(drugId);
+    expect(oral!.inferredParameters).toEqual(['ka']);
+    const ke = Math.LN2 / 4;
+    const ka = oral!.values.ka!;
+    expect(Math.log(ka / ke) / (ka - ke)).toBeCloseTo(1, 8);
+  });
+
+  it('gives a route matching none of the stated drug-level formulations no F, no cautious F and no Tmax', async () => {
+    const { drugId, userId } = await seedMolecule('ir-route-two-depot-fallbacks');
+    // The route is immediate release (its declaration) and has no F, ka or Tmax of its own.
+    await insertAxis(drugId, userId, 'absorptionModel', 'first-order', 'oral', IR);
+    await insertNumeric(drugId, userId, 'bioavailability', null, { low: 0.9, high: 0.9, median: 0.9, unit: 'fraction', scope: WEEKLY_DEPOT });
+    await insertNumeric(drugId, userId, 'bioavailability', null, { low: 0.8, high: 0.8, median: 0.8, unit: 'fraction', scope: MONTHLY_DEPOT });
+    await insertNumeric(drugId, userId, 'tmax', null, { low: 1, high: 1, median: 1, unit: 'h', scope: WEEKLY_DEPOT });
+    await insertNumeric(drugId, userId, 'tmax', null, { low: 2, high: 2, median: 2, unit: 'h', scope: MONTHLY_DEPOT });
+    await recompute(drugId, userId, 'bioavailability');
+    await recompute(drugId, userId, 'tmax');
+
+    const [oral] = await readDrugRouteAssemblyInputs(drugId);
+    expect(oral!.values.bioavailability).toBeUndefined();
+    expect(oral!.defaultedParameters ?? []).not.toContain('bioavailability');
+    expect(oral!.values.ka).toBeUndefined();
+    expect(oral!.inferredParameters).toBeUndefined();
+  });
+
+  it('reads the route-null entries behind a hand-authored drug-level value too', async () => {
+    const { drugId, userId } = await seedMolecule('weekly-route-authored-f');
+    await insertAxis(drugId, userId, 'absorptionModel', 'first-order', 'oral', WEEKLY_DEPOT);
+    await insertNumeric(drugId, userId, 'ka', 'oral', { low: 0.02, high: 0.04, median: 0.03, unit: '1/h', scope: WEEKLY_DEPOT });
+    // A hand-authored F (no formulation) beside a weekly reading never recomputed into the cache.
+    await setDrugLevelParameter(drugId, userId, 'bioavailability', { median: 0.5, unit: 'fraction' });
+    await insertNumeric(drugId, userId, 'bioavailability', null, { low: 0.9, high: 0.9, median: 0.9, unit: 'fraction', scope: WEEKLY_DEPOT });
+
+    const [oral] = await readDrugRouteAssemblyInputs(drugId);
+    expect(oral!.values.bioavailability).toBe(0.9);
+  });
+
+  it('does not let a drug-level F that does not exist outvote an immediate-release Tmax', async () => {
+    const { drugId, userId } = await seedMolecule('attributed-ir-tmax-only');
+    // The attributed route rests on an immediate-release Tmax alone: no F reading anywhere.
+    await insertNumeric(drugId, userId, 'tmax', null, { low: 0.5, high: 1.5, median: 1, unit: 'h', scope: IR });
+    await recompute(drugId, userId, 'tmax');
+
+    const [oral] = await readDrugRouteAssemblyInputs(drugId);
+    expect(oral!.routeProvenance).toBe('attributed');
+    // The joint choice is the Tmax's own formulation; the missing F takes the cautious default.
+    expect(oral!.inferredParameters).toEqual(['ka']);
+    expect(oral!.defaultedParameters).toEqual(['bioavailability']);
+  });
+
   it('still runs an attributed route whose drug-level readings state no formulation, as before', async () => {
     const { drugId, userId } = await seedMolecule('attributed-unstated');
     await insertNumeric(drugId, userId, 'bioavailability', null, { low: 0.6, high: 0.8, median: 0.7, unit: 'fraction' });

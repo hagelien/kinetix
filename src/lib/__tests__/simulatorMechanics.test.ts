@@ -607,7 +607,18 @@ describe('mechanics document — one formulation per route (§5)', () => {
   it('holds the drug-level values a route falls back on to the same formulation, as §5 states', () => {
     expect(doc).toContain('**The drug-level values a route falls back\n  on are held to the same formulation.**');
     expect(flat).toContain('A modified-release F and an immediate-release Tmax therefore never meet in one curve.');
-    expect(flat).toContain('the cautious F does not take its place either');
+    expect(flat).toContain('In that case the cautious F does not take its place');
+    expect(flat).toContain("These readings are used even when the drug's own summary shows no value.");
+    // A weekly and a monthly reading: the drug-level summary has no value…
+    const weeklyF = { ...reading(0.9, 'modified', 168), unit: 'fraction' };
+    const monthlyF = { ...reading(0.8, 'modified', 720), unit: 'fraction' };
+    const fCtxAlone = { targetUnit: 'fraction', matrixRelevant: false };
+    expect(aggregateEntries([weeklyF, monthlyF], fCtxAlone)?.representative).toBeNull();
+    // …but held to a weekly route's formulation, the weekly reading is there to take.
+    expect(
+      aggregateEntries([weeklyF, monthlyF], { ...fCtxAlone, pooledFormulationKey: 'modified|168' })
+        ?.representative,
+    ).toBe(0.9);
     expect(flat).not.toContain('within their own pool');
     // An attributed route: one choice over the drug-level F and Tmax readings together.
     const tmaxCtx = { targetUnit: 'h', matrixRelevant: false };
