@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { DrugPanel } from './DrugPanel';
 import { useSimulatorStore } from '@/stores/simulatorStore';
 import { useAppStore } from '@/stores/appStore';
@@ -11,6 +11,19 @@ vi.mock('react-i18next', () => ({
     t: (key: string) => key,
     i18n: { language: 'en' },
   }),
+}));
+
+const liveModel = vi.hoisted(() => ({ loaded: false }));
+
+vi.mock('@/lib/liveDerivedModels', () => ({
+  refreshLiveDerivedModel: vi.fn(async () => {
+    liveModel.loaded = true;
+  }),
+}));
+
+vi.mock('@/lib/modelingRun', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/modelingRun')>()),
+  offeredDoseRoutes: () => (liveModel.loaded ? ['subcutaneous'] : ['oral']),
 }));
 
 const component: DrugComponent = {
@@ -405,5 +418,21 @@ describe('DrugPanel advanced parameter overrides', () => {
     expect(
       screen.queryByText('simulator.events.bioavailability'),
     ).toBeNull();
+  });
+
+  it('builds the dose picker from the live derived model, not the committed snapshot (#292)', async () => {
+    liveModel.loaded = false;
+    renderPanel(
+      baseConfig({ drugId: '123', drugName: 'Diazepam', engine: 'pk-montecarlo' }),
+      { ...nonEthanolComponent, _slug: 'diazepam' } as DrugComponent,
+    );
+
+    // Once the live model has loaded, a new dose lands on its route, not the legacy one.
+    await waitFor(() => expect(liveModel.loaded).toBe(true));
+    fireEvent.click(await screen.findByText('simulator.events.addDose'));
+
+    expect(useSimulatorStore.getState().drugs[0]!.events[0]).toMatchObject({
+      route: 'subcutaneous',
+    });
   });
 });
