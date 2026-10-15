@@ -23,7 +23,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { modeledSimulatorRoutes, routeIdFor } from '@/lib/forwardCoreAdapter';
-import { LIVE_MODEL_TIMEOUT_MS } from '@/lib/liveDerivedModels';
+import { LIVE_MODEL_TIMEOUT_MS, LIVE_MODEL_TTL_MS } from '@/lib/liveDerivedModels';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
@@ -269,6 +269,11 @@ describe('mechanics document — the refusals it promises', () => {
     );
     // The wait the document names is the live request's own timeout.
     expect(LIVE_MODEL_TIMEOUT_MS).toBe(5_000);
+    // A failure is trusted as long as an answer, so the run cannot retry past the picker.
+    expect(doc.replace(/\s+/g, ' ')).toContain(
+      'its outcome — an answer or a failure — is trusted for a minute',
+    );
+    expect(LIVE_MODEL_TTL_MS).toBe(60_000);
   });
 
   it('refuses a subject below the minimum weight rather than extrapolating (§8)', () => {

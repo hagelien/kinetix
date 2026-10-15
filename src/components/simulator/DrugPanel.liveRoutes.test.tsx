@@ -76,14 +76,15 @@ async function load() {
   vi.stubEnv('VITE_DERIVED_REGISTRY_ENABLED', 'true');
   const { DrugPanel } = await import('./DrugPanel');
   const { useSimulatorStore } = await import('@/stores/simulatorStore');
-  const { offeredDoseRoutes } = await import('@/lib/modelingRun');
+  const { offeredDoseRoutes, runComponent } = await import('@/lib/modelingRun');
+  const live = await import('@/lib/liveDerivedModels');
   useSimulatorStore.setState({
     drugs: [config],
     results: {},
     runningDrugIds: new Set(),
     isRunning: false,
   });
-  return { DrugPanel, useSimulatorStore, offeredDoseRoutes };
+  return { DrugPanel, useSimulatorStore, offeredDoseRoutes, runComponent, live };
 }
 
 beforeEach(() => {
@@ -98,7 +99,9 @@ afterEach(() => {
   vi.resetModules();
 });
 
-describe('DrugPanel dose-route picker under the live derived tier (#292)', () => {
+// Each test imports the panel's module graph afresh (the live overlay and fetch cache are module
+// state), which alone can take seconds on a loaded runner.
+describe('DrugPanel dose-route picker under the live derived tier (#292)', { timeout: 30_000 }, () => {
   it('loads the live model before a dose can be added, and starts it on a route that model declares', async () => {
     let respond!: (res: Response) => void;
     const fetchImpl = vi.fn(
@@ -148,6 +151,72 @@ describe('DrugPanel dose-route picker under the live derived tier (#292)', () =>
     );
     const addDose = screen.getByRole('button', { name: 'simulator.events.addDose' });
     await waitFor(() => expect(addDose).not.toBeDisabled());
+  });
+
+  it('a run after the panel’s failed request does not retry into a model the picker never offered', async () => {
+    // The panel's request fails; the server is back by the time the user runs, and now builds an
+    // SC-only model. Retrying inside the window would refuse the dose the picker just allowed.
+    let serverUp = false;
+    const fetchImpl = vi.fn(async (_url: string) =>
+      serverUp
+        ? new Response(JSON.stringify(subcutaneousOnlyAnswer()), { status: 200 })
+        : new Response(JSON.stringify({ error: 'down' }), { status: 503 }),
+    );
+    vi.stubGlobal('fetch', fetchImpl);
+    const { DrugPanel, useSimulatorStore, offeredDoseRoutes, runComponent } = await load();
+    render(
+      <DrugPanel config={config} drugComponent={drug} timeFormat="hours" referenceTime="00:00" />,
+    );
+    const addDose = screen.getByRole('button', { name: 'simulator.events.addDose' });
+    await waitFor(() => expect(addDose).not.toBeDisabled());
+    fireEvent.click(addDose);
+    const withDose = useSimulatorStore.getState().drugs[0]!;
+    const route = (withDose.events[0] as { route: string }).route;
+    expect(offeredDoseRoutes(withDose, drug)).toContain(route);
+
+    serverUp = true;
+    const runMonteCarlo = vi.fn(async () => {
+      throw new Error('not under test');
+    });
+    await runComponent(withDose, drug, { runMonteCarlo }).catch(() => undefined);
+    // The run trusted the panel's failure for the window: one request in all, and the dose's route
+    // is still one the model the run resolved declares.
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(offeredDoseRoutes(withDose, drug)).toContain(route);
+  });
+
+  it('redraws the picker when a later refresh changes the model', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify(subcutaneousOnlyAnswer()), { status: 200 })),
+    );
+    const { DrugPanel, live } = await load();
+    const dosed: DrugSimConfig = {
+      ...config,
+      events: [{ id: 'd1', type: 'dose', t: 0, amount: 10, unit: 'mg', route: 'subcutaneous' }],
+    };
+    render(
+      <DrugPanel config={dosed} drugComponent={drug} timeFormat="hours" referenceTime="00:00" />,
+    );
+    await waitFor(() =>
+      expect(screen.getByTitle('parameters.route.subcutaneous')).toBeInTheDocument(),
+    );
+    expect(screen.queryByTitle('simulator.routes.notModeled')).toBeNull();
+
+    // A run after the window gets a model that no longer declares subcutaneous.
+    const oralOnly = subcutaneousOnlyAnswer();
+    oralOnly.definition.routes = { oral: oralOnly.definition.routes.subcutaneous };
+    oralOnly.grade.routes = oralOnly.grade.routes.map((r: { route: string }) => ({ ...r, route: 'oral' }));
+    await act(async () => {
+      await live.refreshLiveDerivedModel(
+        SLUG,
+        vi.fn(async () => new Response(JSON.stringify(oralOnly), { status: 200 })) as unknown as typeof fetch,
+        Date.now() + live.LIVE_MODEL_TTL_MS,
+      );
+    });
+    // The picker now offers what the run resolves, and marks the dose's route as undeclared.
+    expect(screen.getByTitle('simulator.routes.notModeled')).toBeInTheDocument();
+    expect(screen.getByTitle('parameters.route.oral')).toBeInTheDocument();
   });
 
   it('does not hold back a dose for an engine that runs no registry model', async () => {

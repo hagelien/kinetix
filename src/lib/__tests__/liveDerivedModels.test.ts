@@ -59,12 +59,12 @@ describe('refreshLiveDerivedModel', () => {
   });
 
   it('keeps the committed model when the server cannot answer', async () => {
-    const { refreshLiveDerivedModel, core } = await load();
+    const { refreshLiveDerivedModel, LIVE_MODEL_TTL_MS, core } = await load();
     const before = core.resolveModel('alprazolam');
     await refreshLiveDerivedModel('alprazolam', answer({ error: 'down' }, 503), 0);
     await refreshLiveDerivedModel('alprazolam', vi.fn(async () => {
       throw new TypeError('offline');
-    }) as unknown as typeof fetch, 1);
+    }) as unknown as typeof fetch, LIVE_MODEL_TTL_MS);
     expect(core.resolveModel('alprazolam')).toEqual(before);
     expect(core.liveDerivedEntry('alprazolam')).toBeUndefined();
   });
@@ -132,7 +132,7 @@ describe('refreshLiveDerivedModel', () => {
     expect(core.liveDerivedEntry('diazepam')).toBeUndefined();
   });
 
-  it('asks again only once the answer has aged out, and retries after a failure', async () => {
+  it('asks again only once the answer, or a failure, has aged out', async () => {
     const { refreshLiveDerivedModel, LIVE_MODEL_TTL_MS } = await load();
     const ok = answer({ status: 'not-modelable', entry: {} });
     await refreshLiveDerivedModel('alprazolam', ok, 0);
@@ -141,9 +141,13 @@ describe('refreshLiveDerivedModel', () => {
     await refreshLiveDerivedModel('alprazolam', ok, LIVE_MODEL_TTL_MS);
     expect(ok).toHaveBeenCalledTimes(2);
 
+    // A failure is trusted for the same window (#292): asking again inside it could install a
+    // model whose routes the picker, built on the failure's fallback, never offered.
     const failing = answer({}, 500);
     await refreshLiveDerivedModel('diazepam', failing, 0);
-    await refreshLiveDerivedModel('diazepam', failing, 1);
+    await refreshLiveDerivedModel('diazepam', failing, LIVE_MODEL_TTL_MS - 1);
+    expect(failing).toHaveBeenCalledTimes(1);
+    await refreshLiveDerivedModel('diazepam', failing, LIVE_MODEL_TTL_MS);
     expect(failing).toHaveBeenCalledTimes(2);
   });
 
@@ -226,5 +230,65 @@ describe('the picker’s view of the live answer (#292)', () => {
     vi.unstubAllEnvs();
     const off = await load(false);
     expect(off.awaitingLiveDerivedModel('alprazolam')).toBe(false);
+  });
+});
+
+/**
+ * #292 review — every way the panel's request and the run's can interleave must leave the picker
+ * and the run on the same model. The panel asks on mount; the run asks again before it resolves.
+ */
+describe('picker and run interleavings (#292)', () => {
+  it('a run after the panel’s failed request resolves the same fallback, without retrying', async () => {
+    const { refreshLiveDerivedModel, awaitingLiveDerivedModel, LIVE_MODEL_TTL_MS, core } = await load();
+    const committed = core.resolveModel('alprazolam');
+    // The panel's request fails: the picker stops waiting and is built on the committed model.
+    await refreshLiveDerivedModel('alprazolam', answer({ error: 'down' }, 503), 0);
+    expect(awaitingLiveDerivedModel('alprazolam')).toBe(false);
+
+    // The run inside the window would get a changed model if it asked; it must not ask.
+    const { definition, grade } = committedAlprazolam();
+    definition.routes = { subcutaneous: definition.routes.oral };
+    const changed = answer({ status: 'assembled', definition, grade });
+    await refreshLiveDerivedModel('alprazolam', changed, LIVE_MODEL_TTL_MS - 1);
+    expect(changed).not.toHaveBeenCalled();
+    expect(core.resolveModel('alprazolam')).toEqual(committed);
+  });
+
+  it('a run started while the panel’s request is in flight joins it rather than asking again', async () => {
+    const { refreshLiveDerivedModel, awaitingLiveDerivedModel, core } = await load();
+    const { definition, grade } = committedAlprazolam();
+    definition.routes.oral.eliminationHalfLifeHours = { kind: 'fixed', value: 30 };
+    let respond!: (res: Response) => void;
+    const slow = vi.fn(
+      (_url: string) =>
+        new Promise<Response>((resolve) => {
+          respond = resolve;
+        }),
+    ) as unknown as typeof fetch;
+    const panel = refreshLiveDerivedModel('alprazolam', slow, 0);
+    const other = answer({ error: 'down' }, 503);
+    const run = refreshLiveDerivedModel('alprazolam', other, 1);
+    expect(awaitingLiveDerivedModel('alprazolam')).toBe(true);
+    respond(new Response(JSON.stringify({ status: 'assembled', definition, grade }), { status: 200 }));
+    await Promise.all([panel, run]);
+    expect(slow).toHaveBeenCalledTimes(1);
+    expect(other).not.toHaveBeenCalled();
+    expect(core.liveDerivedEntry('alprazolam')?.definition?.routes.oral).toEqual(definition.routes.oral);
+  });
+
+  it('a later run whose answer changes the model tells the picker before the run resolves', async () => {
+    const { refreshLiveDerivedModel, subscribeLiveDerivedModels, LIVE_MODEL_TTL_MS, core } = await load();
+    await refreshLiveDerivedModel('alprazolam', answer({ error: 'down' }, 503), 0);
+    const seen: (string[] | undefined)[] = [];
+    subscribeLiveDerivedModels(() => {
+      const model = core.resolveModel('alprazolam');
+      seen.push(model ? Object.keys(model.routes) : undefined);
+    });
+
+    const { definition, grade } = committedAlprazolam();
+    definition.routes = { subcutaneous: definition.routes.oral };
+    await refreshLiveDerivedModel('alprazolam', answer({ status: 'assembled', definition, grade }), LIVE_MODEL_TTL_MS);
+    // The picker heard of the new model, and read it, before the run went on to resolve it.
+    expect(seen).toEqual([['subcutaneous']]);
   });
 });

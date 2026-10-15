@@ -141,9 +141,13 @@ With the derived tier built live (§2), the panel asks for the drug's live model
 the drug is shown, not only when it is run, and redraws the picker whenever that answer, or
 a later one a run fetches, changes the model. A new dose cannot be added until the first
 answer has arrived or the request has failed (at most five seconds), so it starts on a route
-of the model the run will resolve, not of the committed artifact that answer replaces; if
-the request fails, the picker and the run fall back to the same model, and the picker is
-redrawn if a later request changes it. A dose already on an undeclared route (a saved case,
+of the model the run will resolve, not of the committed artifact that answer replaces. The
+panel and the run share one request, and its outcome — an answer or a failure — is trusted
+for a minute: a run in that minute resolves the same model the picker shows, and after a
+failed request it falls back to the same model rather than retrying into one whose routes
+the picker never offered. Once the minute has passed the run asks again, and an answer that
+changes the model redraws the picker before the run resolves it, so a dose on a route the
+new model lacks is then marked as described next. A dose already on an undeclared route (a saved case,
 or a drug or engine changed underneath it) is shown struck through, not as a choice, and the
 run refuses it as above until the route is replaced. Intranasal is offered under the simulator's name
 for it, *insufflation*. The KineLab and ethanol engines, which run no registry model, and a
