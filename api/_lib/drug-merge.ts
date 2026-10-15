@@ -40,7 +40,6 @@ import {
   drugMetabolites,
   drugParameterApplicability,
   drugParameterDiscussions,
-  drugParameterRevisions,
   drugParameters,
   drugReceptorTargets,
   drugs,
@@ -61,6 +60,11 @@ import {
   legacyCidMonographRefusal,
 } from './monograph-helpers.js';
 import { buildSearchKey } from './drugs-helpers.js';
+import {
+  planParameterBaselines,
+  recordDrugMergeEvent,
+  repointParameterRevisions,
+} from './drug-merge-lineage.js';
 import {
   recomputeSummariesForDrug,
   sourceQuoteComparisonKeySql,
@@ -2973,6 +2977,34 @@ export async function mergeDrugs(
     await db.update(drugs).set(nextUpdates).where(eq(drugs.id, winnerId));
   }
 
+  // 1a. Lineage (#29): before step 2 decides whose `drug_parameters` value
+  //     survives (and deletes the other), work out for each parameter which
+  //     revision the survivor's source_diff chain must continue from. Once
+  //     step 7 has interleaved both histories by id, the newest row can be the
+  //     side whose value was dropped; the merge event records the right one.
+  const [winnerParamRows, loserParamRows] = await Promise.all([
+    db.execute<{ parameter: string }>(
+      sql`SELECT parameter FROM drug_parameters WHERE drug_id = ${winnerId}`,
+    ),
+    db.execute<{ parameter: string }>(
+      sql`SELECT parameter FROM drug_parameters WHERE drug_id = ${loserId}`,
+    ),
+  ]);
+  const winnerValueParams = new Set(winnerParamRows.rows.map((r) => r.parameter));
+  const loserValueParams = new Set(loserParamRows.rows.map((r) => r.parameter));
+  // Mirrors `mergeParamKeyedTable`: a loser-only value moves, a value both
+  // hold follows the admin's resolution (winner by default), and anything
+  // else continues the survivor's own history.
+  const parameterBaselines = await planParameterBaselines(db, {
+    winnerId,
+    loserId,
+    survivingSide: (parameter) => {
+      if (!loserValueParams.has(parameter)) return 'winner';
+      if (!winnerValueParams.has(parameter)) return 'loser';
+      return resolutions[`parameter:${parameter}`] === 'loser' ? 'loser' : 'winner';
+    },
+  });
+
   // 2. Single-valued conflict tables.
   for (const spec of PARAM_KEYED_TABLES) {
     await mergeParamKeyedTable(db, spec, winnerId, loserId, resolutions);
@@ -3489,7 +3521,9 @@ export async function mergeDrugs(
           ${dk.eq('w', 'l')}
       )`);
   await db.update(parameterEntries).set({ drugId: winnerId }).where(eq(parameterEntries.drugId, loserId));
-  await db.update(drugParameterRevisions).set({ drugId: winnerId }).where(eq(drugParameterRevisions.drugId, loserId));
+  // Revisions keep their ids; which ones moved is recorded in the merge event
+  // (step 11c) so the survivor's history can still be told apart (#29).
+  const movedRevisionIds = await repointParameterRevisions(db, { winnerId, loserId });
   await db.update(drugParameterDiscussions).set({ drugId: winnerId }).where(eq(drugParameterDiscussions.drugId, loserId));
   await db.update(drugInteractions).set({ drugId: winnerId }).where(eq(drugInteractions.drugId, loserId));
   await db.update(parameterPriorityFlags).set({ drugId: winnerId }).where(eq(parameterPriorityFlags.drugId, loserId));
@@ -3528,9 +3562,11 @@ export async function mergeDrugs(
   //    the two sides are distinct drugs, so their id-keyed pages cannot be the
   //    same row.
   let loserMonographDeleted = false;
+  let repointedMonographPageId: number | null = null;
   if (loser.monograph && loser.monograph.pageId !== winner.monograph?.pageId) {
     const pageId = loser.monograph.pageId;
     if (!winner.monograph) {
+      repointedMonographPageId = pageId;
       // The survivor has no monograph of its own (only possible on a manual
       // winner override, since every drug is created with a stub). Keep the
       // loser's page by repointing it rather than deleting the only monograph in
@@ -3815,6 +3851,24 @@ export async function mergeDrugs(
       );
     }
   }
+
+  // 11c. The lineage record (#29): who the loser was, which revisions moved,
+  //      and the baselines from step 1a. Written before step 13, whose
+  //      recompute reads the baselines for its source_diff.
+  await recordDrugMergeEvent(db, {
+    survivorDrugId: winnerId,
+    loser: {
+      id: loserId,
+      slug: loser.slug,
+      pubchemCid: loser.pubchemCid,
+      names: loser.names,
+    },
+    parameterRevisionIds: movedRevisionIds,
+    parameterBaselines,
+    repointedMonographPageId,
+    mergedVia: 'admin',
+    mergedBy: actorUserId,
+  });
 
   // 12. Finally delete the loser drug row. Everything cascade-bound that we did
   //     not move goes with it; everything RESTRICT-bound was repointed above.
