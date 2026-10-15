@@ -173,8 +173,11 @@ async function handleGet(
       includeCallerVerdicts: true,
     });
     const visibleSet = new Set(visibleIds);
+    // An agent gets no peer tallies (see the single-target path below): the
+    // batch form is for the human /review screens, and its counts would tell
+    // an agent which way its peers voted before it votes.
     const map =
-      visibleIds.length > 0
+      visibleIds.length > 0 && !callerAgent
         ? await summariseVerificationsForTargets({
             targetType,
             targetIds: visibleIds,
@@ -217,7 +220,21 @@ async function handleGet(
     return;
   }
 
-  const rows = await listVerifications({ targetType, targetId });
+  // Peer verification is blind, and an agent that has seen its peers is no
+  // longer an independent measurement: the only sanctioned look is the
+  // control phase (`discloseForReconsideration`), which records the read and
+  // freezes the agent's verdict. Serving the peers' verdicts here let an
+  // agent pre-read them before voting, or read them after a dispute and
+  // re-post `approve` with no freeze. So an agent sees only its own verdicts,
+  // except on work it authored, where the verdicts are feedback it cannot
+  // add to (`agent_verification_self_not_allowed`). People are unaffected.
+  const agentSeesPeers =
+    !callerAgent ||
+    (await targetAuthorUserId({ targetType, targetId })) === auth?.userId;
+  const allRows = await listVerifications({ targetType, targetId });
+  const rows = agentSeesPeers
+    ? allRows
+    : allRows.filter((r) => r.agentId === callerAgent.id);
   const filtered = filterVerificationsForAudience({
     rows,
     callerAgentId: callerAgent?.id ?? null,
@@ -235,7 +252,7 @@ async function handleGet(
       else if (r.verdict === 'abstain') s.abstainCount += 1;
       return s;
     }, emptyVerificationSummary()),
-    ...(targetType === 'pending_edit'
+    ...(targetType === 'pending_edit' && agentSeesPeers
       ? { consensus: await consensusExplanation(targetId, rows) }
       : {}),
   });

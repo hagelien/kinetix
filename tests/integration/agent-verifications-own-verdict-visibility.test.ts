@@ -324,3 +324,100 @@ describe('agent-verifications GET: own-verdict visibility after decision (#1361)
     ).toBe(true);
   });
 });
+
+// Peer verification is blind: an agent may read its peers' verdicts only
+// through the control phase, which records the read and freezes its verdict.
+// The plain GET must not hand them over on a target the agent could verify.
+describe('agent-verifications GET: peer verdicts stay blind to other agents', () => {
+  async function seedAgent(slug: string, selfReviewEnabled = false) {
+    const userId = await seedUser(db, {
+      email: `${slug}@example.com`,
+      username: slug,
+      role: 'contributor',
+    });
+    const [row] = await db
+      .insert(agents)
+      .values({ userId, name: slug, slug, status: 'active', selfReviewEnabled })
+      .returning({ id: agents.id });
+    return { userId, agentId: row!.id };
+  }
+
+  async function seedOpenEditWithPeerApproval(submittedBy: number, peerAgentId: number) {
+    const [edit] = await db
+      .insert(pendingEdits)
+      .values({
+        editType: 'param_entry',
+        parameter: 'therapeuticConcentration',
+        proposedValue: { op: 'delete' },
+        status: 'pending',
+        submittedBy,
+      })
+      .returning({ id: pendingEdits.id });
+    await db.insert(agentVerifications).values({
+      agentId: peerAgentId,
+      targetType: 'pending_edit',
+      targetId: edit!.id,
+      verdict: 'approve',
+      rationaleMd: 'Peer rationale that must stay unseen.',
+      evidenceRefs: [],
+      isImplicit: false,
+    });
+    return edit!.id;
+  }
+
+  type Body = {
+    verifications: Array<{ agentId: number; verdict: string }>;
+    summary: { approveCount: number; disputeCount: number };
+    consensus?: unknown;
+  };
+
+  it("hides peers' verdicts and tallies from an agent that could verify the target", async () => {
+    const submitterId = await seedUser(db, { email: 's@example.com', username: 's' });
+    const peer = await seedAgent('peer-agent');
+    const verifier = await seedAgent('blind-agent');
+    const editId = await seedOpenEditWithPeerApproval(submitterId, peer.agentId);
+
+    const state = await getVerdicts(verifier.userId, editId);
+
+    expect(state.statusCode).toBeLessThan(300);
+    const body = JSON.parse(state.body) as Body;
+    expect(body.verifications).toEqual([]);
+    expect(body.summary.approveCount).toBe(0);
+    expect(body.consensus).toBeUndefined();
+    expect(state.body).not.toContain('Peer rationale');
+  });
+
+  it('shows the agent its own verdict but still not its peers', async () => {
+    const submitterId = await seedUser(db, { email: 's2@example.com', username: 's2' });
+    const peer = await seedAgent('peer-agent-2');
+    const verifier = await seedAgent('blind-agent-2');
+    const editId = await seedOpenEditWithPeerApproval(submitterId, peer.agentId);
+    await db.insert(agentVerifications).values({
+      agentId: verifier.agentId,
+      targetType: 'pending_edit',
+      targetId: editId,
+      verdict: 'dispute',
+      rationaleMd: 'My own objection.',
+      evidenceRefs: [],
+      isImplicit: false,
+    });
+
+    const body = JSON.parse((await getVerdicts(verifier.userId, editId)).body) as Body;
+
+    expect(body.verifications.map((v) => v.agentId)).toEqual([verifier.agentId]);
+    expect(body.summary).toMatchObject({ approveCount: 0, disputeCount: 1 });
+  });
+
+  // Only a self-review agent can read its own submission here at all; the
+  // verdicts on it are feedback on its own work.
+  it("shows every verdict on a self-review agent's own submission", async () => {
+    const author = await seedAgent('author-agent', true);
+    const peer = await seedAgent('peer-agent-3');
+    const editId = await seedOpenEditWithPeerApproval(author.userId, peer.agentId);
+
+    const body = JSON.parse((await getVerdicts(author.userId, editId)).body) as Body;
+
+    expect(body.verifications.map((v) => v.agentId)).toEqual([peer.agentId]);
+    expect(body.summary.approveCount).toBe(1);
+  });
+});

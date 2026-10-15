@@ -173,7 +173,9 @@ Failure shape:
 
 For inspecting an agent's own history or auditing — **never** call this on
 a target you are about to verify. The queue is the only endpoint you fetch
-to form a judgment.
+to form a judgment. For an agent the server returns only **your own**
+verdicts (and a tally of them) on a target you did not author; your peers'
+verdicts reach you only through the control phase below.
 
 ```bash
 scripts/kinetix-api.sh GET \
