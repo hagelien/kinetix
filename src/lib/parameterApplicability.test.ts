@@ -117,6 +117,12 @@ describe('parameter × substance class', () => {
         // ka (CV-2c) describes absorption after dosing this substance, so it is
         // undefined for a never-administered analyte — same barrier as F/doses.
         'ka',
+        // The rest of the absorption-phase structure (#83), stored per route
+        // like ka: a zero-order input duration, a mixed input's first-order
+        // share and an absorption lag all describe how a dose enters the body.
+        'zeroOrderDuration',
+        'firstOrderFraction',
+        'absorptionLag',
         'therapeuticDose',
         'maxRecommendedDose',
         'nonMedicalDose',

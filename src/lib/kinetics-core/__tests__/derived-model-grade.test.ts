@@ -508,4 +508,52 @@ describe('uncertainty semantics from the reported spreads', () => {
       expect(assessment?.reason).not.toContain('eliminationHalfLife');
     });
   });
+
+  describe('a two-compartment model', () => {
+    const twoCompRoute = routeGrade({
+      structure: { disposition: 'two-compartment', elimination: 'first-order', absorption: 'first-order' },
+      family: 'two-compartment-first-order',
+    });
+    const twoCompWith = (k21: ReturnType<typeof fixed>) =>
+      derivedDefinition({
+        routes: {
+          oral: {
+            family: 'two-compartment-first-order',
+            kaPerHour: triangular(0.5, 1, 2),
+            eliminationHalfLifeHours: triangular(8, 10, 14),
+            k12PerHour: triangular(0.3, 0.5, 0.7),
+            k21PerHour: k21,
+            vdLitersPerKg: triangular(0.1, 0.2, 0.3),
+            bioavailability: triangular(0.6, 0.8, 0.9),
+          },
+        },
+      });
+
+    it('judges k12, k21 and the central volume, which shape its curve', () => {
+      const assessment = uncertaintyOf(twoCompWith(fixed(0.3)), twoCompRoute);
+      expect(assessment?.grade).toBe('D');
+      expect(assessment?.reason).toContain('k21 has no reported spread');
+      const ranged = uncertaintyOf(twoCompWith(triangular(0.2, 0.3, 0.4)), twoCompRoute);
+      expect(ranged?.grade).toBe('C');
+      expect(ranged?.reason).toContain('centralVolume');
+    });
+  });
+
+  it('judges a stored lag, which moves the curve, and ignores one that is not stored', () => {
+    const lagged = (lag: ReturnType<typeof fixed>) =>
+      derivedDefinition({
+        routes: {
+          oral: {
+            family: 'one-compartment-first-order',
+            kaPerHour: triangular(0.5, 1, 2),
+            eliminationHalfLifeHours: triangular(2, 4, 9),
+            vdLitersPerKg: triangular(0.5, 1, 2),
+            bioavailability: triangular(0.6, 0.8, 0.9),
+            absorptionLagHours: lag,
+          },
+        },
+      });
+    expect(uncertaintyOf(lagged(fixed(0.5)))?.reason).toContain('absorptionLag has no reported spread');
+    expect(uncertaintyOf(lagged(triangular(0, 0.5, 1)))?.grade).toBe('C');
+  });
 });

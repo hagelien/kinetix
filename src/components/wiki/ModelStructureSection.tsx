@@ -18,7 +18,17 @@ import {
 import { ROUTE_LABEL_KEYS } from '@/lib/routeLabels';
 import type { RouteId } from '@/lib/kinetics-core';
 
-const ROUTE_VALUE_PARAMETERS = ['ka'] as const satisfies readonly DrugParameterId[];
+/** The route-scoped numbers a declared absorption shape runs on: the first-order rate, the
+ *  zero-order duration and mixed-input split, and the optional lag. */
+const ROUTE_VALUE_PARAMETERS = [
+  'ka',
+  'firstOrderFraction',
+  'zeroOrderDuration',
+  'absorptionLag',
+] as const satisfies readonly DrugParameterId[];
+type RouteValueParameter = (typeof ROUTE_VALUE_PARAMETERS)[number];
+const isRouteValueParameter = (id: DrugParameterId | null): id is RouteValueParameter =>
+  (ROUTE_VALUE_PARAMETERS as readonly (DrugParameterId | null)[]).includes(id);
 
 /**
  * The drug's PK model structure (CV-1b): the disposition, elimination and
@@ -337,23 +347,30 @@ export function ModelStructureSection({
                 {t('modelStructure.routeValuesHint')}
               </p>
             </div>
-            {addingAxis !== 'ka' && (
+          </div>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {ROUTE_VALUE_PARAMETERS.map((parameter) => (
               <Button
-                variant="ghost"
+                key={parameter}
+                variant="outline"
                 size="sm"
-                className="h-5 w-5 p-0"
+                className="h-6 gap-1 px-2 text-[11px]"
                 title={t('modelStructure.addRouteValue')}
-                aria-label={t('modelStructure.addRouteValue')}
-                onClick={() => setAddingAxis('ka')}
+                disabled={addingAxis === parameter}
+                onClick={() => setAddingAxis(parameter)}
               >
                 <Plus className="h-3 w-3" />
+                {t(getParameterLongLabelKey(parameter), {
+                  defaultValue: DRUG_PARAMETERS[parameter].longLabel,
+                })}
               </Button>
-            )}
+            ))}
           </div>
-          {addingAxis === 'ka' && (
+          {isRouteValueParameter(addingAxis) && (
             <ParameterEntryEditor
+              key={addingAxis}
               drugId={drugId}
-              parameter="ka"
+              parameter={addingAxis}
               isAdmin={isAdmin}
               onSaved={() => {
                 setAddingAxis(null);

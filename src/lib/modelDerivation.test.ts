@@ -253,8 +253,8 @@ describe('CV-2c — resolveDrugModelsByRoute per-route resolution', () => {
   });
 
   it('offers a one-compartment fallback for an asserted two-compartment disposition', () => {
-    // The catalog cannot supply k12/k21/central volume, so without a fallback a drug that gains a
-    // cited two-compartment fact would lose its curve. The declared derivation is still primary.
+    // Until k12/k21/central volume are curated, a drug that gains a cited two-compartment fact
+    // would lose its curve without a fallback. The declared derivation is still primary.
     const [model] = resolveDrugModelsByRoute({
       dispositionModels: ['two-compartment'],
       eliminationModels: [],
@@ -762,7 +762,7 @@ describe('applyKaInference — ka solved from a route Tmax', () => {
     expect(out.inferredParameters).toEqual([]);
   });
 
-  it('does infer for a mixed input, which has a parallel first-order component', () => {
+  it('declines for a mixed input, whose peak the zero-order pathway moves too', () => {
     const mixed = deriveDrugModel({
       declaration: {
         disposition: 'one-compartment',
@@ -772,7 +772,41 @@ describe('applyKaInference — ka solved from a route Tmax', () => {
       presentParameters: ['halfLife', 'volumeOfDistribution', 'bioavailability'],
     });
     const out = applyKaInference(mixed, { ...VALUES }, 1);
+    expect(out.inferredParameters).toEqual([]);
+    expect(out.values.ka).toBeUndefined();
+    expect(out.declined).toMatch(/mixed input/);
+  });
+
+  it('declines for a two-compartment disposition, whose peak the distribution rates move too', () => {
+    const twoComp = deriveDrugModel({
+      declaration: {
+        disposition: 'two-compartment',
+        elimination: 'first-order',
+        absorption: 'first-order',
+      },
+      presentParameters: ['halfLife', 'k12', 'k21', 'centralVolume', 'bioavailability'],
+    });
+    expect(twoComp.family).toBe('two-compartment-first-order');
+    const out = applyKaInference(twoComp, { ...VALUES, k12: 0.5, k21: 0.3, centralVolume: 0.2 }, 1);
+    expect(out.values.ka).toBeUndefined();
+    expect(out.declined).toMatch(/two-compartment/);
+  });
+
+  it('solves Tmax − tlag under a stored absorption lag, so the lagged model peaks at the stored Tmax', () => {
+    const out = applyKaInference(oral(), { ...VALUES, absorptionLag: 0.5 }, 1.5);
     expect(out.inferredParameters).toEqual(['ka']);
+    const ke = Math.LN2 / 4;
+    const ka = out.values.ka!;
+    // The lagged model's time of peak: tlag + ln(ka/ke)/(ka−ke).
+    expect(0.5 + Math.log(ka / ke) / (ka - ke)).toBeCloseTo(1.5, 8);
+    // The same rate an unlagged route with Tmax 1 h gets.
+    expect(ka).toBeCloseTo(applyKaInference(oral(), { ...VALUES }, 1).values.ka!, 12);
+  });
+
+  it('declines when the stored Tmax is not later than the stored lag', () => {
+    const out = applyKaInference(oral(), { ...VALUES, absorptionLag: 1 }, 1);
+    expect(out.values.ka).toBeUndefined();
+    expect(out.declined).toMatch(/lag/);
   });
 
   it('declines under saturable elimination, where the time of peak depends on the dose', () => {
@@ -878,4 +912,112 @@ describe('inferredKaRange', () => {
   it('gives no range for a Tmax with no reported spread', () => {
     expect(inferredKaRange({ parameter: 'tmax', value: 1, unit: 'h' }, 10)).toBeUndefined();
   });
+
+  it('subtracts a stored lag from both ends, as the central inference does', () => {
+    const lagged = inferredKaRange(tmax(1, 2.5), 10, 0.5)!;
+    const unlagged = inferredKaRange(tmax(0.5, 2), 10)!;
+    expect(lagged.low).toBeCloseTo(unlagged.low, 12);
+    expect(lagged.high).toBeCloseTo(unlagged.high, 12);
+    // The shortest Tmax must clear the lag, or the spread would invent a bound.
+    expect(inferredKaRange(tmax(0.4, 2), 10, 0.5)).toBeUndefined();
+  });
+});
+
+describe('#83 — catalog homes for the structural roles', () => {
+  const DRUG_LEVEL: DrugParameterId[] = ['halfLife', 'volumeOfDistribution'];
+
+  it('maps each structural parameter onto its own role, never V1 onto the generic Vd', () => {
+    expect(parameterRoleFor('k12')).toBe('k12');
+    expect(parameterRoleFor('k21')).toBe('k21');
+    expect(parameterRoleFor('centralVolume')).toBe('centralVolume');
+    expect(parameterRoleFor('volumeOfDistribution')).toBe('vd');
+    expect(parameterRoleFor('firstOrderFraction')).toBe('firstOrderFraction');
+    expect(parameterRoleFor('zeroOrderDuration')).toBe('zeroOrderDuration');
+    expect(parameterRoleFor('absorptionLag')).toBe('absorptionLag');
+    const values = toAssemblyValues([
+      { parameter: 'volumeOfDistribution', value: 4, unit: 'L/kg' },
+      { parameter: 'centralVolume', value: 0.3, unit: 'L/kg' },
+      { parameter: 'k12', value: 0.5, unit: '1/h' },
+      { parameter: 'k21', value: 0.2, unit: '1/h' },
+      { parameter: 'zeroOrderDuration', value: 6, unit: 'h' },
+      { parameter: 'firstOrderFraction', value: 0.4, unit: 'fraction' },
+      { parameter: 'absorptionLag', value: 0, unit: 'h' },
+    ]);
+    expect(values).toEqual({
+      vd: 4,
+      centralVolume: 0.3,
+      k12: 0.5,
+      k21: 0.2,
+      zeroOrderDuration: 6,
+      firstOrderFraction: 0.4,
+      absorptionLag: 0,
+    });
+  });
+
+  it('reads the absorption-phase parameters per route', () => {
+    for (const id of ['firstOrderFraction', 'zeroOrderDuration', 'absorptionLag'] as const) {
+      expect(isRouteAssemblyParameter(id)).toBe(true);
+    }
+    for (const id of ['k12', 'k21', 'centralVolume'] as const) {
+      expect(isRouteAssemblyParameter(id)).toBe(false);
+    }
+  });
+
+  it('completes a declared two-compartment route from k12, k21 and V1', () => {
+    const [model] = resolveDrugModelsByRoute({
+      dispositionModels: ['two-compartment'],
+      eliminationModels: ['first-order'],
+      routes: { oral: { absorption: 'first-order', presentParameters: ['bioavailability', 'ka'] } },
+      presentParameters: [...DRUG_LEVEL, 'k12', 'k21', 'centralVolume'],
+    });
+    expect(model!.family).toBe('two-compartment-first-order');
+    expect(model!.missingParameters).toBeUndefined();
+  });
+
+  it('completes a declared mixed route from its own fraction, duration and ka', () => {
+    const [model] = resolveDrugModelsByRoute({
+      dispositionModels: [],
+      eliminationModels: [],
+      routes: {
+        oral: {
+          absorption: 'mixed',
+          presentParameters: ['bioavailability', 'ka', 'firstOrderFraction', 'zeroOrderDuration'],
+        },
+      },
+      presentParameters: DRUG_LEVEL,
+    });
+    expect(model!.outcome).toBe('modelable');
+    expect(model!.family).toBe('one-compartment-mixed-order');
+    expect(model!.missingParameters).toBeUndefined();
+  });
+
+  it('reports a declared zero-order route without its duration as incomplete, naming it', () => {
+    const [model] = resolveDrugModelsByRoute({
+      dispositionModels: [],
+      eliminationModels: [],
+      routes: { oral: { absorption: 'zero-order', presentParameters: ['bioavailability'] } },
+      presentParameters: DRUG_LEVEL,
+    });
+    expect(model!.family).toBe('one-compartment-zero-order');
+    expect(model!.missingParameters).toEqual(['zeroOrderDuration']);
+  });
+
+  it.each([
+    ['firstOrderFraction', 'oral', 'first-order', /first-order fraction/],
+    ['firstOrderFraction', 'oral', 'zero-order', /first-order fraction/],
+    ['zeroOrderDuration', 'oral', 'first-order', /zero-order input duration/],
+    ['absorptionLag', 'iv', 'bolus', /absorption lag/],
+  ] as const)(
+    'refuses a route-scoped %s on a %s route whose shape (%s) has no place for it',
+    (parameter, route, absorption, reason) => {
+      const [model] = resolveDrugModelsByRoute({
+        dispositionModels: [],
+        eliminationModels: [],
+        routes: { [route]: { absorption, presentParameters: [parameter] } },
+        presentParameters: DRUG_LEVEL,
+      });
+      expect(model!.outcome).toBe('not-modelable');
+      expect(model!.reason).toMatch(reason);
+    },
+  );
 });

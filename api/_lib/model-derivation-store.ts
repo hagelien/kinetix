@@ -59,6 +59,7 @@ import {
   assembleDrugDefinition,
   assembleRouteParams,
   buildRegistrySnapshot,
+  optionalParametersFor,
   findModel,
   registeredAnalytes,
   requiredParametersFor,
@@ -752,6 +753,8 @@ export async function readDrugRouteAssemblyInputs(
     });
   }
 
+  // The catalog stores both the steady-state Vd and the two-compartment central volume V1 only in
+  // L/kg, the default total-weight scaling, so one inference covers either volume a route runs on.
   const vdScaling = inferVdScaling(vdUnit);
   // Administered unless EITHER the stored class or the canonical classification list says
   // otherwise. The list (`data/substanceClasses.ts`) is the reviewed source the stored column is
@@ -830,9 +833,14 @@ export async function readDrugRouteAssemblyInputs(
     if (derived.outcome === 'modelable' && derived.family) {
       const fromCatalog = roleSources(catalogValues);
       for (const role of inferredParameters) if (tmaxSource) fromCatalog[role] = tmaxSource;
-      const required = requiredParametersFor(derived.family, {
-        ivInfusion: derived.structure.absorption === 'iv-infusion',
-      });
+      // The roles the route runs on: those its family requires, plus a stored optional one (a lag),
+      // whose source the grade must see like any other input's.
+      const required = [
+        ...requiredParametersFor(derived.family, {
+          ivInfusion: derived.structure.absorption === 'iv-infusion',
+        }),
+        ...optionalParametersFor(derived.family),
+      ];
       const defaulted = new Set<RequiredParam>(defaultedParameters);
       for (const role of [...required].sort()) {
         const source = fromCatalog[role];
@@ -845,7 +853,7 @@ export async function readDrugRouteAssemblyInputs(
     // spread its Tmax accounts for; a defaulted role took no catalog value and so has no spread.
     const ranges = toAssemblyRanges(catalogValues);
     for (const role of inferredParameters) {
-      const kaRange = inferredKaRange(tmaxValue, withKa.eliminationHalfLife);
+      const kaRange = inferredKaRange(tmaxValue, withKa.eliminationHalfLife, withKa.absorptionLag);
       if (kaRange) ranges[role] = kaRange;
       else delete ranges[role];
     }
@@ -871,7 +879,14 @@ export async function readDrugRouteAssemblyInputs(
     if (!derived.dispositionFallback) return declared;
     // The declared model runs whenever it can: the fallback exists only so that a drug asserting a
     // richer disposition than the catalog can supply keeps the curve it had before the assertion.
-    if (assembleRouteParams(declared.derived, declared.values, { vdScaling }).outcome === 'assembled') {
+    // A declared form whose OWN values contradict each other (two-compartment rates that cannot
+    // produce the stored terminal half-life) is a curation finding, not a gap: it stays reported as
+    // it is rather than being papered over with the simpler curve.
+    const declaredAssembly = assembleRouteParams(declared.derived, declared.values, { vdScaling });
+    if (
+      declaredAssembly.outcome === 'assembled' ||
+      (declaredAssembly.outcome === 'unsupported' && declaredAssembly.contradiction)
+    ) {
       return declared;
     }
     const simplified = buildInput({
@@ -879,9 +894,9 @@ export async function readDrugRouteAssemblyInputs(
       route: derived.route,
       routeProvenance: derived.routeProvenance,
     });
-    // Prefer the simplified form unless it cannot be assembled at all: an `incomplete` simplified
-    // route names the catalog gap a curator can actually close (a missing F, a missing Tmax), where
-    // the declared route's "family not implemented" names nothing they can act on.
+    // Prefer the simplified form unless it cannot be assembled at all, so a drug keeps the curve it
+    // had before its richer disposition was cited. The simplification is recorded below and graded
+    // against completeness; the declared route's own gap (k12, k21, V1) is what closes it.
     if (assembleRouteParams(simplified.derived, simplified.values, { vdScaling }).outcome === 'unsupported') {
       return declared;
     }

@@ -491,6 +491,43 @@ describe('mechanics document — catalogue-derived structure (§5)', () => {
     expect(withoutKa.values.ka).toBeUndefined();
   });
 
+  it('builds a two-compartment curve from k12, k21 and V1, never V1 from Vd, as §5 states', () => {
+    expect(doc).toContain('**A two-compartment disposition is built from its own three numbers.**');
+    const twoComp = derive(['two-compartment']);
+    const base = { ka: 1, eliminationHalfLife: 10, bioavailability: 0.8, vd: 3 };
+    // "V1 is never taken from the volume of distribution."
+    expect(assembleRouteParams(twoComp, { ...base, k12: 0.5, k21: 0.3 }).outcome).toBe('incomplete');
+    const built = assembleRouteParams(twoComp, { ...base, k12: 0.5, k21: 0.3, centralVolume: 0.2 });
+    expect(built).toMatchObject({ outcome: 'assembled', family: 'two-compartment-first-order' });
+    // "k21 at or below ln 2 / t½ ... is a contradiction."
+    expect(doc).toContain('k21 at or below ln 2 / t½');
+    expect(
+      assembleRouteParams(twoComp, { ...base, k12: 0.5, k21: 0.05, centralVolume: 0.2 }),
+    ).toMatchObject({ outcome: 'unsupported', contradiction: true });
+    expect(applyKaInference(twoComp, { eliminationHalfLife: 10 }, 1).values.ka).toBeUndefined();
+  });
+
+  it('builds zero-order and mixed inputs from their route numbers, and shifts by a lag, as §5 states', () => {
+    expect(doc).toContain('**A zero-order or mixed input is built from its route\'s own numbers.**');
+    expect(doc).toContain('**A stored absorption lag delays the whole input.**');
+    const mixed = resolveDrugModelsByRoute({
+      dispositionModels: [],
+      eliminationModels: [],
+      routes: { oral: { absorption: 'mixed' } },
+      presentParameters: ['halfLife', 'volumeOfDistribution'],
+    })[0]!;
+    const base = { ka: 1, eliminationHalfLife: 4, vd: 0.6, bioavailability: 0.8 };
+    expect(assembleRouteParams(mixed, base)).toMatchObject({ outcome: 'incomplete' });
+    expect(
+      assembleRouteParams(mixed, { ...base, firstOrderFraction: 0.4, zeroOrderDuration: 6 }).outcome,
+    ).toBe('assembled');
+    expect(applyKaInference(mixed, { eliminationHalfLife: 4 }, 1).values.ka).toBeUndefined();
+    const saturable = derive([], ['michaelis-menten']);
+    expect(
+      assembleRouteParams(saturable, { ...base, vmax: 15, km: 12, absorptionLag: 0.5 }).outcome,
+    ).toBe('unsupported');
+  });
+
   it('defaults only a missing F, to 100 %, as §5 states', () => {
     expect(doc).toContain('**A missing bioavailability takes a cautious default.**');
     expect(doc).toContain('(F = 100 %)');

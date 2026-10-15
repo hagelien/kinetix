@@ -67,6 +67,7 @@ export {
   absorptionCoherentWithRoute,
   composeModelFamily,
   requiredParametersFor,
+  optionalParametersFor,
   forbiddenParametersFor,
   validateModelStructure,
 } from "./model-structure.js";
@@ -228,6 +229,7 @@ export type {
   OneCompartmentZeroOrderRouteParams,
   OneCompartmentMixedOrderRouteParams,
   MichaelisMentenRouteParams,
+  TwoCompartmentRouteParams,
   RouteModelParams,
   DrugModelDefinition,
   CanonicalSubject,

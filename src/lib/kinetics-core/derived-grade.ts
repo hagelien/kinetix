@@ -74,7 +74,7 @@ export interface DerivedRouteGrade {
   /**
    * Asserted structure axes this route runs in a SIMPLER form than the drug declares, keyed by axis
    * with the declared value — e.g. `{ disposition: 'two-compartment' }` when the route runs
-   * one-compartment because the catalog cannot yet supply the two-compartment micro-constants.
+   * one-compartment because the catalog does not yet hold all of its two-compartment micro-constants.
    * `structure` is what runs. Graded like a defaulted axis: in both cases the curve's shape is not
    * one the evidence asserts. Absent when the route runs exactly what was declared.
    */

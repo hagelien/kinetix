@@ -2833,6 +2833,30 @@
       "label": "Km",
       "longLabel": "Michaelis constant (saturable elimination)"
     },
+    "k12": {
+      "label": "k12",
+      "longLabel": "Central → peripheral rate constant (k12)"
+    },
+    "k21": {
+      "label": "k21",
+      "longLabel": "Peripheral → central rate constant (k21)"
+    },
+    "centralVolume": {
+      "label": "V1",
+      "longLabel": "Central compartment volume (V1)"
+    },
+    "firstOrderFraction": {
+      "label": "Ffo",
+      "longLabel": "First-order fraction of a mixed (parallel) input"
+    },
+    "zeroOrderDuration": {
+      "label": "D0",
+      "longLabel": "Zero-order input duration"
+    },
+    "absorptionLag": {
+      "label": "tlag",
+      "longLabel": "Absorption lag time"
+    },
     "postmortemRedistribution": {
       "label": "C/P",
       "longLabel": "C/P (central–peripheral concentration ratio)"
@@ -4633,7 +4657,8 @@
       "k12": "k12",
       "k21": "k21",
       "vmax": "Vmax",
-      "km": "Km"
+      "km": "Km",
+      "absorptionLag": "absorption lag (tlag)"
     },
     "caveat": {
       "defaultedAxes": "Default assumptions: {{axes}}",
@@ -4697,7 +4722,7 @@
     "loadError": "Could not load model structure.",
     "actionError": "Could not save that change. Please try again.",
     "routeValuesHeading": "Route-specific absorption values",
-    "routeValuesHint": "Add cited route-specific ka distributions here; route-specific bioavailability uses the source-value editor.",
+    "routeValuesHint": "Add cited route-specific values here: ka, the zero-order duration and first-order fraction of a zero-order or mixed input, and an absorption lag. Route-specific bioavailability uses the source-value editor.",
     "addRouteValue": "Add route-specific value"
   },
   "doseContext": {

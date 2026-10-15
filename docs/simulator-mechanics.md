@@ -306,14 +306,34 @@ The two tiers are treated differently, and deliberately so:
   counted against the model's completeness exactly as a defaulted structural axis is, and it
   is stated on the curve. Read it for what it is: the catalogue evidenced *some*
   extravascular route and did not say which. **A declared structure can also be simplified.**
-  Where the catalogue cites a *two-compartment* disposition but holds none of the
-  parameters that form needs (the inter-compartment rate constants and the central
+  Where the catalogue cites a *two-compartment* disposition but does not yet hold every
+  parameter that form needs (the inter-compartment rate constants and the central
   volume), the curve is drawn with the **one-compartment** form instead of not being drawn
   at all, and the model records the simplification. It counts against completeness exactly
   as a defaulted axis does, because the curve is not the model the evidence describes: it
   has no distribution phase, so concentrations shortly after a dose are the ones to
   distrust. Only disposition is ever simplified this way — a drug whose elimination is
   cited as saturable (Michaelis–Menten) is never drawn with first-order elimination.
+  **A two-compartment disposition is built from its own three numbers.** Once the
+  catalogue holds the central→peripheral and peripheral→central rate constants (k12, k21)
+  and the central volume V1, the curve runs the two-compartment form, with its fast
+  distribution phase before the terminal decline; the stored half-life is read as the
+  terminal one. V1 is never taken from the volume of distribution, which also counts the
+  tissue the drug spreads into. Rate constants that cannot produce the stored terminal
+  half-life (k21 at or below ln 2 / t½) are a contradiction: that drug gets no curve, not
+  the simpler one, until the values are corrected. The clearance and volume form many
+  population models report (CL, Q, V1, V2, often in absolute litres) is not stored yet; only
+  the rate-constant form is. Under two-compartment disposition a recorded Tmax is
+  never solved for an absorption rate, because the time of peak also depends on k12 and k21.
+  **A zero-order or mixed input is built from its route's own numbers.** A route cited as a
+  constant-rate (zero-order) input needs its input duration; a mixed (parallel) input also
+  needs the share of the dose that takes the first-order path, and its absorption rate. Both
+  are stored per route, and until they are the route gets no curve. A mixed input's Tmax is
+  never solved for an absorption rate, since the zero-order share moves the peak too.
+  **A stored absorption lag delays the whole input.** Where a route holds a lag time, nothing
+  is absorbed before it and the curve is the unlagged one shifted later; a Tmax is then solved
+  against the time after the lag. The two-compartment and saturable forms cannot carry a lag,
+  so a drug with a stored lag on one of those is not drawn without it.
   **A saturable elimination is built from its own two numbers.** Where a drug's elimination
   is cited as saturable and the catalogue holds its maximum elimination rate (Vmax) and its
   Michaelis constant (Km), measured in plasma or serum, the curve runs the saturable form, so concentrations climb faster

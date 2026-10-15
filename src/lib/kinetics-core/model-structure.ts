@@ -96,9 +96,10 @@ export interface ModelStructure {
   absorption: AbsorptionKind;
 }
 
-/** A parameter role a family requires. The DB's parameter kinds map onto these roles; the
- * coupling here is what keeps an incoherent declaration (e.g. a saturable model with a
- * half-life and no Km) out of the store. */
+/** A parameter role a family requires — or, for `absorptionLag`, one it ACCEPTS without requiring
+ * (see `optionalParametersFor`). The DB's parameter kinds map onto these roles; the coupling here is
+ * what keeps an incoherent declaration (e.g. a saturable model with a half-life and no Km) out of
+ * the store. */
 export type RequiredParam =
   | 'ka'
   | 'vd'
@@ -117,7 +118,8 @@ export type RequiredParam =
   | 'metaboliteEliminationHalfLife'
   | 'metaboliteVd'
   | 'parentMolarMass'
-  | 'metaboliteMolarMass';
+  | 'metaboliteMolarMass'
+  | 'absorptionLag';
 
 /** Result of composing the axes into an engine family. */
 export type ComposeResult =
@@ -246,6 +248,25 @@ const REQUIRED_PARAMETERS: Record<ModelFamily, RequiredParam[]> = {
     'metaboliteMolarMass',
   ],
 };
+
+/**
+ * Roles a family ACCEPTS without requiring them. Only the absorption lag (`tlag`, SC-4A) is
+ * optional: absent, the input starts at the dose; present, it starts `tlag` hours later. The engine
+ * carries a lag on exactly these families (`absorptionLagHours`); the two-compartment, saturable and
+ * IV families have no lag field, so a cited lag cannot be run there and assembly refuses it rather
+ * than drawing a curve that ignores it.
+ */
+const OPTIONAL_PARAMETERS: Partial<Record<ModelFamily, readonly RequiredParam[]>> = {
+  'one-compartment-first-order': ['absorptionLag'],
+  'one-compartment-zero-order': ['absorptionLag'],
+  'one-compartment-mixed-order': ['absorptionLag'],
+  'one-compartment-clv': ['absorptionLag'],
+};
+
+/** The roles `family` accepts without requiring (see `OPTIONAL_PARAMETERS`). */
+export function optionalParametersFor(family: ModelFamily): RequiredParam[] {
+  return [...(OPTIONAL_PARAMETERS[family] ?? [])];
+}
 
 /** Options that make a family's required/forbidden parameters context-dependent. */
 export interface StructureRequirementOptions {
