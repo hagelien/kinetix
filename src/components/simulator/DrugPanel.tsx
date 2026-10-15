@@ -13,10 +13,14 @@ import {
   getComponentEngine,
   getRunBlockReasonKey,
   isComponentRunnable,
+  offeredDoseRoutes,
 } from '@/lib/modelingRun';
+import { coreRouteFor } from '@/lib/simulatorRoutes';
+import { ROUTE_LABEL_KEYS } from '@/lib/routeLabels';
 import { isEthanolDrugId } from '@/lib/ethanolSimulator';
 import { DEFAULT_WORKBOOK_INPUT } from '@/lib/etohScenario';
 import { useDrugName } from '@/lib/useDrugName';
+import { useLiveDerivedModel } from '@/lib/useLiveDerivedModel';
 import { WorkbookBackcalcPanel } from '@/components/simulator/WorkbookBackcalcPanel';
 import { WorkbookForwardPanel } from '@/components/simulator/WorkbookForwardPanel';
 import type { DrugComponent } from '@/types';
@@ -35,13 +39,23 @@ import type {
 } from '@/types/simulator';
 import { X, Copy, ChevronDown, ChevronUp, Eye, EyeOff } from 'lucide-react';
 
-const ROUTES: { value: RouteType; label: string }[] = [
-  { value: 'iv', label: 'IV' },
-  { value: 'oral', label: 'Oral' },
-  { value: 'insufflation', label: 'IN' },
-  { value: 'inhalation', label: 'Inh' },
-  { value: 'other', label: 'Other' },
-];
+/**
+ * The short label on a dose-route button: an untranslated abbreviation, or an i18n key under
+ * `simulator.routes.*`. The button's tooltip carries the route's full name (`ROUTE_LABEL_KEYS`).
+ */
+const ROUTE_BUTTON_LABEL: Record<RouteType, { text: string } | { key: string }> = {
+  iv: { text: 'IV' },
+  oral: { key: 'simulator.routes.oral' },
+  insufflation: { text: 'IN' },
+  inhalation: { text: 'Inh' },
+  im: { key: 'simulator.routes.im' },
+  subcutaneous: { key: 'simulator.routes.subcutaneous' },
+  sublingual: { key: 'simulator.routes.sublingual' },
+  buccal: { key: 'simulator.routes.buccal' },
+  rectal: { key: 'simulator.routes.rectal' },
+  transdermal: { key: 'simulator.routes.transdermal' },
+  other: { key: 'simulator.routes.other' },
+};
 
 const MATRIX_OPTIONS = [
   'whole_blood',
@@ -150,13 +164,28 @@ export function DrugPanel({
       (a.t ?? Number.POSITIVE_INFINITY) - (b.t ?? Number.POSITIVE_INFINITY),
   );
 
+  // Load the drug's live derived model before the picker is built from the registry, and re-render
+  // when it lands, so the picker and the run resolve the same model. A Monte Carlo component holds
+  // back a new dose until that first answer settles: until then the routes on offer are the
+  // committed snapshot's, which the run is about to replace.
+  const awaitingLiveModel =
+    useLiveDerivedModel(drugComponent?._slug) && engine === 'pk-montecarlo';
+
+  // The routes the dose picker offers: the resolved model's own routes for a Monte Carlo
+  // component, so a route the model does not declare is never offered.
+  const doseRoutes = offeredDoseRoutes(config, drugComponent);
+  const preferredRoute = config.route ?? 'oral';
+  const defaultDoseRoute: RouteType = doseRoutes.includes(preferredRoute)
+    ? preferredRoute
+    : (doseRoutes[0] ?? preferredRoute);
+
   const handleAddDose = () => {
     const event: DoseEvent = {
       id: newId(),
       type: 'dose',
       t: 0,
       unit: isEthanolEngine ? 'g' : 'mg',
-      route: isEthanolEngine ? 'oral' : (config.route ?? 'oral'),
+      route: isEthanolEngine ? 'oral' : defaultDoseRoute,
       ...(isKinelabEngine
         ? {
             amountRange: { min: 50, max: 500 },
@@ -535,6 +564,7 @@ export function DrugPanel({
                 referenceTime={referenceTime}
                 isEthanolEngine={isEthanolEngine}
                 isKinelabEngine={isKinelabEngine}
+                doseRoutes={doseRoutes}
                 selected={selectedMarkerId === `${config.id}:${event.id}`}
                 onChange={(updates) =>
                   updateEvent(config.id, event.id, updates)
@@ -552,6 +582,9 @@ export function DrugPanel({
             size="sm"
             className="h-7 text-xs"
             onClick={handleAddDose}
+            disabled={awaitingLiveModel}
+            aria-busy={awaitingLiveModel || undefined}
+            title={awaitingLiveModel ? t('simulator.events.loadingRoutes') : undefined}
           >
             {t('simulator.events.addDose')}
           </Button>
@@ -718,6 +751,8 @@ interface EventRowProps {
   referenceTime: string;
   isEthanolEngine: boolean;
   isKinelabEngine: boolean;
+  /** The routes a dose may be given by (see `offeredDoseRoutes`). */
+  doseRoutes: readonly RouteType[];
   selected?: boolean;
   onChange: (updates: Partial<SimEvent>) => void;
   onRemove: () => void;
@@ -730,11 +765,16 @@ function EventRow({
   referenceTime,
   isEthanolEngine,
   isKinelabEngine,
+  doseRoutes,
   selected = false,
   onChange,
   onRemove,
 }: EventRowProps) {
   const { t } = useTranslation();
+  const routeButtonLabel = (route: RouteType) => {
+    const label = ROUTE_BUTTON_LABEL[route];
+    return 'key' in label ? t(label.key) : label.text;
+  };
   const rowRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -929,24 +969,30 @@ function EventRow({
           <span className="text-xs text-muted-foreground">
             {t('simulator.route')}:
           </span>
-          <div className="flex gap-1">
-            {ROUTES.map((r) => (
+          <div className="flex flex-wrap gap-1">
+            {doseRoutes.map((route) => (
               <Button
-                key={r.value}
-                variant={event.route === r.value ? 'default' : 'outline'}
+                key={route}
+                variant={event.route === route ? 'default' : 'outline'}
                 size="sm"
                 className="h-6 text-xs px-2"
-                onClick={() =>
-                  onChange({ route: r.value } as Partial<SimEvent>)
-                }
+                title={t(ROUTE_LABEL_KEYS[coreRouteFor(route)])}
+                onClick={() => onChange({ route } as Partial<SimEvent>)}
               >
-                {r.value === 'oral'
-                  ? t('simulator.routes.oral')
-                  : r.value === 'other'
-                    ? t('simulator.routes.other')
-                    : r.label}
+                {routeButtonLabel(route)}
               </Button>
             ))}
+            {/* A dose already on a route the model does not declare (a saved case, or an
+                engine switched under it) still shows its route, but as a marker rather
+                than an option: it cannot be picked again, only replaced. */}
+            {event.route && !doseRoutes.includes(event.route) && (
+              <span
+                className="inline-flex h-6 items-center rounded-lg border border-destructive px-2 text-xs text-destructive line-through"
+                title={t('simulator.routes.notModeled')}
+              >
+                {routeButtonLabel(event.route)}
+              </span>
+            )}
           </div>
         </div>
       )}

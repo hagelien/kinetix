@@ -1708,6 +1708,43 @@ Every generated interpretation should declare which reasoning level it belongs t
 
 ```ts
 export interface PatternFinding {
+  // Stable semantic identity, never run-scoped, random or positional:
+  // `<rule key>@<rule version>:<subject>#<dependency hash>`.
+  // - subject: a canonical, sorted list of the finding's own inputs, each
+  //   identifying a result INSTANCE, not just its definition: every
+  //   PatternFeatureResult it cites as `<featureId>@<featureVersion>` plus its
+  //   normalization descriptor, specimen/matrix and the ids of the
+  //   observations its numerator and denominator draw on; the substance
+  //   module as `<module id>@<version>`; and the reference set used (e.g.
+  //   `feature=m6g-morphine@2/norm=creatinine/matrix=urine/obs=17,18;module=opioids@1;ref=atlas@4`).
+  //   Raw, creatinine-corrected and SG-corrected variants of one feature
+  //   therefore get different ids. It ends with an input fingerprint: a hash
+  //   of the canonical serialization of EVERYTHING the finding's computation
+  //   reads, from any source. From the case: the cited observations' values,
+  //   units, qualifiers, assays, matrices and timing; the specimen fields its
+  //   normalization uses, such as creatinineMmolL and specificGravity; and any
+  //   case context a rule consults. From the catalog and reference data: every
+  //   value resolved into the computation, such as the molecular weights
+  //   mass-to-molar normalization reads via src/lib/pattern/catalogAnalytes.ts.
+  //   The rule is completeness, not a list: the engine resolves all of these
+  //   into one input object before computing, and builds the fingerprint from
+  //   that same object, so a value the computation reads cannot be left out
+  //   whether or not any version number moved with it.
+  // - uniqueness: two findings in one run never share an id. The engine
+  //   checks this after every run and fails the run on a duplicate rather
+  //   than emit two findings an override could not tell apart.
+  // - dependency hash: a hash of every result-affecting version in the run
+  //   manifest (section 37): patternEngineVersion, featureRegistryVersion,
+  //   metabolismGraphVersion, assaySemanticsVersion, referenceDatasetVersions,
+  //   sourceResolverVersion and normalizationConfig. The rule is that the id
+  //   covers exactly what marks a saved result stale; a version later added to
+  //   the manifest is added to the hash with it.
+  // Recomputing the same case with the same inputs and versions yields the same id
+  // whatever other findings appear, vanish or reorder. Any change that would
+  // mark the result stale changes the id, so an override never silently
+  // attaches to a conclusion computed differently from the one the expert
+  // overrode; it becomes an orphan instead (section 30.12), shown with the
+  // engine text it superseded. Inference overrides are keyed on this id.
   id: string;
 
   level:
@@ -1981,16 +2018,54 @@ pattern_inference_overrides
                           -- case row directly and cleans up no children, so a
                           -- restricting FK would make any case with an override
                           -- undeletable.
-  finding_id
+  finding_id              -- the full id (section 28), kept for inspection;
+                          -- unbounded, so never indexed
+  finding_key             -- sha256(finding_id), fixed width.
+                          -- UNIQUE (case_id, finding_key): one override per
+                          -- finding, so the UI always has one statement to show
   statement               -- the expert's text
-  superseded_statement    -- the engine's text at the time of override
+  superseded_statement    -- the engine finding the expert's browser showed when
+                          -- the override was made, as its canonical
+                          -- { statementKey, statementParams } (section 28)
+                          -- plus the rendered text and its locale;
+                          -- CLIENT-REPORTED (the engine runs only in the
+                          -- browser, section 41.1)
   note
-  author_user_id          -- STAMPED SERVER-SIDE from the session; never read
-                          -- from the request body
-  created_at              -- stamped server-side
+  author_user_id          -- STAMPED SERVER-SIDE from the session on create or re-create;
+                          -- never read from the request body; fixed for this
+                          -- incarnation (reset only by a re-create)
+  created_at              -- stamped server-side on create or re-create;
+                          -- fixed for this incarnation
+  updated_by_user_id      -- stamped server-side on each edit; NULL until edited
+  updated_at              -- stamped server-side on each edit; NULL until edited
+  revision                -- 1 on first create, +1 per real edit, delete and
+                          -- re-create; never reset, so a revision number names
+                          -- one state of this finding's override for good. A
+                          -- save or delete must name the revision it was made
+                          -- against (section 42, Phase 5)
+  deleted_at              -- set by a delete; the row stays as a tombstone so a
+                          -- re-create continues its revision count
+
+pattern_inference_override_revisions   -- append-only; never updated or deleted
+  id
+  override_id             -- FK to pattern_inference_overrides.id ON DELETE
+                          -- CASCADE; the override row is never hard-deleted
+                          -- (a delete leaves a tombstone), so it is removed
+                          -- only with its case, together with its revisions
+                          -- (no case_id or finding_id of its own: both
+                          -- come through override_id, so a revision can
+                          -- never name a different case than its override)
+  action                  -- 'create' | 'edit' | 'delete'
+  statement               -- the text after this action (NULL for 'delete')
+  superseded_statement
+  note
+  actor_user_id           -- stamped server-side from the session
+  at                      -- stamped server-side
 ```
 
-  Attribution and timestamp are derived from the authenticated request and any client-supplied value is ignored. Each override keeps the engine text it superseded, so the pair stays inspectable after the engine's own conclusion has moved on. An overridden inference is rendered as the expert's text with the engine's original one inspectable next to it, and it never feeds back into any computation — not into similar-case ranking, not into source resolution, not into a manifest.
+  The active table holds the one override in force per finding; the revision table keeps every version of it. Each create, real edit and delete writes its revision row in the same transaction as the change, so the sequence of expert statements, who wrote each and when, and a withdrawal survive later edits. An identical repeated save changes nothing and writes no revision.
+
+  Attribution and timestamps are derived from the authenticated request and any client-supplied value is ignored. An edit never rewrites `author_user_id` or `created_at`: who made the override and when stays fixed, and the latest edit is recorded beside it. A re-create after a delete starts a new incarnation: it resets both to the re-creating actor and the time, and clears the edit fields, so the reactivated statement is never dated or attributed to the withdrawn incarnation; the earlier incarnation stays in the revision history. Override writes are owner-only (section 42, Phase 5), so today the re-creator is always the case owner; nothing here adds a way for another user to write overrides on a case. Each override keeps the engine text the expert saw, so the pair stays inspectable after the engine's own conclusion has moved on. Because the engine runs only in the browser (section 41.1), the server cannot verify that text: it is stored and always rendered as "engine text as shown to <author> (reported by their browser)", never as a verified engine conclusion. Beside it the UI shows the engine text the current browser computes for the same finding id; since the id fingerprints every input and version (section 28), the two should match, and a mismatch is flagged rather than reconciled. The comparison is on the canonical `statementKey` and `statementParams`, never on rendered text, so viewing in another locale or editing a translation is not a mismatch; the stored text is shown in the locale it was rendered in. An overridden inference is rendered as the expert's text with that labelled engine text inspectable next to it, and it never feeds back into any computation — not into similar-case ranking, not into source resolution, not into a manifest.
 
 The reason to allow the override at all is that the toxicologist is the expert and the engine is a first-pass instrument; the reason to constrain it this way is that an edited conclusion which looked machine-derived would be the single most dangerous artifact this document could produce.
 
@@ -2241,6 +2316,14 @@ Case CRUD continues through:
 
 with `kind=pattern-case` for listing.
 
+Inference overrides (section 30.12) are stored beside the case, not inside it, through a sub-resource of case persistence itself, added in Phase 5:
+
+```text
+/api/simulator/cases?id=<id>&resource=inference-overrides   -- CRUD, scoped by the parent case's created_by
+```
+
+It is part of case persistence: the same deployed function (`api/simulator/cases.ts`, which already takes `?id=` and `?kind=`) dispatches on `resource=inference-overrides` under the same per-owner controls. A query parameter rather than a nested path, because the function deploys only at `/api/simulator/cases` and a nested URL would 404 before reaching it. It is not a new endpoint family: an override's `finding_id` carries a case input fingerprint (section 28) and its texts describe the case, so the route sits inside the one persistence boundary invariant 45 allows. It computes nothing, so it is not an analysis endpoint in the sense of section 41.1.
+
 ## 36. State management
 
 Create a dedicated store:
@@ -2416,10 +2499,10 @@ Numbered from 35 so the existing invariant numbers, which are cited elsewhere in
 ### 40.10 Sandbox and aggregate-tier invariants
 
 41. `sandbox` survives the full save/load round trip as part of the validated case contract — a schema that strips it silently converts a teaching artifact into apparent evidence. A sandbox case never reaches the reference atlas, never appears in the Similar Cases pool — including for another sandbox case — and contributes to no `n`, percentile, or distribution. Assert the atlas half structurally, alongside the existing user-case write-route test. Templates are served only through the admin/group-grant gate that covers method data and never appear in a client bundle; an account without that access receives an empty set, with no count or substance list that would leak method coverage. Every user with access sees the full set without provisioning, including a newly created account, and a template is owned by nobody until an edit clones it.
-42. An inference override round-trips through save and reload, survives a recompute that changes the underlying finding, and retains the superseded engine text. Its `author_user_id` and `created_at` come from the authenticated session — assert that a request supplying either is rejected or has them overwritten, since an attribution the UI renders as an expert's name must never be a value the client chose. Editing a sandbox ratio stores a concentration, never a ratio: the derivation chain from raw observation to feature is intact after the edit, and a ratio with no non-negative solution is refused rather than clamped. Solve-editing is offered only where both sides resolve to exactly one observation; a composite feature such as `(M3G + M6G) / morphine` is read-only rather than distributing an edit across its terms. An overridden inference is stored beside the engine's, never in place of it, and appears in no computation — similarity, source resolution and the run manifest are byte-identical with and without the override.
+42. An inference override round-trips through save and reload, survives a recompute that changes the underlying finding, and retains the superseded engine text. Its `author_user_id` and `created_at` come from the authenticated session, and `updated_by_user_id` and `updated_at` likewise on an edit — assert that a request supplying any of them is rejected or has them overwritten, since an attribution the UI renders as an expert's name must never be a value the client chose, and that an edit leaves `author_user_id` and `created_at` unchanged. Two concurrent saves of an override for the same finding leave exactly one row, an override write authenticated by an agent token is refused with 403 even on a case that agent created, and so is one by a human owner who lacks `pattern.inferenceOverride.write`, and repeating an identical save leaves `updated_by_user_id` and `updated_at` as they were and returns the stored override. A save whose `expectedRevision` is older than the stored one is refused with 409 and changes nothing — including a retry of a committed save after another tab has edited the override since; a delete with a stale `expectedRevision` is refused the same way. Editing a cited concentration in place, with every observation id unchanged, changes the finding's id and orphans its override; so does editing a specimen's `creatinineMmolL` or `specificGravity`, and so does correcting a catalog molecular weight the finding's normalization uses, with no engine or registry version bump. A property test perturbs each field of a finding's computation input in turn and asserts the id changes every time. Every row of the save/delete decision table (section 42, Phase 5) is a test case, including a stale same-text save against a tombstone, which is refused with 409. Deleting an override and recreating it for the same finding continues its revision count, so a tab still holding the pre-delete revision is refused; a re-create with text identical to the deleted statement still reactivates it, and a re-create resets `created_at` to the re-create time and clears the edit fields, so the reactivated statement is never dated or attributed to the withdrawn incarnation. (Only the case owner can write overrides, so the re-creator is the owner; the reset is what keeps attribution right if case sharing is added later.) Switching locale between saving and viewing an override does not flag an engine-text mismatch. Recomputing a case, including after other findings are added, removed or reordered, gives each finding the same id, so every override stays on the inference it was made against; bumping a feature definition's version, or any version section 37 says marks a result stale (including `metabolismGraphVersion` and `assaySemanticsVersion`), changes the id of every finding it affects and leaves that finding's override orphaned, not re-attached. A case whose raw, creatinine-corrected and SG-corrected variants of one feature are computed together yields three distinct finding ids, each with its own override, and a run that would emit two findings with one id fails. Two edits and then a delete leave four revision rows (create, edit, edit, delete) with each statement, actor and time intact, and an identical repeated save adds none. Editing a sandbox ratio stores a concentration, never a ratio: the derivation chain from raw observation to feature is intact after the edit, and a ratio with no non-negative solution is refused rather than clamped. Solve-editing is offered only where both sides resolve to exactly one observation; a composite feature such as `(M3G + M6G) / morphine` is read-only rather than distributing an edit across its terms. An overridden inference is stored beside the engine's, never in place of it, and appears in no computation — similarity, source resolution and the run manifest are byte-identical with and without the override.
 43. No individual percentile, and no case-level distribution, is ever computed from `pattern_reference_aggregates`. Aggregates and individual observations never pool into one statistic. A feature-level aggregate row exists only where the study reported that feature directly; deriving one by dividing two concentration aggregates is rejected at import, which is invariant 17 enforced at the write path rather than the read.
 44. Every statistic over matched references — percentile, fold-from-median, robust z, and the standardization behind the similarity distance — is computed over quantified references only, labelled as such wherever shown, and carries the same quantified and censored counts. The suppression tests gate them together: quantified `n < minQuantifiedN`, or `censored * denominator >= total * numerator` (defaults 5 and 1/3, section 21.1). Assert that a feature failing them yields none of the four rather than some, and assert the exact boundary in both directions — 33 censored of 100 renders, 34 of 100 suppresses — which is where a `0.33` decimal and a true third disagree. Also assert the 4-of-11 case, which fails both tests. Censored references still render as bounds on the Ratio Atlas when excluded from the statistic.
-45. No case-derived value reaches an **analysis or compute** endpoint. Persistence is the deliberate exception: `/api/simulator/cases` stores the case, including observations and the optional `analysis` snapshot, under existing per-owner controls (section 41.1). Assert structurally that `src/lib/pattern/*` computation is never invoked from an API handler, and that no endpoint other than case persistence receives an observation value, a feature value, or a case input hash. Reference, method and metabolism-graph fetches are keyed by substance module or method, never by the analyte set of an open case, so neither a network trace nor an access log can reconstruct which analytes a case contains. Assert this for `/api/metabolism-graph` specifically, whose natural signature would have been the case's drug ids.
+45. No case-derived value reaches an **analysis or compute** endpoint. Persistence is the deliberate exception: `/api/simulator/cases` stores the case, including observations and the optional `analysis` snapshot, under existing per-owner controls (section 41.1). Assert structurally that `src/lib/pattern/*` computation is never invoked from an API handler, and that no endpoint other than case persistence (`/api/simulator/cases`, including its `resource=inference-overrides` requests) receives an observation value, a feature value, or a case input hash. Reference, method and metabolism-graph fetches are keyed by substance module or method, never by the analyte set of an open case, so neither a network trace nor an access log can reconstruct which analytes a case contains. Assert this for `/api/metabolism-graph` specifically, whose natural signature would have been the case's drug ids.
 
 ## 41. Performance targets
 
@@ -2596,7 +2679,31 @@ src/lib/pattern/interpretation.ts
 src/components/modeling/pattern/SimilarCases.tsx
 src/components/modeling/pattern/SourceResolver.tsx
 src/components/modeling/pattern/QualityPanel.tsx
+drizzle/00xx_pattern_inference_overrides.sql
+api/_lib/patternInferenceOverrideStore.ts
 ```
+
+The inference override layer (section 30.12) gets its storage here, with the inferences it overrides. Nothing earlier writes to `pattern_inference_overrides`, and `/api/simulator/cases` reads and writes `simulator_cases` only, so the table needs its own plumbing:
+
+- **Migration.** Creates `pattern_inference_overrides` and its append-only `pattern_inference_override_revisions` as sketched in section 30.12, with `case_id` a foreign key to `simulator_cases` `ON DELETE CASCADE`. The existing case DELETE path removes the case row directly and cleans up no children, so a restricting key would make any case with an override undeletable.
+- **One override per finding, saved against the version the client saw.** The migration adds a unique constraint on `(case_id, finding_key)` (`finding_key` = sha256 of the unbounded `finding_id`, so a finding citing many results never exceeds the index's tuple limit), and every override row carries `revision` (an integer, 1 on create, +1 on each edit, delete and re-create). A save sends `expectedRevision`: `null` for a new override, otherwise the revision the client last read. Under the row lock (`SELECT … FOR UPDATE`, or the insert's unique conflict for a create) the store decides by the table below, which covers every combination of the stored row's state, the revision match and the text; no other outcome exists. "Text equal" compares statement and note. A 409 always returns the current row (or its absence) for the client to decide from.
+
+  | Stored row | `expectedRevision` | Text | Save does | Delete does |
+  |---|---|---|---|---|
+  | none | `null` | — | **create** (revision 1, `create` revision row) | success, records nothing |
+  | none | a number | — | 409 | success, records nothing |
+  | active | = stored | differs | **edit** (revision +1, edit fields, `edit` revision row) | **delete** (tombstone, revision +1, `delete` revision row) |
+  | active | = stored | equal | return stored row, record nothing | **delete** |
+  | active | ≠ stored or `null` | equal | return stored row, record nothing (a committed save's retry; two tabs saving the same words) | 409 |
+  | active | ≠ stored or `null` | differs | 409 (a delayed retry or a stale tab never overwrites a newer statement) | 409 |
+  | tombstone | = stored | any | **re-create** (see below) | success, records nothing |
+  | tombstone | ≠ stored or `null` | any | 409, whatever the text | success, records nothing |
+
+  A delete leaves the row as a tombstone (`deleted_at` set) so `revision` keeps counting. A re-create is itself a state change, whatever the text: it clears `deleted_at`, sets the new statement, note and engine text, resets `author_user_id`/`created_at` to the re-creator and now, clears the edit fields, bumps `revision` and appends a `create` revision. Revision numbers are therefore never reused for a finding, and a tab holding a pre-delete revision is refused (no ABA). The active override for a finding is its row with `deleted_at` NULL.
+  So a retried request, a double click or two tabs saving at once leave one row, and no write is recorded as an edit unless it was made against the current version. A real edit keeps `author_user_id` and `created_at`. An override whose `finding_id` the current engine no longer emits — including after a change to the rule or to any feature, module, normalization or reference version its id names — is shown as such beside the case, never re-attached to another finding (section 28).
+- **History kept.** Create, edit and delete each append a row to `pattern_inference_override_revisions` in the same transaction as the change (section 30.12), so an edit or a delete never erases an earlier expert statement. Delete removes the active override; its revisions remain until the case itself is deleted. The revision table is insert-only: the store has no update or delete path for it.
+- **Store and route, scoped by owner.** Create, read, update and delete each resolve the parent case first and check its `created_by` against the authenticated user, answering as `/api/simulator/cases` does when the case is missing (404) or not the caller's (403). The foreign key alone does not establish that the caller owns the case it points at. Override writes (create, edit, delete) also require a human actor: a request authenticated by an agent credential — an `AGENT_TOKEN_PREFIX` (`kxat_`) bearer token, or any user id that belongs to an `agents` row — is refused with 403, even on a case that agent owns. `AuthContext` does not tell agents from people, so the check is explicit in the handler; an override is attributed as an expert's conclusion, and automated output must never be presented as one. Being a human owner is still not expertise, so override writes are also gated on a new capability, `pattern.inferenceOverride.write`, checked with `callerCan` like every other write (the UI hides the edit affordance via `useCan`). It defaults to `editor` and floors at `contributor`, so an admin can widen it from Admin → Permissions but never to every authenticated account. A case owner without it can still read existing overrides on their case and annotate the case itself; they cannot create a statement the UI renders as an expert conclusion. Reads stay owner-scoped as for the case.
+- **Attribution stamped server-side.** `author_user_id` and `created_at` come from the authenticated session when the override is created or re-created, and an edit never changes them; an update stamps `updated_by_user_id` and `updated_at` from the session instead. A request body that supplies any of the four is rejected or has it overwritten, never stored as sent — invariant 42 in section 40 tests exactly this.
 
 Acceptance:
 
@@ -2640,7 +2747,7 @@ The Pattern UI should consume a versioned scenario-comparison result rather than
 | Concern | Existing files to reuse/extend | New files |
 |---|---|---|
 | Modeling shell | `src/pages/ModelingPage.tsx`, `src/components/modeling/ModelingWorkspace.tsx`, `src/router.tsx` | `PatternCasePage.tsx`, `ModelingModeTabs.tsx` |
-| Case persistence | `api/simulator/cases.ts` | `src/types/patternCase.ts`, `src/lib/patternCases.ts`, `patternCaseStore.ts` |
+| Case persistence | `api/simulator/cases.ts` | `src/types/patternCase.ts`, `src/lib/patternCases.ts`, `patternCaseStore.ts`; inference overrides: `patternInferenceOverrideStore.ts`, served by `api/simulator/cases.ts` (Phase 5) |
 | Unit conversion | `src/lib/unitConversion.ts` | pattern normalization wrapper only |
 | Metabolism | `src/lib/metabolism.ts`, `api/_lib/metabolismStore.ts`, `drug_metabolites` | graph API/store + edge semantic fields |
 | Analytical methods | `analytical_method_components`, `src/lib/drugApi.ts`, method editor/API | measurand semantics + contributor model |

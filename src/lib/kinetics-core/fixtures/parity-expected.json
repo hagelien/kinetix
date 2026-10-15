@@ -238,7 +238,7 @@
       ]
     },
     "manifest": {
-      "coreVersion": "1.10.0",
+      "coreVersion": "1.11.0",
       "registryVersion": "0.9.0",
       "registryChecksum": "adcc1cec",
       "modelId": "amphetamine-one-comp-v1",
@@ -491,7 +491,7 @@
       ]
     },
     "manifest": {
-      "coreVersion": "1.10.0",
+      "coreVersion": "1.11.0",
       "registryVersion": "0.9.0",
       "registryChecksum": "adcc1cec",
       "modelId": "amphetamine-one-comp-v1",
@@ -784,7 +784,7 @@
       ]
     },
     "manifest": {
-      "coreVersion": "1.10.0",
+      "coreVersion": "1.11.0",
       "registryVersion": "0.9.0",
       "registryChecksum": "adcc1cec",
       "modelId": "amphetamine-one-comp-v1",
@@ -941,7 +941,7 @@
       ]
     },
     "manifest": {
-      "coreVersion": "1.10.0",
+      "coreVersion": "1.11.0",
       "registryVersion": "0.9.0",
       "registryChecksum": "adcc1cec",
       "modelId": "cocaine-one-comp-v2",
@@ -1196,7 +1196,7 @@
       ]
     },
     "manifest": {
-      "coreVersion": "1.10.0",
+      "coreVersion": "1.11.0",
       "registryVersion": "0.9.0",
       "registryChecksum": "adcc1cec",
       "modelId": "thc-two-comp-v1",
@@ -1497,7 +1497,7 @@
       ]
     },
     "manifest": {
-      "coreVersion": "1.10.0",
+      "coreVersion": "1.11.0",
       "registryVersion": "0.9.0",
       "registryChecksum": "adcc1cec",
       "modelId": "thc-two-comp-v1",
@@ -1659,7 +1659,7 @@
       ]
     },
     "manifest": {
-      "coreVersion": "1.10.0",
+      "coreVersion": "1.11.0",
       "registryVersion": "0.9.0",
       "registryChecksum": "adcc1cec",
       "modelId": "cocaine-one-comp-v2",
@@ -1816,7 +1816,7 @@
       ]
     },
     "manifest": {
-      "coreVersion": "1.10.0",
+      "coreVersion": "1.11.0",
       "registryVersion": "0.9.0",
       "registryChecksum": "adcc1cec",
       "modelId": "cocaine-one-comp-v2",
@@ -2677,7 +2677,7 @@
       ]
     },
     "manifest": {
-      "coreVersion": "1.10.0",
+      "coreVersion": "1.11.0",
       "registryVersion": "0.9.0",
       "registryChecksum": "adcc1cec",
       "modelId": "cocaine-one-comp-v2",
@@ -2834,7 +2834,7 @@
       ]
     },
     "manifest": {
-      "coreVersion": "1.10.0",
+      "coreVersion": "1.11.0",
       "registryVersion": "0.9.0",
       "registryChecksum": "adcc1cec",
       "modelId": "cocaine-one-comp-v2",
@@ -3082,7 +3082,7 @@
       ]
     },
     "manifest": {
-      "coreVersion": "1.10.0",
+      "coreVersion": "1.11.0",
       "registryVersion": "0.9.0",
       "registryChecksum": "adcc1cec",
       "modelId": "methylphenidate-one-comp-v1",
@@ -3330,7 +3330,7 @@
       ]
     },
     "manifest": {
-      "coreVersion": "1.10.0",
+      "coreVersion": "1.11.0",
       "registryVersion": "0.9.0",
       "registryChecksum": "adcc1cec",
       "modelId": "methylphenidate-one-comp-v1",
@@ -3642,7 +3642,7 @@
       ]
     },
     "manifest": {
-      "coreVersion": "1.10.0",
+      "coreVersion": "1.11.0",
       "registryVersion": "0.9.0",
       "registryChecksum": "adcc1cec",
       "modelId": "lsd-one-comp-v1",
@@ -3890,7 +3890,7 @@
       ]
     },
     "manifest": {
-      "coreVersion": "1.10.0",
+      "coreVersion": "1.11.0",
       "registryVersion": "0.9.0",
       "registryChecksum": "adcc1cec",
       "modelId": "2cb-one-comp-v1",
@@ -4204,7 +4204,7 @@
       ]
     },
     "manifest": {
-      "coreVersion": "1.10.0",
+      "coreVersion": "1.11.0",
       "registryVersion": "0.9.0",
       "registryChecksum": "adcc1cec",
       "modelId": "ghb-michaelis-menten-v1",
@@ -4522,7 +4522,7 @@
       ]
     },
     "manifest": {
-      "coreVersion": "1.10.0",
+      "coreVersion": "1.11.0",
       "registryVersion": "0.9.0",
       "registryChecksum": "adcc1cec",
       "modelId": "ghb-michaelis-menten-v1",
@@ -4712,7 +4712,7 @@
       ]
     },
     "manifest": {
-      "coreVersion": "1.10.0",
+      "coreVersion": "1.11.0",
       "registryVersion": "0.9.0",
       "registryChecksum": "adcc1cec",
       "modelId": "ghb-michaelis-menten-v1",
@@ -4960,7 +4960,7 @@
       ]
     },
     "manifest": {
-      "coreVersion": "1.10.0",
+      "coreVersion": "1.11.0",
       "registryVersion": "0.9.0",
       "registryChecksum": "adcc1cec",
       "modelId": "ethanol-michaelis-menten-v1",
@@ -5219,7 +5219,7 @@
       ]
     },
     "manifest": {
-      "coreVersion": "1.10.0",
+      "coreVersion": "1.11.0",
       "registryVersion": "0.9.0",
       "registryChecksum": "adcc1cec",
       "modelId": "mdma-michaelis-menten-v1",
@@ -5478,7 +5478,7 @@
       ]
     },
     "manifest": {
-      "coreVersion": "1.10.0",
+      "coreVersion": "1.11.0",
       "registryVersion": "0.9.0",
       "registryChecksum": "adcc1cec",
       "modelId": "mdma-michaelis-menten-v1",
@@ -5927,7 +5927,7 @@
       ]
     },
     "manifest": {
-      "coreVersion": "1.10.0",
+      "coreVersion": "1.11.0",
       "registryVersion": "0.9.0",
       "registryChecksum": "adcc1cec",
       "modelId": "lisdexamfetamine-one-comp-v1",
@@ -6244,7 +6244,7 @@
       ]
     },
     "manifest": {
-      "coreVersion": "1.10.0",
+      "coreVersion": "1.11.0",
       "registryVersion": "0.9.0",
       "registryChecksum": "adcc1cec",
       "modelId": "ketamine-one-comp-v1",
@@ -6441,7 +6441,7 @@
       ]
     },
     "manifest": {
-      "coreVersion": "1.10.0",
+      "coreVersion": "1.11.0",
       "registryVersion": "0.9.0",
       "registryChecksum": "adcc1cec",
       "modelId": "ketamine-one-comp-v1",
@@ -6657,7 +6657,7 @@
       ]
     },
     "manifest": {
-      "coreVersion": "1.10.0",
+      "coreVersion": "1.11.0",
       "registryVersion": "0.9.0",
       "registryChecksum": "adcc1cec",
       "modelId": "psilocybin-one-comp-v1",
@@ -6677,7 +6677,7 @@
     "detail": "Model ethanol-michaelis-menten-v1 route \"oral\" uses widmark Vd scaling, which requires the subject age.",
     "limitations": [],
     "manifest": {
-      "coreVersion": "1.10.0",
+      "coreVersion": "1.11.0",
       "registryVersion": "0.9.0",
       "registryChecksum": "adcc1cec",
       "modelId": "ethanol-michaelis-menten-v1",
@@ -6697,7 +6697,7 @@
     "detail": "Model methylphenidate-one-comp-v1 route \"oral\" uses lean-body-mass Vd scaling, which requires the subject heightCm.",
     "limitations": [],
     "manifest": {
-      "coreVersion": "1.10.0",
+      "coreVersion": "1.11.0",
       "registryVersion": "0.9.0",
       "registryChecksum": "adcc1cec",
       "modelId": "methylphenidate-one-comp-v1",
@@ -6854,7 +6854,7 @@
       ]
     },
     "manifest": {
-      "coreVersion": "1.10.0",
+      "coreVersion": "1.11.0",
       "registryVersion": "0.9.0",
       "registryChecksum": "adcc1cec",
       "modelId": "amphetamine-one-comp-v1",
@@ -6874,7 +6874,7 @@
     "detail": "Model amphetamine-one-comp-v1 does not support route \"iv\". Supported: oral, intranasal.",
     "limitations": [],
     "manifest": {
-      "coreVersion": "1.10.0",
+      "coreVersion": "1.11.0",
       "registryVersion": "0.9.0",
       "registryChecksum": "adcc1cec",
       "modelId": "amphetamine-one-comp-v1",
@@ -6894,7 +6894,7 @@
     "detail": "No reviewed model for analyte \"not-a-real-drug\" in registry 0.9.0.",
     "limitations": [],
     "manifest": {
-      "coreVersion": "1.10.0",
+      "coreVersion": "1.11.0",
       "registryVersion": "0.9.0",
       "registryChecksum": "adcc1cec",
       "modelId": null,

@@ -1,9 +1,10 @@
-import { asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import {
   bioEntities,
   drugInteractions,
   drugReceptorTargets,
   drugs,
+  wikiPages,
 } from '../../db/schema.js';
 import { isUniqueViolation } from './drugs-helpers.js';
 import { findOrCreateEntityBySymbol } from './bioEntityStore.js';
@@ -11,6 +12,7 @@ import type { getDb } from './db.js';
 import {
   isMechanismTier,
   type DrugReceptorTargetSummary,
+  type EntityTargetLigand,
 } from '../../src/lib/receptorTargets.js';
 import type { ReceptorMechanismInput } from './schemas.js';
 import { targetSlug } from './slug.js';
@@ -105,6 +107,99 @@ export async function getDrugReceptorTargets(
       };
     })
     .filter((r): r is DrugReceptorTargetSummary => r !== null);
+}
+
+/**
+ * Every drug-target relationship pointing at a bio entity, read from the
+ * entity's side (the inverse of {@link getDrugReceptorTargets}). Backs the
+ * target-pharmacology collection on the entity monograph.
+ *
+ * One query joins each relationship to its drug; a second, batched lookup
+ * resolves the drugs' published monograph slugs. Never a query per ligand.
+ * Every row is returned — including qualitative ones with no measurement —
+ * with its ranges, species and reference ids exactly as stored.
+ *
+ * Ordering is stable rather than scientifically judgmental: normalised
+ * interaction type, then drug slug, then relationship id. A clinical order
+ * depends on the metric the reader picks, so it belongs in the client.
+ */
+export async function listEntityTargetLigands(
+  db: Db,
+  entityId: number,
+): Promise<EntityTargetLigand[]> {
+  const rows = await db
+    .select({
+      id: drugReceptorTargets.id,
+      drugId: drugReceptorTargets.drugId,
+      interactionType: drugReceptorTargets.interactionType,
+      tier: drugReceptorTargets.tier,
+      affinity: drugReceptorTargets.affinity,
+      potency: drugReceptorTargets.potency,
+      efficacy: drugReceptorTargets.efficacy,
+      ki: drugReceptorTargets.ki,
+      ic50: drugReceptorTargets.ic50,
+      ec50: drugReceptorTargets.ec50,
+      emax: drugReceptorTargets.emax,
+      selectivityRatio: drugReceptorTargets.selectivityRatio,
+      assaySpecies: drugReceptorTargets.assaySpecies,
+      referenceIds: drugReceptorTargets.referenceIds,
+      evidenceNote: drugReceptorTargets.evidenceNote,
+      drugSlug: drugs.slug,
+      drugNames: drugs.names,
+    })
+    .from(drugReceptorTargets)
+    .innerJoin(drugs, eq(drugReceptorTargets.drugId, drugs.id))
+    .where(eq(drugReceptorTargets.bioEntityId, entityId))
+    .orderBy(
+      sql`regexp_replace(lower(trim(${drugReceptorTargets.interactionType})), '[[:space:]_-]+', '_', 'g')`,
+      asc(drugs.slug),
+      asc(drugReceptorTargets.id),
+    );
+
+  if (rows.length === 0) return [];
+
+  // Only a published monograph is named here: this read is public, and a
+  // draft's slug is not. A drug without one still links through
+  // `/wiki/drug/:id`, which applies the normal access rules.
+  const drugIds = [...new Set(rows.map((row) => row.drugId))];
+  const monographs = await db
+    .select({ id: wikiPages.id, drugId: wikiPages.drugCid, slug: wikiPages.slug })
+    .from(wikiPages)
+    .where(
+      and(
+        eq(wikiPages.pageType, 'drug_monograph'),
+        eq(wikiPages.status, 'published'),
+        inArray(wikiPages.drugCid, drugIds),
+      ),
+    )
+    .orderBy(asc(wikiPages.id));
+  const monographSlugByDrug = new Map<number, string>();
+  for (const page of monographs) {
+    if (page.drugId != null && !monographSlugByDrug.has(page.drugId)) {
+      monographSlugByDrug.set(page.drugId, page.slug);
+    }
+  }
+
+  return rows.map((row) => ({
+    relationshipId: row.id,
+    drugId: row.drugId,
+    drugSlug: row.drugSlug,
+    drugNames: row.drugNames ?? {},
+    drugMonographSlug: monographSlugByDrug.get(row.drugId) ?? null,
+    interactionType: row.interactionType,
+    tier: isMechanismTier(row.tier) ? row.tier : null,
+    affinity: rangeOrNull(row.affinity),
+    potency: rangeOrNull(row.potency),
+    efficacy: rangeOrNull(row.efficacy),
+    ki: rangeOrNull(row.ki),
+    ic50: rangeOrNull(row.ic50),
+    ec50: rangeOrNull(row.ec50),
+    emax: rangeOrNull(row.emax),
+    selectivityRatio: rangeOrNull(row.selectivityRatio),
+    assaySpecies: row.assaySpecies,
+    referenceIds: row.referenceIds ?? [],
+    evidenceNote: row.evidenceNote,
+  }));
 }
 
 export class ReceptorTargetWriteError extends Error {

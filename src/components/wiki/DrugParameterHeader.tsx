@@ -22,7 +22,6 @@ import {
   fetchPriorityFlags,
   type PriorityFlagRow,
 } from '@/lib/parameterPriorityFlagsApi';
-import { buildDrugBibliography } from '@/lib/bibliography';
 import { ParameterBadges } from './ParameterBadges';
 import { ParameterEditForm } from './ParameterEditForm';
 import { ParameterFlagDialog } from './ParameterFlagDialog';
@@ -114,7 +113,6 @@ export function DrugParameterHeader({ drugCid }: Props) {
     );
   }
 
-  const bibliography = buildDrugBibliography(indicators.refs);
   const drugDisplayName =
     formatGenericDrugName(resolveDrugName(drug.names, i18n.language)) ||
     drug.slug;
@@ -136,9 +134,6 @@ export function DrugParameterHeader({ drugCid }: Props) {
           const value = (drug as unknown as Record<string, unknown>)[pid];
           const formatted = spec.format(value) || '—';
           const paramRefIds = indicators.refs[pid] ?? [];
-          const refIndices = paramRefIds
-            .map((id) => bibliography.get(id))
-            .filter((n): n is number => typeof n === 'number');
           const commentCount = indicators.comments[pid] ?? 0;
           const hasValue = value != null;
           const flag = flagByParameter.get(pid);
@@ -267,7 +262,6 @@ export function DrugParameterHeader({ drugCid }: Props) {
                   <ParameterBadges
                     commentCount={commentCount}
                     refCount={paramRefIds.length}
-                    refIndices={refIndices}
                     onCommentClick={() =>
                       setDialog({ kind: 'discussion', parameter: pid })
                     }
