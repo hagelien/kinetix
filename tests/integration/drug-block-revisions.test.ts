@@ -709,6 +709,8 @@ describe('drug block revisions', () => {
     expect(ok.body.revisions).toHaveLength(1);
     expect(ok.body.revisions[0].author).toMatchObject({ id: userId, displayName: 'Kari' });
     expect(ok.body.revisions[0].author.email).toBeUndefined();
+    expect(ok.body.revisions[0].reviewDecision).toBeUndefined();
+    expect(ok.body.revisions[0].verifications).toBeUndefined();
 
     const other = await call(`drugId=${drugId}&block=pharmacodynamics`);
     expect(other.body.revisions).toEqual([]);

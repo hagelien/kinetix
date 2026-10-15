@@ -387,6 +387,35 @@ describe('ParameterHistoryDialog', () => {
       expect(within(diff).queryByText(/^\+ /)).not.toBeInTheDocument();
     });
 
+
+    it.each(['en', 'nb'])('shows the publication reviewer and verdict affordance in %s', async (lang) => {
+      await i18nApp.changeLanguage(lang);
+      const reviewedAt = '2026-10-15T11:30:00.000Z';
+      fetchDrugBlockHistoryMock.mockResolvedValue({ revisions: [revision({
+        oldValue: {}, newValue: {}, editSummary: null, pendingEditId: 44,
+        author: { id: 1, displayName: 'Innsender' },
+        reviewDecision: { reviewedAt, reviewer: { id: 2, displayName: 'Godkjenner', role: 'editor' } },
+        verifications: { approveCount: 1, disputeCount: 0, abstainCount: 0, implicitApproveCount: 0 },
+      })] });
+      render(<ParameterHistoryDialog drugId={51} parameter="metabolism" onClose={() => {}} />);
+      const decision = await screen.findByTestId('block-review-decision');
+      expect(decision).toHaveTextContent(i18nApp.t('paramHistory.approvedBy'));
+      expect(decision).toHaveTextContent('Godkjenner');
+      expect(decision).toHaveTextContent(new Date(reviewedAt).toLocaleString());
+      expect(within(decision).queryByRole('link')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: i18nApp.t('review.verification.showRationales') })).toBeInTheDocument();
+      expect(screen.getByText('Innsender')).toBeInTheDocument();
+    });
+
+    it('states when the publication reviewer was not recorded', async () => {
+      fetchDrugBlockHistoryMock.mockResolvedValue({ revisions: [revision({
+        oldValue: {}, newValue: {}, editSummary: null,
+        reviewDecision: { reviewedAt: null, reviewer: null },
+      })] });
+      render(<ParameterHistoryDialog drugId={51} parameter="metabolism" onClose={() => {}} />);
+      expect(await screen.findByTestId('block-review-decision')).toHaveTextContent('Reviewer not recorded');
+    });
+
     it('names an operator script as the author of an authorless block revision', async () => {
       fetchDrugBlockHistoryMock.mockResolvedValue({
         revisions: [

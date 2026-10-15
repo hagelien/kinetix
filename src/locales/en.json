@@ -4071,6 +4071,7 @@
     "modelStructure": "Model structure"
   },
   "blockHistory": {
+    "reviewerNotRecorded": "Reviewer not recorded",
     "noRevisions": "No changes recorded for this section yet. History is kept from the first change after it was introduced.",
     "scriptAuthor": "Import or operator script",
     "notRecorded": "Not recorded",

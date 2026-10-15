@@ -430,6 +430,19 @@ export function ParameterHistoryDialog({
                   {new Date(rev.createdAt).toLocaleString()}
                 </div>
                 <ApprovalsLine approvals={rev.approvals} t={t} />
+                {block && rev.reviewDecision ? (
+                  <div className="text-xs text-muted-foreground mb-2" data-testid="block-review-decision">
+                    <span>{t('paramHistory.approvedBy')} </span>
+                    {rev.reviewDecision.reviewer ? (
+                      <UserBadge user={rev.reviewDecision.reviewer} />
+                    ) : (
+                      <span>{t('blockHistory.reviewerNotRecorded')}</span>
+                    )}
+                    {rev.reviewDecision.reviewedAt ? (
+                      <> ({new Date(rev.reviewDecision.reviewedAt).toLocaleString()})</>
+                    ) : null}
+                  </div>
+                ) : null}
                 {rev.editSummary && (
                   <div className="text-sm italic mb-2">
                     “{formatEditSummary(rev.editSummary, t)}”

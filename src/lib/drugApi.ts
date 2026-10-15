@@ -206,6 +206,11 @@ export interface DrugParameterRevisionDTO {
   /** Set when this revision is the applied result of a reviewed `param_entry`
    * pending edit — also the id to fetch that edit's agent verdicts for (#1358). */
   pendingEditId?: number | null;
+  /** Publication decision on a block's linked approved edit; no private email. */
+  reviewDecision?: {
+    reviewedAt: string | null;
+    reviewer: ({ id: number } & UserBadgeData) | null;
+  };
   createdAt: string;
   author: ({ id: number } & UserBadgeData) | null;
   /** Server includes approval summary on the history endpoint (#344, #361). */
