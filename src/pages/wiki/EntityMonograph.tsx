@@ -3,6 +3,7 @@ import { useParams, Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { BioEntitySummary } from '@/lib/bioEntities';
 import { EntityMetabolismDrugs } from '@/components/wiki/EntityMetabolismDrugs';
+import { EntityTargetLigands } from '@/components/wiki/EntityTargetLigands';
 
 /**
  * Resolve `/wiki/entity/:slug` to the entity's monograph wiki page (#785). The
@@ -11,10 +12,10 @@ import { EntityMetabolismDrugs } from '@/components/wiki/EntityMetabolismDrugs';
  * drug to its monograph.
  *
  * An entity with no monograph yet falls back to a minimal page of its own —
- * name plus the drugs the metabolism database links to it — rather than a bare
- * "no monograph" line, so the registry's data is reachable before anyone
- * writes the article. The same linked-drug section renders inside the
- * monograph itself (see WikiPage) once one exists.
+ * name, its target pharmacology, and the drugs the metabolism database links
+ * to it — rather than a bare "no monograph" line, so the registry's data is
+ * reachable before anyone writes the article. The same structured sections
+ * render inside the monograph itself (see WikiPage) once one exists.
  */
 export function EntityMonograph() {
   const { slug } = useParams<{ slug: string }>();
@@ -90,6 +91,7 @@ export function EntityMonograph() {
       <p className="text-sm text-muted-foreground">
         {t('bioEntity.monographMissing')}
       </p>
+      {entity && <EntityTargetLigands entityId={entity.id} />}
       {entity && <EntityMetabolismDrugs entityId={entity.id} />}
     </div>
   );

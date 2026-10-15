@@ -10,7 +10,6 @@
 import {
   and,
   asc,
-  desc,
   eq,
   inArray,
   isNull,
@@ -26,6 +25,7 @@ import {
   citations,
 } from '../../db/schema.js';
 import { getDb, isInPoolTransaction } from './db.js';
+import { previousRevisionForNextWrite } from './drug-merge-lineage.js';
 import { markEntryMutationsConflicted } from './entry-conflicts.js';
 import { getDrugParameterMap, upsertDrugParameter } from './drugParameterStore.js';
 import {
@@ -530,22 +530,19 @@ export interface SourceDiff {
   removed: SourceDiffEntry[];
 }
 
+/**
+ * The contributing citations of the revision `source_diff` is measured from.
+ * Ordinarily the newest revision of `(drugId, parameter)`; after a drug merge,
+ * the newest one of the side whose value the survivor kept, until the
+ * survivor writes its own (#29 — the rule and why live in
+ * `drug-merge-lineage.ts`, shared with the source_diff backfill).
+ */
 async function fetchPreviousReferenceIds(
   drugId: number,
   parameter: string,
 ): Promise<number[]> {
-  const [latest] = await getDb()
-    .select({ referenceIds: drugParameterRevisions.referenceIds })
-    .from(drugParameterRevisions)
-    .where(
-      and(
-        eq(drugParameterRevisions.drugId, drugId),
-        eq(drugParameterRevisions.parameter, parameter),
-      ),
-    )
-    .orderBy(desc(drugParameterRevisions.id))
-    .limit(1);
-  return latest?.referenceIds ?? [];
+  const previous = await previousRevisionForNextWrite(getDb(), drugId, parameter);
+  return previous?.referenceIds ?? [];
 }
 
 /** Both sides are sorted ascending (see `sameContributingCitations`). */

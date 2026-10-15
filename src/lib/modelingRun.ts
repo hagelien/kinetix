@@ -56,9 +56,11 @@ import {
   coreAnalyteFor,
   coreResultToMonteCarloResult,
   interpolateCoreBand,
+  modeledSimulatorRoutes,
   routeIdFor,
   toCanonicalScenario,
 } from '@/lib/forwardCoreAdapter';
+import { LEGACY_SIMULATOR_ROUTES } from '@/lib/simulatorRoutes';
 import {
   liveDerivedEntries,
   type CanonicalResult,
@@ -515,6 +517,31 @@ function analyteId(config: DrugSimConfig, drug: DrugComponent | undefined) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
+}
+
+/**
+ * The kinetics-core analyte a component's Monte Carlo run resolves its model under — the same id
+ * `runCoreDoses` passes the engine, so the dose-route picker offers the routes of the model that
+ * will actually run.
+ */
+export function coreAnalyteForComponent(
+  config: DrugSimConfig,
+  drug: DrugComponent | undefined,
+): string {
+  return coreAnalyteFor([drug?._slug, analyteId(config, drug)]);
+}
+
+/**
+ * The dose routes the panel offers for a component. A Monte Carlo component whose drug resolves a
+ * kinetics-core model offers exactly that model's routes; the engines that run no core model
+ * (KineLab, ethanol/Widmark) and a drug with no resolved model keep the legacy list.
+ */
+export function offeredDoseRoutes(
+  config: DrugSimConfig,
+  drug: DrugComponent | undefined,
+): readonly RouteType[] {
+  if (getComponentEngine(config) !== 'pk-montecarlo') return LEGACY_SIMULATOR_ROUTES;
+  return modeledSimulatorRoutes(coreAnalyteForComponent(config, drug)) ?? LEGACY_SIMULATOR_ROUTES;
 }
 
 function kinelabRoute(config: DrugSimConfig): InferenceInput['route'] {
@@ -1365,7 +1392,7 @@ async function runCoreDoses(
 ): Promise<{ ok: true; core: CanonicalResult } | { ok: false; detail: string }> {
   const build = (draws: number) =>
     toCanonicalScenario({
-      analyte: coreAnalyteFor([drugComponent?._slug, analyteId(config, drugComponent)]),
+      analyte: coreAnalyteForComponent(config, drugComponent),
       route: mcConfig.route,
       subject: { weightKg: mcConfig.weight ?? 70 },
       doses,
