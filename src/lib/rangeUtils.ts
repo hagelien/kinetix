@@ -132,6 +132,14 @@ export function formatRange(
   // shadow the real min–max range in the formatted output; the value then
   // falls through to the range/value branches below.
   if (rep != null && isQualifierOperator(qualifier)) s = `${qualifier} ${fmt(rep)}${unitSuffix}`;
+  // A stored operator on a bound-only value or a span is part of what the
+  // source reported (#296): "< 10" is a strict bound, not the inclusive "≤10"
+  // the one-sided fallback below would write, and "> 3–12" is a censored
+  // span, not an exact one. Keep the operator as recorded.
+  else if (isQualifierOperator(qualifier) && min != null && max != null && min !== max)
+    s = `${qualifier} ${fmt(min)}–${fmt(max)}${unitSuffix}`;
+  else if (isQualifierOperator(qualifier) && (min != null || max != null))
+    s = `${qualifier} ${fmt((min ?? max)!)}${unitSuffix}`;
   else if (min != null && max != null && min !== max) s = `${fmt(min)}–${fmt(max)}${unitSuffix}`;
   else if (min != null && max === min) s = `${fmt(min)}${unitSuffix}`;
   else if (rep != null) s = `${fmt(rep)}${unitSuffix}`;

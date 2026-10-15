@@ -59,6 +59,29 @@ describe('rangeUtils', () => {
   });
 
   describe('formatRange', () => {
+    // #296: a stored operator is part of what the source reported, so a
+    // bound-only value or span keeps it rather than becoming an inclusive or
+    // exact reading.
+    it.each([
+      ['<', { max: 10 }, '< 10 ng/mL'],
+      ['≤', { max: 10 }, '≤ 10 ng/mL'],
+      ['>', { min: 3 }, '> 3 ng/mL'],
+      ['≥', { min: 3 }, '≥ 3 ng/mL'],
+      ['<', { min: 10 }, '< 10 ng/mL'],
+      ['<', { min: 10, max: 10 }, '< 10 ng/mL'],
+    ] as const)('keeps a %s qualifier on a bound-only value (%o)', (qualifier, bounds, expected) => {
+      expect(formatRange({ ...bounds, qualifier, unit: 'ng/mL' })).toBe(expected);
+    });
+
+    it.each(['<', '≤', '>', '≥'] as const)('keeps a %s qualifier on a qualified span', (qualifier) => {
+      expect(formatRange({ min: 3, max: 12, qualifier, unit: 'ng/mL' })).toBe(`${qualifier} 3–12 ng/mL`);
+    });
+
+    it('still writes an unqualified one-sided bound inclusively', () => {
+      expect(formatRange({ max: 10, unit: 'ng/mL' })).toBe('≤10 ng/mL');
+      expect(formatRange({ min: 3, unit: 'ng/mL' })).toBe('≥3 ng/mL');
+    });
+
     it('formats value with unit', () => {
       expect(formatRange({ median: 5, unit: 'mg' })).toBe('5 mg');
     });
