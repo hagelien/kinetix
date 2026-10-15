@@ -125,6 +125,12 @@ describe('mechanics document — engine vocabulary', () => {
     );
   });
 
+  it('names every accepted route in the document (§3 step 1)', () => {
+    for (const route of ROUTE_IDS) {
+      expect(doc, `route ${route}`).toContain(`\`${route}\``);
+    }
+  });
+
   it('publishes the engine route vocabulary', () => {
     const routes = new Set(
       mechanicsModels().flatMap((m) => m.routes.map((r) => r.route)),

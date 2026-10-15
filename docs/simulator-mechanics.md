@@ -132,7 +132,12 @@ name-derived id (`ethanol`, `ghb`). The first id the build resolves is the one t
 here is terminal for the run. If the
 model exists, the scenario's route must be one the model declares — a model reviewed only
 for sublingual dosing refuses an oral scenario rather than reusing the sublingual
-parameters. The dose basis (parent drug, active moiety, salt, free base) must likewise be
+parameters. The engine accepts the routes `oral`, `intranasal`, `iv`, `im`, `sublingual`,
+`buccal`, `subcutaneous`, `transdermal`, `rectal`, `inhalation` and `other`; `buccal`,
+`subcutaneous` and `transdermal` are vocabulary only so far — no reviewed or derived model
+declares them yet, so a scenario on one of them is refused as an undeclared route. The
+simulator's route picker still offers only IV, oral, intranasal, inhaled and other, so
+`sublingual`, `im`, `rectal` and the three new routes cannot be selected there. The dose basis (parent drug, active moiety, salt, free base) must likewise be
 one the model declares; an unsupported basis is refused rather than silently mis-scaled.
 
 ### Step 2 — Scale the volume of distribution to the subject

@@ -693,8 +693,8 @@ Run all six steps before producing any output. Skipping a step invalidates the c
      representative dose, is a `doseLow`–`doseHigh` range. The representative
      figure goes in `comments`, where nothing can normalize by it.
   4. **Route and formulation.** `route` is one of `ROUTE_IDS` (`oral`,
-     `intranasal`, `iv`, `im`, `sublingual`, `rectal`, `inhalation`,
-     `other`). For `iv`, add `ivInputMode` (`bolus` / `infusion` /
+     `intranasal`, `iv`, `im`, `sublingual`, `buccal`, `subcutaneous`,
+     `transdermal`, `rectal`, `inhalation`, `other`). For `iv`, add `ivInputMode` (`bolus` / `infusion` /
      `unknown`), and for an infusion `administrationDurationMin`. Add
      `releaseProfile` (`immediate` / `modified` / `not_applicable` /
      `unknown`) and `physicalForm` (`tablet_capsule` / `solution` /
