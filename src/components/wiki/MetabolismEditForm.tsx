@@ -13,6 +13,7 @@ import { parseLocaleNumber } from '@/lib/parseNumber';
 import { showToast } from '@/lib/toast';
 import { useCan } from '@/lib/usePermissions';
 import {
+  ApiError,
   submitDrugMetabolism,
   type MetabolismMetaboliteInput,
   type MetabolismPrecursorInput,
@@ -383,7 +384,9 @@ export function MetabolismEditForm({
       }
       onSaved();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('metabolismEdit.saveFailed'));
+      setError(err instanceof ApiError && err.code === 'block_reference_missing'
+        ? t('errors.blockReferenceMissing')
+        : err instanceof Error ? err.message : t('metabolismEdit.saveFailed'));
     } finally {
       setSaving(false);
     }

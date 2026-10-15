@@ -10,11 +10,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PendingEditCard } from '@/components/review/PendingEditCard';
 import type { PendingEditRow } from '@/lib/pendingEditsApi';
 
+import en from '@/locales/en.json';
+import nb from '@/locales/nb.json';
+const errorLocale = vi.hoisted(() => ({ language: 'en' as 'en' | 'nb' }));
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     i18n: { language: 'en' },
     t: (key: string, opts?: Record<string, unknown>) =>
-      (opts?.defaultValue as string | undefined) ?? key,
+      key === 'errors.blockReferenceMissing' ? (errorLocale.language === 'nb' ? nb : en).errors.blockReferenceMissing : (opts?.defaultValue as string | undefined) ?? key,
   }),
 }));
 
@@ -121,4 +125,11 @@ describe('PendingEditCard — PubChem CID shadow refusal', () => {
 
     expect(await screen.findByText('Some other refusal')).toBeInTheDocument();
   });
+});
+
+it.each(['en', 'nb'] as const)('translates a missing block reference on approval in %s', async (language) => {
+  errorLocale.language = language;
+  await approveAndFail(new ApiError('Hardcoded English missing reference', 400, 'block_reference_missing'));
+  expect(await screen.findByText((language === 'nb' ? nb : en).errors.blockReferenceMissing)).toBeInTheDocument();
+  expect(screen.queryByText('Hardcoded English missing reference')).not.toBeInTheDocument();
 });

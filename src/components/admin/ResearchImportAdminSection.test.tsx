@@ -2,8 +2,12 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResearchImportAdminSection } from './ResearchImportAdminSection';
 
+import en from '@/locales/en.json';
+import nb from '@/locales/nb.json';
+const errorLocale = vi.hoisted(() => ({ language: 'en' as 'en' | 'nb' }));
+
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({ t: (key: string) => key === 'errors.blockReferenceMissing' ? (errorLocale.language === 'nb' ? nb : en).errors.blockReferenceMissing : key }),
 }));
 vi.mock('@/lib/toast', () => ({ showToast: vi.fn() }));
 
@@ -193,4 +197,16 @@ describe('ResearchImportAdminSection', () => {
 
     await waitFor(() => expect(screen.getByText('Some other refusal')).toBeInTheDocument());
   });
+});
+
+it.each(['en', 'nb'] as const)('translates a missing block reference on import in %s', async (language) => {
+  errorLocale.language = language;
+  (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: false, status: 400,
+    json: async () => ({ error: 'Hardcoded English missing reference', code: 'block_reference_missing' }),
+  });
+  render(<ResearchImportAdminSection />);
+  typeInto(VALID_JSON);
+  fireEvent.click(screen.getByText('admin.researchImport.preview'));
+  expect(await screen.findByText((language === 'nb' ? nb : en).errors.blockReferenceMissing)).toBeInTheDocument();
+  expect(screen.queryByText('Hardcoded English missing reference')).not.toBeInTheDocument();
 });

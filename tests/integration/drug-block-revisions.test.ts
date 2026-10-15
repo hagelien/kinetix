@@ -171,6 +171,24 @@ async function summaryRequest(block: string, drugId: number, citationId: number,
 
 describe('drug block revisions', () => {
   it.each(['metabolism', 'pharmacodynamics'] as const)(
+    'returns the stable missing-reference save code for %s', async (block) => {
+      const drugId = await seedDrug(db);
+      const userId = await seedUser(db, { role: 'admin' });
+      getUserFromRequestMock.mockResolvedValue({ userId, role: 'admin' });
+      const missing = 987654321;
+      const entity = await seedBioEntity(db);
+      const saved = block === 'metabolism'
+        ? await request(metabolismHandler, 'PUT', `/api/drug-metabolism?drugId=${drugId}`,
+          { ...metabolismInput(0.5), profile: { referenceIds: [missing] } })
+        : await request(receptorHandler, 'PUT', `/api/drug-receptor-targets?drugId=${drugId}`,
+          { mechanisms: [{ receptorTargetId: entity, interactionType: 'agonist', referenceIds: [missing] }] });
+      expect(saved.status).toBe(400);
+      expect(saved.body.code).toBe('block_reference_missing');
+      expect(await revisionsFor(drugId, block)).toEqual([]);
+    },
+  );
+
+  it.each(['metabolism', 'pharmacodynamics'] as const)(
     'retains a direct %s edit summary through the public history API', async (block) => {
       const drugId = await seedDrug(db);
       const userId = await seedUser(db, { role: 'admin' });

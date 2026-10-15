@@ -249,7 +249,7 @@ async function handlePut(
     });
   } catch (err) {
     if (err instanceof MetabolismWriteError || err instanceof ParameterApplyError) {
-      error(res, err.statusHint, err.message);
+      error(res, err.statusHint, err.message, err instanceof ParameterApplyError ? err.code : undefined);
       return;
     }
     throw err;
