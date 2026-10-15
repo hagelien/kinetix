@@ -979,6 +979,22 @@ describe('PATCH /api/disputes release guards', () => {
     expect(resolveDisputeByIdMock).toHaveBeenCalled();
   });
 
+  // decideOwn waives the own-edit rule on top of review.edit.decide; an
+  // installation that raised decide above the author keeps them out.
+  it('requires review.edit.decide alongside decideOwn for a self-overrule', async () => {
+    getUserFromRequestMock.mockResolvedValue({ userId: AUTHOR, role: 'editor' });
+    callerCanMock.mockImplementation((role: string, capability: string) =>
+      capability === 'review.edit.decide'
+        ? Promise.resolve(role === 'admin')
+        : shippedDefaults(role, capability),
+    );
+
+    const { status, body } = await patch('rejected');
+
+    expect(status).toBe(403);
+    expect(body.code).toBe('dispute_overrule_own_not_allowed');
+  });
+
   it("refuses an agent overruling a person's dispute on someone else's edit", async () => {
     getUserFromRequestMock.mockResolvedValue({ userId: 99, role: 'editor' });
     isActiveAgentUserMock.mockResolvedValue(true);

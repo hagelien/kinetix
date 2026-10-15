@@ -385,8 +385,9 @@ async function handlePost(
  *    `PATCH /api/pending-edits` blocks even an author holding
  *    `review.edit.decideOwn` from deciding their own edit over a standing
  *    objection; overruling it first would make that block a single extra
- *    click. The human `decideOwn` grant is honoured here as on an uphold's
- *    return, and never for an active agent (an agent token is clamped to
+ *    click. The human `decideOwn` grant (with `review.edit.decide`, which
+ *    it waives on top of) is honoured here as on an uphold's return, and
+ *    never for an active agent (an agent token is clamped to
  *    editor, so a lowered grant would otherwise reach every agent).
  *  - An active agent never overrules a human-raised dispute: a human
  *    objection stays human-controlled, as an agent never decides a human's
@@ -399,6 +400,7 @@ async function releaseRefusal(args: {
   id: number;
   resolution: 'rejected' | 'withdrawn';
   callerUserId: number;
+  mayDecide: boolean;
   mayDecideOwn: boolean;
 }): Promise<{ message: string; code: string } | null> {
   const dispute = await getDisputeById(args.id);
@@ -420,9 +422,12 @@ async function releaseRefusal(args: {
     targetType: dispute.targetType,
     targetId: dispute.targetId,
   });
+  // `review.edit.decideOwn` is a waiver on top of `review.edit.decide`, not a
+  // replacement for it: an author who may not decide edits at all gets
+  // nothing from it, as on the manual path.
   if (
     authorUserId === args.callerUserId &&
-    !(args.mayDecideOwn && !callerIsAgent)
+    !(args.mayDecide && args.mayDecideOwn && !callerIsAgent)
   ) {
     return {
       message:
@@ -503,6 +508,7 @@ async function handlePatch(
       id,
       resolution,
       callerUserId: auth.userId,
+      mayDecide,
       mayDecideOwn,
     });
     if (refusal) {
