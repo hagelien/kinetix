@@ -211,6 +211,23 @@ describe("getUserFromRequest", () => {
     ).resolves.toMatchObject({ userId: 7 });
   });
 
+  // iat is whole seconds; a sign-in later in the revocation's own second must
+  // not be rejected.
+  it("accepts a token issued in the same second as the revocation", async () => {
+    vi.mocked(jwtVerify).mockResolvedValue({
+      payload: { sub: "7", role: "contributor", iat: Math.floor(revokedAt.getTime() / 1000) },
+      protectedHeader: { alg: "HS256" },
+      key: new Uint8Array(),
+    } as Awaited<ReturnType<typeof jwtVerify>>);
+    mockUserLookup(async () => [
+      { ...revokedUser()[0]!, sessionsValidAfter: new Date(revokedAt.getTime() + 600) },
+    ]);
+
+    await expect(
+      getUserFromRequest(requestWithToken("signed-token")),
+    ).resolves.toMatchObject({ userId: 7 });
+  });
+
   it("fails closed on an undated token once sessions were revoked", async () => {
     withIssuedAt(undefined);
     mockUserLookup(async () => revokedUser());

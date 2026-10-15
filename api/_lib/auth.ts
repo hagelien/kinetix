@@ -231,12 +231,15 @@ export async function getUserFromRequest(
 
   // Server-side revocation: a token issued before the user's sessions were
   // revoked (allowlist removal, admin force-logout) is dead, even after the
-  // person signs in again and moves `lastAuthAt` forward. A token without an
-  // `iat` cannot be dated, so it fails closed once anything was revoked.
+  // person signs in again and moves `lastAuthAt` forward. `iat` has whole-
+  // second precision, so the cutoff is compared at the same precision: a
+  // token minted later in the revocation's own second stays valid rather than
+  // a fresh sign-in being rejected. A token without an `iat` cannot be dated,
+  // so it fails closed once anything was revoked.
   if (
     row.sessionsValidAfter &&
     (verified.issuedAt === null ||
-      verified.issuedAt * 1000 < row.sessionsValidAfter.getTime())
+      verified.issuedAt < Math.floor(row.sessionsValidAfter.getTime() / 1000))
   ) {
     return null;
   }

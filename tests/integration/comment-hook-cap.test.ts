@@ -3,13 +3,12 @@
  *
  * `comment_posted` is the one hook event a lowest-tier signed-in user can
  * cause, and each fire starts a billed routine session. The caps are counted
- * from the database — the author's drug-scoped comments and the successful
- * `comment_posted` fires in the last hour — so they hold across serverless
- * instances. A capped fire is recorded as `skipped` / `rate_limited`.
+ * from the database — the author's drug-scoped comments, and everyone's, in
+ * the last hour — so they hold across serverless instances. A capped fire is recorded as `skipped` / `rate_limited`.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { desc } from 'drizzle-orm';
-import { agentHookRuns, drugParameterDiscussions } from '../../db/schema.js';
+import { agentHookRuns, agents, drugParameterDiscussions } from '../../db/schema.js';
 import {
   COMMENT_HOOK_GLOBAL_LIMIT,
   COMMENT_HOOK_PER_AUTHOR_LIMIT,
@@ -87,17 +86,31 @@ describe('comment hook caps', () => {
     });
   });
 
-  it('skips a fire once the global cap of successful fires is reached', async () => {
-    const [commentId] = await postComments(1);
-    await db.insert(agentHookRuns).values(
-      Array.from({ length: COMMENT_HOOK_GLOBAL_LIMIT }, () => ({
-        event: 'comment_posted',
-        outcome: 'success',
-      })),
+  // Comments are committed before their hook fires, so counting them (not
+  // recorded runs) includes every fire still in flight in a concurrent burst.
+  it('skips a fire once people across the site exceed the global cap', async () => {
+    const others = await Promise.all(
+      Array.from({ length: COMMENT_HOOK_GLOBAL_LIMIT }, (_, i) =>
+        seedUser(db, { email: `u${i}@example.com`, username: `u${i}`, role: 'authenticated' }),
+      ),
     );
+    for (const author of others) await postComments(1, author);
+    const [commentId] = await postComments(1);
     expect(await fireFor(commentId!)).toEqual({
       outcome: 'skipped',
       errorMessage: 'rate_limited',
     });
+  });
+
+  it("does not count agents' comments toward the global cap", async () => {
+    const agentUser = await seedUser(db, {
+      email: 'agent@example.com',
+      username: 'agent',
+      role: 'contributor',
+    });
+    await db.insert(agents).values({ userId: agentUser, name: 'a', slug: 'a', status: 'active' });
+    await postComments(COMMENT_HOOK_GLOBAL_LIMIT + 5, agentUser);
+    const [commentId] = await postComments(1);
+    expect(await fireFor(commentId!)).toEqual({ outcome: 'skipped', errorMessage: null });
   });
 });

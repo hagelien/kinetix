@@ -468,10 +468,13 @@ export const COMMENT_HOOK_GLOBAL_LIMIT = 30;
 const COMMENT_HOOK_WINDOW_MS = 60 * 60 * 1000;
 
 /**
- * Whether firing for this comment would exceed a cap. Counted from the
- * database so the caps hold across serverless instances: the author's own
- * drug-scoped comments in the window (including this one), and the
- * `comment_posted` fires that reached the routine.
+ * Whether firing for this comment would exceed a cap. Both caps count
+ * drug-scoped comments by people in the window — the author's own, and
+ * everyone's — read from the database so they hold across serverless
+ * instances. A comment row is committed before its hook fires (the fire waits
+ * for the commit), so the count already includes every fire still in flight;
+ * counting recorded `agent_hook_runs` instead would let a concurrent burst
+ * from many authors all see room under the cap before any run was recorded.
  */
 async function commentHookOverCap(authorUserId: number): Promise<boolean> {
   const since = new Date(Date.now() - COMMENT_HOOK_WINDOW_MS);
@@ -489,18 +492,19 @@ async function commentHookOverCap(authorUserId: number): Promise<boolean> {
       ),
     db
       .select({ n: sql<number>`count(*)::int` })
-      .from(agentHookRuns)
+      .from(drugParameterDiscussions)
       .where(
         and(
-          eq(agentHookRuns.event, 'comment_posted'),
-          eq(agentHookRuns.outcome, 'success'),
-          gte(agentHookRuns.createdAt, since),
+          isNotNull(drugParameterDiscussions.drugId),
+          gte(drugParameterDiscussions.createdAt, since),
+          // Agents' comments never fire the hook (fireAgentHookForActor).
+          sql`NOT EXISTS (SELECT 1 FROM ${agents} WHERE ${agents.userId} = ${drugParameterDiscussions.createdBy})`,
         ),
       ),
   ]);
   return (
     (mine?.n ?? 0) > COMMENT_HOOK_PER_AUTHOR_LIMIT ||
-    (all?.n ?? 0) >= COMMENT_HOOK_GLOBAL_LIMIT
+    (all?.n ?? 0) > COMMENT_HOOK_GLOBAL_LIMIT
   );
 }
 
