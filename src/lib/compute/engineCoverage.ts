@@ -23,6 +23,12 @@ import {
 export interface CoverageComponent extends EnginePriorFields {
   name: string;
   nameEn?: string;
+  /** The drug's catalog slug (`drugs.slug`) when the source carries one —
+   *  `RawComponent.slug` in the fixture, `DrugRow.slug` from the API, or
+   *  `DrugComponent._slug` (map it here when adapting one). Preferred over the
+   *  name-derived fallback because the catalog slug is not always derivable
+   *  from the name (Valproat is `valproat`, not `valproic-acid`). */
+  slug?: string | null;
 }
 
 export type EngineTier =
@@ -56,9 +62,23 @@ export interface EngineCoverage {
   engineReady: number;
 }
 
-/** Slugify a component name the same way the seeder (`generateSlug`) does, so
- *  coverage slugs line up with `drugs.slug` / the runtime analyte id. */
+/** The identifier a coverage entry reports: the component's own catalog slug
+ *  when it carries a non-blank one, otherwise the name slugified the same way
+ *  the seeder (`generateSlug`) does.
+ *
+ *  The catalog slug wins because it IS `drugs.slug` / the runtime analyte id
+ *  (`scripts/seed-drugs.ts` seeds fresh databases with the fixture's slug, and
+ *  the modelling run keys a catalog-derived kinetics-core model by it). The
+ *  derivation only reproduces it when the slug was minted from the English
+ *  name, so deriving unconditionally reported ids that exist nowhere for every
+ *  entry minted otherwise — Valproat came out `valproic-acid`. The fallback is
+ *  kept, unchanged, for hand-written / pre-slug entries. A blank slug is
+ *  treated as absent, matching `toComponentFromRaw` in `src/data/index.ts`.
+ *  The slug is trimmed but otherwise passed through verbatim: it is an
+ *  identifier to look up, not text to normalise. */
 export function coverageSlug(component: CoverageComponent): string {
+  const slug = typeof component.slug === 'string' ? component.slug.trim() : '';
+  if (slug) return slug;
   return (component.nameEn || component.name)
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, '')
@@ -68,7 +88,8 @@ export function coverageSlug(component: CoverageComponent): string {
     .slice(0, 200);
 }
 
-// Zero-order analytes are identified by slug — today just ethanol. Kept as a
+// Zero-order analytes are identified by slug — today just ethanol, whose
+// catalog slug and name-derived slug agree (`ethanol`). Kept as a
 // set so a future zero-order component (e.g. GHB, if it moves to a saturable
 // branch) is a one-line addition.
 const ZERO_ORDER_SLUGS = new Set(['ethanol']);
