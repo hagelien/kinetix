@@ -265,7 +265,7 @@ describe('buildActivityPlot', () => {
     const plot = buildActivityPlot(
       [
         ligand({ relationshipId: 1, emax: { median: 60, unit: '%' } }),
-        ligand({ relationshipId: 2, emax: { median: 0.9, unit: 'fraction' } }),
+        ligand({ relationshipId: 2, emax: { median: 3, unit: 'a.u.' } }),
       ],
       'emax',
     );
@@ -273,6 +273,53 @@ describe('buildActivityPlot', () => {
     expect(plot.omitted.map((o) => o.reason)).toEqual([
       'heterogeneous_units',
       'heterogeneous_units',
+    ]);
+  });
+
+  it('scales folded units onto the linear axis instead of only relabelling them', () => {
+    const molar = buildActivityPlot(
+      [
+        ligand({ relationshipId: 1, efficacy: { median: 1, min: 0.5, max: 2, unit: 'mM' } }),
+        ligand({ relationshipId: 2, efficacy: { median: 500, unit: 'nM' } }),
+      ],
+      'efficacy',
+    );
+    expect(molar.scale).toBe('linear');
+    expect(molar.unit).toBe('nM');
+    const byId = new Map(
+      molar.groups.flatMap((g) => g.points).map((p) => [p.ligand.relationshipId, p]),
+    );
+    // 1 mM is 1 000 000 nM, not "1 nM"; its error bar scales with it.
+    expect(byId.get(1)).toMatchObject({ value: 1e6, low: 5e5, high: 2e6 });
+    expect(byId.get(2)).toMatchObject({ value: 500 });
+
+    const percent = buildActivityPlot(
+      [
+        ligand({ relationshipId: 1, emax: { median: 0.9, min: 0.8, max: 1, unit: 'fraction' } }),
+        ligand({ relationshipId: 2, emax: { median: 60, unit: '%' } }),
+      ],
+      'emax',
+    );
+    expect(percent.unit).toBe('%');
+    expect(percent.groups[0]!.points.map((p) => [p.value, p.low, p.high])).toEqual([
+      [90, 80, 100],
+      [60, null, null],
+    ]);
+  });
+
+  it('omits one-sided bounds from a linear plot without letting their unit disable it', () => {
+    const plot = buildActivityPlot(
+      [
+        ligand({ relationshipId: 1, emax: { median: 60, unit: '%' } }),
+        ligand({ relationshipId: 2, emax: { min: 1, unit: 'a.u.' } }),
+        ligand({ relationshipId: 3, emax: { median: 80, qualifier: '>', unit: '%' } }),
+      ],
+      'emax',
+    );
+    expect(plot.pointCount).toBe(1);
+    expect(plot.omitted.map((o) => [o.ligand.relationshipId, o.reason])).toEqual([
+      [2, 'one_sided'],
+      [3, 'one_sided'],
     ]);
   });
 
@@ -363,6 +410,26 @@ describe('sortLigands', () => {
     ];
     expect(sortLigands(rows, 'emax', 'asc', name).map((r) => r.relationshipId)).toEqual([3, 2, 1, 4]);
     expect(sortLigands(rows, 'emax', 'desc', name).map((r) => r.relationshipId)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('never uses a one-sided bound as an exact sort key', () => {
+    const ki = [
+      ligand({ relationshipId: 1, ki: { min: 0.01, unit: 'nM' } }),
+      ligand({ relationshipId: 2, ki: { median: 5, unit: 'nM' } }),
+      ligand({ relationshipId: 3, ki: { median: 1, unit: 'nM' } }),
+      ligand({ relationshipId: 4, ki: { median: 0.5, qualifier: '<', unit: 'nM' } }),
+    ];
+    expect(sortLigands(ki, 'ki', 'asc', name).map((r) => r.relationshipId)).toEqual([3, 2, 1, 4]);
+    expect(sortLigands(ki, 'ki', 'desc', name).map((r) => r.relationshipId)).toEqual([2, 3, 1, 4]);
+
+    const emax = [
+      ligand({ relationshipId: 1, emax: { min: 99, unit: '%' } }),
+      ligand({ relationshipId: 2, emax: { median: 50, unit: '%' } }),
+      ligand({ relationshipId: 3, emax: { median: 70, unit: '%' } }),
+      ligand({ relationshipId: 4, efficacy: { max: 10, unit: '%' } }),
+    ];
+    expect(sortLigands(emax, 'emax', 'desc', name).map((r) => r.relationshipId)).toEqual([3, 2, 1, 4]);
+    expect(sortLigands(emax, 'emax', 'asc', name).map((r) => r.relationshipId)).toEqual([2, 3, 1, 4]);
   });
 
   it('sorts by drug name', () => {

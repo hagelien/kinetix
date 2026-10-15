@@ -208,6 +208,25 @@ export function toNanomolar(
   return factor === null ? null : value * factor;
 }
 
+/**
+ * The common scale a stored unit folds onto, with the factor its numbers must
+ * be multiplied by to be expressed on that scale: molar units → nM, `%` /
+ * `percent` → %, `fraction` → % (×100). Any other unit — including none — is
+ * its own scale (factor 1) and is only comparable with itself.
+ *
+ * Every caller that groups values by `unit` must also scale them by
+ * `factor`; folding the label without the number is how 1 mM ends up
+ * positioned at "1 nM".
+ */
+export function comparableUnit(unit: string | null | undefined): {
+  unit: string;
+  factor: number;
+} {
+  const raw = (unit ?? '').trim();
+  if (raw.toLowerCase() === 'fraction') return { unit: '%', factor: 100 };
+  return normalizePdUnit(raw);
+}
+
 // ─── Metrics and the activity plot ───────────────────────────────────────────
 
 /** Plot metrics, in selector order. One is shown at a time — never mixed. */
@@ -284,9 +303,11 @@ function groupPoints(
  * Concentration metrics are converted to nM on a log axis; a value in any
  * other unit, a one-sided bound, or a non-positive value stays in the table
  * but is listed as omitted. Non-concentration metrics (Emax, efficacy, and
- * affinity/potency recorded without a molar unit) use a linear axis in the
- * stored unit — and only when every value shares that unit; mixed units
+ * affinity/potency recorded without a molar unit) use a linear axis on one
+ * common scale (see {@link comparableUnit}; values and bounds are scaled onto
+ * it) — and only when every exact value folds onto that scale; mixed units
  * disable the plot rather than pretending the numbers are comparable.
+ * One-sided bounds are never plotted as points on either axis.
  *
  * Within each activity group, concentration points run smallest first;
  * linear points largest first.
@@ -340,31 +361,37 @@ export function buildActivityPlot(
     };
   }
 
-  const units = new Set(measured.map((m) => normalizePdUnit(m.range.unit).unit));
+  // One-sided bounds are never plotted, so they neither join nor break the
+  // unit check; compatible units are folded AND scaled onto one scale.
+  const exact = measured.filter((m) => m.scalar.exact);
+  for (const { ligand } of measured.filter((m) => !m.scalar.exact)) {
+    omitted.push({ ligand, reason: 'one_sided' });
+  }
+  const units = new Set(exact.map((m) => comparableUnit(m.range.unit).unit));
   if (units.size > 1) {
     return {
       metric,
       scale: 'linear',
       unit: '',
       groups: [],
-      omitted: measured.map(({ ligand }) => ({
-        ligand,
-        reason: 'heterogeneous_units' as const,
-      })),
+      omitted: [
+        ...exact.map(({ ligand }) => ({
+          ligand,
+          reason: 'heterogeneous_units' as const,
+        })),
+        ...omitted,
+      ],
       pointCount: 0,
     };
   }
-  for (const { ligand, scalar } of measured) {
-    if (!scalar.exact) {
-      omitted.push({ ligand, reason: 'one_sided' });
-      continue;
-    }
+  for (const { ligand, range, scalar } of exact) {
+    const { factor } = comparableUnit(range.unit);
     points.push({
       ligand,
       group: normalizeInteractionType(ligand.interactionType).group,
-      value: scalar.value,
-      low: scalar.low,
-      high: scalar.high,
+      value: scalar.value * factor,
+      low: scalar.low === null ? null : scalar.low * factor,
+      high: scalar.high === null ? null : scalar.high * factor,
     });
   }
   return {
@@ -413,13 +440,16 @@ export type LigandSortKey = 'default' | 'drug' | 'activity' | 'ki' | 'ec50' | 'i
  * unsortable rather than compared as a raw number against nM values.
  * Ranking 2.4 ng/mL beside 0.2 nM would assert a molar-vs-mass potency order
  * the data does not support. Such rows stay in the table and sort with the
- * rows that have no value.
+ * rows that have no value. So does a one-sided bound, which is a limit rather
+ * than a value that can be ranked.
  */
 export function measurementSortValue(
   range: NumericRange | null | undefined,
 ): number | null {
   const scalar = rangeScalar(range);
-  if (!scalar) return null;
+  // A one-sided bound (min-only, max-only, or `<`/`>`/`≤`/`≥`) is a limit,
+  // not a value: it has no exact rank among the measured ones.
+  if (!scalar || !scalar.exact) return null;
   return toNanomolar(scalar.value, range?.unit);
 }
 
@@ -432,20 +462,16 @@ export function emaxOrEfficacy(ligand: EntityTargetLigand): NumericRange | null 
 }
 
 /**
- * A unit-tagged value for comparing Emax/efficacy readings: `%`, `percent`
- * and `fraction` share one scale (a fraction is ×100), molar units share nM,
- * and any other unit — including none — is only comparable with itself.
+ * A unit-tagged value for comparing Emax/efficacy readings, on the scale of
+ * {@link comparableUnit}; null for a missing value or a one-sided bound.
  */
 export function efficacyComparable(
   range: NumericRange | null | undefined,
 ): { unit: string; value: number } | null {
   const scalar = rangeScalar(range);
-  if (!scalar) return null;
-  const raw = (range?.unit ?? '').trim();
-  if (raw.toLowerCase() === 'fraction') {
-    return { unit: '%', value: scalar.value * 100 };
-  }
-  const { unit, factor } = normalizePdUnit(raw);
+  // One-sided bounds are limits, not rankable values.
+  if (!scalar || !scalar.exact) return null;
+  const { unit, factor } = comparableUnit(range?.unit);
   return { unit, value: scalar.value * factor };
 }
 
@@ -476,8 +502,8 @@ function efficacySortValues(
 /**
  * Sort a ligand list for the table. `default` keeps the server's stable
  * order. Rows without a sortable value for the sorted measurement (none
- * recorded, a Ki/EC50/IC50 not in a molar unit, or an Emax/efficacy outside
- * the column's common unit) always go last, in either direction and in their
+ * recorded, a one-sided bound, a Ki/EC50/IC50 not in a molar unit, or an
+ * Emax/efficacy outside the column's common unit) always go last, in either direction and in their
  * original order, so they never crowd out — or get ranked against — the
  * comparable ones.
  */
