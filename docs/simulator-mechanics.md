@@ -341,6 +341,17 @@ The two tiers are treated differently, and deliberately so:
   median. Inputs are drawn independently and the extremes are treated as bounds, so the band is
   a **plausible range** — the curves the reported values allow — and never a confidence or
   prediction interval. An input with only one reported value stays fixed at it.
+  **Only reference-scope evidence feeds a curve.** A Tmax, absorption rate (ka),
+  bioavailability or absorption shape that the catalogue records for a **modified-release**
+  formulation (an extended-release tablet, a depot) or for a named **special population**
+  (hepatic or renal impairment, a metabolizer phenotype, children, the elderly, pregnancy, or
+  another stated population) is stored and listed with its source. It is left out of every
+  pooled value and every route model. Values from healthy adults, from patients the source
+  does not describe further, and from sources that name no formulation or population still
+  pool. So a curve describes an immediate-release product in a general adult population. An
+  extended-release Tmax does not move the oral peak, a depot's absorption shape does not
+  become the route's shape or conflict with it, and a route whose only evidence is scoped is
+  treated as having none.
   Most derived models grade **D**: a model-structure axis is a default, an input has no reported
   spread, or a value traces to no cited source. Those reach a reviewer only through a recorded
   acknowledgement. A model clear of all three can reach **C**. Either way, only when the derived
@@ -366,12 +377,15 @@ The two tiers are treated differently, and deliberately so:
    merely mislabelled — sublingual buprenorphine and intravenous thiopental are the shape of
    that error. Keying the route on the stored value (the drug editor's route selector) is
    what removes the assumption; until then, check the route before trusting the magnitude.
+   An F, ka or Tmax recorded for a modified-release formulation is not used at all (§5):
+   the curve is always the reference formulation's.
 4. **Doses add.** For the closed-form families, multiple doses superpose linearly. Any
    auto-induction, saturation, or depletion across a dosing history is absent unless the
    model is Michaelis–Menten.
 5. **The subject is a healthy adult of the stated weight.** Pregnancy, extremes of age,
    organ impairment, dialysis, critical illness and drug–drug interactions are not
-   modelled — see §7 and §8.
+   modelled — see §7 and §8. For the same reason, catalogue evidence recorded for one of
+   those populations is not used as a catalogue-derived model's input (§5).
 6. **The concentration is a systemic, unbound-plus-bound total in the stated matrix.**
    Protein binding is not modelled; there is no free-fraction calculation, and no
    correction for altered binding in disease.

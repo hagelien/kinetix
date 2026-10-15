@@ -1784,3 +1784,134 @@ async function drugIdFor(slug: string): Promise<number> {
   if (!row) throw new Error(`no drug ${slug}`);
   return row.id;
 }
+
+/**
+ * #12 — the generic route model is built from reference-scope evidence only, the same partition the
+ * numeric pooling applies. A depot-only absorption shape or a modified-release / special-population
+ * ka or F is stored and listed, but it neither drives the route's model nor makes an IR/MR pair
+ * look like a structural conflict.
+ */
+describe('#12 — scoped (modified-release / special-population) evidence in route derivation', () => {
+  async function insertScoped(
+    drugId: number,
+    userId: number,
+    values: Record<string, unknown>,
+  ): Promise<void> {
+    await db.insert(parameterEntries).values({
+      drugId,
+      createdBy: userId,
+      origin: 'contributor',
+      unit: '',
+      ...values,
+    } as never);
+  }
+
+  async function seedOralDrug(slug: string): Promise<{ drugId: number; userId: number }> {
+    const drugId = await seedDrug(db, { slug, names: { en: slug } });
+    const userId = await seedUser(db);
+    await insertAxis(drugId, userId, 'dispositionModel', 'one-compartment');
+    await insertAxis(drugId, userId, 'eliminationModel', 'first-order');
+    await insertAxis(drugId, userId, 'absorptionModel', 'first-order', 'oral');
+    await setDrugLevelParameter(drugId, userId, 'halfLife', { median: 4, unit: 'h' });
+    await setDrugLevelParameter(drugId, userId, 'volumeOfDistribution', { median: 0.7, unit: 'L/kg' });
+    return { drugId, userId };
+  }
+
+  it('ignores a modified-release absorption shape beside the immediate-release one', async () => {
+    const { drugId, userId } = await seedOralDrug('oksymorfon-scope');
+    await insertScoped(drugId, userId, {
+      parameter: 'absorptionModel',
+      categoricalValue: 'zero-order',
+      route: 'oral',
+      releaseProfile: 'modified',
+    });
+
+    const inputs = await readDrugModelInputsByRoute(drugId);
+    expect(inputs.routes.oral?.absorption).toEqual(['first-order']);
+    const models = await deriveDrugModelsByRoute(drugId);
+    expect(models).toHaveLength(1);
+    // Without the partition the two shapes are a per-route conflict → not-modelable.
+    expect(models[0]!.outcome).toBe('modelable');
+    expect(models[0]!.structure.absorption).toBe('first-order');
+  });
+
+  it('declares no route from scoped evidence alone', async () => {
+    const drugId = await seedDrug(db, { slug: 'depot-only', names: { en: 'depot-only' } });
+    const userId = await seedUser(db);
+    await insertScoped(drugId, userId, {
+      parameter: 'absorptionModel',
+      categoricalValue: 'zero-order',
+      route: 'im',
+      releaseProfile: 'modified',
+    });
+    await insertScoped(drugId, userId, {
+      parameter: 'ka',
+      route: 'im',
+      median: '0.05',
+      unit: '1/h',
+      pkPopulation: 'renal_impairment',
+    });
+    expect((await readDrugModelInputsByRoute(drugId)).routes).toEqual({});
+    expect(await readDrugRouteAssemblyInputs(drugId)).toEqual([]);
+  });
+
+  it('pools only reference-scope ka and F into the route', async () => {
+    const { drugId, userId } = await seedOralDrug('scoped-values');
+    await insertNumeric(drugId, userId, 'ka', 'oral', { median: 1.0, unit: '1/h' });
+    await insertScoped(drugId, userId, {
+      parameter: 'ka',
+      route: 'oral',
+      median: '0.1',
+      unit: '1/h',
+      releaseProfile: 'modified',
+    });
+    await insertNumeric(drugId, userId, 'bioavailability', 'oral', { median: 0.75, unit: 'fraction' });
+    await insertScoped(drugId, userId, {
+      parameter: 'bioavailability',
+      route: 'oral',
+      median: '0.2',
+      unit: 'fraction',
+      pkPopulation: 'hepatic_impairment',
+    });
+
+    const [oral] = await readDrugRouteAssemblyInputs(drugId);
+    expect(oral!.values.ka).toBe(1.0);
+    expect(oral!.values.bioavailability).toBe(0.75);
+  });
+
+  it('does not let a scoped-only F withhold the route from the drug-level F', async () => {
+    const { drugId, userId } = await seedOralDrug('scoped-f-only');
+    await insertNumeric(drugId, userId, 'ka', 'oral', { median: 1.0, unit: '1/h' });
+    await setDrugLevelParameter(drugId, userId, 'bioavailability', { median: 0.6, unit: 'fraction' });
+    await insertScoped(drugId, userId, {
+      parameter: 'bioavailability',
+      route: 'oral',
+      median: '0.2',
+      unit: 'fraction',
+      releaseProfile: 'modified',
+    });
+
+    const [oral] = await readDrugRouteAssemblyInputs(drugId);
+    expect(oral!.values.bioavailability).toBe(0.6);
+  });
+
+  it('keeps the catalog snapshot on the same partition as the per-drug read', async () => {
+    const { drugId, userId } = await seedOralDrug('snapshot-scope');
+    await insertNumeric(drugId, userId, 'ka', 'oral', { median: 1.0, unit: '1/h' });
+    await insertNumeric(drugId, userId, 'bioavailability', 'oral', { median: 0.75, unit: 'fraction' });
+    await insertScoped(drugId, userId, {
+      parameter: 'absorptionModel',
+      categoricalValue: 'zero-order',
+      route: 'oral',
+      releaseProfile: 'modified',
+    });
+
+    const build = await readDerivedRegistrySnapshot();
+    const def = build.snapshot.definitions.find((d) => d.analyte === 'snapshot-scope');
+    expect(def).toBeDefined();
+    expect(Object.keys(def!.routes)).toEqual(['oral']);
+    expect(build.notModelable.map((e) => (e as { analyte?: string }).analyte)).not.toContain(
+      'snapshot-scope',
+    );
+  });
+});

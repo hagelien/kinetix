@@ -339,13 +339,31 @@ export function entryInReferenceScope(entry: {
   releaseProfile?: string | null;
   pkPopulation?: string | null;
 }): boolean {
-  if (entry.releaseProfile === 'modified') return false;
+  if (entry.releaseProfile === OUT_OF_SCOPE_RELEASE_PROFILE) return false;
   const population = entry.pkPopulation;
+  return population == null || (REFERENCE_SCOPE_POPULATIONS as readonly string[]).includes(population);
+}
+
+/** The release profile that sets an entry outside the reference scope. */
+export const OUT_OF_SCOPE_RELEASE_PROFILE = 'modified' satisfies (typeof RELEASE_PROFILES)[number];
+
+/** The stated populations that stay in the reference scope (an unstated one does too). */
+export const REFERENCE_SCOPE_POPULATIONS = [
+  'healthy_adult',
+  'patients_unspecified',
+  'unknown',
+] as const satisfies readonly (typeof PK_POPULATIONS)[number][];
+
+/**
+ * `entryInReferenceScope` as a SQL predicate over a `parameter_entries` alias, for a reader that
+ * filters in the database (the gap queue's fill test). Built from the same constants, so the two
+ * cannot drift; the values are closed vocabulary literals, never input.
+ */
+export function referenceScopeSql(alias: string): string {
+  const populations = REFERENCE_SCOPE_POPULATIONS.map((p) => `'${p}'`).join(', ');
   return (
-    population == null ||
-    population === 'healthy_adult' ||
-    population === 'patients_unspecified' ||
-    population === 'unknown'
+    `(${alias}.release_profile IS DISTINCT FROM '${OUT_OF_SCOPE_RELEASE_PROFILE}'` +
+    ` AND (${alias}.pk_population IS NULL OR ${alias}.pk_population IN (${populations})))`
   );
 }
 

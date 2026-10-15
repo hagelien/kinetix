@@ -41,6 +41,7 @@ import {
 } from '../../src/lib/drugParameters.js';
 import type { NumericRange } from '../../src/types/index.js';
 import { meanRange } from '../../src/lib/rangeUtils.js';
+import { entryInReferenceScope } from '../../src/lib/entryDoseContext.js';
 import {
   DEFAULT_SUBSTANCE_CLASS,
   substanceIsAdministered,
@@ -150,9 +151,20 @@ const MOLECULE_AXES: readonly string[] = [
  */
 interface RouteKeyedInputRows {
   moleculeRows: readonly { parameter: string; categoricalValue: string | null }[];
-  routeAxisRows: readonly { categoricalValue: string | null; route: string | null }[];
-  routeParamRows: readonly { parameter: string; route: string | null }[];
+  routeAxisRows: readonly (ScopeColumns & { categoricalValue: string | null; route: string | null })[];
+  routeParamRows: readonly (ScopeColumns & { parameter: string; route: string | null })[];
   drugLevelRows: readonly { parameter: string }[];
+}
+
+/**
+ * The formulation/population scope a route-level row states (#12). The generic route model is
+ * built from reference-scope evidence only (`entryInReferenceScope`) — the same partition the
+ * numeric pooling applies — so a depot-only absorption shape or a modified-release ka neither
+ * drives the route's model nor stands as a structural conflict against the immediate-release one.
+ */
+interface ScopeColumns {
+  releaseProfile?: string | null;
+  pkPopulation?: string | null;
 }
 
 /**
@@ -198,6 +210,8 @@ export async function readDrugModelInputsByRoute(
       .select({
         categoricalValue: parameterEntries.categoricalValue,
         route: parameterEntries.route,
+        releaseProfile: parameterEntries.releaseProfile,
+        pkPopulation: parameterEntries.pkPopulation,
       })
       .from(parameterEntries)
       .where(
@@ -216,6 +230,8 @@ export async function readDrugModelInputsByRoute(
       .select({
         parameter: parameterEntries.parameter,
         route: parameterEntries.route,
+        releaseProfile: parameterEntries.releaseProfile,
+        pkPopulation: parameterEntries.pkPopulation,
       })
       .from(parameterEntries)
       .where(
@@ -275,11 +291,15 @@ function mapRouteKeyedInputs({
   const routeAbsorption = new Map<RouteId, Set<string>>();
   for (const row of routeAxisRows) {
     if (!isRouteId(row.route) || !row.categoricalValue) continue;
+    // A modified-release or special-population shape is not the route's generic absorption (#12).
+    if (!entryInReferenceScope(row)) continue;
     addTo(routeAbsorption, row.route, row.categoricalValue);
   }
   const routeParameters = new Map<RouteId, Set<DrugParameterId>>();
   for (const row of routeParamRows) {
     if (!isRouteId(row.route)) continue;
+    // Only reference-scope evidence declares the route's parameters, as only it pools (#12).
+    if (!entryInReferenceScope(row)) continue;
     if (
       !isDrugParameterId(row.parameter) ||
       parameterRoleFor(row.parameter) === null ||
@@ -707,6 +727,10 @@ export async function readDrugRouteAssemblyInputs(
   >();
   for (const row of routeValueRows) {
     if (!isRouteId(row.route)) continue;
+    // Out-of-scope evidence (a modified-release or special-population F/ka/Tmax, #12) is left out
+    // here, not only of the pool: it is not the route's own curation of the generic value, so it
+    // must not withhold the drug-level F or the labelled default the way reference evidence does.
+    if (!entryInReferenceScope(row)) continue;
     const p = row.parameter;
     // `isRouteAssemblyParameter` is the authority here, NOT the engine-role map: `tmax` is
     // route-keyed and pooled like the others but fills no engine role of its own (it is the
@@ -1144,6 +1168,8 @@ export async function readDerivedRegistrySnapshot(): Promise<DerivedRegistryBuil
           drugId: parameterEntries.drugId,
           categoricalValue: parameterEntries.categoricalValue,
           route: parameterEntries.route,
+          releaseProfile: parameterEntries.releaseProfile,
+          pkPopulation: parameterEntries.pkPopulation,
         })
         .from(parameterEntries)
         .where(
@@ -1159,6 +1185,8 @@ export async function readDerivedRegistrySnapshot(): Promise<DerivedRegistryBuil
           drugId: parameterEntries.drugId,
           parameter: parameterEntries.parameter,
           route: parameterEntries.route,
+          releaseProfile: parameterEntries.releaseProfile,
+          pkPopulation: parameterEntries.pkPopulation,
         })
         .from(parameterEntries)
         .where(
