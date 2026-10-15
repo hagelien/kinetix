@@ -565,9 +565,13 @@ async function sealIfComplete(
   // act theirs. Merged into the case's record, never narrowed.
   const openNow = await openDisputesOnVersion(kase);
   const openDisputes = mergeOpenDisputes(kase.t1Snapshot.openDisputes, openNow);
-  // The dispute verdicts committed now, by id: a verdict is written before the
-  // dispute that mirrors it, in a separate transaction, so a timestamp cannot
-  // tell the T4 queue which of them this case actually saw.
+  // The dispute verdicts committed now, by id. A verdict and the dispute that
+  // mirrors it commit together under the source-row lock this seal holds
+  // (#268), so each id here whose dispute is still open had that dispute
+  // captured above (one a moderator already resolved is not open, and its
+  // answered verdict keeps no handoff listed either). The T4 queue
+  // requires a verdict's id to be here as well as its timestamp to predate
+  // the seal, since the two stamps can come from different servers' clocks.
   const disputeVerdictIds = (
     await getDb()
       .select({ id: agentVerifications.id })
