@@ -226,12 +226,14 @@ export function UnitTooltip({
    * A non-focusable trigger sits inside another interactive element (a button)
    * that is the real tab stop. Focus on that ancestor never reaches the
    * descendant trigger, so the ancestor itself opens and describes the panel.
+   * A non-button focus target (a hoverable value) opts in with
+   * `data-focus-host`.
    */
   const hasAlternatives = alternatives.length > 0;
   useEffect(() => {
     if (focusable || !hasAlternatives) return;
     const host = triggerRef.current?.closest<HTMLElement>(
-      'button, a[href], [role="button"]',
+      'button, a[href], [role="button"], [data-focus-host]',
     );
     if (!host) return;
     const previous = host.getAttribute('aria-describedby');
