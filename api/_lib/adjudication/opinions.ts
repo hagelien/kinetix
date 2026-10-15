@@ -23,6 +23,7 @@ import {
   adjudicationCaseSeats,
   adjudicationCases,
   adjudicationOpinions,
+  agentVerifications,
   agents,
   users,
   type AdjudicationCaseState,
@@ -564,7 +565,24 @@ async function sealIfComplete(
   // act theirs. Merged into the case's record, never narrowed.
   const openNow = await openDisputesOnVersion(kase);
   const openDisputes = mergeOpenDisputes(kase.t1Snapshot.openDisputes, openNow);
-  const t1Snapshot = { ...kase.t1Snapshot, openDisputes };
+  // The dispute verdicts committed now, by id: a verdict is written before the
+  // dispute that mirrors it, in a separate transaction, so a timestamp cannot
+  // tell the T4 queue which of them this case actually saw.
+  const disputeVerdictIds = (
+    await getDb()
+      .select({ id: agentVerifications.id })
+      .from(agentVerifications)
+      .where(
+        and(
+          eq(agentVerifications.targetType, kase.targetType),
+          eq(agentVerifications.targetId, kase.targetId),
+          eq(agentVerifications.verdict, 'dispute'),
+          eq(agentVerifications.isImplicit, false),
+        ),
+      )
+      .orderBy(agentVerifications.id)
+  ).map((v) => v.id);
+  const t1Snapshot = { ...kase.t1Snapshot, openDisputes, disputeVerdictIds };
   const disputeOrigin = disputeOriginOf(openDisputes);
 
   const reasons: AdjudicationHandoff['reasons'] = [];

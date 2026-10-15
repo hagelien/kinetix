@@ -2881,6 +2881,7 @@ export type AdjudicationHandoff = {
   t1Snapshot: {
     verdicts: AdjudicationVerdictSnapshot[];
     openDisputes: AdjudicationDisputeSnapshot[];
+    disputeVerdictIds?: number[];
   };
   /** The sources both panelists cited, de-duplicated. */
   decisiveSources: unknown[];
@@ -2917,6 +2918,12 @@ export const adjudicationCases = pgTable(
       .$type<{
         verdicts: AdjudicationVerdictSnapshot[];
         openDisputes: AdjudicationDisputeSnapshot[];
+        /**
+         * Ids of the explicit agent `dispute` verdicts committed when the case
+         * sealed, written by the seal. Absent on a case sealed before it was
+         * recorded (and on one not yet sealed).
+         */
+        disputeVerdictIds?: number[];
       }>()
       .notNull(),
     state: varchar('state', { length: 20 })
