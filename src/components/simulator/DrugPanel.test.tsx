@@ -439,6 +439,32 @@ describe('DrugPanel advanced parameter overrides', () => {
     });
   });
 
+  it('keeps dose controls disabled while the component is still hydrating (#292)', () => {
+    const config = baseConfig({ drugId: '123', engine: 'pk-montecarlo' });
+    useSimulatorStore.setState({ drugs: [config] });
+    const { rerender } = render(
+      <DrugPanel
+        config={config}
+        drugComponent={undefined}
+        componentHydrating
+        timeFormat="hours"
+        referenceTime="00:00"
+      />,
+    );
+    const addDose = screen.getByText('simulator.events.addDose') as HTMLButtonElement;
+    expect(addDose.disabled).toBe(true);
+
+    rerender(
+      <DrugPanel
+        config={config}
+        drugComponent={undefined}
+        timeFormat="hours"
+        referenceTime="00:00"
+      />,
+    );
+    expect(addDose.disabled).toBe(false);
+  });
+
   it('keeps an existing dose\'s route choices disabled until the live routes have loaded (#292)', async () => {
     liveModel.loaded = false;
     renderPanel(

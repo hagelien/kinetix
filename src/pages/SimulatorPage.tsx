@@ -106,6 +106,8 @@ export function SimulatorPage() {
   const { t } = useTranslation();
   const [showSearch, setShowSearch] = useState(true);
   const [loadedComponents, setLoadedComponents] = useState<DrugComponent[]>([]);
+  // Drugs whose component is still being fetched: their dose controls wait (see DrugPanel).
+  const [hydratingDrugIds, setHydratingDrugIds] = useState<ReadonlySet<string>>(new Set());
   const [showSettings, setShowSettings] = useState(false);
   const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
   const [searchParams] = useSearchParams();
@@ -260,12 +262,18 @@ export function SimulatorPage() {
         continue;
 
       pendingHydrationRef.current.add(drugId);
+      setHydratingDrugIds((ids) => new Set(ids).add(drugId));
       hydrateComponentByRouteId(drugId)
         .catch((err) => {
           console.error(`Failed to hydrate simulator drug ${drugId}:`, err);
         })
         .finally(() => {
           pendingHydrationRef.current.delete(drugId);
+          setHydratingDrugIds((ids) => {
+            const next = new Set(ids);
+            next.delete(drugId);
+            return next;
+          });
         });
     }
   }, [drugs, hydrateComponentByRouteId, loadedComponents]);
@@ -1087,6 +1095,7 @@ export function SimulatorPage() {
           <div className="h-px flex-1 bg-border" />
         </div>
         <SimulatorModelingRail
+          hydratingDrugIds={hydratingDrugIds}
           showSettings={showSettings}
           displaySettings={displaySettings}
           setDisplaySettings={setDisplaySettings}

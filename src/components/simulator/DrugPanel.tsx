@@ -124,6 +124,8 @@ interface DrugPanelProps {
   referenceTime: string;
   /** Composite `configId:eventId` of the marker selected from the timeline. */
   selectedMarkerId?: string | null;
+  /** The drug's component is still being fetched, so its resolved model is not yet known. */
+  componentHydrating?: boolean;
 }
 
 export function DrugPanel({
@@ -133,6 +135,7 @@ export function DrugPanel({
   timeFormat,
   referenceTime,
   selectedMarkerId,
+  componentHydrating = false,
 }: DrugPanelProps) {
   const { t } = useTranslation();
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -181,7 +184,9 @@ export function DrugPanel({
   }, [liveSlug]);
   // Until the live model has answered (or failed, or timed out) the picker may still show the
   // snapshot's routes, so a dose is not created yet.
-  const liveRoutesLoading = liveSlug !== undefined && loadedLiveSlug !== liveSlug;
+  const liveRoutesLoading =
+    engine === 'pk-montecarlo' &&
+    (componentHydrating || (liveSlug !== undefined && loadedLiveSlug !== liveSlug));
 
   // The routes the dose picker offers: the resolved model's own routes for a Monte Carlo
   // component, so a route the model does not declare is never offered.

@@ -18,6 +18,8 @@ interface SimulatorModelingRailProps {
   setDisplaySettings: (settings: Partial<CaseDisplaySettings>) => void;
   drugs: DrugSimConfig[];
   drugComponentMap: Map<string, DrugComponent>;
+  /** Drugs whose component is still being fetched (their dose controls wait). */
+  hydratingDrugIds?: ReadonlySet<string>;
   getResolvedDistributions: (config: DrugSimConfig) =>
     | {
         halfLife: DistributionSpec;
@@ -37,6 +39,7 @@ export function SimulatorModelingRail({
   setDisplaySettings,
   drugs,
   drugComponentMap,
+  hydratingDrugIds,
   getResolvedDistributions,
   showSearch,
   setShowSearch,
@@ -124,6 +127,7 @@ export function SimulatorModelingRail({
               key={config.id}
               config={config}
               drugComponent={component}
+              componentHydrating={!component && !!hydratingDrugIds?.has(config.drugId)}
               resolvedDistributions={getResolvedDistributions(config)}
               timeFormat={displaySettings.timeFormat}
               referenceTime={displaySettings.referenceTime}
