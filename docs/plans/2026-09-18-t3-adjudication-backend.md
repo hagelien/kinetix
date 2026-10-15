@@ -47,7 +47,7 @@ person). The work lands in three pull requests:
      the target (withdrawn ones excluded), with a disagreement still live, and
      records the count as a lower bound;
    - `competing_scope` and `human_request` were typed but never produced
-     until migration `0151_t3_trigger_inputs.sql` gave them persisted inputs
+     until migration `0153_t3_trigger_inputs.sql` gave them persisted inputs
      (issue 1280, kinetix #17): `agent_verifications.competing_scope`, set by
      a flagship verdict, and `adjudication_requests`, written by
      `POST /api/agent-adjudication-queue?action=request`. A human-requested
@@ -358,7 +358,7 @@ webhook nor a quiet cycle can strand a case:
    re-evaluates triggers 4–5 and backfills anything the write path missed.
 
 Triggers 2 (`competing_scope`) and 5 (`human_request`) read persisted inputs
-(migration `0151`): the T2 verdict write carries an optional `competingScope`
+(migration `0153`): the T2 verdict write carries an optional `competingScope`
 flag beside `approve | dispute | abstain`, stored on `agent_verifications`; and
 a person who may read the dispute queue records a request for one version of a target
 in `adjudication_requests` through

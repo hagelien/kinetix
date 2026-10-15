@@ -231,8 +231,8 @@ async function handleRequest(
       inserted: result.inserted,
       // The case this request opened or joined, if blind T2 has spoken; null
       // until then (the request opens it when the flagship verdict lands).
-      caseId: result.detection?.caseId ?? null,
-      detection: result.detection?.result ?? null,
+      caseId: result.detection.caseId,
+      detection: result.detection.result,
     },
     { headers: noStoreHeaders() },
   );

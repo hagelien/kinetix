@@ -428,7 +428,7 @@ async function caseHasOpinions(caseId: number): Promise<boolean> {
 }
 
 export type AdjudicationRequestResult =
-  | { ok: true; requestId: number; inserted: boolean; detection: DetectOutcome | null }
+  | { ok: true; requestId: number; inserted: boolean; detection: DetectOutcome }
   | { ok: false; reason: 'target_not_found' | 'target_version_stale' };
 
 /**
@@ -439,10 +439,16 @@ export type AdjudicationRequestResult =
  * The version is re-read under the target's source-row lock — the lock every
  * T3 reader takes — so a request is never bound to a payload the person did
  * not read. One request per person per version: asking again returns the
- * first. The detector runs after the request commits, in its own transaction,
- * as it does after a verdict; a fault there never loses the request, and the
- * sweep picks the target up. A request made before blind T2 has spoken is
- * kept and opens the case when the flagship verdict lands.
+ * first. A request made before blind T2 has spoken is kept and opens the case
+ * when the flagship verdict lands.
+ *
+ * The detector runs inside the same transaction, under the same lock, so the
+ * request is on the live case before any other T3 writer can act on it. Run
+ * after the commit, the second seat's final opinion could take the lock in
+ * between and seal — and close an agent-only case automatically — on the
+ * triggers it had before, while the person was told their request stood. A
+ * detector fault therefore fails the request as a whole, and the person asks
+ * again.
  */
 export async function requestAdjudication(args: {
   targetType: AgentVerificationTargetType;
@@ -451,9 +457,12 @@ export async function requestAdjudication(args: {
   requestedBy: number;
   reasonMd: string;
 }): Promise<AdjudicationRequestResult> {
-  const written = await inTransaction(async () => {
-    const tx = getDb();
-    await lockVerificationSourceRow(tx, args.targetType, args.targetId);
+  async function record(
+    tx: ReturnType<typeof getDb>,
+  ): Promise<
+    | { ok: true; requestId: number; inserted: boolean }
+    | { ok: false; reason: 'target_not_found' | 'target_version_stale' }
+  > {
     const version = await verificationTargetVersion(args, tx);
     if (version === null) return { ok: false as const, reason: 'target_not_found' as const };
     if (version !== args.targetVersion) {
@@ -490,21 +499,20 @@ export async function requestAdjudication(args: {
         ),
       );
     return { ok: true as const, requestId: existing!.id, inserted: false };
-  });
-  if (!written.ok) return written;
-
-  let detection: DetectOutcome | null = null;
-  try {
-    detection = await detectAdjudicationCase({
+  }
+  return inTransaction(async () => {
+    const tx = getDb();
+    await lockVerificationSourceRow(tx, args.targetType, args.targetId);
+    const written = await record(tx);
+    if (!written.ok) return written;
+    // Joins this transaction (`inTransaction` nests), so the source-row lock
+    // is held from the version check through the case update.
+    const detection = await detectAdjudicationCase({
       targetType: args.targetType,
       targetId: args.targetId,
     });
-  } catch (err) {
-    console.error(
-      `[adjudication] detection failed for ${args.targetType}:${args.targetId}: ${err instanceof Error ? err.message : String(err)}`,
-    );
-  }
-  return { ...written, detection };
+    return { ...written, detection };
+  });
 }
 
 export interface AdjudicationSweepResult {

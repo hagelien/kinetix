@@ -18,7 +18,7 @@
  *   competing_scope          an explicit flagship verdict carrying
  *                            `agent_verifications.competing_scope`: blind T2
  *                            found the disagreement turns on materially
- *                            different scope (migration 0151).
+ *                            different scope (migration 0153).
  *   flagship_disagreement    two flagship verdicts, one approving and one
  *                            disputing.
  *   repeated_correction_loop at least REPEATED_CORRECTION_LOOP_MIN decided
@@ -28,7 +28,7 @@
  *                            revisions but not every return — so the count is
  *                            a LOWER BOUND and is recorded as one.
  *   human_request            a person's `adjudication_requests` row on the
- *                            version (migration 0151). Like every trigger it
+ *                            version (migration 0153). Like every trigger it
  *                            waits for T2: a request made earlier opens the
  *                            case when the flagship verdict lands. The person
  *                            keeps the final authority, so the seal always
