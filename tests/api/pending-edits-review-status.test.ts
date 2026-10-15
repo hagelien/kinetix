@@ -65,6 +65,13 @@ vi.mock('../../api/_lib/auth.js', () => ({
   getUserFromRequest: getUserFromRequestMock,
 }));
 
+// The T3 hold's re-check takes the pending-edit row lock; with the DB mocked
+// there is no row to lock.
+vi.mock('../../api/_lib/verification-targets.js', async (importActual) => ({
+  ...(await importActual<typeof import('../../api/_lib/verification-targets.js')>()),
+  lockVerificationSourceRow: vi.fn(async () => undefined),
+}));
+
 vi.mock('../../api/_lib/pending-edits-helpers.js', () => ({
   applyApprovedEdit: applyApprovedEditMock,
   assertReferencesJudged: vi.fn(),
@@ -398,6 +405,73 @@ describe('/api/pending-edits reviewer status guard', () => {
       expect(db.update).not.toHaveBeenCalled();
     }
     expect(applyApprovedEditMock).not.toHaveBeenCalled();
+  });
+
+  // The early read is not the one that decides: each decision write reads the
+  // hold again under the row lock, so a request committing between the two is
+  // seen (here: free at the first read, held at the second).
+  it('re-checks the T3 hold under the row lock for every agent decision', async () => {
+    getUserFromRequestMock.mockResolvedValue({ userId: 8, role: 'editor' });
+    isActiveAgentUserMock.mockResolvedValue(true);
+    applyApprovedEditMock.mockImplementation(
+      async (_id: number, _by: number, _token: string, opts?: { revalidate?: () => Promise<void> }) => {
+        await opts?.revalidate?.();
+      },
+    );
+    for (const body of [
+      { status: 'approved' },
+      { status: 'rejected', rejectionReason: 'low_quality' },
+      { status: 'returned', returnComment: 'Trenger en kilde til.' },
+    ]) {
+      pendingEditAwaitsAdjudicationMock.mockReset();
+      pendingEditAwaitsAdjudicationMock.mockResolvedValueOnce(false).mockResolvedValue(true);
+      const edit = pendingEdit('pending');
+      const db = mockDbWithPendingEdit(edit);
+      const { res, state } = createResponse();
+      await handler(
+        createPatchRequest({ ...body, reviewToken: pendingEditReviewToken(edit) }),
+        res,
+      );
+      expect([body.status, state.statusCode]).toEqual([body.status, 409]);
+      expect(JSON.parse(state.body)).toMatchObject({
+        code: 'agent_moderation_held_for_adjudication',
+      });
+      expect(db.update).not.toHaveBeenCalled();
+      expect(pendingEditAwaitsAdjudicationMock).toHaveBeenCalledTimes(2);
+    }
+  });
+
+  // A self-review agent returning or approving its own held proposal acts as
+  // a reviewer; only its withdrawal is exempt.
+  it('holds a self-review agent’s return of its own held edit, but not its withdrawal', async () => {
+    const SUBMITTER_ID = 12;
+    getUserFromRequestMock.mockResolvedValue({ userId: SUBMITTER_ID, role: 'editor' });
+    isActiveAgentUserMock.mockResolvedValue(true);
+    isSelfReviewAgentUserMock.mockResolvedValue(true);
+    pendingEditAwaitsAdjudicationMock.mockResolvedValue(true);
+
+    let edit = pendingEdit('pending');
+    let db = mockDbWithPendingEdit(edit);
+    let { res, state } = createResponse();
+    await handler(
+      createPatchRequest({
+        status: 'returned',
+        returnComment: 'Needs a second source',
+        reviewToken: pendingEditReviewToken(edit),
+      }),
+      res,
+    );
+    expect(state.statusCode).toBe(409);
+    expect(JSON.parse(state.body)).toMatchObject({ code: 'agent_moderation_held_for_adjudication' });
+    expect(db.update).not.toHaveBeenCalled();
+
+    edit = pendingEdit('pending');
+    db = mockDbWithPendingEdit(edit);
+    ({ res, state } = createResponse());
+    // The author's own rejection with no payload change is its withdrawal.
+    await handler(createPatchRequest({ status: 'rejected', rejectionReason: 'low_quality' }), res);
+    expect(state.statusCode).not.toBe(409);
+    expect(db.update).toHaveBeenCalled();
   });
 
   it('leaves a person free to decide a proposal held for T3 adjudication', async () => {
