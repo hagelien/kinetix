@@ -349,7 +349,11 @@ export async function listHandoffs(limit = 50) {
             eq(agentVerifications.targetType, kase.targetType),
             eq(agentVerifications.targetId, kase.targetId),
             // Recorded (or last restated) by the time the case sealed: one
-            // written later is an objection this case never heard.
+            // written later is an objection this case never heard. The time
+            // stands for "the seal saw it" only because the verdict and its
+            // mirrored dispute commit together, under the source-row lock the
+            // seal takes (POST /api/agent-verifications, #268): a verdict on
+            // record by the seal had its dispute captured with it.
             lte(agentVerifications.updatedAt, kase.sealedAt),
             unansweredDisputeVerdict(),
           ),

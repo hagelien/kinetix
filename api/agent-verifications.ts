@@ -502,19 +502,75 @@ async function handlePost(
   // citation resolution all sit in that window — and nothing on
   // `agent_verifications` records which revision was validated, so an admitted
   // verdict would read as a judgment of a payload its author never saw.
+  //
+  // The verdict and its bridge to the unified disputes table (see
+  // api/_lib/disputes.ts) commit as ONE transaction (#268). The verdict is
+  // unchanged and still drives consensus; the bridge mirrors it so an agent
+  // contestation shows up in the same feed/inbox a human dispute does: a
+  // `dispute` opens (or refreshes) an agent-sourced dispute, and flipping to
+  // approve/abstain retracts this agent's open dispute. They are two records
+  // of one objection, and every T3 reader takes the target's source-row lock
+  // to read them as one consistent cut — the detector, a seat claim, the seal
+  // (./_lib/adjudication/). Committed separately, a seal could take that lock
+  // between them: the dispute verdict was on record (written before the seal,
+  // so `listHandoffs` counted it) while its dispute was not (absent from the
+  // `t1_snapshot.openDisputes` the case file serves), and once the captured
+  // objections were answered that unseen verdict kept a completed handoff in
+  // T4 that the case file could not explain.
+  //
+  // Held in one transaction, the source-row lock `recordVerification` takes
+  // first is held until the bridge has written too, so a seal sees both or
+  // neither. The lock order is the one each write already took on its own —
+  // source row, then the agents row and the verdict row (the upsert), then the
+  // dispute — so joining them adds no new order to deadlock against. The
+  // nested helpers join this transaction through `inTransaction` rather than
+  // opening a second connection (api/_lib/db.ts).
+  //
+  // Under the held lock the target cannot move between the two writes, so the
+  // mirror's stale-target retry (#1324) and its gone-verdict check (#1401) do
+  // not fire on this path; they stay for the helper's own sake. And a bridge
+  // write that fails now takes the verdict with it: the agent gets an error
+  // and retries, rather than leaving a verdict with no dispute row a
+  // moderator could ever see or close.
   let recorded: { id: number; inserted: boolean };
+  let mirrored: { id: number; inserted: boolean } | null = null;
   try {
-    recorded = await recordVerification({
-      expectTargetVersion: parsed.data.targetVersion,
-      agentId: agent.id,
-      targetType,
-      targetId: parsed.data.targetId,
-      verdict: parsed.data.verdict,
-      rationaleMd,
-      evidenceRefs,
-      model: parsed.data.model ?? null,
-      isImplicit: false,
-    });
+    ({ recorded, mirrored } = await inTransaction(async () => {
+      const written = await recordVerification({
+        expectTargetVersion: parsed.data.targetVersion,
+        agentId: agent.id,
+        targetType,
+        targetId: parsed.data.targetId,
+        verdict: parsed.data.verdict,
+        rationaleMd,
+        evidenceRefs,
+        model: parsed.data.model ?? null,
+        isImplicit: false,
+      });
+      if (parsed.data.verdict !== 'dispute') {
+        await withdrawOpenDispute({
+          targetType,
+          targetId: parsed.data.targetId,
+          createdBy: auth.userId,
+        });
+        return { recorded: written, mirrored: null };
+      }
+      // `mirrorAgentDisputeVerdict` (#1324) tells apart a payload revision
+      // (nothing left to mirror; the "revise in place" reconciliation handles
+      // it) from a status-only change such as a moderator's bare
+      // `pending -> returned` — retrying once against the version it observes.
+      // Neither can land inside this transaction (see above).
+      const dispute = await mirrorAgentDisputeVerdict({
+        targetType,
+        targetId: parsed.data.targetId,
+        createdBy: auth.userId,
+        reasonMd: rationaleMd,
+        evidenceRefs,
+        targetVersion: parsed.data.targetVersion,
+        verificationId: written.id,
+      });
+      return { recorded: written, mirrored: dispute };
+    }));
   } catch (err) {
     if (err instanceof StaleVerificationTargetError) {
       // The same answer the pre-check gives, for the same reason — the agent
@@ -568,53 +624,23 @@ async function handlePost(
     }),
   );
 
-  // Bridge to the unified disputes table (see api/_lib/disputes.ts). The
-  // verdict above is unchanged and still drives consensus; here we mirror it so
-  // an agent contestation shows up in the same feed/inbox a human dispute does.
-  // A `dispute` opens (or refreshes) an agent-sourced dispute and notifies on
-  // first raise; flipping to approve/abstain retracts this agent's open dispute.
-  if (parsed.data.verdict === 'dispute') {
-    // The verdict above already committed under the same expectTargetVersion,
-    // so a mismatch inside the mirror write only fires if the target moved in
-    // the (tiny) window between that commit and this one.
-    // `mirrorAgentDisputeVerdict` (#1324) tells apart a payload revision
-    // (nothing left to mirror; the "revise in place" reconciliation handles
-    // it) from a status-only change such as a moderator's bare
-    // `pending -> returned`, which still needs the mirror so the verdict it
-    // already blocks consensus on gets a `disputes` row a moderator can act
-    // on — retrying once against the version it observes, rather than
-    // silently leaving that case unmirrored.
-    const mirrored = await mirrorAgentDisputeVerdict({
+  // Notified on first raise only, and only once the dispute has committed with
+  // its verdict: a notification is not part of the transaction above.
+  if (mirrored?.inserted) {
+    const authorUserId = await contributionAuthorUserId({
       targetType,
       targetId: parsed.data.targetId,
-      createdBy: auth.userId,
-      reasonMd: rationaleMd,
-      evidenceRefs,
-      targetVersion: parsed.data.targetVersion,
-      verificationId: id,
     });
-    if (mirrored?.inserted) {
-      const authorUserId = await contributionAuthorUserId({
-        targetType,
-        targetId: parsed.data.targetId,
-      });
-      await fanOutDisputeNotification({
-        type: 'dispute_opened',
-        disputeId: mirrored.id,
-        targetType,
-        targetId: parsed.data.targetId,
-        actorUserId: auth.userId,
-        targetAuthorUserId: authorUserId,
-        title: 'An agent disputed a fact or parameter',
-        bodyMd: rationaleMd,
-        url: await disputeTargetUrl({ targetType, targetId: parsed.data.targetId }),
-      });
-    }
-  } else {
-    await withdrawOpenDispute({
+    await fanOutDisputeNotification({
+      type: 'dispute_opened',
+      disputeId: mirrored.id,
       targetType,
       targetId: parsed.data.targetId,
-      createdBy: auth.userId,
+      actorUserId: auth.userId,
+      targetAuthorUserId: authorUserId,
+      title: 'An agent disputed a fact or parameter',
+      bodyMd: rationaleMd,
+      url: await disputeTargetUrl({ targetType, targetId: parsed.data.targetId }),
     });
   }
 
