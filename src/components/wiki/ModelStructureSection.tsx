@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Plus, Trash2 } from 'lucide-react';
 import { ParameterEntryEditor } from '@/components/wiki/ParameterEntryEditor';
+import { ParameterEntryList } from '@/components/wiki/ParameterEntryList';
 import {
   deleteParameterEntry,
   fetchParameterEntries,
@@ -133,6 +134,14 @@ export function ModelStructureSection({
       setActionFailed(true);
     }
   }
+
+  // Route values with at least one stored entry are listed in full; the rest get an add button.
+  const routeValuesWithEntries = ROUTE_VALUE_PARAMETERS.filter((parameter) =>
+    entries.some((e) => e.parameter === parameter),
+  );
+  const routeValuesWithoutEntries = ROUTE_VALUE_PARAMETERS.filter(
+    (parameter) => !routeValuesWithEntries.includes(parameter),
+  );
 
   const valueLabel = (value: string) =>
     t(`parameters.modelStructure.value.${value}`, { defaultValue: value });
@@ -336,36 +345,58 @@ export function ModelStructureSection({
           );
         })}
       </dl>
-      {canEdit && (
-        <div className="mt-3 border-t border-border pt-3">
-          <div className="flex items-center justify-between gap-1">
-            <div>
-              <h5 className="text-xs font-medium text-muted-foreground">
-                {t('modelStructure.routeValuesHeading')}
-              </h5>
-              <p className="text-[11px] text-muted-foreground">
-                {t('modelStructure.routeValuesHint')}
-              </p>
+      {(canEdit || routeValuesWithEntries.length > 0) && (
+        <div
+          className="mt-3 border-t border-border pt-3"
+          data-testid="model-structure-route-values"
+        >
+          <h5 className="text-xs font-medium text-muted-foreground">
+            {t('modelStructure.routeValuesHeading')}
+          </h5>
+          {canEdit && (
+            <p className="text-[11px] text-muted-foreground">
+              {t('modelStructure.routeValuesHint')}
+            </p>
+          )}
+          {/*
+            Every stored route value is listed with its route, figure, citation, source quote and
+            notes — these numbers drive the auto-built PK curve, and a route-scoped parameter has
+            no drug-level row in the sidebar, so this is the only place it can be inspected, edited
+            or removed. The list carries its own edit/delete controls and add button.
+          */}
+          {routeValuesWithEntries.map((parameter) => (
+            <ParameterEntryList
+              key={parameter}
+              drugId={drugId}
+              parameter={parameter}
+              canEdit={canEdit}
+              isAdmin={isAdmin}
+              onMutated={() => {
+                void load();
+                onMutated?.();
+              }}
+            />
+          ))}
+          {canEdit && routeValuesWithoutEntries.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {routeValuesWithoutEntries.map((parameter) => (
+                <Button
+                  key={parameter}
+                  variant="outline"
+                  size="sm"
+                  className="h-6 gap-1 px-2 text-[11px]"
+                  title={t('modelStructure.addRouteValue')}
+                  disabled={addingAxis === parameter}
+                  onClick={() => setAddingAxis(parameter)}
+                >
+                  <Plus className="h-3 w-3" />
+                  {t(getParameterLongLabelKey(parameter), {
+                    defaultValue: DRUG_PARAMETERS[parameter].longLabel,
+                  })}
+                </Button>
+              ))}
             </div>
-          </div>
-          <div className="mt-1 flex flex-wrap gap-1">
-            {ROUTE_VALUE_PARAMETERS.map((parameter) => (
-              <Button
-                key={parameter}
-                variant="outline"
-                size="sm"
-                className="h-6 gap-1 px-2 text-[11px]"
-                title={t('modelStructure.addRouteValue')}
-                disabled={addingAxis === parameter}
-                onClick={() => setAddingAxis(parameter)}
-              >
-                <Plus className="h-3 w-3" />
-                {t(getParameterLongLabelKey(parameter), {
-                  defaultValue: DRUG_PARAMETERS[parameter].longLabel,
-                })}
-              </Button>
-            ))}
-          </div>
+          )}
           {isRouteValueParameter(addingAxis) && (
             <ParameterEntryEditor
               key={addingAxis}

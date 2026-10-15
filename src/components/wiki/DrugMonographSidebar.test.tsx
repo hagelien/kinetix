@@ -349,6 +349,19 @@ describe('DrugMonographSidebar', () => {
     );
   });
 
+  it('lists the two-compartment parameters as drug-level rows, and the route-scoped ones not at all', () => {
+    // k12, k21 and V1 drive the two-compartment curve and are molecule-level, so they sit with the
+    // other PK rows (and their sources/history controls). The route-scoped absorption values have
+    // no drug-level row; the model-structure section lists them per route instead.
+    setUser([]);
+    renderSidebar(undefined, 'pharmacokinetics');
+    expect(screen.getByText(/central → peripheral rate constant/i)).toBeInTheDocument();
+    expect(screen.getByText(/peripheral → central rate constant/i)).toBeInTheDocument();
+    expect(screen.getByText(/central compartment volume/i)).toBeInTheDocument();
+    expect(screen.queryByText(/absorption lag time/i)).toBeNull();
+    expect(screen.queryByText(/zero-order input duration/i)).toBeNull();
+  });
+
   it('renders one section without its box in tab mode', () => {
     setUser([]);
     renderSidebar(undefined, 'pharmacokinetics');
