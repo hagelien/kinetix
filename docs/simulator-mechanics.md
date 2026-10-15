@@ -136,9 +136,16 @@ parameters. **The dose-route picker offers exactly the routes the resolved model
 For a Monte Carlo component the panel resolves the model under the same id the run will use
 and lists its routes — intramuscular, subcutaneous, sublingual, buccal, rectal, transdermal
 and the rest included — so a route the model lacks is never offered, and a new dose starts
-on one the model has. A dose already on an undeclared route (a saved case, or a drug or
-engine changed underneath it) is shown struck through, not as a choice, and the run refuses
-it as above until the route is replaced. Intranasal is offered under the simulator's name
+on one the model has. **The picker waits for the drug's live model, as the run does.**
+With the derived tier built live (§2), the panel asks for the drug's live model as soon as
+the drug is shown, not only when it is run, and redraws the picker whenever that answer, or
+a later one a run fetches, changes the model. A new dose cannot be added until the first
+answer has arrived or the request has failed (at most five seconds), so it starts on a route
+of the model the run will resolve, not of the committed artifact that answer replaces; if
+the request fails, the picker and the run fall back to the same model, and the picker is
+redrawn if a later request changes it. A dose already on an undeclared route (a saved case,
+or a drug or engine changed underneath it) is shown struck through, not as a choice, and the
+run refuses it as above until the route is replaced. Intranasal is offered under the simulator's name
 for it, *insufflation*. The KineLab and ethanol engines, which run no registry model, and a
 drug with no resolved model keep the fixed list (IV, oral, insufflation, inhalation,
 other). The dose basis (parent drug, active moiety, salt, free base) must likewise be

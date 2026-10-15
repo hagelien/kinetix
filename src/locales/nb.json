@@ -1236,6 +1236,7 @@
     },
     "events": {
       "addDose": "+ Legg til dose",
+      "loadingRoutes": "Henter administrasjonsveiene modellen for dette stoffet støtter…",
       "addConcentration": "+ Legg til konsentrasjon",
       "addQuery": "+ Legg til prediksjonstidspunkt",
       "doseLabel": "Dose",

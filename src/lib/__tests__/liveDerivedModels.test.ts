@@ -176,3 +176,55 @@ describe('withLiveDerived', () => {
     ]);
   });
 });
+
+describe('the picker’s view of the live answer (#292)', () => {
+  it('waits on a derived slug until its first live answer settles, then tells subscribers', async () => {
+    const { refreshLiveDerivedModel, awaitingLiveDerivedModel, subscribeLiveDerivedModels, liveDerivedModelsVersion } =
+      await load();
+    const listener = vi.fn();
+    const unsubscribe = subscribeLiveDerivedModels(listener);
+    expect(awaitingLiveDerivedModel('alprazolam')).toBe(true);
+
+    const before = liveDerivedModelsVersion();
+    await refreshLiveDerivedModel('alprazolam', answer({ status: 'not-modelable', entry: {} }), 0);
+    expect(awaitingLiveDerivedModel('alprazolam')).toBe(false);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(liveDerivedModelsVersion()).toBeGreaterThan(before);
+
+    unsubscribe();
+    await refreshLiveDerivedModel('diazepam', answer({ status: 'not-modelable', entry: {} }), 0);
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops waiting after a failed request too, since the run then falls back to the same model', async () => {
+    const { refreshLiveDerivedModel, awaitingLiveDerivedModel } = await load();
+    await refreshLiveDerivedModel('alprazolam', answer({ error: 'down' }, 503), 0);
+    expect(awaitingLiveDerivedModel('alprazolam')).toBe(false);
+  });
+
+  it('notifies again only when a later answer changes what is installed', async () => {
+    const { refreshLiveDerivedModel, subscribeLiveDerivedModels, LIVE_MODEL_TTL_MS } = await load();
+    const { definition, grade } = committedAlprazolam();
+    const listener = vi.fn();
+    subscribeLiveDerivedModels(listener);
+    await refreshLiveDerivedModel('alprazolam', answer({ status: 'assembled', definition, grade }), 0);
+    expect(listener).toHaveBeenCalledTimes(1);
+    // The same answer again (a run after the TTL): nothing changed, nothing to re-render.
+    await refreshLiveDerivedModel('alprazolam', answer({ status: 'assembled', definition, grade }), LIVE_MODEL_TTL_MS);
+    expect(listener).toHaveBeenCalledTimes(1);
+    // A withdrawal changes the installed model: the picker must hear about it.
+    await refreshLiveDerivedModel('alprazolam', answer({ status: 'not-modelable', entry: {} }), 2 * LIVE_MODEL_TTL_MS);
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+
+  it('never waits for a reviewed analyte, a missing slug, or with the derived tier off', async () => {
+    const { awaitingLiveDerivedModel } = await load();
+    expect(awaitingLiveDerivedModel('ethanol')).toBe(false);
+    expect(awaitingLiveDerivedModel(undefined)).toBe(false);
+
+    vi.resetModules();
+    vi.unstubAllEnvs();
+    const off = await load(false);
+    expect(off.awaitingLiveDerivedModel('alprazolam')).toBe(false);
+  });
+});

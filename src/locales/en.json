@@ -1236,6 +1236,7 @@
     },
     "events": {
       "addDose": "+ Add dose",
+      "loadingRoutes": "Loading the routes this drug's model declares…",
       "addConcentration": "+ Add concentration",
       "addQuery": "+ Add prediction time",
       "doseLabel": "Dose",
