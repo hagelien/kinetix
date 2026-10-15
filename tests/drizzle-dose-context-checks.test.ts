@@ -116,19 +116,19 @@ describe('0135 reported-statistic CHECKs', () => {
 });
 
 /**
- * Migration 0152 (#12) opens the formulation/regimen/population scope to the
+ * Migration 0155 (#12) opens the formulation/regimen/population scope to the
  * `doseContext: 'optional'` parameters. The parameter list and the two column
  * lists must be exactly the registry's and `OPTIONAL_DOSE_CONTEXT_FIELD_KEYS`:
  * a parameter missing from the list fails its writes as an opaque 500; a
  * column in the wrong list is either refused where the API accepts it or
  * stored by a direct writer where the API would refuse it.
  */
-describe('0152 optional dose-context CHECK', () => {
-  const sql0152 = readFileSync(
-    path.resolve(__dirname, '../drizzle/0152_parameter_entries_optional_dose_context.sql'),
+describe('0155 optional dose-context CHECK', () => {
+  const sql0155 = readFileSync(
+    path.resolve(__dirname, '../drizzle/0155_parameter_entries_optional_dose_context.sql'),
     'utf8',
   );
-  const block = sql0152.match(
+  const block = sql0155.match(
     /ADD CONSTRAINT "parameter_entries_dose_context_forbidden"([\s\S]*?)\);\s*$/,
   )![1]!;
   const [always, scopedTail] = block.split(/"parameter" IN \(/) as [string, string];

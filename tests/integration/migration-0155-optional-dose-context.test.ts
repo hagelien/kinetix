@@ -1,6 +1,6 @@
 /**
  * Formulation, regimen and population scope on the absorption parameters
- * (migration 0152, #12).
+ * (migration 0155, #12).
  *
  * An extended-release-only Tmax (OPANA ER) used to be storable only as a bare
  * oral Tmax, with its formulation in prose, and would then pool as the drug's
@@ -62,7 +62,7 @@ const tmax = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-describe('migration 0152 — the scope columns on the absorption parameters', () => {
+describe('migration 0155 — the scope columns on the absorption parameters', () => {
   // Built per test: `drugId` is seeded in beforeEach, after the table is read.
   it.each([
     ['an extended-release twice-daily Tmax', () => tmax({ releaseProfile: 'modified', physicalForm: 'tablet_capsule', doseRegimen: 'multiple', doseIntervalHours: '12' })],
