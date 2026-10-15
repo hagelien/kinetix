@@ -915,6 +915,7 @@ describe('PATCH /api/disputes release guards', () => {
     fanOutDisputeNotificationMock.mockResolvedValue({ recipients: 1 });
     retryAgentConsensusMock.mockResolvedValue({ outcome: 'applied' });
     contributionAuthorUserIdMock.mockResolvedValue(AUTHOR);
+    targetAuthorUserIdMock.mockResolvedValue(AUTHOR);
     isActiveAgentUserMock.mockResolvedValue(false);
     getDisputeByIdMock.mockResolvedValue(openDispute());
   });
@@ -927,6 +928,19 @@ describe('PATCH /api/disputes release guards', () => {
     expect(status).toBe(403);
     expect(body.code).toBe('dispute_overrule_own_not_allowed');
     expect(resolveDisputeByIdMock).not.toHaveBeenCalled();
+    expect(retryAgentConsensusMock).not.toHaveBeenCalled();
+  });
+
+  // `contributionAuthorUserId` drops an edit whose client-writable
+  // `proposed_meta.source` claims conversation ingestion; the guard must not.
+  it('refuses the submitter even when the edit claims to come from ingestion', async () => {
+    getUserFromRequestMock.mockResolvedValue({ userId: AUTHOR, role: 'editor' });
+    contributionAuthorUserIdMock.mockResolvedValue(null);
+
+    const { status, body } = await patch('rejected');
+
+    expect(status).toBe(403);
+    expect(body.code).toBe('dispute_overrule_own_not_allowed');
     expect(retryAgentConsensusMock).not.toHaveBeenCalled();
   });
 

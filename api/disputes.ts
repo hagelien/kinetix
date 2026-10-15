@@ -380,7 +380,8 @@ async function handlePost(
  *  - Withdrawing is the objector's own retraction, always theirs to make.
  *    Anyone else withdrawing it releases the work exactly as an overrule
  *    does, so it gets the same guards below.
- *  - The contested work's author may not overrule the objection to it.
+ *  - The contested work's author (whoever submitted or wrote it) may not
+ *    overrule the objection to it.
  *    `PATCH /api/pending-edits` blocks even an author holding
  *    `review.edit.decideOwn` from deciding their own edit over a standing
  *    objection; overruling it first would make that block a single extra
@@ -411,7 +412,11 @@ async function releaseRefusal(args: {
   }
 
   const callerIsAgent = await isActiveAgentUser(args.callerUserId);
-  const authorUserId = await contributionAuthorUserId({
+  // The wide author (`submitted_by` / `created_by`), not the notice-scoped
+  // `contributionAuthorUserId`: that one drops an edit whose client-writable
+  // `proposed_meta.source` claims conversation ingestion, so a submitter
+  // could label their own edit and overrule the objection to it.
+  const authorUserId = await targetAuthorUserId({
     targetType: dispute.targetType,
     targetId: dispute.targetId,
   });
