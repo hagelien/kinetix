@@ -40,6 +40,7 @@ import {
   withdrawAgentDisputesForTarget,
 } from './disputes.js';
 import {
+  isoMs,
   lockVerificationSourceRow,
   StaleVerificationTargetError,
   verificationTargetVersion,
@@ -2171,4 +2172,71 @@ export async function lockConsensusEligibility(): Promise<void> {
     .innerJoin(users, eq(users.id, agents.userId))
     .orderBy(asc(agents.id))
     .for('share');
+}
+
+/**
+ * The T3 adjudication hold on a pending edit, as a SQL condition over the
+ * `pending_edits` row in scope (agents/drug-db-adjudication.md §2; issue 17).
+ * True while:
+ *
+ * - a T3 case on the edit is live (`open`/`sealed`): the panel has not
+ *   spoken. The triggers that need no dispute (`competing_scope`,
+ *   `human_request`) would otherwise leave nothing holding consensus;
+ * - a person has asked for an adjudication of its current version: they keep
+ *   the final authority, before, during and after the panel;
+ * - blind T2 found competing scope on it (an explicit flagship verdict with
+ *   `competing_scope`) and no panel has settled that version automatically —
+ *   whether the case is not open yet (the detector has not run, or failed),
+ *   or it was handed to a person, or it could not be served: only a converged
+ *   case that needed no person releases it.
+ *
+ * Read by every consensus path — the legacy gate (and its under-lock
+ * re-check), the generic engine's facts, the batched status and the retry
+ * sweep — so none of them publishes past a case. A person's own approval is
+ * not consensus and is not held.
+ */
+export const pendingEditAdjudicationHoldSql = sql<boolean>`(
+  exists (
+    select 1 from adjudication_cases ac
+    where ac.target_type = 'pending_edit' and ac.target_id = ${pendingEdits.id}
+      and ac.state in ('open', 'sealed')
+  )
+  or exists (
+    select 1 from adjudication_requests ar
+    where ar.target_type = 'pending_edit' and ar.target_id = ${pendingEdits.id}
+      and ar.target_version = ${isoMs(pendingEdits.submittedAt)} || '|' || ${pendingEdits.status}
+  )
+  or (
+    exists (
+      select 1 from agent_verifications cs
+      where cs.target_type = 'pending_edit' and cs.target_id = ${pendingEdits.id}
+        and cs.is_implicit = false and cs.verifier_tier = ${FLAGSHIP_TIER}
+        and cs.competing_scope = true
+    )
+    and not exists (
+      select 1 from adjudication_cases settled
+      where settled.target_type = 'pending_edit' and settled.target_id = ${pendingEdits.id}
+        and settled.state = 'converged' and not settled.t4_required
+        and settled.target_version = ${isoMs(pendingEdits.submittedAt)} || '|' || ${pendingEdits.status}
+    )
+  )
+)`;
+
+/** {@link pendingEditAdjudicationHoldSql} for one pending edit. */
+export async function pendingEditAwaitsAdjudication(pendingEditId: number): Promise<boolean> {
+  const [row] = await getDb()
+    .select({ id: pendingEdits.id })
+    .from(pendingEdits)
+    .where(and(eq(pendingEdits.id, pendingEditId), pendingEditAdjudicationHoldSql));
+  return row !== undefined;
+}
+
+/** {@link pendingEditAdjudicationHoldSql} for many pending edits, in one read. */
+export async function pendingEditsAwaitingAdjudication(ids: readonly number[]): Promise<Set<number>> {
+  if (ids.length === 0) return new Set();
+  const rows = await getDb()
+    .select({ id: pendingEdits.id })
+    .from(pendingEdits)
+    .where(and(inArray(pendingEdits.id, [...ids]), pendingEditAdjudicationHoldSql));
+  return new Set(rows.map((r) => r.id));
 }

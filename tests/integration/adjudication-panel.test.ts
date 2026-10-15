@@ -1515,6 +1515,27 @@ describe('T3 trigger: a person’s request for an adjudication (issue 17)', () =
     expect(kase!.triggers).toEqual(['t1_t2_disagreement']);
   });
 
+  it('refuses, and stores nothing, for a proposal that has been decided', async () => {
+    const s = await seedCase({ agentDispute: true });
+    const editor = await seedUser(db, { email: 'ed@example.com', username: 'ed', role: 'editor' });
+    for (const status of ['approved', 'rejected', 'returned', 'withdrawn']) {
+      await db.update(pendingEdits).set({ status }).where(eq(pendingEdits.id, s.editId));
+      const [edit] = await db.select().from(pendingEdits).where(eq(pendingEdits.id, s.editId));
+      const asked = await request(editor, 'editor', {
+        targetType: 'pending_edit',
+        targetId: s.editId,
+        targetVersion: `${edit!.submittedAt.toISOString()}|${status}`,
+        reasonMd: REASON,
+      });
+      expect([status, asked.status, asked.body.code]).toEqual([
+        status,
+        409,
+        'adjudication_request_target_unavailable',
+      ]);
+    }
+    expect(await db.select().from(adjudicationRequests)).toEqual([]);
+  });
+
   it('records every requester on the case, and answers a repeat once the case is decided', async () => {
     const s = await seedCase({ agentDispute: true });
     const first = await seedUser(db, { email: 'ed@example.com', username: 'ed', role: 'editor' });

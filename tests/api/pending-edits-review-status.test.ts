@@ -15,7 +15,9 @@ const {
   upheldDisputeStandsMock,
   summariseVerificationsMock,
   notifyContributionFeedbackMock,
+  pendingEditAwaitsAdjudicationMock,
 } = vi.hoisted(() => ({
+  pendingEditAwaitsAdjudicationMock: vi.fn(),
   notifyContributionFeedbackMock: vi.fn(),
   getDbMock: vi.fn(),
   getUserFromRequestMock: vi.fn(),
@@ -36,6 +38,7 @@ vi.mock('../../api/_lib/agent-verifications.js', async (importActual) => {
     isActiveAgentUser: isActiveAgentUserMock,
     isSelfReviewAgentUser: isSelfReviewAgentUserMock,
     summariseVerificationsForTargets: summariseVerificationsMock,
+    pendingEditAwaitsAdjudication: pendingEditAwaitsAdjudicationMock,
   };
 });
 
@@ -173,6 +176,8 @@ describe('/api/pending-edits reviewer status guard', () => {
     unresolvedDisputeVerdictCountMock.mockResolvedValue(0);
     // Default: no objection has been upheld against the current payload.
     upheldDisputeStandsMock.mockResolvedValue(false);
+    // Default: no T3 adjudication holds the proposal.
+    pendingEditAwaitsAdjudicationMock.mockResolvedValue(false);
     notifyContributionFeedbackMock.mockResolvedValue({ notified: true });
   });
 
@@ -366,6 +371,49 @@ describe('/api/pending-edits reviewer status guard', () => {
     );
 
     expect(state.statusCode).not.toBe(403);
+    expect(db.update).toHaveBeenCalled();
+  });
+
+  // A proposal held for T3 adjudication is not one agent's to decide, even an
+  // agent's proposal another agent may otherwise moderate (issue 17).
+  it('blocks an agent reviewer from deciding a proposal held for T3 adjudication', async () => {
+    getUserFromRequestMock.mockResolvedValue({ userId: 8, role: 'editor' });
+    isActiveAgentUserMock.mockResolvedValue(true);
+    pendingEditAwaitsAdjudicationMock.mockResolvedValue(true);
+    for (const body of [
+      { status: 'approved' },
+      { status: 'rejected', rejectionReason: 'low_quality' },
+    ]) {
+      const edit = pendingEdit('pending');
+      const db = mockDbWithPendingEdit(edit);
+      const { res, state } = createResponse();
+      await handler(
+        createPatchRequest({ ...body, reviewToken: pendingEditReviewToken(edit) }),
+        res,
+      );
+      expect(state.statusCode).toBe(409);
+      expect(JSON.parse(state.body)).toMatchObject({
+        code: 'agent_moderation_held_for_adjudication',
+      });
+      expect(db.update).not.toHaveBeenCalled();
+    }
+    expect(applyApprovedEditMock).not.toHaveBeenCalled();
+  });
+
+  it('leaves a person free to decide a proposal held for T3 adjudication', async () => {
+    pendingEditAwaitsAdjudicationMock.mockResolvedValue(true);
+    const edit = pendingEdit('pending');
+    const db = mockDbWithPendingEdit(edit);
+    const { res, state } = createResponse();
+    await handler(
+      createPatchRequest({
+        status: 'rejected',
+        rejectionReason: 'low_quality',
+        reviewToken: pendingEditReviewToken(edit),
+      }),
+      res,
+    );
+    expect(state.statusCode).not.toBe(409);
     expect(db.update).toHaveBeenCalled();
   });
 

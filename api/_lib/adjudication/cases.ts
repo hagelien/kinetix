@@ -40,7 +40,7 @@ import { ACTIVE_AGENT_ROLES } from '../agent-verifications.js';
 import { contributionAuthorUserId } from '../notifications.js';
 import { FLAGSHIP_TIER } from '../../../src/lib/modelTiers.js';
 import { classifyAdjudicationCase, disputeOriginOf } from './detector.js';
-import { bindPanelTarget } from './snapshot.js';
+import { bindPanelTarget, liveHydratedTarget } from './snapshot.js';
 
 /**
  * The open disputes about one version of a target. A person's dispute
@@ -444,7 +444,7 @@ async function caseHasOpinions(caseId: number): Promise<boolean> {
 
 export type AdjudicationRequestResult =
   | { ok: true; requestId: number; inserted: boolean; detection: DetectOutcome }
-  | { ok: false; reason: 'target_not_found' | 'target_version_stale' }
+  | { ok: false; reason: 'target_not_found' | 'target_version_stale' | 'target_unavailable' }
   | { ok: false; reason: 'case_closed'; caseId: number };
 
 /** Thrown inside the request transaction so a request that cannot be served is not kept. */
@@ -474,6 +474,9 @@ class AdjudicationRequestRefused extends Error {
  * detector fault therefore fails the request as a whole, and the person asks
  * again.
  *
+ * A target a panel could not be served (a decided proposal, an unpublished
+ * page) is refused as `target_unavailable` before anything is written.
+ *
  * A request is kept only where it will reach a person: on the version's case
  * (opened, joined or reopened by it, or already carrying it), or with no case
  * yet because blind T2 has not spoken — the case then opens with it. A
@@ -492,12 +495,20 @@ export async function requestAdjudication(args: {
     tx: ReturnType<typeof getDb>,
   ): Promise<
     | { ok: true; requestId: number; inserted: boolean }
-    | { ok: false; reason: 'target_not_found' | 'target_version_stale' }
+    | { ok: false; reason: 'target_not_found' | 'target_version_stale' | 'target_unavailable' }
   > {
     const version = await verificationTargetVersion(args, tx);
     if (version === null) return { ok: false as const, reason: 'target_not_found' as const };
     if (version !== args.targetVersion) {
       return { ok: false as const, reason: 'target_version_stale' as const };
+    }
+    // A panel can only adjudicate what it can be served: a decided proposal
+    // (approved, rejected, returned, withdrawn) or an unpublished wiki page
+    // would close the case at the first seat claim (./snapshot.ts). Read as
+    // a panelist with no part in the case would read it.
+    const served = await liveHydratedTarget(args, { agentId: 0, agentUserId: 0 });
+    if (!served || served.targetVersion !== version) {
+      return { ok: false as const, reason: 'target_unavailable' as const };
     }
     const [inserted] = await tx
       .insert(adjudicationRequests)

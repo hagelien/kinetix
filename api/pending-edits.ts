@@ -115,6 +115,7 @@ import {
   clearVerificationsForTarget,
   emptyVerificationSummary,
   isActiveAgentUser,
+  pendingEditAwaitsAdjudication,
   isSelfReviewAgentUser,
   recordImplicitAgentApproval,
   resolveActiveAgent,
@@ -3900,6 +3901,27 @@ async function handlePatch(
       // off the code (AGENTS.md i18n rule for API error bodies).
       'Agents cannot moderate a human contributor\'s edit; post a peer-verification verdict instead',
       'agent_moderation_of_human_edit_not_allowed',
+    );
+    return;
+  }
+
+  // Nor does a single agent decide a proposal held for T3 adjudication
+  // (pendingEditAdjudicationHoldSql): the panel has not spoken, or a person
+  // keeps the decision. Agent consensus holds it the same way
+  // (`adjudication_pending`); this closes the moderator path for an agent
+  // carrying an editor role. A person's decision is not held.
+  // An agent author's own withdrawal is not a decision and stays open to it.
+  if (
+    (requestedStatus === 'approved' ||
+      (!isSubmitter && (requestedStatus === 'rejected' || requestedStatus === 'returned'))) &&
+    (await isActiveAgentUser(auth.userId)) &&
+    (await pendingEditAwaitsAdjudication(edit.id))
+  ) {
+    error(
+      res,
+      409,
+      'This proposal is held for a T3 adjudication; an agent cannot decide it while the case or a person\'s request stands',
+      'agent_moderation_held_for_adjudication',
     );
     return;
   }

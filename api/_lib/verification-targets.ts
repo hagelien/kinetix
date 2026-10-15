@@ -160,7 +160,7 @@ export async function verificationTargetVersion(
 }
 
 /** A stored timestamp as `Date.toISOString()` writes it (UTC, milliseconds). */
-const isoMs = (col: PgColumn) =>
+export const isoMs = (col: PgColumn) =>
   sql`to_char(date_trunc('milliseconds', ${col}), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
 
 /**

@@ -336,6 +336,10 @@ export async function listHandoffs(limit = 50) {
     // A person asked for this adjudication: the case is theirs to close for
     // as long as the target stays at the version the panel adjudicated.
     sql`${kase.triggers} ? 'human_request'`,
+    // A proposal whose competing scope the panel could not settle: consensus
+    // holds it (`pendingEditAdjudicationHoldSql`) until a person decides it,
+    // which moves its version.
+    and(eq(kase.targetType, 'pending_edit'), sql`${kase.triggers} ? 'competing_scope'`),
     exists(
       db
         .select({ one: sql`1` })

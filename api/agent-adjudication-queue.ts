@@ -213,6 +213,13 @@ async function handleRequest(
   if (!result.ok) {
     if (result.reason === 'target_not_found') {
       error(res, 404, 'Target not found', 'adjudication_request_target_not_found');
+    } else if (result.reason === 'target_unavailable') {
+      error(
+        res,
+        409,
+        'This target can no longer be adjudicated (the proposal is decided, or its page is not published)',
+        'adjudication_request_target_unavailable',
+      );
     } else if (result.reason === 'case_closed') {
       // A version is adjudicated at most once; its closed case can be read
       // with ?caseId=N. Nothing was recorded.

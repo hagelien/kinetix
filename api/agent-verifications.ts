@@ -29,6 +29,9 @@ import {
   pendingEditTargetOpenToAgents,
   pendingEditTargetsOpenToAgents,
   pendingEditCitesUnreadSources,
+  pendingEditAwaitsAdjudication,
+  pendingEditsAwaitingAdjudication,
+  pendingEditAdjudicationHoldSql,
   pendingEditsCitingUnreadSources,
   activeAgentStandingsForUsers,
   lockConsensusEligibility,
@@ -651,9 +654,13 @@ async function handlePost(
   // bridge above, so an open dispute this verdict raised is part of the cut.
   // Never allowed to reject the verdict, which is already recorded: a failure
   // here is logged and the consensus sweep's backstop picks the target up.
+  // Nor to publish past a case it could not open: consensus is not attempted
+  // after a failed detection (the T3 hold covers the retry sweep).
+  let detectionFailed = false;
   try {
     await detectAdjudicationCase({ targetType, targetId: parsed.data.targetId });
   } catch (err) {
+    detectionFailed = true;
     console.error(
       `[adjudication] detection failed for ${targetType}:${parsed.data.targetId}: ${err instanceof Error ? err.message : String(err)}`,
     );
@@ -665,7 +672,7 @@ async function handlePost(
   // an `approve` can newly clear the bar, and only pending_edit targets are
   // appliable, so other verdicts/target types skip this entirely.
   let autoApplied = false;
-  if (targetType === 'pending_edit' && parsed.data.verdict === 'approve') {
+  if (targetType === 'pending_edit' && parsed.data.verdict === 'approve' && !detectionFailed) {
     autoApplied = await applyOnAgentConsensus({
       pendingEditId: parsed.data.targetId,
       approverUserId: auth.userId,
@@ -846,7 +853,10 @@ export type AgentConsensusHold =
   // A wiki edit whose page is not (or no longer) published.
   | 'target_unpublished'
   // An ingested fact citing a paper nobody has read in full yet.
-  | 'unverified_sources';
+  | 'unverified_sources'
+  // A T3 adjudication is live on it, a person asked for one, or a case that
+  // found competing scope left it to a person (pendingEditAdjudicationHoldSql).
+  | 'adjudication_pending';
 
 export type AgentConsensusOutcome =
   | { outcome: 'applied' }
@@ -1021,6 +1031,12 @@ async function legacyConsensusHold(
   if (await pendingEditCitesUnreadSources(pending)) {
     return { reason: 'unverified_sources' };
   }
+  // A T3 case the agents' approvals cannot settle: the panel has not spoken,
+  // or a person keeps the decision. Read again under the row lock in the
+  // apply's re-check, the lock a request and the detector take too.
+  if (await pendingEditAwaitsAdjudication(pendingEditId)) {
+    return { reason: 'adjudication_pending' };
+  }
 
   // Adapt the quorum to the active-agent pool. A fixed quorum of 2 is
   // unreachable for agent-authored edits whenever fewer than three agents are
@@ -1176,6 +1192,8 @@ export interface ConsensusStatusFacts {
   targetOpenToAgents: boolean;
   /** `pendingEditCitesUnreadSources`. */
   citesUnreadSources: boolean;
+  /** `pendingEditAwaitsAdjudication`. */
+  awaitsAdjudication: boolean;
   /** `countActiveVerifierAgents()`. */
   activeAgents: number;
   /**
@@ -1217,6 +1235,7 @@ export function consensusStatusFromFacts(
   if (facts.submittedBy == null) return hold('human_submitted');
   if (!facts.targetOpenToAgents) return hold('target_unpublished');
   if (facts.citesUnreadSources) return hold('unverified_sources');
+  if (facts.awaitsAdjudication) return hold('adjudication_pending');
   const quorum = effectiveConsensusQuorum(facts.activeAgents, {
     authorSelfReviews: !facts.submitterIsAgent || facts.authorSelfReviewGrant,
   });
@@ -1289,6 +1308,7 @@ export async function agentConsensusStatusForTargets(
     unreadSources,
     openDisputes,
     upheldRulings,
+    awaitingAdjudication,
   ] = await Promise.all([
     mapWithConcurrency(live, SOURCE_QUOTE_CHECK_CONCURRENCY, (row) =>
       highRiskProposalWouldPublishUnquoted(row, () => {}),
@@ -1299,6 +1319,7 @@ export async function agentConsensusStatusForTargets(
     pendingEditsCitingUnreadSources(live),
     openDisputeTargetIds({ targetType: 'pending_edit', targetIds: liveIds }),
     pendingEditsWithStandingUpheldRuling(live),
+    pendingEditsAwaitingAdjudication(liveIds),
   ]);
 
   // The author's own verdicts count only when it may review its own work —
@@ -1334,6 +1355,7 @@ export async function agentConsensusStatusForTargets(
         authorSelfReviewGrant: standing?.selfReviews ?? false,
         targetOpenToAgents: openTargets.has(row.id),
         citesUnreadSources: unreadSources.has(row.id),
+        awaitsAdjudication: awaitingAdjudication.has(row.id),
         activeAgents,
         summary: summaries.get(row.id),
         hasOpenDispute: openDisputes.has(row.id),
@@ -1905,6 +1927,9 @@ export async function sweepAgentConsensus(
     // COALESCE: a NULL from a missing field would make NOT drop a row the
     // filter never meant to exclude.
     not(sql`coalesce(${citesUnreadSources}, false)`),
+    // Held for T3 on every retry (`adjudication_pending`) until the case or
+    // the person's request no longer stands.
+    not(pendingEditAdjudicationHoldSql),
     // A reviewer's comment-only return keeps the approvals, so a row
     // resubmitted unchanged sits at quorum and holds as
     // `returned_unrevised` on every retry (`returnStandsUnrevised`). Only

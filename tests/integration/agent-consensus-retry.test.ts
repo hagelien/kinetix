@@ -7,6 +7,7 @@
  * admin's correction triggers, and the retry sweep.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { Readable } from 'node:stream';
 import {
   afterAll,
   beforeAll,
@@ -26,6 +27,8 @@ vi.mock('../../api/_lib/auth.js', () => ({
 
 import { eq } from 'drizzle-orm';
 import {
+  adjudicationCases,
+  adjudicationRequests,
   agentVerifications,
   agents,
   citations,
@@ -1961,5 +1964,168 @@ describe('agent consensus hold, re-stamp and retry', () => {
       .from(pendingEdits)
       .where(eq(pendingEdits.id, edit!.id));
     expect(after!.reviewedBy).toBe(peerB.userId);
+  });
+});
+
+describe('T3 adjudication holds agent consensus (issue 17)', () => {
+  /** A person's published-page fact proposal with two agent approvals: a quorum. */
+  async function seedApprovedFact(opts: { competingScope?: boolean } = {}) {
+    const admin = await seedUser(db, { email: 'admin@example.com', username: 'admin', role: 'admin' });
+    const peerA = await seedAgent('peer-a');
+    const peerB = await seedAgent('peer-b');
+    await db.update(agents).set({ modelTier: 'flagship' }).where(eq(agents.id, peerB.agentId));
+    const [page] = await db
+      .insert(wikiPages)
+      .values({
+        slug: 'diazepam',
+        title: 'Diazepam',
+        pageType: 'drug_monograph',
+        content: { version: 2, sections: { pk: { body: { type: 'doc', content: [] } } } },
+        status: 'published',
+        createdBy: admin,
+        updatedBy: admin,
+      })
+      .returning({ id: wikiPages.id });
+    const [paper] = await db
+      .insert(citations)
+      .values({ type: 'pmid', identifier: '12345678' })
+      .returning({ id: citations.id });
+    const [edit] = await db
+      .insert(pendingEdits)
+      .values({
+        editType: 'wiki_fact',
+        targetId: page!.id,
+        sectionId: 'pk',
+        factOperation: 'add',
+        factStatement: 'Halveringstiden er 20–100 timer.',
+        proposedValue: {
+          type: 'fact',
+          attrs: { factId: 'f-1', referenceIds: [paper!.id] },
+          content: [{ type: 'text', text: 'Halveringstiden er 20–100 timer.' }],
+        },
+        submittedBy: admin,
+        status: 'pending',
+      })
+      .returning({ id: pendingEdits.id, submittedAt: pendingEdits.submittedAt });
+    await approve(peerA.agentId, edit!.id);
+    await approve(peerB.agentId, edit!.id, { tier: 'flagship' });
+    if (opts.competingScope) {
+      await db
+        .update(agentVerifications)
+        .set({ competingScope: true })
+        .where(eq(agentVerifications.agentId, peerB.agentId));
+    }
+    return {
+      editId: edit!.id,
+      version: `${edit!.submittedAt.toISOString()}|pending`,
+      admin,
+      peerA,
+      peerB,
+    };
+  }
+
+  async function expectHeld(s: Awaited<ReturnType<typeof seedApprovedFact>>) {
+    expect(await sweepAgentConsensus()).toEqual([]);
+    expect(
+      await runAgentConsensus({ pendingEditId: s.editId, approverUserId: s.peerA.userId }),
+    ).toEqual({ outcome: 'held', reason: 'adjudication_pending' });
+    expect(await agentConsensusStatus(s.editId)).toMatchObject({
+      ready: false,
+      reason: 'adjudication_pending',
+    });
+    expect((await collectConsensusFacts(s.editId))?.disputeHoldCause).toBe('adjudication_pending');
+    const [row] = await db.select().from(pendingEdits).where(eq(pendingEdits.id, s.editId));
+    expect(row!.status).toBe('pending');
+  }
+
+  it('holds a quorum whose flagship approval found competing scope, before and while the case is open', async () => {
+    const s = await seedApprovedFact({ competingScope: true });
+    // No case yet (the detector has not run, or failed): held all the same.
+    await expectHeld(s);
+
+    const [kase] = await db
+      .insert(adjudicationCases)
+      .values({
+        targetType: 'pending_edit',
+        targetId: s.editId,
+        targetVersion: s.version,
+        triggers: ['competing_scope'],
+        disputeOrigin: 'agent',
+        t2Snapshot: [],
+        t1Snapshot: { verdicts: [], openDisputes: [] },
+      })
+      .returning({ id: adjudicationCases.id });
+    await expectHeld(s);
+
+    // A panel that handed it to a person keeps it held for that person.
+    await db
+      .update(adjudicationCases)
+      .set({ state: 'diverged', t4Required: true, closedAt: new Date() })
+      .where(eq(adjudicationCases.id, kase!.id));
+    await expectHeld(s);
+
+    // Only a panel that settled the version on its own releases it.
+    await db
+      .update(adjudicationCases)
+      .set({ state: 'converged', t4Required: false })
+      .where(eq(adjudicationCases.id, kase!.id));
+    expect((await collectConsensusFacts(s.editId))?.disputeHoldCause).toBeNull();
+    expect(await sweepAgentConsensus()).toEqual([{ pendingEditId: s.editId, outcome: 'applied' }]);
+  });
+
+  it('holds a quorum on a version a person asked to have adjudicated', async () => {
+    const s = await seedApprovedFact();
+    expect(await agentConsensusStatus(s.editId)).toEqual({ ready: true });
+    await db.insert(adjudicationRequests).values({
+      targetType: 'pending_edit',
+      targetId: s.editId,
+      targetVersion: s.version,
+      requestedBy: s.admin,
+      reasonMd: 'Ønsker en T3-vurdering før dette publiseres.',
+    });
+    await expectHeld(s);
+  });
+
+  it('does not publish when the clinching approval sets competing scope through the API', async () => {
+    const s = await seedApprovedFact();
+    // Take peer B's approval back, then cast it through the route with the flag.
+    await db.delete(agentVerifications).where(eq(agentVerifications.agentId, s.peerB.agentId));
+    getUserFromRequestMock.mockResolvedValue({ userId: s.peerB.userId, role: 'contributor' });
+    const raw = JSON.stringify({
+      targetType: 'pending_edit',
+      targetId: s.editId,
+      targetVersion: s.version,
+      verdict: 'approve',
+      rationaleMd: 'Stemmer for voksne; for eldre gir kildene en annen halveringstid.',
+      competingScope: true,
+    });
+    const req = Readable.from([raw]) as IncomingMessage;
+    req.method = 'POST';
+    req.url = '/api/agent-verifications';
+    req.headers = {
+      host: 'localhost',
+      'content-type': 'application/json',
+      'content-length': String(Buffer.byteLength(raw)),
+    };
+    const state = { statusCode: 0, body: '' };
+    const res = {
+      headersSent: false,
+      setHeader: vi.fn(),
+      writeHead: vi.fn((code: number) => {
+        state.statusCode = code;
+        return res;
+      }),
+      end: vi.fn((body?: string) => {
+        state.body = body ?? '';
+        return res;
+      }),
+    } as unknown as ServerResponse;
+    await handler(req, res);
+    expect(state.statusCode).toBeLessThan(300);
+    expect(JSON.parse(state.body)).toMatchObject({ autoApplied: false });
+    const [row] = await db.select().from(pendingEdits).where(eq(pendingEdits.id, s.editId));
+    expect(row!.status).toBe('pending');
+    const [kase] = await db.select().from(adjudicationCases).where(eq(adjudicationCases.targetId, s.editId));
+    expect(kase).toMatchObject({ state: 'open', triggers: ['competing_scope'] });
   });
 });

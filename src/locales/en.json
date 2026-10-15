@@ -2563,6 +2563,7 @@
         "returned_unrevised": "a reviewer returned this version with a note; it must be revised first.",
         "target_unpublished": "the page is not published, so agents cannot vouch for it.",
         "unverified_sources": "it cites a paper nobody has read in full yet; an agent must review that paper first.",
+        "adjudication_pending": "a T3 adjudication is open on it, or a person asked for one; agent approvals cannot publish it until that is settled.",
         "apply_failed": "the publish was refused. Press Approve to see the error."
       }
     }
