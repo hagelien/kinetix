@@ -15,8 +15,11 @@ import {
   withBlockHistory,
 } from '../../../api/_lib/drugBlockHistory.js';
 import { lockDrugForEntryApplicability } from '../../../api/_lib/parameterApplicabilityStore.js';
+import { parseResearchOutput } from '../../../src/lib/deepResearchImport.js';
+import { runImport } from '../../../api/_lib/researchImportStore.js';
 import { mergeCitations, type CitationMergeStats } from '../../../api/_lib/citation-merge.js';
 import { mergeDrugs } from '../../../api/_lib/drug-merge.js';
+import { replaceDrugReceptorTargets } from '../../../api/_lib/receptorTargetStore.js';
 import { replaceDrugMetabolism } from '../../../api/_lib/metabolismStore.js';
 import { applyApprovedEdit } from '../../../api/_lib/pending-edits-helpers.js';
 import { planDeletes, applyDeletesInTransaction } from '../../../scripts/repair-hallucinated-citations.js';
@@ -371,6 +374,175 @@ describe.skipIf(!realPostgresUrl())('metabolism block history on concurrent conn
       expect(JSON.stringify(revision!.oldValue)).toContain(`"referenceIds":[${winner}]`);
       expect(JSON.stringify(revision!.newValue)).toContain(`"referenceIds":[${winner}]`);
       expect(revision!.newValue).toEqual(await readDrugBlockSnapshot(getDb(), parentA, block));
+    },
+  );
+
+  async function firstUseWriter(block: 'metabolism' | 'pharmacodynamics', citationId: number) {
+    if (block === 'metabolism') {
+      const payload = { profile: { referenceIds: [citationId] }, routes: [], metabolites: [], precursors: [] };
+      return { payload, save: () => replaceDrugMetabolism(getDb(), parentA, payload, actor) };
+    }
+    const entity = await seedBioEntity(db as never);
+    const mechanisms = [{ receptorTargetId: entity, interactionType: 'agonist', referenceIds: [citationId] }];
+    return { payload: { mechanisms }, save: () => replaceDrugReceptorTargets(getDb(), parentA, mechanisms, actor) };
+  }
+
+  async function firstUseCitations() {
+    const papers = await db.insert(citations).values([
+      { type: 'doi', identifier: '10.1000/first-winner' },
+      { type: 'doi', identifier: '10.1000/first-loser' },
+    ]).returning({ id: citations.id });
+    return papers.map((p) => p.id) as [number, number];
+  }
+
+  it.each(['metabolism', 'pharmacodynamics'] as const)(
+    'defers a fold behind a first-use %s citation write', async (block) => {
+      const [winner, loser] = await firstUseCitations();
+      const { save } = await firstUseWriter(block, loser);
+      const written = gate();
+      const release = gate();
+      const writer = runInPoolTransaction(async () => {
+        if (block === 'metabolism') await lockMetabolismHistory();
+        await lockDrugForEntryApplicability(parentA);
+        await withBlockHistory({ drugIds: [parentA], blocks: [block], actorUserId: actor }, async () => {
+          await save();
+          written.open();
+          await release.wait;
+        });
+      });
+      try {
+        await written.wait;
+        // There is no committed use in any live block or history yet. The
+        // fold must see the shared membership key, not rely on its drug scan.
+        const result = await runInPoolTransaction(() => mergeCitations(getDb(), winner, loser));
+        expect(result).toMatchObject({ deferred: true, deferredReason: 'entry_in_flight' });
+      } finally {
+        release.open();
+        await writer;
+      }
+      expect((await runInPoolTransaction(() => mergeCitations(getDb(), winner, loser))).deferred).not.toBe(true);
+      const [revision] = await db.select().from(drugBlockRevisions);
+      expect(revision!.newValue).toEqual(await readDrugBlockSnapshot(getDb(), parentA, block));
+      expect(JSON.stringify(revision!.newValue)).toContain(`"referenceIds":[${winner}]`);
+      expect(await db.select().from(citations).where(eq(citations.id, loser))).toHaveLength(0);
+    },
+  );
+
+  it.each(['metabolism', 'pharmacodynamics'] as const)(
+    'rejects a first-use %s write after waiting for a citation fold', async (block) => {
+      const [winner, loser] = await firstUseCitations();
+      const { save } = await firstUseWriter(block, loser);
+      const folded = gate();
+      const release = gate();
+      const fold = runInPoolTransaction(async () => {
+        await mergeCitations(getDb(), winner, loser);
+        folded.open();
+        await release.wait;
+      });
+      await folded.wait;
+      const writer = runInPoolTransaction(async () => {
+        await getDb().execute(sql`SET LOCAL application_name = 'block-history-first-use'`);
+        if (block === 'metabolism') await lockMetabolismHistory();
+        await lockDrugForEntryApplicability(parentA);
+        await withBlockHistory({ drugIds: [parentA], blocks: [block], actorUserId: actor }, save);
+      }).then(() => null, (err: unknown) => err);
+      try {
+        await waitForAdvisory(db, 'block-history-first-use');
+      } finally {
+        release.open();
+        await fold;
+      }
+      expect(await writer).toMatchObject({ statusHint: 400, code: 'block_reference_missing' });
+      expect(await db.select().from(drugBlockRevisions)).toHaveLength(0);
+      expect(await db.select().from(drugMetabolismProfiles)).toHaveLength(0);
+      expect(await db.select().from(drugReceptorTargets)).toHaveLength(0);
+    },
+  );
+
+  it.each(['metabolism', 'pharmacodynamics'] as const)(
+    'locks first-use %s approval references before its pending-edit row', async (block) => {
+      const [winner, loser] = await firstUseCitations();
+      const { payload } = await firstUseWriter(block, loser);
+      const [edit] = await db.insert(pendingEdits).values({
+        editType: block === 'metabolism' ? 'metabolism' : 'receptor_targets',
+        targetId: parentA, proposedValue: payload, submittedBy: actor, status: 'pending',
+      }).returning({ id: pendingEdits.id });
+      const rowHeld = gate();
+      const release = gate();
+      const approval = applyApprovedEdit(edit!.id, actor, undefined, { revalidate: async () => {
+        rowHeld.open();
+        await release.wait;
+      } });
+      try {
+        await rowHeld.wait;
+        const folded = await runInPoolTransaction(() => mergeCitations(getDb(), winner, loser));
+        expect(folded).toMatchObject({ deferred: true, deferredReason: 'entry_in_flight' });
+      } finally {
+        release.open();
+        await approval;
+      }
+      expect((await runInPoolTransaction(() => mergeCitations(getDb(), winner, loser))).deferred).not.toBe(true);
+      const [revision] = await db.select().from(drugBlockRevisions);
+      expect(revision!.pendingEditId).toBe(edit!.id);
+      expect(revision!.newValue).toEqual(await readDrugBlockSnapshot(getDb(), parentA, block));
+      expect(JSON.stringify(revision!.newValue)).toContain(`"referenceIds":[${winner}]`);
+    },
+  );
+
+  it.each(['metabolism', 'pharmacodynamics'] as const)(
+    'locks a first-use %s-only research source before block insertion', async (block) => {
+      const [winner, loser] = await firstUseCitations();
+      await db.update(drugs).set({ pubchemCid: 123456 }).where(eq(drugs.id, parentA));
+      const parsed = parseResearchOutput({
+        schemaVersion: 'kinetix-deep-research-output-v1',
+        drugIdentity: { names: { en: 'Parent A' }, pubchemCid: 123456 },
+        kinetixParameterValues: [],
+        pharmacodynamicTargets: block === 'pharmacodynamics'
+          ? [{ targetSymbol: 'DRD2', targetName: 'Dopamine D2', interactionType: 'antagonist', sourceIds: ['S1'] }] : [],
+        metabolism: block === 'metabolism' ? { profileSourceIds: ['S1'] } : {},
+        sources: [{ sourceId: 'S1', citationType: 'doi', doi: '10.1000/first-loser', title: 'First use' }],
+      });
+      if (!parsed.ok) throw new Error(parsed.errors.join('; '));
+      expect(parsed.data.parameters).toHaveLength(0);
+      const table = block === 'metabolism' ? 'drug_metabolism_profiles' : 'drug_receptor_targets';
+      await db.execute(sql`CREATE FUNCTION pr303_wait_first_use() RETURNS trigger AS $$
+        BEGIN PERFORM pg_advisory_xact_lock(1651273576, 99); RETURN NEW; END;
+        $$ LANGUAGE plpgsql`);
+      await db.execute(sql.raw(`CREATE TRIGGER pr303_wait_first_use BEFORE INSERT ON ${table}
+        FOR EACH ROW EXECUTE FUNCTION pr303_wait_first_use()`));
+      const held = gate();
+      const release = gate();
+      const latch = runInPoolTransaction(async () => {
+        await getDb().execute(sql`SELECT pg_advisory_xact_lock(1651273576, 99)`);
+        held.open();
+        await release.wait;
+      });
+      await held.wait;
+      const imported = runImport(getDb(), parsed.data, { userId: actor, overwrite: false });
+      try {
+        let waiting = false;
+        for (let i = 0; i < 100; i++) {
+          const result = await db.execute<{ waiting: boolean }>(sql`
+            SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE wait_event = 'advisory'
+              AND position(${`insert into "${table}"`} in query) > 0) AS waiting
+          `);
+          if (result.rows[0]?.waiting) { waiting = true; break; }
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+        expect(waiting).toBe(true);
+        const folded = await runInPoolTransaction(() => mergeCitations(getDb(), winner, loser));
+        expect(folded).toMatchObject({ deferred: true, deferredReason: 'entry_in_flight' });
+      } finally {
+        release.open();
+        await Promise.all([latch, imported]);
+        await db.execute(sql`DROP FUNCTION pr303_wait_first_use() CASCADE`);
+      }
+      expect((await runInPoolTransaction(() => mergeCitations(getDb(), winner, loser))).deferred).not.toBe(true);
+      const rows = await db.select().from(drugBlockRevisions).where(eq(drugBlockRevisions.drugId, parentA));
+      const revision = rows.find((r) => r.block === block)!;
+      expect(revision).toBeDefined();
+      expect(revision.newValue).toEqual(await readDrugBlockSnapshot(getDb(), parentA, block));
+      expect(JSON.stringify(revision.newValue)).toContain(`"referenceIds":[${winner}]`);
     },
   );
 

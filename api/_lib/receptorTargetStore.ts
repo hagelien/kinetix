@@ -1,3 +1,4 @@
+import { lockBlockCitationReferences } from './blockCitationLocks.js';
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import {
   bioEntities,
@@ -350,6 +351,7 @@ export async function replaceDrugReceptorTargets(
   mechanisms: ReceptorMechanismInput[],
   userId: number,
 ): Promise<void> {
+  await lockBlockCitationReferences(db, mechanisms);
   await validateReceptorTargetsInput(db, drugId, mechanisms);
 
   // #785 Phase 7: resolve each mechanism to a unified bio_entities id and write

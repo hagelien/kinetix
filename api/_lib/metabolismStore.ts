@@ -1,3 +1,4 @@
+import { lockBlockCitationReferences } from './blockCitationLocks.js';
 import { asc, eq, inArray } from 'drizzle-orm';
 import {
   bioEntities,
@@ -584,6 +585,7 @@ export async function replaceDrugMetabolism(
   input: MetabolismWriteInput,
   userId: number,
 ): Promise<void> {
+  await lockBlockCitationReferences(db, input);
   const drugName = await validateMetabolismInput(db, drugId, input);
 
   // Elimination / metabolism routes. #785 Phase 7: route.enzymeId is a unified

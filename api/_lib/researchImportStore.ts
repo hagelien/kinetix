@@ -14,6 +14,7 @@
  * non-destructive toward existing curated values. See the CLI header for the
  * operator-facing contract.
  */
+import { lockBlockCitationIds } from './blockCitationLocks.js';
 import { and, desc, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import {
   drugs,
@@ -37,7 +38,6 @@ import {
 } from '../../src/lib/citationHandles.js';
 import {
   doseContextValuesForWrite,
-  lockCitationMembershipsShared,
   recomputeSummariesForDrug,
 } from './parameter-entries-store.js';
 import { parameterDoseContextMode } from '../../src/lib/drugParameters.js';
@@ -347,19 +347,14 @@ export async function runImport(
       // Resolve once, before snapshots, and use these exact endpoints for the
       // inserts too. A newly linked drug may have live data but no history yet.
       const metaboliteDrugs = await resolveImportMetabolites(tx, data);
+      // All incoming sources, including PD/metabolism-only references, before
+      // snapshots and before any child row can make a fold wait.
+      await lockBlockCitationIds(tx, citationMap.values());
       const blockHistory = await beginBlockHistory({
         drugIds: [drugId],
         metabolismDrugIds: [...metaboliteDrugs.values()],
         actorUserId: opts.userId,
       });
-      await lockCitationMembershipsShared(
-        data.parameters.flatMap((p) =>
-          p.sourceValues.flatMap((sv) => {
-            const citationId = citationMap.get(sv.sourceId);
-            return citationId == null ? [] : [citationId];
-          }),
-        ),
-      );
       await seedParameters(tx, drugId, data, citationMap, opts, stats);
       await seedParameterEntries(tx, drugId, data, citationMap, opts, stats);
       await seedPdTargets(tx, drugId, data, citationMap, opts.userId, stats);

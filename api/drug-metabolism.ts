@@ -10,6 +10,8 @@
  * the apply step (here for admins, in applyApprovedEdit for the review queue)
  * clears and re-inserts the rows. See api/_lib/metabolismStore.ts.
  */
+import { lockBlockCitationReferences } from './_lib/blockCitationLocks.js';
+import { ParameterApplyError } from './_lib/drugs-helpers.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { json, error, withErrorHandling } from './_lib/response.js';
 import { getDb, runInPoolTransaction } from './_lib/db.js';
@@ -222,6 +224,7 @@ async function handlePut(
     outcome = await runInPoolTransaction<DirectOutcome>(async () => {
       await lockMetabolismHistory();
       await lockDrugForEntryApplicability(drugId);
+      await lockBlockCitationReferences(getDb(), input);
       const [drugInTx] = await getDb()
         .select({ updatedAt: drugs.updatedAt })
         .from(drugs)
@@ -244,7 +247,7 @@ async function handlePut(
       return { kind: 'ok' };
     });
   } catch (err) {
-    if (err instanceof MetabolismWriteError) {
+    if (err instanceof MetabolismWriteError || err instanceof ParameterApplyError) {
       error(res, err.statusHint, err.message);
       return;
     }

@@ -1,3 +1,4 @@
+import { lockBlockCitationReferences } from './blockCitationLocks.js';
 import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 import { getDb, inTransaction } from './db.js';
 import {
@@ -1435,6 +1436,10 @@ async function paramEntryEditDrugId(
 async function lockCitationMembershipForEdit(
   edit: typeof pendingEdits.$inferSelect,
 ): Promise<void> {
+  if (edit.editType === 'metabolism' || edit.editType === 'receptor_targets') {
+    await lockBlockCitationReferences(getDb(), edit.proposedValue);
+    return;
+  }
   if (edit.editType !== 'param_entry') return;
   const value = edit.proposedValue;
   if (!value || typeof value !== 'object') return;
