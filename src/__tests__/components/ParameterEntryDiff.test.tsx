@@ -93,6 +93,42 @@ describe('ParameterEntryDiff', () => {
     expect(screen.getByText(/doseContext\.drugRef/)).toBeInTheDocument();
   });
 
+  // #12 / Codex on #300: a modified-release or special-population Tmax is
+  // stored but not pooled, so the review card must show its scope.
+  it('shows the formulation, regimen and population of a scoped proposal', () => {
+    render(
+      <ParameterEntryDiff
+        edit={edit(
+          {
+            op: 'create',
+            input: {
+              parameter: 'tmax',
+              low: 3,
+              high: 6,
+              unit: 'h',
+              route: 'oral',
+              releaseProfile: 'modified',
+              physicalForm: 'tablet_capsule',
+              doseRegimen: 'multiple',
+              doseIntervalHours: 12,
+              pkPopulation: 'renal_impairment',
+              populationQualifier: 'CrCl < 30 mL/min',
+              citationId: 7,
+            },
+          },
+          { parameter: 'tmax', drugName: 'Oksymorfon' },
+        )}
+      />,
+    );
+    const card = document.body.textContent!;
+    expect(card).toMatch(/releaseProfile\.modified|modified/);
+    expect(card).toMatch(/physicalForm\.tablet_capsule|tablet_capsule/);
+    expect(card).toMatch(/doseRegimen\.multiple|multiple/);
+    expect(card).toMatch(/doseContext\.everyHours/);
+    expect(card).toMatch(/pkPopulation\.renal_impairment|renal_impairment/);
+    expect(card).toContain('CrCl < 30 mL/min');
+  });
+
   it('renders a categorical model-structure create proposal by its value', () => {
     render(
       <ParameterEntryDiff

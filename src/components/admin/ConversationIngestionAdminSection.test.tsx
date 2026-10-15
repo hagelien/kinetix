@@ -200,6 +200,44 @@ describe('ConversationIngestionAdminSection', () => {
     });
   });
 
+  // Codex P1 on #300 (#12): a modified-release or special-population reading
+  // is stored but not pooled, so the card names its scope before approval.
+  it('shows the formulation, regimen and population a reading is scoped to', async () => {
+    const scoped = {
+      ...PLAN,
+      items: [
+        {
+          ...PLAN.items[0]!,
+          parameter: 'tmax',
+          reading: {
+            low: 3,
+            high: 6,
+            unit: 'h',
+            releaseProfile: 'modified',
+            doseRegimen: 'multiple',
+            doseIntervalHours: 12,
+            pkPopulation: 'renal_impairment',
+            populationQualifier: 'CrCl < 30 mL/min',
+          },
+        },
+        PLAN.items[1]!,
+      ],
+    };
+    mockResponse({ ok: true, applied: false, plan: scoped, warnings: [] });
+    render(<ConversationIngestionAdminSection />);
+    typeBundle();
+    fireEvent.click(screen.getByText('admin.conversationIngestion.analyze'));
+
+    await waitFor(() =>
+      expect(screen.getByText(/doseContext\.values\.releaseProfile\.modified/)).toBeInTheDocument(),
+    );
+    const reading = screen.getByText(/doseContext\.values\.releaseProfile\.modified/).textContent!;
+    expect(reading).toContain('doseContext.values.doseRegimen.multiple');
+    expect(reading).toContain('doseContext.values.pkPopulation.renal_impairment');
+    expect(reading).toContain('CrCl < 30 mL/min');
+    expect(translated).toContainEqual({ key: 'doseContext.everyHours', opts: { hours: 12 } });
+  });
+
   it('pre-selects applicable items and leaves blocked ones untickable', async () => {
     mockResponse({ ok: true, applied: false, plan: PLAN, warnings: [] });
     render(<ConversationIngestionAdminSection />);

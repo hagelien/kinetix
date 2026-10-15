@@ -490,3 +490,48 @@ describe('aggregateEntries — the reported statistic', () => {
     expect(s.min).toBe(-0.5);
   });
 });
+
+// #12: an extended-release Tmax (OPANA ER) or a special-population value states
+// its scope, and the general figure is drawn from the reference case only.
+describe('aggregateEntries — formulation and population scope', () => {
+  const tmaxCtx: AggregationContext = { targetUnit: 'h', matrixRelevant: false };
+  const tmax = (over: Partial<ParameterEntryValue>) =>
+    entry({ unit: 'h', matrix: null, citationId: 1, median: 1, ...over });
+
+  it('keeps a modified-release or special-population entry out of the pool, but listed', () => {
+    const s = aggregateEntries(
+      [
+        tmax({ entryId: 1, median: 1, releaseProfile: 'immediate' }),
+        tmax({ entryId: 2, citationId: 2, median: 1.5 }),
+        tmax({ entryId: 3, citationId: 3, median: 8, releaseProfile: 'modified' }),
+        tmax({ entryId: 4, citationId: 4, median: 6, pkPopulation: 'hepatic_impairment' }),
+      ],
+      tmaxCtx,
+    )!;
+    expect(s.entryCount).toBe(4);
+    expect(s.pooledCount).toBe(2);
+    expect(s.max).toBe(1.5);
+    expect(s.contributingCitationIds).toEqual([1, 2]);
+    expect(s.points.map((p) => p.entryId).sort()).toEqual([1, 2, 3, 4]);
+  });
+
+  it('pools unstated, unknown, healthy-adult and unspecified-patient entries as before', () => {
+    const s = aggregateEntries(
+      [
+        tmax({ median: 1 }),
+        tmax({ median: 2, releaseProfile: 'unknown', pkPopulation: 'unknown' }),
+        tmax({ median: 3, releaseProfile: 'immediate', pkPopulation: 'healthy_adult' }),
+        tmax({ median: 4, pkPopulation: 'patients_unspecified' }),
+      ],
+      tmaxCtx,
+    )!;
+    expect(s.pooledCount).toBe(4);
+  });
+
+  it('pools nothing when every entry is outside the reference scope', () => {
+    const s = aggregateEntries([tmax({ median: 8, releaseProfile: 'modified' })], tmaxCtx)!;
+    expect(s.pooledCount).toBe(0);
+    expect(s.representative).toBeNull();
+    expect(summaryToNumericRange(s)).toBeNull();
+  });
+});
