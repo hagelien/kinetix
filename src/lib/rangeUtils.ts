@@ -131,12 +131,22 @@ export function formatRange(
   // free-text qualifiers ("voksen po") are ignored here so they can never
   // shadow the real min–max range in the formatted output; the value then
   // falls through to the range/value branches below.
-  if (rep != null && isQualifierOperator(qualifier)) s = `${qualifier} ${fmt(rep)}${unitSuffix}`;
+  //
+  // The stored operator is written out as recorded — never swapped for the
+  // inclusive "≥"/"≤" of an unqualified bound, and never dropped from a span —
+  // so a strict "< 10" does not read as "≤10" and a censored "> 3–12" does not
+  // read as the exact span "3–12".
+  const operator = isQualifierOperator(qualifier) ? qualifier : null;
+  const bound = min ?? max;
+  if (operator && rep != null) s = `${operator} ${fmt(rep)}${unitSuffix}`;
+  else if (operator && min != null && max != null && min !== max)
+    s = `${operator} ${fmt(min)}–${fmt(max)}${unitSuffix}`;
+  else if (operator && bound != null) s = `${operator} ${fmt(bound)}${unitSuffix}`;
   else if (min != null && max != null && min !== max) s = `${fmt(min)}–${fmt(max)}${unitSuffix}`;
   else if (min != null && max === min) s = `${fmt(min)}${unitSuffix}`;
   else if (rep != null) s = `${fmt(rep)}${unitSuffix}`;
-  // One-sided thresholds: show "≥min" / "≤max" instead of an empty
-  // string. Common for #302 P3 parameters like effect/toxic
+  // Unqualified one-sided thresholds: show "≥min" / "≤max" instead of an
+  // empty string. Common for #302 P3 parameters like effect/toxic
   // thresholds and fatal-dose floors where the literature reports
   // only a one-sided cutoff.
   else if (min != null) s = `≥${fmt(min)}${unitSuffix}`;

@@ -83,6 +83,61 @@ describe('rangeUtils', () => {
       expect(formatRange({ max: 200, unit: 'mg/L' })).toBe('≤200 mg/L');
     });
 
+    describe('keeps the stored operator (#296)', () => {
+      it.each([
+        ['<', { max: 10 }, '< 10 nM'],
+        ['≤', { max: 10 }, '≤ 10 nM'],
+        ['>', { min: 10 }, '> 10 nM'],
+        ['≥', { min: 10 }, '≥ 10 nM'],
+      ] as const)(
+        'renders a bound-only %s value with its own operator',
+        (qualifier, bounds, expected) => {
+          expect(formatRange({ ...bounds, qualifier, unit: 'nM' })).toBe(expected);
+        },
+      );
+
+      it('never turns a strict bound into an inclusive one', () => {
+        // The bug: `{ max: 10, qualifier: '<' }` rendered as "≤10".
+        expect(formatRange({ max: 10, qualifier: '<', unit: 'nM' })).not.toContain('≤');
+        expect(formatRange({ min: 10, qualifier: '>', unit: 'nM' })).not.toContain('≥');
+      });
+
+      it.each(['<', '≤', '>', '≥'] as const)(
+        'keeps the %s operator on a qualified min–max span',
+        (qualifier) => {
+          expect(formatRange({ min: 3, max: 12, qualifier, unit: 'h' })).toBe(
+            `${qualifier} 3–12 h`,
+          );
+        },
+      );
+
+      it('writes a qualified span whose bounds are equal as one figure', () => {
+        expect(formatRange({ min: 5, max: 5, qualifier: '<', unit: 'mg' })).toBe('< 5 mg');
+      });
+
+      it('keeps the operator when scaling to percent and hiding the unit', () => {
+        expect(
+          formatRange({ max: 0.05, qualifier: '<', unit: 'fraction' }, { asPercent: true }),
+        ).toBe('< 5%');
+        expect(
+          formatRange({ min: 0.2, max: 0.4, qualifier: '>' }, { asPercent: true }),
+        ).toBe('> 20–40%');
+        expect(formatRange({ max: 10, qualifier: '<', unit: 'nM' }, { showUnit: false })).toBe(
+          '< 10',
+        );
+      });
+
+      it('keeps the note after a qualified bound', () => {
+        expect(formatRange({ max: 10, qualifier: '<', note: 'LOQ' })).toBe('< 10 (LOQ)');
+      });
+
+      it('still prefers a central value over the span when one is stored', () => {
+        expect(formatRange({ min: 3, max: 12, median: 5, qualifier: '>', unit: 'h' })).toBe(
+          '> 5 h',
+        );
+      });
+    });
+
     it('ignores a free-text qualifier and falls back to the min–max range', () => {
       // Legacy import stuffed a route/population label into `qualifier`
       // alongside a real range; it must never shadow the min–max display.
