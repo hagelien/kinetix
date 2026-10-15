@@ -625,6 +625,76 @@ describe('T3 sealing, convergence and the T4 handoff', () => {
     expect(kept).toMatchObject({ t4Required: true, state: 'diverged' });
   });
 
+  describe('a completed handoff and objections raised after its seal (#238)', () => {
+    async function handedOff() {
+      const reviewer = await seedUser(db, { email: 'ed@example.com', username: 'ed', role: 'editor' });
+      const s = await seedCase({ agentDispute: true });
+      const { kase } = await panel(
+        s,
+        { resolvedValue: 60, resolvedUnit: 'L/h' },
+        { resolvedValue: 75, resolvedUnit: 'L/h' },
+      );
+      expect(kase.t4Required).toBe(true);
+      const [captured] = await db.select().from(disputes).where(eq(disputes.targetId, s.editId));
+      expect(kase.t1Snapshot.openDisputes.map((d) => d.disputeId)).toEqual([captured!.id]);
+      return { ...s, reviewer, capturedId: captured!.id };
+    }
+    const lateDispute = async (s: Awaited<ReturnType<typeof handedOff>>, source: 'human' | 'agent', createdBy: number) => {
+      const [row] = await db
+        .insert(disputes)
+        .values({
+          targetType: 'pending_edit',
+          targetId: s.editId,
+          createdBy,
+          source,
+          reasonMd: 'Ny innvending etter at saken ble forseglet.',
+          targetVersion: s.version,
+        })
+        .returning({ id: disputes.id });
+      return row!.id;
+    };
+    const listed = async () => (await listHandoffs()).map((h) => h.caseId);
+
+    it('does not revive a completed handoff for a dispute opened after the seal', async () => {
+      const s = await handedOff();
+      // A person overrules the captured objection: the handoff is complete.
+      await resolveDisputeById({ id: s.capturedId, resolution: 'rejected', resolvedBy: s.reviewer });
+      expect(await listed()).toEqual([]);
+
+      // On the same, unchanged version: a person's new dispute…
+      const person = await seedUser(db, { email: 'late@example.com', username: 'late', role: 'contributor' });
+      const personDispute = await lateDispute(s, 'human', person);
+      // …and a fresh agent objection, its verdict and the row mirroring it.
+      const late = await seedAgent('late-agent', { tier: 'mid' });
+      await verdictOn(late.agentId, s.editId, 'dispute', 'mid', 'Kilden oppgir en annen verdi.');
+      await lateDispute(s, 'agent', late.userId);
+      expect(await listed()).toEqual([]);
+
+      // Nor does an upheld ruling on an objection the case never carried.
+      await resolveDisputeById({ id: personDispute, resolution: 'upheld', resolvedBy: s.reviewer });
+      expect(await listed()).toEqual([]);
+      // The case file a person would be handed still holds only what it captured.
+      const file = await caseFile(s.reviewer, s.caseId, 'editor');
+      expect(file.body.outcome.handoff.t1Snapshot.openDisputes.map((d: { disputeId: number }) => d.disputeId)).toEqual([
+        s.capturedId,
+      ]);
+    });
+
+    it('keeps listing a handoff while a dispute it captured is still open', async () => {
+      const s = await handedOff();
+      expect(await listed()).toEqual([s.caseId]);
+      // Post-seal activity neither adds nor takes away: the captured objection holds it.
+      const person = await seedUser(db, { email: 'late@example.com', username: 'late', role: 'contributor' });
+      const personDispute = await lateDispute(s, 'human', person);
+      expect(await listed()).toEqual([s.caseId]);
+      await resolveDisputeById({ id: personDispute, resolution: 'rejected', resolvedBy: s.reviewer });
+      expect(await listed()).toEqual([s.caseId]);
+      // Answering the captured objection completes it.
+      await resolveDisputeById({ id: s.capturedId, resolution: 'rejected', resolvedBy: s.reviewer });
+      expect(await listed()).toEqual([]);
+    });
+  });
+
   it('routes a converged case to a person when a person’s dispute is part of it', async () => {
     const s = await seedCase({ humanDispute: true });
     const { kase } = await panel(
