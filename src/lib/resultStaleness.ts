@@ -1,3 +1,5 @@
+import { resolvableAnalyteIds, resolveModel } from '@/lib/kinetics-core';
+import { isDerivedModelId } from '@/lib/modelDerivation';
 import type { DrugSimConfig, DrugSimResult } from '@/types/simulator';
 
 /**
@@ -72,4 +74,20 @@ export function isResultStale(
 ): boolean {
   if (!result || result.inputHash == null) return false;
   return result.inputHash !== hashRunInputs(config);
+}
+
+/**
+ * Whether a stored result ran on a DERIVED model the registry no longer resolves: a live refresh
+ * has replaced the build it ran on (each live build carries its own versioned model id), or the
+ * catalogue has withdrawn the model. Its inputs may be unchanged, but a run now would compute on a
+ * different model (or refuse), so the curve is out of date until it is re-run (#299). The grade
+ * gate withholds such a result on its own (`gradeResult`); this is what tells the reader why.
+ *
+ * Reviewed models are pinned by their own ids and are not replaced underneath a result, so only a
+ * derived id is considered.
+ */
+export function isResultModelSuperseded(result: DrugSimResult | undefined): boolean {
+  const modelId = result?.assumptions.modelId;
+  if (!modelId || !isDerivedModelId(modelId)) return false;
+  return !resolvableAnalyteIds().some((analyte) => resolveModel(analyte)?.modelId === modelId);
 }
