@@ -21,6 +21,7 @@ import { callerCan } from './_lib/permissions-store.js';
 import { drugs, pendingEdits } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { recordImplicitAgentApproval } from './_lib/agent-verifications.js';
+import { withBlockHistory, metabolismInputLinkedDrugIds } from './_lib/drugBlockHistory.js';
 import {
   getDrugMetabolism,
   MetabolismWriteError,
@@ -229,7 +230,17 @@ async function handlePut(
       if (drugInTx.updatedAt.getTime() !== snapshot.getTime()) {
         return { kind: 'changed' };
       }
-      await replaceDrugMetabolism(getDb(), drugId, input, auth.userId);
+      // Recorded in the block history — this drug's box and every drug its
+      // metabolite and precursor links touch (#37).
+      await withBlockHistory(
+        getDb(),
+        {
+          drugIds: [drugId, ...metabolismInputLinkedDrugIds(input)],
+          blocks: ['metabolism'],
+          actorUserId: auth.userId,
+        },
+        () => replaceDrugMetabolism(getDb(), drugId, input, auth.userId),
+      );
       return { kind: 'ok' };
     });
   } catch (err) {

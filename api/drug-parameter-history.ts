@@ -267,7 +267,14 @@ async function handleBlockHistory(
       )
       .orderBy(desc(drugBlockRevisions.createdAt), desc(drugBlockRevisions.id))
       .limit(100);
-    json(res, 200, { revisions });
+    // An operator script (seeder, importer) records with no author; say so
+    // with a null rather than an author object of nulls.
+    json(res, 200, {
+      revisions: revisions.map((r) => ({
+        ...r,
+        author: r.author?.id == null ? null : r.author,
+      })),
+    });
   } catch {
     error(res, 500, 'Failed to fetch block history');
   }

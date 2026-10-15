@@ -386,5 +386,22 @@ describe('ParameterHistoryDialog', () => {
       // Nothing to compare against, so nothing is marked as added.
       expect(within(diff).queryByText(/^\+ /)).not.toBeInTheDocument();
     });
+
+    it('names an operator script as the author of an authorless block revision', async () => {
+      fetchDrugBlockHistoryMock.mockResolvedValue({
+        revisions: [
+          revision({
+            editSummary: null,
+            author: null,
+            oldValue: { declarations: [] },
+            newValue: { declarations: [declaration('two-compartment', 5)] },
+          }),
+        ],
+      });
+      render(
+        <ParameterHistoryDialog drugId={51} parameter="modelStructure" onClose={() => {}} />,
+      );
+      expect(await screen.findByText('Import or operator script')).toBeInTheDocument();
+    });
   });
 });

@@ -60,6 +60,7 @@ import {
   withDrugApplicabilityLock,
 } from './parameterApplicabilityStore.js';
 import { getDb, runInPoolTransaction } from './db.js';
+import { beginBlockHistory } from './drugBlockHistory.js';
 import { assertPubchemCidShadowsNoDrug } from './drugs-helpers.js';
 import type {
   NormalizedResearchImport,
@@ -308,6 +309,13 @@ export async function runImport(
 
   const drugId = await resolveDrug(db, data, stats);
   stats.drugId = drugId;
+  // The import writes mechanisms, the metabolism box and source entries
+  // (model-structure axes and route-scoped ka among them) directly, so it is
+  // recorded in the block history like any other write to those blocks (#37).
+  const blockHistory = await beginBlockHistory(db, {
+    drugIds: [drugId],
+    actorUserId: opts.userId,
+  });
   const citationMap = await seedCitations(
     db,
     drugId,
@@ -371,6 +379,7 @@ export async function runImport(
   await runInPoolTransaction(async () => {
     await recomputeSummariesForDrug(drugId, opts.userId);
   });
+  await blockHistory.record();
   return stats;
 }
 

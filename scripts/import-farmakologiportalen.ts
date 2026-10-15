@@ -39,6 +39,7 @@ import {
   withDrugApplicabilityLock,
 } from '../api/_lib/parameterApplicabilityStore';
 import { getDb } from '../api/_lib/db';
+import { withBlockHistory } from '../api/_lib/drugBlockHistory';
 import { findPubchemCidShadows } from '../api/_lib/drugs-helpers';
 import { generateSlug } from '../api/_lib/slug';
 import { buildDrugSearchKey } from '../src/lib/drugNames';
@@ -521,15 +522,29 @@ async function main(): Promise<void> {
         activity: inferMetaboliteActivity(m.name),
         sortOrder,
       }));
-      const res = await db
-        .insert(drugMetabolites)
-        .values(rows)
-        // Untargeted: a page can name one substance twice (the bare name and a
-        // qualified variant), which is one link once both resolve to the same
-        // drug — the substance index (0099) catches that, the name index the
-        // literal repeat.
-        .onConflictDoNothing()
-        .returning({ id: drugMetabolites.id });
+      // Recorded in the block history (#37): this box and the boxes of the
+      // metabolites it links. An importer has no user: NULL author.
+      const res = await withBlockHistory(
+        getDb(),
+        {
+          drugIds: [
+            drugId,
+            ...rows.flatMap((r) => (r.metaboliteDrugId != null ? [r.metaboliteDrugId] : [])),
+          ],
+          blocks: ['metabolism'],
+          actorUserId: null,
+        },
+        () =>
+          db
+            .insert(drugMetabolites)
+            .values(rows)
+            // Untargeted: a page can name one substance twice (the bare name
+            // and a qualified variant), which is one link once both resolve to
+            // the same drug — the substance index (0099) catches that, the
+            // name index the literal repeat.
+            .onConflictDoNothing()
+            .returning({ id: drugMetabolites.id }),
+      );
       metaboliteLinks += res.length;
     }
   }

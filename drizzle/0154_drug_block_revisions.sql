@@ -6,7 +6,9 @@
 --
 -- One row per change to one drug's block, with a self-contained before/after
 -- snapshot. `old_value` is NULL only when the prior state was never recorded;
--- an empty block is an empty snapshot. Nothing is backfilled: history starts
+-- an empty block is an empty snapshot. `created_by` is NULL for a write made
+-- by an operator script that runs without a user (seeders, importers), which
+-- is still recorded rather than skipped. Nothing is backfilled: history starts
 -- with the first write after this migration.
 --
 -- Every statement is separated by a statement-breakpoint marker: the production
@@ -19,7 +21,7 @@ CREATE TABLE IF NOT EXISTS "drug_block_revisions" (
   "old_value" jsonb,
   "new_value" jsonb NOT NULL,
   "pending_edit_id" integer REFERENCES "pending_edits"("id") ON DELETE SET NULL,
-  "created_by" integer NOT NULL REFERENCES "users"("id"),
+  "created_by" integer REFERENCES "users"("id"),
   "created_at" timestamp DEFAULT now() NOT NULL,
   CONSTRAINT "drug_block_revisions_block_check"
     CHECK ("block" IN ('metabolism', 'pharmacodynamics', 'modelStructure'))

@@ -1265,10 +1265,17 @@ export function DrugMonographSidebar({
         </div>
         ) : null}
 
-        {metabolism?.evidenceNote ? (
+        {/* The note opens its own sources, like any cited value. A box can
+            carry sources with no note; they are still shown and reachable. */}
+        {metabolism?.evidenceNote || metabolism?.referenceIds?.length ? (
           <div>
             <h4 className="mb-1 font-medium">{t('sidebar.metabolismNote')}</h4>
-            <p className="text-muted-foreground">{metabolism.evidenceNote}</p>
+            <p className="text-muted-foreground" data-testid="metabolism-note">
+              {withReferences(
+                metabolism.referenceIds,
+                metabolism.evidenceNote || t('sidebar.metabolismSourcesOnly'),
+              ) ?? (metabolism.evidenceNote || null)}
+            </p>
           </div>
         ) : null}
       </div>

@@ -43,6 +43,7 @@ import 'dotenv/config';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { drugs, wikiPages, pendingEdits, parameterEntries } from '../db/schema';
 import { getDb, runInPoolTransaction } from '../api/_lib/db';
+import { beginBlockHistory } from '../api/_lib/drugBlockHistory';
 import {
   blockedParametersFor,
   withDrugApplicabilityLock,
@@ -1219,6 +1220,16 @@ async function main(): Promise<void> {
           );
         }
 
+        // The script moves metabolite links (and refuses a loser with any
+        // other block data or block history), so the survivor's metabolism
+        // box — and the box of every drug at the other end of a moved link —
+        // is recorded in the block history (#37). No user: NULL author.
+        const blockHistory = await beginBlockHistory(tx, {
+          drugIds: [live.survivor.id, live.loser.id],
+          blocks: ['metabolism'],
+          actorUserId: null,
+        });
+
         // Identity is recomputed from the locked rows, not the preflight's:
         // a metadata edit in between would otherwise be overwritten by a stale
         // copy of the names it just changed.
@@ -1467,6 +1478,8 @@ async function main(): Promise<void> {
             .set({ pubchemCid: live.loser.pubchemCid, updatedAt: new Date() })
             .where(eq(drugs.id, live.survivor.id));
         }
+
+        await blockHistory.record();
       });
     });
   });

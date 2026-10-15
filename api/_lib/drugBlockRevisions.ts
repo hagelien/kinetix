@@ -42,19 +42,16 @@ export interface MetabolismBlockSnapshot {
 }
 
 /**
- * The metabolism box as a content snapshot; an empty box is empty lists.
- * `profileReferenceIds` is read separately because the public metabolism read
- * model does not carry the profile's citations, but they are part of what an
- * edit can change.
+ * The metabolism box as a content snapshot; an empty box is empty lists. The
+ * profile's own citations are part of it: an edit can change only them.
  */
 export function metabolismBlockSnapshot(
   metabolism: DrugMetabolism | null,
-  profileReferenceIds: readonly number[] | null | undefined,
 ): MetabolismBlockSnapshot {
   const strip = (row: object) => withoutRowIdentity(row, ['id', 'sortOrder']);
   return {
     evidenceNote: metabolism?.evidenceNote ?? null,
-    referenceIds: [...(profileReferenceIds ?? [])],
+    referenceIds: [...(metabolism?.referenceIds ?? [])],
     routes: (metabolism?.routes ?? []).map(strip),
     metabolites: (metabolism?.metabolites ?? []).map(strip),
     precursors: (metabolism?.precursors ?? []).map(strip),
@@ -246,7 +243,8 @@ export async function recordDrugBlockRevision(
     /** The state before the change; null when it was never recorded. */
     oldValue: unknown;
     newValue: unknown;
-    createdBy: number;
+    /** Null for an operator script that runs without a user. */
+    createdBy: number | null;
     pendingEditId?: number | null;
   },
 ): Promise<number | null> {

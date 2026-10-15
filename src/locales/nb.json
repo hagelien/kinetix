@@ -4069,6 +4069,7 @@
   },
   "blockHistory": {
     "noRevisions": "Ingen endringer er registrert for denne delen ennå. Historikken føres fra den første endringen etter at den ble innført.",
+    "scriptAuthor": "Import eller driftsskript",
     "notRecorded": "Ikke registrert",
     "empty": "(tom)"
   },

@@ -16,10 +16,6 @@ import {
 } from '../../src/lib/receptorTargets.js';
 import type { ReceptorMechanismInput } from './schemas.js';
 import { targetSlug } from './slug.js';
-import {
-  pharmacodynamicsBlockSnapshot,
-  recordDrugBlockRevision,
-} from './drugBlockRevisions.js';
 
 type Db = ReturnType<typeof getDb>;
 
@@ -345,21 +341,16 @@ async function resolveEntityId(
 /**
  * Replace a drug's entire set of receptor-target mechanisms with `mechanisms`.
  * Clears the existing rows and re-inserts, creating any catalog targets that
- * were supplied by symbol/name. Must run inside a transaction.
+ * were supplied by symbol/name. Must run inside a transaction, wrapped in
+ * `withBlockHistory` (api/_lib/drugBlockHistory.ts) so the change is recorded.
  */
 export async function replaceDrugReceptorTargets(
   db: Db,
   drugId: number,
   mechanisms: ReceptorMechanismInput[],
   userId: number,
-  /** The approved pending edit this write applies, for the revision row. */
-  opts: { pendingEditId?: number | null } = {},
 ): Promise<void> {
   await validateReceptorTargetsInput(db, drugId, mechanisms);
-  // The mechanisms as they stood, for the block's revision history (#37).
-  const before = pharmacodynamicsBlockSnapshot(
-    await getDrugReceptorTargets(db, drugId),
-  );
 
   // #785 Phase 7: resolve each mechanism to a unified bio_entities id and write
   // it to bio_entity_id (the legacy receptor_target_id column was dropped in
@@ -416,16 +407,4 @@ export async function replaceDrugReceptorTargets(
     eventType: 'edit',
   });
 
-  // The revision history of the whole pharmacodynamics block, in the same
-  // transaction as the write.
-  await recordDrugBlockRevision(db, {
-    drugId,
-    block: 'pharmacodynamics',
-    oldValue: before,
-    newValue: pharmacodynamicsBlockSnapshot(
-      await getDrugReceptorTargets(db, drugId),
-    ),
-    createdBy: userId,
-    pendingEditId: opts.pendingEditId ?? null,
-  });
 }

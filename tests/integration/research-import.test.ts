@@ -7,6 +7,7 @@ import {
   drugEnzymeInteractions,
   drugMetabolismProfiles,
   drugMetabolites,
+  drugBlockRevisions,
   drugParameterApplicability,
   drugParameterRevisions,
   drugParameters,
@@ -156,6 +157,36 @@ function parse(doc: unknown) {
 }
 
 describe('deep-research importer — full DB path (PGlite)', () => {
+  // #37: the importer writes the mechanisms and the metabolism box directly,
+  // so it is recorded in the block history like any other write to them —
+  // once: an idempotent re-run changes nothing and records nothing.
+  it('records the blocks it writes in the block history', async () => {
+    const first = await runImport(db, parse(DOC), { userId, overwrite: false });
+    const rows = await db
+      .select({
+        block: drugBlockRevisions.block,
+        createdBy: drugBlockRevisions.createdBy,
+        newValue: drugBlockRevisions.newValue,
+      })
+      .from(drugBlockRevisions)
+      .where(eq(drugBlockRevisions.drugId, first.drugId));
+    expect(rows.map((r) => r.block).sort()).toEqual(['metabolism', 'pharmacodynamics']);
+    expect(rows.every((r) => r.createdBy === userId)).toBe(true);
+    const metabolism = rows.find((r) => r.block === 'metabolism')!.newValue as {
+      referenceIds: number[];
+      routes: unknown[];
+    };
+    expect(metabolism.routes).toHaveLength(2);
+    expect(metabolism.referenceIds).toHaveLength(1);
+
+    await runImport(db, parse(DOC), { userId, overwrite: false });
+    const after = await db
+      .select({ id: drugBlockRevisions.id })
+      .from(drugBlockRevisions)
+      .where(eq(drugBlockRevisions.drugId, first.drugId));
+    expect(after).toHaveLength(2);
+  });
+
   it('seeds a new drug with parameters, citations, revisions, PD targets and metabolism', async () => {
     const stats = await runImport(db, parse(DOC), { userId, overwrite: false });
 

@@ -13,6 +13,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { json, error, withErrorHandling } from './_lib/response.js';
 import { getDb, runInPoolTransaction } from './_lib/db.js';
+import { withBlockHistory } from './_lib/drugBlockHistory.js';
 import { getUserFromRequest } from './_lib/auth.js';
 import { assertSameOrigin, parseAndValidate } from './_lib/validate.js';
 import { receptorTargetsWriteSchema } from './_lib/schemas.js';
@@ -214,7 +215,11 @@ async function handlePut(
       if (drugInTx.updatedAt.getTime() !== snapshot.getTime()) {
         return { kind: 'changed' };
       }
-      await replaceDrugReceptorTargets(getDb(), drugId, mechanisms, auth.userId);
+      await withBlockHistory(
+        getDb(),
+        { drugIds: [drugId], blocks: ['pharmacodynamics'], actorUserId: auth.userId },
+        () => replaceDrugReceptorTargets(getDb(), drugId, mechanisms, auth.userId),
+      );
       return { kind: 'ok' };
     });
   } catch (err) {

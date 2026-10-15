@@ -59,6 +59,7 @@ import {
   toMetabolismWriteInput,
 } from './metabolismStore.js';
 import { replaceDrugReceptorTargets } from './receptorTargetStore.js';
+import { metabolismInputLinkedDrugIds, withBlockHistory } from './drugBlockHistory.js';
 import { replaceDrugEnzymeInteractions } from './enzymeInteractionStore.js';
 import {
   createBioEntity,
@@ -1907,12 +1908,17 @@ async function applyApprovedEditEffects(
     }
     const { editSummary: _editSummary, submitForReview: _submitForReview, ...payload } =
       parsed.data;
-    await replaceDrugMetabolism(
+    const input = toMetabolismWriteInput(payload);
+    const targetId = edit.targetId;
+    await withBlockHistory(
       db,
-      edit.targetId,
-      toMetabolismWriteInput(payload),
-      edit.submittedBy,
-      { pendingEditId: edit.id },
+      {
+        drugIds: [targetId, ...metabolismInputLinkedDrugIds(input)],
+        blocks: ['metabolism'],
+        actorUserId: edit.submittedBy,
+        pendingEditId: edit.id,
+      },
+      () => replaceDrugMetabolism(db, targetId, input, edit.submittedBy),
     );
   } else if (edit.editType === 'receptor_targets') {
     if (!edit.targetId) throw new Error('Missing target drug id');
@@ -1929,12 +1935,17 @@ async function applyApprovedEditEffects(
         400,
       );
     }
-    await replaceDrugReceptorTargets(
+    const targetId = edit.targetId;
+    await withBlockHistory(
       db,
-      edit.targetId,
-      parsed.data.mechanisms,
-      edit.submittedBy,
-      { pendingEditId: edit.id },
+      {
+        drugIds: [targetId],
+        blocks: ['pharmacodynamics'],
+        actorUserId: edit.submittedBy,
+        pendingEditId: edit.id,
+      },
+      () =>
+        replaceDrugReceptorTargets(db, targetId, parsed.data.mechanisms, edit.submittedBy),
     );
   } else if (edit.editType === 'enzyme_interaction') {
     if (!edit.targetId) throw new Error('Missing target drug id');

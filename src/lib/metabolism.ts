@@ -158,6 +158,11 @@ export interface DrugEliminationRoute {
 export interface DrugMetabolism {
   routes: DrugEliminationRoute[];
   evidenceNote: string | null;
+  /**
+   * The profile's own citations: the sources behind the box-level evidence
+   * note. Null (or absent, from an older payload) when there are none.
+   */
+  referenceIds?: number[] | null;
   metabolites: DrugMetaboliteLink[];
   precursors: DrugMetaboliteLink[];
 }
@@ -507,6 +512,7 @@ export function hasMetabolismData(
   return (
     metabolism.routes.length > 0 ||
     Boolean(metabolism.evidenceNote && metabolism.evidenceNote.trim()) ||
+    (metabolism.referenceIds?.length ?? 0) > 0 ||
     metabolism.metabolites.length > 0 ||
     metabolism.precursors.length > 0
   );

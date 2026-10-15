@@ -21,8 +21,12 @@ vi.mock('../../api/_lib/auth.js', () => ({
 }));
 
 import { getDb, runInPoolTransaction } from '../../api/_lib/db.js';
-import { replaceDrugMetabolism } from '../../api/_lib/metabolismStore.js';
+import { getDrugMetabolism, replaceDrugMetabolism } from '../../api/_lib/metabolismStore.js';
 import { replaceDrugReceptorTargets } from '../../api/_lib/receptorTargetStore.js';
+import {
+  metabolismInputLinkedDrugIds,
+  withBlockHistory,
+} from '../../api/_lib/drugBlockHistory.js';
 import {
   collectReferenceUsage,
   collectUsedCitationIdsForDrug,
@@ -78,6 +82,35 @@ async function revisionsFor(drugId: number, block: string) {
   return rows.filter((row) => row.block === block);
 }
 
+/** A metabolism write the way the API makes one: recorded by the recorder. */
+function recordedMetabolismWrite(
+  drugId: number,
+  input: Parameters<typeof replaceDrugMetabolism>[2],
+  userId: number,
+) {
+  return withBlockHistory(
+    getDb(),
+    {
+      drugIds: [drugId, ...metabolismInputLinkedDrugIds(input)],
+      blocks: ['metabolism'],
+      actorUserId: userId,
+    },
+    () => replaceDrugMetabolism(getDb(), drugId, input, userId),
+  );
+}
+
+function recordedReceptorWrite(
+  drugId: number,
+  mechanisms: Parameters<typeof replaceDrugReceptorTargets>[2],
+  userId: number,
+) {
+  return withBlockHistory(
+    getDb(),
+    { drugIds: [drugId], blocks: ['pharmacodynamics'], actorUserId: userId },
+    () => replaceDrugReceptorTargets(getDb(), drugId, mechanisms, userId),
+  );
+}
+
 function metabolismInput(fraction: number) {
   return {
     profile: { evidenceNote: 'Hovedsakelig nyreutskillelse.' },
@@ -93,7 +126,7 @@ describe('drug block revisions', () => {
     const userId = await seedUser(db);
     const write = (fraction: number) =>
       runInPoolTransaction(() =>
-        replaceDrugMetabolism(getDb(), drugId, metabolismInput(fraction), userId),
+        recordedMetabolismWrite(drugId, metabolismInput(fraction), userId),
       );
 
     await write(0.6);
@@ -129,8 +162,7 @@ describe('drug block revisions', () => {
     );
 
     await runInPoolTransaction(() =>
-      replaceDrugReceptorTargets(
-        getDb(),
+      recordedReceptorWrite(
         drugId,
         [{ receptorTargetId: entityId, interactionType: 'antagonist', tier: 'primary' }],
         userId,
@@ -210,7 +242,7 @@ describe('drug block revisions', () => {
     await declare(winnerId, 'dispositionModel', 'two-compartment');
     await declare(loserId, 'eliminationModel', 'first-order');
     await runInPoolTransaction(() =>
-      replaceDrugMetabolism(getDb(), loserId, metabolismInput(0.4), userId),
+      recordedMetabolismWrite(loserId, metabolismInput(0.4), userId),
     );
     const winnerBefore = (await revisionsFor(winnerId, 'modelStructure')).at(-1)!.newValue;
 
@@ -272,8 +304,7 @@ describe('drug block revisions', () => {
     );
     await recomputeParameterAndDependents(drugId, 'dispositionModel', userId);
     await runInPoolTransaction(() =>
-      replaceDrugMetabolism(
-        getDb(),
+      recordedMetabolismWrite(
         drugId,
         {
           profile: {},
@@ -320,8 +351,7 @@ describe('drug block revisions', () => {
     const citationId = await seedAdmissibleCitation(db);
     const write = (referenceIds: number[]) =>
       runInPoolTransaction(() =>
-        replaceDrugMetabolism(
-          getDb(),
+        recordedMetabolismWrite(
           drugId,
           { ...metabolismInput(0.5), profile: { evidenceNote: 'Notat.', referenceIds } },
           userId,
@@ -398,11 +428,57 @@ describe('drug block revisions', () => {
     expect(usage.some((u) => u.kind === 'drug' && u.id === drugId)).toBe(true);
   });
 
+  // Metabolism is a graph: a precursor link written on one drug is a
+  // metabolite on the other drug's box, so both boxes are recorded.
+  it("records the linked drug's box when a write adds a link to it", async () => {
+    const userId = await seedUser(db);
+    const parentId = await seedDrug(db, { slug: 'forelder', names: { nb: 'Forelder' } });
+    const childId = await seedDrug(db, { slug: 'barn', names: { nb: 'Barn' } });
+    await runInPoolTransaction(() =>
+      recordedMetabolismWrite(
+        childId,
+        {
+          profile: {},
+          routes: [],
+          metabolites: [],
+          precursors: [{ precursorDrugId: parentId, activity: 'active' as const }],
+        },
+        userId,
+      ),
+    );
+
+    const [child] = await revisionsFor(childId, 'metabolism');
+    expect((child!.newValue as { precursors: unknown[] }).precursors).toHaveLength(1);
+    const [parent] = await revisionsFor(parentId, 'metabolism');
+    expect(parent!.createdBy).toBe(userId);
+    expect((parent!.oldValue as { metabolites: unknown[] }).metabolites).toEqual([]);
+    expect((parent!.newValue as { metabolites: unknown[] }).metabolites).toHaveLength(1);
+  });
+
+  // Codex review on #303: the profile's citations are part of the public
+  // metabolism model too, including a box that has sources and no note.
+  it('exposes the profile citations on the metabolism read model, even without a note', async () => {
+    const userId = await seedUser(db);
+    const drugId = await seedDrug(db);
+    const citationId = await seedAdmissibleCitation(db);
+    await runInPoolTransaction(() =>
+      recordedMetabolismWrite(
+        drugId,
+        { profile: { referenceIds: [citationId] }, routes: [], metabolites: [], precursors: [] },
+        userId,
+      ),
+    );
+    const metabolism = await getDrugMetabolism(getDb(), drugId);
+    expect(metabolism).not.toBeNull();
+    expect(metabolism!.evidenceNote).toBeNull();
+    expect(metabolism!.referenceIds).toEqual([citationId]);
+  });
+
   it('serves a block history from the history endpoint, and refuses an unknown block', async () => {
     const drugId = await seedDrug(db);
     const userId = await seedUser(db, { displayName: 'Kari' });
     await runInPoolTransaction(() =>
-      replaceDrugMetabolism(getDb(), drugId, metabolismInput(0.5), userId),
+      recordedMetabolismWrite(drugId, metabolismInput(0.5), userId),
     );
 
     const call = async (query: string) => {

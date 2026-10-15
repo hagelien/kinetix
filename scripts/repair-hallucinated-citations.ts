@@ -51,6 +51,7 @@ import 'dotenv/config';
 import fs from 'node:fs';
 import { sql, type SQL } from 'drizzle-orm';
 import { getDb, runInPoolTransaction } from '../api/_lib/db';
+import { beginBlockHistory } from '../api/_lib/drugBlockHistory';
 import { describeDeferredMerge, mergeCitations } from '../api/_lib/citation-merge';
 import { fetchRecords } from '../api/_lib/pubmed-eutils';
 import { fetchCrossRefMetadata } from '../api/_lib/crossref';
@@ -615,6 +616,21 @@ async function applyDeletes(
   const db = getDb();
   const ids = plan.citationIds;
 
+  // Every drug whose metabolism, mechanisms or model structure (declarations
+  // and ka values are parameter entries) cites a reference being removed: the
+  // removal changes those blocks, so it is recorded in their history (#37).
+  const blockDrugs = await db.execute<{ drug_id: number }>(sql`
+    SELECT drug_id FROM parameter_entries WHERE citation_id = ANY(${intArray(ids)})
+    UNION SELECT drug_id FROM drug_receptor_targets WHERE reference_ids && ${intArray(ids)}
+    UNION SELECT drug_id FROM drug_metabolism_profiles WHERE reference_ids && ${intArray(ids)}
+    UNION SELECT drug_id FROM drug_elimination_routes WHERE reference_ids && ${intArray(ids)}
+    UNION SELECT parent_drug_id FROM drug_metabolites WHERE reference_ids && ${intArray(ids)}
+  `);
+  const blockHistory = await beginBlockHistory(db, {
+    drugIds: blockDrugs.rows.map((r) => Number(r.drug_id)),
+    actorUserId,
+  });
+
   console.log('  removing parameter entries…');
   await db.execute(sql`
     DELETE FROM parameter_entries WHERE citation_id = ANY(${intArray(ids)})
@@ -680,6 +696,9 @@ async function applyDeletes(
   for (const drugId of cascade) {
     await recomputeSummariesForDrug(drugId, actorUserId);
   }
+
+  console.log('  recording the changed blocks…');
+  await blockHistory.record();
 }
 
 // ─── Main ───────────────────────────────────────────────────────────────────

@@ -1909,9 +1909,8 @@ export const drugBlockRevisions = pgTable(
       () => pendingEdits.id,
       { onDelete: 'set null' },
     ),
-    createdBy: integer('created_by')
-      .references(() => users.id)
-      .notNull(),
+    /** NULL for an operator script that runs without a user (seeder, importer). */
+    createdBy: integer('created_by').references(() => users.id),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
   (t) => [

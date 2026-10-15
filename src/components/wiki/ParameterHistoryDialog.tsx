@@ -419,7 +419,14 @@ export function ParameterHistoryDialog({
                 }`}
               >
                 <div className="text-xs text-muted-foreground mb-2">
-                  <UserBadge user={rev.author} /> ·{' '}
+                  {block && rev.author == null ? (
+                    // A block change made by an operator script (a seeder or
+                    // an importer) has no user behind it.
+                    <span>{t('blockHistory.scriptAuthor')}</span>
+                  ) : (
+                    <UserBadge user={rev.author} />
+                  )}{' '}
+                  ·{' '}
                   {new Date(rev.createdAt).toLocaleString()}
                 </div>
                 <ApprovalsLine approvals={rev.approvals} t={t} />

@@ -24,11 +24,6 @@ import {
 } from '../../src/lib/metabolism.js';
 import { ENTITY_RANKS, type EntityRank } from '../../src/lib/bioEntities.js';
 import { isUniqueViolation } from './drugs-helpers.js';
-import {
-  metabolismBlockSnapshot,
-  recordDrugBlockRevision,
-  type MetabolismBlockSnapshot,
-} from './drugBlockRevisions.js';
 import type { getDb } from './db.js';
 
 type Db = ReturnType<typeof getDb>;
@@ -257,6 +252,12 @@ export async function getDrugMetabolism(
   const metabolism: DrugMetabolism = {
     routes: routeRows.map(serializeRoute),
     evidenceNote: profile?.evidenceNote ?? null,
+    // The profile's own citations — the sources behind the box-level note,
+    // and a box can carry them with no note at all (#37).
+    referenceIds:
+      profile?.referenceIds && profile.referenceIds.length > 0
+        ? profile.referenceIds
+        : null,
     metabolites: dedupeMetaboliteLinks(metaboliteRows.map(serializeLink)),
     precursors: dedupeMetaboliteLinks(precursorRows.map(serializeLink)),
   };
@@ -264,6 +265,7 @@ export async function getDrugMetabolism(
   if (
     metabolism.routes.length === 0 &&
     !metabolism.evidenceNote &&
+    !metabolism.referenceIds &&
     metabolism.metabolites.length === 0 &&
     metabolism.precursors.length === 0
   ) {
@@ -568,43 +570,21 @@ export async function validateMetabolismInput(
 }
 
 /**
- * The metabolism box as `drug_block_revisions` records it (#37): the read
- * model plus the profile's own citations, which the read model leaves out but
- * an edit can change on their own.
- */
-export async function getMetabolismBlockSnapshot(
-  db: Db,
-  drugId: number,
-): Promise<MetabolismBlockSnapshot> {
-  const [metabolism, [profile]] = await Promise.all([
-    getDrugMetabolism(db, drugId),
-    db
-      .select({ referenceIds: drugMetabolismProfiles.referenceIds })
-      .from(drugMetabolismProfiles)
-      .where(eq(drugMetabolismProfiles.drugId, drugId))
-      .limit(1),
-  ]);
-  return metabolismBlockSnapshot(metabolism, profile?.referenceIds ?? null);
-}
-
-/**
  * Replace a drug's entire metabolism box (profile note + elimination/metabolism
  * routes + metabolite links + precursor links) with `input`. Metabolites are
  * the rows where the drug is the parent; precursors are the rows where the drug
  * is the metabolite, so editing precursors reuses the same junction table from
- * the reverse side. Must run inside a transaction.
+ * the reverse side. Must run inside a transaction, wrapped in
+ * `withBlockHistory` (api/_lib/drugBlockHistory.ts) so the change — to this
+ * drug's box and to every linked drug's — is recorded.
  */
 export async function replaceDrugMetabolism(
   db: Db,
   drugId: number,
   input: MetabolismWriteInput,
   userId: number,
-  /** The approved pending edit this write applies, for the revision row. */
-  opts: { pendingEditId?: number | null } = {},
 ): Promise<void> {
   const drugName = await validateMetabolismInput(db, drugId, input);
-  // The box as it stood, for the block's revision history (#37).
-  const before = await getMetabolismBlockSnapshot(db, drugId);
 
   // Elimination / metabolism routes. #785 Phase 7: route.enzymeId is a unified
   // bio_entities id, written to bio_entity_id (the legacy enzyme_id column was
@@ -706,16 +686,6 @@ export async function replaceDrugMetabolism(
     eventType: 'edit',
   });
 
-  // The revision history of the whole box. Same transaction as the write, so
-  // a change is never applied without its history row (or vice versa).
-  await recordDrugBlockRevision(db, {
-    drugId,
-    block: 'metabolism',
-    oldValue: before,
-    newValue: await getMetabolismBlockSnapshot(db, drugId),
-    createdBy: userId,
-    pendingEditId: opts.pendingEditId ?? null,
-  });
 }
 
 /** Map a validated {@link metabolismWriteSchema} payload to a write input. */

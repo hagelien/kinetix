@@ -22,6 +22,7 @@ import {
   withDrugApplicabilityLock,
 } from '../api/_lib/parameterApplicabilityStore';
 import { getDb } from '../api/_lib/db';
+import { withBlockHistory } from '../api/_lib/drugBlockHistory';
 import { findPubchemCidShadows } from '../api/_lib/drugs-helpers';
 import {
   drugs,
@@ -350,76 +351,83 @@ async function seedMetabolism(index: SeedIndex): Promise<void> {
   for (const c of embeddedComponents) {
     const drugId = index.pubchemToDrugId.get(c.pubchemCid);
     if (!drugId) continue;
+    // Recorded in the block history (#37) — this box and the boxes of the
+    // drugs its metabolite links reach. A seeder has no user: NULL author.
+    await withBlockHistory(
+      getDb(),
+      { drugIds: [drugId], blocks: ['metabolism'], actorUserId: null },
+      async () => {
+        await db
+          .delete(drugMetabolites)
+          .where(eq(drugMetabolites.parentDrugId, drugId));
+        await db
+          .delete(drugEliminationRoutes)
+          .where(eq(drugEliminationRoutes.drugId, drugId));
+        await db
+          .delete(drugMetabolismProfiles)
+          .where(eq(drugMetabolismProfiles.drugId, drugId));
 
-    await db
-      .delete(drugMetabolites)
-      .where(eq(drugMetabolites.parentDrugId, drugId));
-    await db
-      .delete(drugEliminationRoutes)
-      .where(eq(drugEliminationRoutes.drugId, drugId));
-    await db
-      .delete(drugMetabolismProfiles)
-      .where(eq(drugMetabolismProfiles.drugId, drugId));
+        const metabolism = c.metabolism;
+        if (!metabolism) return;
 
-    const metabolism = c.metabolism;
-    if (!metabolism) continue;
+        const enzymeLabels = compactUnique(metabolism.enzymes);
+        const eliminationRoutes = compactUnique(metabolism.eliminationRoutes);
+        const metabolites = compactUnique(metabolism.metabolites);
 
-    const enzymeLabels = compactUnique(metabolism.enzymes);
-    const eliminationRoutes = compactUnique(metabolism.eliminationRoutes);
-    const metabolites = compactUnique(metabolism.metabolites);
+        const routeRows = [
+          ...enzymeLabels.map((label) => ({
+            drugId,
+            kind: 'enzyme' as const,
+            bioEntityId: enzymeIdByKey.get(label.trim().toLowerCase()) ?? null,
+            label,
+          })),
+          ...eliminationRoutes.map((label) => ({
+            drugId,
+            kind: 'other_unchanged' as const,
+            label,
+          })),
+        ].map((row, sortOrder) => ({ ...row, sortOrder }));
 
-    const routeRows = [
-      ...enzymeLabels.map((label) => ({
-        drugId,
-        kind: 'enzyme' as const,
-        bioEntityId: enzymeIdByKey.get(label.trim().toLowerCase()) ?? null,
-        label,
-      })),
-      ...eliminationRoutes.map((label) => ({
-        drugId,
-        kind: 'other_unchanged' as const,
-        label,
-      })),
-    ].map((row, sortOrder) => ({ ...row, sortOrder }));
+        if (routeRows.length > 0) {
+          await db.insert(drugEliminationRoutes).values(routeRows);
+          routeCount += routeRows.length;
+        }
 
-    if (routeRows.length > 0) {
-      await db.insert(drugEliminationRoutes).values(routeRows);
-      routeCount += routeRows.length;
-    }
-
-    // `compactUnique` dedupes the fixture's spellings; this dedupes the
-    // substances behind them. Several catalog entries name one metabolite more
-    // than once (a bare name and an abbreviation — "ecgonine methyl ester" and
-    // "EME"), which resolve to the same drug and are one link, not two. Since
-    // 0099 the table says so too, so a second row is a unique violation rather
-    // than the duplicate line the monograph used to print.
-    const seenMetaboliteDrugIds = new Set<number>();
-    const rows: {
-      parentDrugId: number;
-      metaboliteDrugId: number | null;
-      metaboliteName: string;
-      activity: ReturnType<typeof inferMetaboliteActivity>;
-      sortOrder: number;
-    }[] = [];
-    for (const metaboliteName of metabolites) {
-      const metaboliteDrugId =
-        index.nameToDrugId.get(normalizeMetabolismName(metaboliteName)) ?? null;
-      if (metaboliteDrugId !== null) {
-        if (seenMetaboliteDrugIds.has(metaboliteDrugId)) continue;
-        seenMetaboliteDrugIds.add(metaboliteDrugId);
-      }
-      rows.push({
-        parentDrugId: drugId,
-        metaboliteDrugId,
-        metaboliteName,
-        activity: inferMetaboliteActivity(metaboliteName),
-        sortOrder: rows.length,
-      });
-    }
-    if (rows.length > 0) {
-      await db.insert(drugMetabolites).values(rows);
-      metaboliteCount += rows.length;
-    }
+        // `compactUnique` dedupes the fixture's spellings; this dedupes the
+        // substances behind them. Several catalog entries name one metabolite more
+        // than once (a bare name and an abbreviation — "ecgonine methyl ester" and
+        // "EME"), which resolve to the same drug and are one link, not two. Since
+        // 0099 the table says so too, so a second row is a unique violation rather
+        // than the duplicate line the monograph used to print.
+        const seenMetaboliteDrugIds = new Set<number>();
+        const rows: {
+          parentDrugId: number;
+          metaboliteDrugId: number | null;
+          metaboliteName: string;
+          activity: ReturnType<typeof inferMetaboliteActivity>;
+          sortOrder: number;
+        }[] = [];
+        for (const metaboliteName of metabolites) {
+          const metaboliteDrugId =
+            index.nameToDrugId.get(normalizeMetabolismName(metaboliteName)) ?? null;
+          if (metaboliteDrugId !== null) {
+            if (seenMetaboliteDrugIds.has(metaboliteDrugId)) continue;
+            seenMetaboliteDrugIds.add(metaboliteDrugId);
+          }
+          rows.push({
+            parentDrugId: drugId,
+            metaboliteDrugId,
+            metaboliteName,
+            activity: inferMetaboliteActivity(metaboliteName),
+            sortOrder: rows.length,
+          });
+        }
+        if (rows.length > 0) {
+          await db.insert(drugMetabolites).values(rows);
+          metaboliteCount += rows.length;
+        }
+      },
+    );
   }
 
   console.log(

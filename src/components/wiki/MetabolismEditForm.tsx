@@ -366,6 +366,10 @@ export function MetabolismEditForm({
       const result = await submitDrugMetabolism(drugId, {
         profile: {
           evidenceNote: profileNote.trim() || null,
+          // The profile's own citations are not edited here, but the save
+          // replaces the box wholesale: carry them through rather than
+          // silently dropping the note's sources.
+          referenceIds: metabolism?.referenceIds ?? null,
         },
         routes: routeInputs,
         metabolites: metaboliteInputs,

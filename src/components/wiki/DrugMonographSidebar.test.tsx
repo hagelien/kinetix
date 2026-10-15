@@ -940,6 +940,36 @@ describe('DrugMonographSidebar', () => {
   });
 
 
+  it("cites the box-level note's own sources, even when there is no note", async () => {
+    vi.mocked(fetchDrugReferences).mockResolvedValue([
+      {
+        id: 3,
+        drugId: 1,
+        type: 'freetext',
+        identifier: 'Smith 2020',
+        metadata: null,
+        createdBy: null,
+        createdAt: new Date().toISOString(),
+      } as unknown as Awaited<ReturnType<typeof fetchDrugReferences>>[number],
+    ]);
+    mockDrugState.metabolism = {
+      routes: [],
+      evidenceNote: null,
+      referenceIds: [3],
+      metabolites: [],
+      precursors: [],
+    };
+    setUser([], 'authenticated');
+    renderSidebar(undefined, 'metabolism');
+
+    const note = await screen.findByTestId('metabolism-note');
+    const trigger = within(note).getByTestId('reference-hover');
+    expect(trigger).toHaveTextContent('sources');
+    fireEvent.mouseEnter(trigger);
+    const link = await screen.findByRole('link', { name: /^\[1\]/ });
+    expect(link).toHaveAttribute('href', '/references/3');
+  });
+
   it('offers contributors a metabolism editor even when no data exists', () => {
     mockDrugState.metabolism = null;
     setUser(['halfLife'], 'contributor');
