@@ -3269,7 +3269,8 @@
   "errors": {
     "unknownConcentrationUnit": "One of the selected units isn't recognized. Pick from the list and try again.",
     "invalidEnabledUnits": "Pick at least one concentration unit.",
-    "primaryUnitNotSupported": "The primary unit must be a per-litre unit. Per-decilitre units are still allowed as alternatives in tooltips and converters."
+    "primaryUnitNotSupported": "The primary unit must be a per-litre unit. Per-decilitre units are still allowed as alternatives in tooltips and converters.",
+    "pubchemCidShadowsDrugId": "This PubChem CID equals another drug's internal id. Saved simulator cases look that drug up by this number and would load the wrong substance. The CID can't be used until that is resolved."
   },
   "topicSections": {
     "empty": "This topic page has no sectioned headings yet. An admin can add headings via the whole-page editor; once published, atomic facts can attach to each section.",

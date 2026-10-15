@@ -535,7 +535,9 @@ async function handleUpdate(
     return;
   }
   if (outcome.kind === 'apply_error') {
-    error(res, outcome.error.statusHint, outcome.error.message);
+    // The code too, so the form can localize a refusal it knows
+    // (`pubchem_cid_shadows_drug_id`, `pubchem_cid_change_refused`).
+    error(res, outcome.error.statusHint, outcome.error.message, outcome.error.code);
     return;
   }
   if (outcome.kind === 'not_applicable') {

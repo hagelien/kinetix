@@ -97,6 +97,11 @@ const REVIEW_ERROR_KEYS: Record<string, string> = {
   pending_edit_decision_with_payload_change: 'review.errors.decideAfterRevising',
   // An agent resubmitting a calculation-driving proposal with no quote.
   source_quote_required: 'review.errors.sourceQuoteRequired',
+  // Approving a proposal that would give a drug a PubChem CID equal to another
+  // drug's internal id (a wiki_new that creates its drug, or a pubchemCid
+  // edit). Shared with the research import and the wiki create page, hence
+  // the `errors.*` key.
+  pubchem_cid_shadows_drug_id: 'errors.pubchemCidShadowsDrugId',
 };
 
 interface PendingEditCardProps {

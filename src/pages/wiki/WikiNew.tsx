@@ -8,6 +8,18 @@ import {
 } from "@/components/wiki/WikiEditor";
 import { fetchPendingEdits, updatePendingEdit } from "@/lib/pendingEditsApi";
 
+/**
+ * Stable error codes POST /api/wiki/pages can answer, mapped to translated
+ * prose. Anything else falls back to the API's English `error` (AGENTS.md
+ * i18n rule: server messages reaching the UI go through a code).
+ */
+const CREATE_ERROR_KEYS: Record<string, string> = {
+  wiki_admin_only_whole_page: "wiki.adminOnlyWholePage",
+  parameter_not_applicable: "wiki.parameterNotApplicable",
+  // The new drug's PubChem CID equals another drug's internal id.
+  pubchem_cid_shadows_drug_id: "errors.pubchemCidShadowsDrugId",
+};
+
 interface PendingWikiDraft {
   id: number;
   title: string;
@@ -127,13 +139,13 @@ function WikiNewContent() {
           // Map known stable error codes to localised strings; fall
           // back to the API's English `error` for anything we haven't
           // explicitly handled (AGENTS.md i18n rule).
-          const message =
-            data.code === "wiki_admin_only_whole_page"
-              ? t("wiki.adminOnlyWholePage")
-              : data.code === "parameter_not_applicable"
-                ? t("wiki.parameterNotApplicable")
-                : (data.error ?? t("wiki.failedToCreate"));
-          throw new Error(message);
+          const key =
+            typeof data.code === "string"
+              ? CREATE_ERROR_KEYS[data.code]
+              : undefined;
+          throw new Error(
+            key ? t(key) : (data.error ?? t("wiki.failedToCreate")),
+          );
         }
         const data = await res.json();
         if (data.pending && data.pendingEditId) {

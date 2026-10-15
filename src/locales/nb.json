@@ -3269,7 +3269,8 @@
   "errors": {
     "unknownConcentrationUnit": "Én av de valgte enhetene gjenkjennes ikke. Velg fra listen og prøv igjen.",
     "invalidEnabledUnits": "Velg minst én konsentrasjonsenhet.",
-    "primaryUnitNotSupported": "Primærenheten må være en per-liter-enhet. Per-desiliter-enheter er fortsatt tillatt som alternativer i tipsene og konverteren."
+    "primaryUnitNotSupported": "Primærenheten må være en per-liter-enhet. Per-desiliter-enheter er fortsatt tillatt som alternativer i tipsene og konverteren.",
+    "pubchemCidShadowsDrugId": "Denne PubChem-CID-en er lik den interne id-en til et annet legemiddel. Lagrede simulator-caser finner det legemidlet via dette nummeret og ville lastet feil stoff. CID-en kan ikke brukes før dette er løst."
   },
   "topicSections": {
     "empty": "Denne emnesiden har ingen seksjonsoverskrifter ennå. En administrator kan legge til overskrifter via helsidefyll; når siden er publisert, kan atomiske fakta knyttes til hver seksjon.",

@@ -52,6 +52,7 @@ const SAVE_ERROR_KEYS: Record<string, string> = {
   parameter_not_applicable: 'paramEdit.errors.notApplicable',
   parameter_entry_backed: 'paramEdit.errors.entryBacked',
   reference_not_judged: 'paramEdit.errors.referenceNotJudged',
+  pubchem_cid_shadows_drug_id: 'errors.pubchemCidShadowsDrugId',
 };
 
 function translateSaveError(
