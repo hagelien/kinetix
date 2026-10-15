@@ -223,6 +223,13 @@ describe('drug block revisions', () => {
           route: null,
           citationId,
           sourceQuote: null,
+          // No formulation, regimen or population scope (#12).
+          doseRegimen: null,
+          doseIntervalHours: null,
+          releaseProfile: null,
+          physicalForm: null,
+          pkPopulation: null,
+          populationQualifier: null,
         },
       ],
     });
@@ -382,6 +389,38 @@ describe('drug block revisions', () => {
 
   // Codex review on #303: the model-structure section also curates the
   // per-route ka values, which have no aggregate revision of their own.
+  // #12 lets an absorption declaration carry a formulation/population scope;
+  // a change to it alone is a change to the block.
+  it('records a change to an absorption declaration\'s formulation scope', async () => {
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db);
+    const citationId = await seedAdmissibleCitation(db);
+    const entry = await insertParameterEntry(
+      {
+        drugId,
+        citationId,
+        parameter: 'absorptionModel',
+        categoricalValue: 'first-order',
+        route: 'oral',
+        unit: '',
+      } as ParameterEntryInput,
+      userId,
+    );
+    await recomputeInTransaction(drugId, 'absorptionModel', userId);
+    await db
+      .update(parameterEntries)
+      .set({ releaseProfile: 'modified' } as never)
+      .where(eq(parameterEntries.id, entry.id));
+    await recomputeInTransaction(drugId, 'absorptionModel', userId);
+
+    const revisions = await revisionsFor(drugId, 'modelStructure');
+    expect(revisions).toHaveLength(2);
+    const decl = (v: unknown) =>
+      (v as { declarations: Array<{ releaseProfile: string | null }> }).declarations[0]!;
+    expect(decl(revisions[1]!.oldValue).releaseProfile).toBeNull();
+    expect(decl(revisions[1]!.newValue).releaseProfile).toBe('modified');
+  });
+
   it('records a per-route ka value in the model-structure block', async () => {
     const drugId = await seedDrug(db);
     const userId = await seedUser(db);

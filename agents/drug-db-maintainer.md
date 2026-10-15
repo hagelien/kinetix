@@ -553,6 +553,19 @@ Run all six steps before producing any output. Skipping a step invalidates the c
   read-in-full reference gate applies (`reference_not_judged`). As a contributor
   each row queues a `param_entry` pending edit.
 
+  **Formulation and population — `tmax`, `ka`, `bioavailability`,
+  `absorptionModel`.** These may also carry `releaseProfile`, `physicalForm`,
+  `doseRegimen`, `doseIntervalHours`, `pkPopulation` and `populationQualifier`
+  (the Cmax vocabularies, `src/lib/entryDoseContext.ts`) at the top level of the
+  body; every other dose field is still refused on them. Set them when the
+  value is for an extended-release product, a depot, a repeated regimen or a
+  special population — an OPANA ER Tmax is `releaseProfile: "modified"`, not a
+  bare oral Tmax; a weekly and a monthly depot differ in `doseIntervalHours`
+  (168 vs ~720) — and only as far as the source says: a label that names no
+  population gets no `pkPopulation`. A `modified` or special-population entry
+  is stored and listed but kept out of the pooled value. A PATCH restates them
+  like `route`: leave one out and it is cleared.
+
   **`quote` — the sentence you read the value off.** Copy the source's own
   words: the sentence, table cell or figure caption the number comes from,
   verbatim, not your paraphrase of it and not a restatement of your conclusion.

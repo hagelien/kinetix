@@ -296,6 +296,18 @@ export interface ParameterItemPlan extends ItemPlanCommon {
     matrix?: string;
     scenario?: string;
     n?: number;
+    /**
+     * The formulation, regimen and population the reading is scoped to (#12),
+     * as stated: a modified-release or special-population value is kept out of
+     * the drug's pooled figure, so the admin must see that it is one before
+     * approving it.
+     */
+    releaseProfile?: string;
+    physicalForm?: string;
+    doseRegimen?: string;
+    doseIntervalHours?: number;
+    pkPopulation?: string;
+    populationQualifier?: string;
   };
   /** What the drug currently shows for this parameter, if anything. */
   current: { value: unknown; entryCount: number } | null;
@@ -1396,6 +1408,12 @@ async function planParameterItem(
     matrix: item.matrix,
     scenario: item.scenario,
     n: item.n,
+    releaseProfile: item.doseContext?.releaseProfile ?? undefined,
+    physicalForm: item.doseContext?.physicalForm ?? undefined,
+    doseRegimen: item.doseContext?.doseRegimen ?? undefined,
+    doseIntervalHours: item.doseContext?.doseIntervalHours ?? undefined,
+    pkPopulation: item.doseContext?.pkPopulation ?? undefined,
+    populationQualifier: item.doseContext?.populationQualifier ?? undefined,
   };
   const base = {
     index,

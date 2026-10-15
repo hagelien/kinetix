@@ -72,13 +72,15 @@ export function pharmacodynamicsBlockSnapshot(
 }
 
 export interface ModelStructureBlockSnapshot {
-  declarations: Array<{
-    parameter: string;
-    categoricalValue: string | null;
-    route: string | null;
-    citationId: number | null;
-    sourceQuote: string | null;
-  }>;
+  declarations: Array<
+    {
+      parameter: string;
+      categoricalValue: string | null;
+      route: string | null;
+      citationId: number | null;
+      sourceQuote: string | null;
+    } & EntryScope
+  >;
   /**
    * The section's per-route values (`ka`). Not categorical, but curated in the
    * same section, and ka has no aggregate whose revisions would record it.
@@ -96,8 +98,22 @@ export interface ModelStructureBlockSnapshot {
     observationContext: string | null;
     citationId: number | null;
     sourceQuote: string | null;
-  }>;
+  } & EntryScope>;
 }
+
+/**
+ * The formulation, regimen and population an absorption entry is scoped to
+ * (#12: `absorptionModel` and `ka` may carry them). Two declarations that
+ * differ only here are two declarations, and a change to one is a change.
+ */
+type EntryScope = {
+  doseRegimen: string | null;
+  doseIntervalHours: string | null;
+  releaseProfile: string | null;
+  physicalForm: string | null;
+  pkPopulation: string | null;
+  populationQualifier: string | null;
+};
 
 /**
  * Parameters whose entries make up the model-structure block: the categorical
@@ -110,6 +126,17 @@ export const MODEL_STRUCTURE_BLOCK_PARAMETERS: readonly string[] = [
 
 export function isModelStructureBlockParameter(parameter: string): boolean {
   return MODEL_STRUCTURE_BLOCK_PARAMETERS.includes(parameter);
+}
+
+function entryScope(row: { [K in keyof EntryScope]: string | null | undefined }): EntryScope {
+  return {
+    doseRegimen: row.doseRegimen ?? null,
+    doseIntervalHours: row.doseIntervalHours ?? null,
+    releaseProfile: row.releaseProfile ?? null,
+    physicalForm: row.physicalForm ?? null,
+    pkPopulation: row.pkPopulation ?? null,
+    populationQualifier: row.populationQualifier ?? null,
+  };
 }
 
 function byContent(a: unknown, b: unknown): number {
@@ -138,6 +165,12 @@ export async function modelStructureBlockSnapshot(
       observationContext: parameterEntries.observationContext,
       citationId: parameterEntries.citationId,
       sourceQuote: parameterEntries.sourceQuote,
+      doseRegimen: parameterEntries.doseRegimen,
+      doseIntervalHours: parameterEntries.doseIntervalHours,
+      releaseProfile: parameterEntries.releaseProfile,
+      physicalForm: parameterEntries.physicalForm,
+      pkPopulation: parameterEntries.pkPopulation,
+      populationQualifier: parameterEntries.populationQualifier,
     })
     .from(parameterEntries)
     .where(
@@ -155,6 +188,7 @@ export async function modelStructureBlockSnapshot(
       route: row.route ?? null,
       citationId: row.citationId ?? null,
       sourceQuote: row.sourceQuote ?? null,
+      ...entryScope(row),
     }))
     .sort(byContent);
   const routeValues = rows
@@ -172,6 +206,7 @@ export async function modelStructureBlockSnapshot(
       observationContext: row.observationContext ?? null,
       citationId: row.citationId ?? null,
       sourceQuote: row.sourceQuote ?? null,
+      ...entryScope(row),
     }))
     .sort(byContent);
   return { declarations, routeValues };

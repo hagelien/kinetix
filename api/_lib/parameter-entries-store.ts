@@ -239,6 +239,8 @@ export async function loadEntryValuesForParameter(
       unit: parameterEntries.unit,
       matrix: parameterEntries.matrix,
       n: parameterEntries.n,
+      releaseProfile: parameterEntries.releaseProfile,
+      pkPopulation: parameterEntries.pkPopulation,
       origin: parameterEntries.origin,
       reviewScore: paperReviews.overallScore,
     })
@@ -269,6 +271,8 @@ export async function loadEntryValuesForParameter(
     unit: r.unit,
     matrix: r.matrix as ReferenceMatrix | null,
     n: r.n,
+    releaseProfile: r.releaseProfile,
+    pkPopulation: r.pkPopulation,
     origin: r.origin,
     reviewScore: r.reviewScore ?? null,
   }));
@@ -376,6 +380,8 @@ export async function getParameterSummariesWithRoutes(
       unit: parameterEntries.unit,
       matrix: parameterEntries.matrix,
       n: parameterEntries.n,
+      releaseProfile: parameterEntries.releaseProfile,
+      pkPopulation: parameterEntries.pkPopulation,
       origin: parameterEntries.origin,
       reviewScore: paperReviews.overallScore,
     })
@@ -413,6 +419,8 @@ export async function getParameterSummariesWithRoutes(
       unit: r.unit,
       matrix: r.matrix as ReferenceMatrix | null,
       n: r.n,
+      releaseProfile: r.releaseProfile,
+      pkPopulation: r.pkPopulation,
       origin: r.origin,
       reviewScore: r.reviewScore ?? null,
     });
@@ -1112,11 +1120,17 @@ function numToStr(v: number | undefined): string | null {
  * Absent means NULL here — not "preserve", which is what `observationContext`
  * and `quote` get on an update. Preserve-when-omitted exists to protect a
  * stored value from a client that predates the field; no client predates the
- * dose fields for the only parameters that may carry them, because dose
- * context is forbidden everywhere else (`validateDoseContext`) and every
- * writer of a dose-context entry is new. A legacy client that edits such an
- * entry omits `valueBasis` and is refused by validation — loudly — rather than
- * silently wiping context.
+ * dose fields for Cmax, because every writer of a Cmax entry is new, and a
+ * legacy client that edits one omits `valueBasis` and is refused by validation
+ * — loudly — rather than silently wiping context.
+ *
+ * The formulation/regimen/population scope a `doseContext: 'optional'`
+ * parameter may carry (tmax, ka, F, the absorption model; #12) follows the
+ * same whole-row rule as the `route`, `matrix` and `n` it sits beside: a
+ * PATCH restates the whole entry (it requires `unit` and `citationId`), so an
+ * update that leaves the release profile out says the entry has none. The
+ * entry editor sends the scope on every save of such a parameter for that
+ * reason.
  *
  * The reported statistic (`centralValue` / `centralStatistic` /
  * `intervalKind`, optional on every parameter since migration 0135) follows

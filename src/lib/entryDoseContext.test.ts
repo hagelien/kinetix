@@ -17,6 +17,8 @@ import {
   DOSE_BASES,
   DOSE_CONTEXT_FIELD_KEYS,
   DOSE_NORMALIZED_UNITS,
+  entryInReferenceScope,
+  OPTIONAL_DOSE_CONTEXT_FIELD_KEYS,
   REPORTED_STATISTIC_FIELD_KEYS,
   DOSE_REGIMENS,
   INTERVAL_KINDS,
@@ -369,19 +371,19 @@ describe('validateDoseContext — required', () => {
 describe('dose context on a parameter that does not declare it', () => {
   it('rejects every dose field through validateEntryForParameter', () => {
     const legacy = { low: 1, high: 2, unit: 'h' };
-    expect(validateEntryForParameter('tmax', legacy)).toBeNull();
+    expect(validateEntryForParameter('halfLife', legacy)).toBeNull();
     const statistic: readonly string[] = REPORTED_STATISTIC_FIELD_KEYS;
     for (const key of DOSE_CONTEXT_FIELD_KEYS.filter((k) => !statistic.includes(k))) {
       const value = key === 'priorDosingRegular' ? true : key.endsWith('Id') ? 1 : 1;
       expect(
-        validateEntryForParameter('tmax', { ...legacy, [key]: value }),
+        validateEntryForParameter('halfLife', { ...legacy, [key]: value }),
         key,
       ).toMatch(/takes no dose context/);
     }
   });
   it('treats explicit nulls as absent', () => {
     expect(
-      validateEntryForParameter('tmax', {
+      validateEntryForParameter('halfLife', {
         low: 1,
         high: 2,
         unit: 'h',
@@ -389,6 +391,123 @@ describe('dose context on a parameter that does not declare it', () => {
         administeredDrugId: null,
       }),
     ).toBeNull();
+  });
+});
+
+// #12: an extended-release Tmax or a hepatic-impairment F states its scope
+// in the formulation/regimen/population fields Cmax already has, instead of
+// in prose no validator reaches.
+describe('optional dose context on the absorption parameters (#12)', () => {
+  const tmax = { low: 4, high: 8, unit: 'h', route: 'oral' };
+
+  it('is registered on exactly tmax, ka, bioavailability and absorptionModel', async () => {
+    const dp = await import('./drugParameters');
+    const optional = dp.DRUG_PARAMETER_IDS.filter(
+      (id) => dp.parameterDoseContextMode(id) === 'optional',
+    );
+    expect([...optional].sort()).toEqual(['absorptionModel', 'bioavailability', 'ka', 'tmax']);
+  });
+
+  it('accepts an extended-release, multiple-dose oral Tmax', () => {
+    expect(
+      validateEntryForParameter('tmax', {
+        ...tmax,
+        releaseProfile: 'modified',
+        physicalForm: 'tablet_capsule',
+        doseRegimen: 'multiple',
+        doseIntervalHours: 12,
+      }),
+    ).toBeNull();
+  });
+
+  it('tells a weekly from a monthly depot by its dosing interval', () => {
+    const depot = {
+      low: 0.1,
+      high: 0.3,
+      unit: 'fraction',
+      route: 'im',
+      releaseProfile: 'modified' as const,
+      physicalForm: 'suspension' as const,
+      doseRegimen: 'steady_state' as const,
+    };
+    expect(validateEntryForParameter('bioavailability', { ...depot, doseIntervalHours: 168 })).toBeNull();
+    expect(validateEntryForParameter('bioavailability', { ...depot, doseIntervalHours: 720 })).toBeNull();
+  });
+
+  it('accepts a stated population, qualified when it is not healthy adults', () => {
+    expect(validateEntryForParameter('tmax', { ...tmax, pkPopulation: 'healthy_adult' })).toBeNull();
+    expect(
+      validateEntryForParameter('ka', {
+        low: 0.5,
+        high: 1,
+        unit: '1/h',
+        route: 'oral',
+        pkPopulation: 'hepatic_impairment',
+        populationQualifier: 'Child-Pugh B',
+      }),
+    ).toBeNull();
+    expect(
+      validateEntryForParameter('absorptionModel', {
+        categoricalValue: 'first-order',
+        unit: '',
+        route: 'oral',
+        releaseProfile: 'immediate',
+      }),
+    ).toBeNull();
+  });
+
+  it("holds the stated scope to Cmax's rules", () => {
+    expect(
+      validateEntryForParameter('tmax', { ...tmax, doseRegimen: 'single', doseIntervalHours: 12 }),
+    ).toMatch(/single dose has no dosing interval/);
+    expect(validateEntryForParameter('tmax', { ...tmax, doseIntervalHours: 0 })).toMatch(
+      /doseIntervalHours must be positive/,
+    );
+    expect(validateEntryForParameter('tmax', { ...tmax, populationQualifier: 'postop' })).toMatch(
+      /populationQualifier/,
+    );
+    expect(
+      validateEntryForParameter('tmax', {
+        ...tmax,
+        pkPopulation: 'healthy_adult',
+        populationQualifier: 'postop',
+      }),
+    ).toMatch(/populationQualifier/);
+  });
+
+  it('still refuses every other dose field', () => {
+    const scope: readonly string[] = OPTIONAL_DOSE_CONTEXT_FIELD_KEYS;
+    const statistic: readonly string[] = REPORTED_STATISTIC_FIELD_KEYS;
+    const others = DOSE_CONTEXT_FIELD_KEYS.filter((k) => !scope.includes(k) && !statistic.includes(k));
+    expect(others).toContain('doseValue');
+    expect(others).toContain('valueBasis');
+    for (const key of others) {
+      const value = key === 'priorDosingRegular' ? true : 1;
+      expect(validateEntryForParameter('tmax', { ...tmax, [key]: value }), key).toMatch(
+        new RegExp(`takes no "${key}"`),
+      );
+    }
+  });
+
+  it('keeps the scope in the duplicate identity, and the statistic out of it', () => {
+    const ir = { releaseProfile: 'immediate', pkPopulation: 'healthy_adult' };
+    expect(doseContextIdentityKey(ir, 'optional')).not.toBe(
+      doseContextIdentityKey({ ...ir, releaseProfile: 'modified' }, 'optional'),
+    );
+    expect(doseContextIdentityKey({ ...ir, centralStatistic: 'median' }, 'optional')).toBe(
+      doseContextIdentityKey(ir, 'optional'),
+    );
+  });
+
+  it('pools only the reference formulation and population', () => {
+    expect(entryInReferenceScope({})).toBe(true);
+    expect(entryInReferenceScope({ releaseProfile: 'immediate', pkPopulation: 'healthy_adult' })).toBe(true);
+    expect(entryInReferenceScope({ releaseProfile: 'unknown', pkPopulation: 'unknown' })).toBe(true);
+    expect(entryInReferenceScope({ pkPopulation: 'patients_unspecified' })).toBe(true);
+    expect(entryInReferenceScope({ releaseProfile: 'modified' })).toBe(false);
+    for (const population of ['hepatic_impairment', 'renal_impairment', 'metabolizer_phenotype', 'paediatric', 'elderly', 'pregnancy', 'other']) {
+      expect(entryInReferenceScope({ pkPopulation: population }), population).toBe(false);
+    }
   });
 });
 

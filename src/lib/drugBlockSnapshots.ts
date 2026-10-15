@@ -22,6 +22,7 @@ import { ROUTE_LABEL_KEYS } from './routeLabels';
 import { DRUG_PARAMETERS, getParameterLongLabelKey, isDrugParameterId } from './drugParameters';
 import type { RouteId } from './kinetics-core';
 import type { DrugBlockId } from './drugBlocks';
+import { scopeContextLabels, type DoseContextFields } from './entryDoseContext';
 import { formatGenericDrugName, resolveDrugName } from './drugNames';
 import type { NumericRange } from '@/types';
 
@@ -44,6 +45,24 @@ function refs(value: unknown): string | null {
     ? value.filter((id): id is number => typeof id === 'number')
     : [];
   return ids.length > 0 ? ids.map((id) => `#${id}`).join(', ') : null;
+}
+
+/** The formulation/regimen/population an absorption entry is scoped to (#12). */
+function scope(row: SnapshotRow, t: Translate): string | null {
+  const interval = row.doseIntervalHours;
+  const labels = scopeContextLabels(
+    {
+      doseRegimen: text(row.doseRegimen),
+      doseIntervalHours:
+        interval == null || interval === '' ? null : Number(interval),
+      releaseProfile: text(row.releaseProfile),
+      physicalForm: text(row.physicalForm),
+      pkPopulation: text(row.pkPopulation),
+      populationQualifier: text(row.populationQualifier),
+    } as DoseContextFields,
+    t,
+  );
+  return labels.length > 0 ? labels.join(' · ') : null;
 }
 
 function join(parts: Array<string | null | undefined>): string {
@@ -195,6 +214,7 @@ function modelStructureLines(snapshot: SnapshotRow, t: Translate): string[] {
       return join([
         `${label}: ${value || '—'}`,
         route ? (routeKey ? t(routeKey) : route) : null,
+        scope(entry, t),
         typeof entry.n === 'number' ? `n=${entry.n}` : null,
         text(entry.comments),
         text(entry.observationContext),
@@ -220,6 +240,7 @@ function declarationLines(snapshot: SnapshotRow, t: Translate): string[] {
     return join([
       `${axis}: ${t(`parameters.modelStructure.value.${value}`, { defaultValue: value })}`,
       route ? (routeKey ? t(routeKey) : route) : null,
+      scope(declaration, t),
       typeof declaration.citationId === 'number' ? `#${declaration.citationId}` : null,
       quote ? `“${quote}”` : null,
     ]);

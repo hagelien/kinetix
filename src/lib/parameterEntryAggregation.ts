@@ -18,6 +18,7 @@ import type { ReferenceMatrix } from './referenceConcentrations.js';
 import {
   ARITHMETIC_INTERVAL_KINDS,
   entryCentralValue,
+  entryInReferenceScope,
 } from './entryDoseContext.js';
 
 /** Matrices that convert to whole blood via the blood:plasma ratio. */
@@ -68,6 +69,16 @@ export interface ParameterEntryValue {
   n: number | null;
   /** paper_reviews.overall_score for this entry's citation, 0–100. */
   reviewScore: number | null;
+  /**
+   * The formulation and population the entry states, on a parameter that may
+   * carry them (`doseContext: 'optional'` — tmax, ka, F, #12). An entry outside
+   * the reference scope (a modified-release formulation, a named special
+   * population — `entryInReferenceScope`) is listed and plotted but never
+   * pooled, so an extended-release Tmax cannot stand as the route's Tmax.
+   * Optional: absent reads as unstated, which pools as before.
+   */
+  releaseProfile?: string | null;
+  pkPopulation?: string | null;
   /**
    * Row provenance: 'legacy' / 'contributor' are real sources; 'grandfathered'
    * is a synthetic placeholder that preserves a migrated authored value while a
@@ -402,6 +413,9 @@ export function aggregateEntries(
     // A censored threshold ("< 120") is not a point observation — keep it in
     // byMatrix but never pool its bound as an exact value.
     if (e.qualifier) continue;
+    // A modified-release or special-population reading describes another
+    // case than the one this summary stands for (#12): shown, not pooled.
+    if (!entryInReferenceScope(e)) continue;
     const rep = entryRepresentative(e);
     if (rep == null) continue;
     // Only blood matrices can be normalized to whole blood.
