@@ -573,10 +573,57 @@ describe('CV-2c — route-scoped parameter entries (ka)', () => {
         parameter: 'ka',
         median: 1.2,
         unit: '1/h',
-        route: 'transdermal',
+        route: 'intrathecal',
         citationId: 5,
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('#81 — subcutaneous, transdermal and buccal routes', () => {
+  it('authors a buprenorphine subcutaneous-depot F with route = subcutaneous', () => {
+    expect(
+      validateEntryForParameter('bioavailability', {
+        low: 0.85,
+        high: 0.95,
+        median: 0.9,
+        unit: 'fraction',
+        route: 'subcutaneous',
+      }),
+    ).toBeNull();
+    expect(
+      parameterEntryInputSchema.safeParse({
+        drugId: 1,
+        parameter: 'bioavailability',
+        low: 0.85,
+        high: 0.95,
+        median: 0.9,
+        unit: 'fraction',
+        route: 'subcutaneous',
+        citationId: 5,
+      }).success,
+    ).toBe(true);
+  });
+
+  it.each(['subcutaneous', 'transdermal', 'buccal'] as const)(
+    'accepts %s on every route-capable parameter, and treats it as extravascular',
+    (route) => {
+      expect(validateEntryForParameter('ka', { median: 0.2, unit: '1/h', route })).toBeNull();
+      expect(validateEntryForParameter('tmax', { median: 12, unit: 'h', route })).toBeNull();
+      expect(
+        validateEntryForParameter('absorptionModel', { categoricalValue: 'zero-order', route }),
+      ).toBeNull();
+      // Extravascular: an IV input shape is refused on it, exactly as on `oral`.
+      expect(
+        validateEntryForParameter('absorptionModel', { categoricalValue: 'bolus', route }),
+      ).toMatch(/not compatible/);
+    },
+  );
+
+  it('still forbids a route on a drug-level parameter', () => {
+    expect(
+      validateEntryForParameter('halfLife', { median: 30, unit: 'h', route: 'subcutaneous' }),
+    ).toMatch(/not route-specific/i);
   });
 });
 
@@ -623,7 +670,7 @@ describe('CV-2c-4 — route-optional absorption declarations', () => {
         parameter: 'absorptionModel',
         categoricalValue: 'first-order',
         unit: '',
-        route: 'transdermal',
+        route: 'intrathecal',
         citationId: 5,
       }).success,
     ).toBe(false);

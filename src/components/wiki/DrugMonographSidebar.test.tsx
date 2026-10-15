@@ -446,7 +446,7 @@ describe('DrugMonographSidebar', () => {
     ).toBeInTheDocument();
   });
 
-  it('renders mechanism citations as linked [n] markers like parameter values', async () => {
+  it('cites a mechanism through its phrase, like parameter values', async () => {
     vi.mocked(fetchDrugReferences).mockResolvedValue([
       {
         id: 3,
@@ -491,10 +491,14 @@ describe('DrugMonographSidebar', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /pharmacodynamics/i }));
 
-    // The citation renders as the shared ParameterBadges [n] anchor, not a
-    // plain "#3" — a mechanism-only reference is numbered as a trailing entry.
-    const link = await screen.findByRole('link', { name: /reference 1/i });
-    expect(link).toHaveAttribute('href', '#param-ref-1');
+    // The phrase itself opens the shared reference panel — no trailing
+    // superscript [n] marker. A mechanism-only reference is numbered as a
+    // trailing bibliography entry.
+    const phrase = await screen.findByTestId('reference-hover');
+    expect(phrase.closest('li')?.querySelector('sup')).toBeNull();
+    fireEvent.mouseEnter(phrase);
+    const link = await screen.findByRole('link', { name: /^\[1\]/ });
+    expect(link).toHaveAttribute('href', '/references/3');
   });
 
   it('numbers a parameter citation against the page-level ordering when supplied', async () => {
@@ -504,7 +508,7 @@ describe('DrugMonographSidebar', () => {
     // number — so a marker means the same bibliography entry everywhere on the
     // page. It must also skip its own reference fetch.
     // A reader who can't add source values, on a value with none yet: no
-    // sources dialog to open, so the [n] marker is still how it cites.
+    // sources dialog to open, so the value cites through the reference panel.
     mockDrugState.indicatorRefs = { proteinBinding: [42] };
     setUser(['proteinBinding'], 'authenticated');
     renderSidebar(
@@ -524,8 +528,11 @@ describe('DrugMonographSidebar', () => {
       'pharmacokinetics',
     );
 
-    const link = await screen.findByRole('link', { name: /reference 3/i });
-    expect(link).toHaveAttribute('href', '#param-ref-3');
+    const value = await screen.findByTestId('reference-hover');
+    expect(value).toHaveTextContent(/reference 3/i);
+    fireEvent.mouseEnter(value);
+    const link = await screen.findByRole('link', { name: /^\[3\]/ });
+    expect(link).toHaveAttribute('href', '/references/42');
     expect(fetchDrugReferences).not.toHaveBeenCalled();
   });
 
@@ -547,8 +554,12 @@ describe('DrugMonographSidebar', () => {
     openSection('pharmacokinetics');
     renderSidebar();
 
-    const link = await screen.findByRole('link', { name: /reference 1/i });
-    expect(link).toHaveAttribute('href', '#param-ref-1');
+    const value = await screen.findByTestId('reference-hover');
+    expect(value).toHaveTextContent(/reference 1/i);
+    expect(value.closest('dd')?.querySelector('sup')).toBeNull();
+    fireEvent.mouseEnter(value);
+    const link = await screen.findByRole('link', { name: /^\[1\]/ });
+    expect(link).toHaveAttribute('href', '/references/42');
     expect(fetchDrugReferences).toHaveBeenCalledWith(1);
   });
 
@@ -1194,6 +1205,55 @@ describe('DrugMonographSidebar', () => {
     expect(screen.queryByRole('link', { name: /reference 1/i })).toBeNull();
 
     fireEvent.click(value);
+    expect(
+      await screen.findByRole('heading', { name: /source values/i }),
+    ).toBeInTheDocument();
+  });
+
+  // Resting the pointer on a source-value figure floats a preview of its
+  // source values; clicking it still opens the full dialog.
+  it('previews the source values when the value is hovered', async () => {
+    mockDrugState.parameterSummaries = {
+      halfLife: {
+        parameter: 'halfLife',
+        unit: 'h',
+        representative: 2.2,
+        iqrLow: 1.8,
+        iqrHigh: 2.8,
+        entryCount: 3,
+        pooledCount: 3,
+        points: [],
+      },
+    };
+    setUser(['halfLife']);
+    openSection('pharmacokinetics');
+    renderSidebar();
+
+    const value = await screen.findByTestId('parameter-value-sources-halfLife');
+    fireEvent.mouseEnter(value);
+    // Not on mere contact: a pointer crossing the box must not flash it open.
+    expect(screen.queryByTestId('parameter-sources-preview')).toBeNull();
+
+    const preview = await screen.findByTestId('parameter-sources-preview');
+    expect(value).toHaveAttribute('aria-describedby', preview.id);
+    expect(within(preview).getByText(/3 source values/i)).toBeInTheDocument();
+    expect(
+      within(preview).getByText(/click the value to open/i),
+    ).toBeInTheDocument();
+    // A preview, not the dialog: no per-source list or discussion here.
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    // Leaving the value lets the preview go.
+    fireEvent.mouseLeave(value);
+    await waitFor(() =>
+      expect(screen.queryByTestId('parameter-sources-preview')).toBeNull(),
+    );
+
+    // Clicking opens the full dialog and drops any preview.
+    fireEvent.mouseEnter(value);
+    await screen.findByTestId('parameter-sources-preview');
+    fireEvent.click(value);
+    expect(screen.queryByTestId('parameter-sources-preview')).toBeNull();
     expect(
       await screen.findByRole('heading', { name: /source values/i }),
     ).toBeInTheDocument();

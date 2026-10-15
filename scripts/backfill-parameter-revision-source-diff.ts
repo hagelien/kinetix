@@ -27,6 +27,7 @@ import path from 'node:path';
 import { and, asc, gt, inArray, isNull, or, sql } from 'drizzle-orm';
 import { getDb } from '../api/_lib/db.js';
 import { drugParameterRevisions, citations } from '../db/schema.js';
+import { drugAtSql, previousRevisionSql } from '../api/_lib/drug-merge-lineage.js';
 import {
   CACHE_REVISION_CLEARED_CODE,
   CACHE_REVISION_RECOMPUTED_CODE,
@@ -142,6 +143,25 @@ async function targetPage(
     .limit(pageSize);
 }
 
+/**
+ * The previous revision of the revision aliased `alias`, as the live writer
+ * saw it when that revision was written — the shared rule in
+ * `api/_lib/drug-merge-lineage.ts` (#29). Plain "latest lower id on the same
+ * drug" is not that once a merge has repointed another drug's history onto
+ * this one: a repointed row with a lower id was on the other drug when this
+ * revision was written, and the live writer never saw it.
+ */
+function previousOf(alias: string) {
+  const r = sql.raw(`"${alias}"`);
+  const revisionId = sql`${r}."id"`;
+  return previousRevisionSql({
+    drugId: sql`${r}."drug_id"`,
+    drugAtTime: drugAtSql(alias, revisionId),
+    parameter: sql`${r}."parameter"`,
+    revisionId,
+  });
+}
+
 interface RowSnapshot {
   /** This row's own `reference_ids` as of one instant — the "next" set. */
   referenceIds: number[] | null;
@@ -183,15 +203,7 @@ async function readRowSnapshot(
       prev."id" AS prev_id,
       prev."reference_ids" AS prev_reference_ids
     FROM "drug_parameter_revisions" r
-    LEFT JOIN LATERAL (
-      SELECT p."id", p."reference_ids"
-      FROM "drug_parameter_revisions" p
-      WHERE p."drug_id" = r."drug_id"
-        AND p."parameter" = r."parameter"
-        AND p."id" < r."id"
-      ORDER BY p."id" DESC
-      LIMIT 1
-    ) AS prev ON true
+    LEFT JOIN LATERAL (${previousOf('r')}) AS prev ON true
     WHERE r."id" = ${row.id}
   `);
   const found = result.rows[0];
@@ -329,13 +341,10 @@ export async function backfillSourceDiffs(
         snapshot.prevReferenceIds === null ? null : JSON.stringify(snapshot.prevReferenceIds);
       const updated = await db.execute<{ id: number }>(sql`
         WITH current_prev AS (
-          SELECT p."id" AS id, p."reference_ids" AS reference_ids
-          FROM "drug_parameter_revisions" p
-          JOIN "drug_parameter_revisions" r
-            ON r."drug_id" = p."drug_id" AND r."parameter" = p."parameter"
-          WHERE r."id" = ${row.id} AND p."id" < r."id"
-          ORDER BY p."id" DESC
-          LIMIT 1
+          SELECT prev.id, prev.reference_ids
+          FROM "drug_parameter_revisions" r
+          CROSS JOIN LATERAL (${previousOf('r')}) AS prev
+          WHERE r."id" = ${row.id}
         )
         UPDATE "drug_parameter_revisions" AS r
            SET "source_diff" = ${JSON.stringify(diff)}::jsonb

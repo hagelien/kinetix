@@ -1,5 +1,6 @@
 import type { BioEntityFunction, BioEntitySummary } from './bioEntities';
 import type { EntityMetabolismDrug } from './metabolism';
+import type { EntityTargetLigand } from './receptorTargets';
 
 /**
  * Client for the unified biological-entity catalog (#785). Backs the registry
@@ -97,6 +98,26 @@ export async function fetchEntityMetabolismDrugs(
   }
   const data = (await res.json()) as { drugs: EntityMetabolismDrug[] };
   return data.drugs ?? [];
+}
+
+/**
+ * Every drug-target relationship recorded against this entity, in the
+ * server's stable order. Backs the entity monograph's target-pharmacology
+ * collection, which filters and sorts the full set client-side.
+ */
+export async function fetchEntityTargetLigands(
+  entityId: number,
+  signal?: AbortSignal,
+): Promise<EntityTargetLigand[]> {
+  const res = await fetch(`/api/bio-entities?targetLigands=${entityId}`, {
+    cache: 'no-store',
+    signal,
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to fetch target ligands: ${res.status}`);
+  }
+  const data = (await res.json()) as { ligands?: EntityTargetLigand[] };
+  return data.ligands ?? [];
 }
 
 function readWriteResult(data: unknown): BioEntityWriteResult {

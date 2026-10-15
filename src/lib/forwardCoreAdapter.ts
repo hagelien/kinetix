@@ -34,6 +34,7 @@
  *     `text` is surfaced as-is.
  */
 import {
+  ROUTE_IDS,
   SCENARIO_SCHEMA_VERSION,
   resolveModel,
   resolvableAnalyteIds,
@@ -51,18 +52,27 @@ import type {
   SimulationWarning,
   UncertaintyPoint,
 } from '@/types/simulator';
+import { coreRouteFor, simulatorRouteFor } from '@/lib/simulatorRoutes';
 
 /**
- * Kinetix `RouteType` → core `RouteId`. Every current Kinetix route maps; the
- * only rename is `insufflation` → the core's `intranasal`.
+ * The model `toCanonicalScenario` runs an analyte under: the RENDERING release (reviewed tier, plus
+ * the committed derived tier when the rollout flag is on), or `undefined` when it resolves none.
  */
-const ROUTE_ID: Record<RouteType, RouteId> = {
-  iv: 'iv',
-  oral: 'oral',
-  insufflation: 'intranasal',
-  inhalation: 'inhalation',
-  other: 'other',
-};
+function renderedModel(analyte: string) {
+  return resolvableAnalyteIds().includes(analyte) ? resolveModel(analyte) : undefined;
+}
+
+/**
+ * The simulator routes the analyte's resolved model declares, in the kinetics-core route order, or
+ * `undefined` when no model resolves for it. This is what the dose-route picker offers: a route the
+ * model declares is selectable (an IM, sublingual or rectal model included), and one it does not
+ * declare is not, since `toCanonicalScenario` would refuse it.
+ */
+export function modeledSimulatorRoutes(analyte: string): RouteType[] | undefined {
+  const model = renderedModel(analyte);
+  if (!model) return undefined;
+  return ROUTE_IDS.filter((id) => model.routes[id] != null).map(simulatorRouteFor);
+}
 
 /**
  * The kinetics-core analyte id to run a drug under: the first candidate the rendering release
@@ -81,7 +91,7 @@ export function coreAnalyteFor(candidates: readonly (string | undefined)[]): str
 /** The core `RouteId` a Kinetix route maps to. Exported so the grade path can look up a
  *  route-keyed record for the same route the run used, rather than re-deriving the map. */
 export function routeIdFor(route: RouteType): RouteId {
-  return ROUTE_ID[route];
+  return coreRouteFor(route);
 }
 
 export interface ForwardCoreRequest {
@@ -142,9 +152,7 @@ export function toCanonicalScenario(
   // Resolve through the RENDERING release (reviewed tier, plus the committed derived
   // tier when the rollout flag is on) rather than the reviewed tier alone. An override
   // always wins a shared analyte, so a reviewed model is never displaced by a derived one.
-  const model = resolvableAnalyteIds().includes(req.analyte)
-    ? resolveModel(req.analyte)
-    : undefined;
+  const model = renderedModel(req.analyte);
   if (!model) {
     return unsupported(
       `analyte "${req.analyte}" is not in the kinetics-core registry`,
@@ -156,7 +164,7 @@ export function toCanonicalScenario(
   // on ANY dose sends the whole case to the legacy path.
   for (const d of req.doses) {
     const routeType = d.route ?? req.route;
-    const routeId = ROUTE_ID[routeType];
+    const routeId = coreRouteFor(routeType);
     if (!model.routes[routeId]) {
       return unsupported(
         `route "${routeType}" (${routeId}) is not modeled for "${req.analyte}"`,
@@ -192,7 +200,7 @@ export function toCanonicalScenario(
   const doses: CanonicalDoseEvent[] = req.doses.map((d) => ({
     tHours: d.tHours,
     amountMg: d.amountMg,
-    route: ROUTE_ID[d.route ?? req.route],
+    route: coreRouteFor(d.route ?? req.route),
     basis,
   }));
 
