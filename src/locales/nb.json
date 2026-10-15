@@ -1780,6 +1780,7 @@
       "overwrite": "Overskriv eksisterende verdier",
       "invalidJson": "Dette er ikke gyldig JSON.",
       "requestFailed": "Forespørselen mislyktes. Prøv igjen.",
+      "pubchemCidShadowsDrugId": "Denne PubChem-CID-en brukes allerede som intern id for et annet legemiddel, og lagrede caser slår opp det legemidlet med dette nummeret. Gi det legemidlet sin egen CID først, eller flytt casene bort fra id-en, før denne CID-en tas i bruk.",
       "validationFailed": "Dokumentet kunne ikke valideres:",
       "unnamedDrug": "(uten navn)",
       "countParameters": "Parametere",
@@ -2676,7 +2677,8 @@
     "parentHint": "Valgfritt. La stå tom for å beholde siden på toppnivå.",
     "clearParent": "Fjern",
     "emptyPageContent": "Denne siden har ikke noe innhold ennå.",
-    "parameterNotApplicable": "Noen parametere er ikke definerte størrelser for dette stoffet. Fjern dem, eller fjern merkingen / korriger stoffklassen, før du lagrer."
+    "parameterNotApplicable": "Noen parametere er ikke definerte størrelser for dette stoffet. Fjern dem, eller fjern merkingen / korriger stoffklassen, før du lagrer.",
+    "pubchemCidShadowsDrugId": "Denne PubChem-CID-en brukes allerede som intern id for et annet legemiddel, og lagrede caser slår opp det legemidlet med dette nummeret. Gi det legemidlet sin egen CID først, eller flytt casene bort fra id-en, før denne CID-en tas i bruk."
   },
   "coverageAreas": {
     "metabolism": "Metabolisme",

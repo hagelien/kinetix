@@ -132,7 +132,9 @@ function WikiNewContent() {
               ? t("wiki.adminOnlyWholePage")
               : data.code === "parameter_not_applicable"
                 ? t("wiki.parameterNotApplicable")
-                : (data.error ?? t("wiki.failedToCreate"));
+                : data.code === "pubchem_cid_shadows_drug_id"
+                  ? t("wiki.pubchemCidShadowsDrugId")
+                  : (data.error ?? t("wiki.failedToCreate"));
           throw new Error(message);
         }
         const data = await res.json();

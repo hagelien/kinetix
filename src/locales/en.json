@@ -1780,6 +1780,7 @@
       "overwrite": "Overwrite existing values",
       "invalidJson": "That is not valid JSON.",
       "requestFailed": "The request failed. Please try again.",
+      "pubchemCidShadowsDrugId": "This PubChem CID is already used as the internal id of another drug, and saved cases key that drug by the number. Give that drug its own CID first, or move its cases off the id, before using this CID.",
       "validationFailed": "The document could not be validated:",
       "unnamedDrug": "(unnamed drug)",
       "countParameters": "Parameters",
@@ -2676,7 +2677,8 @@
     "parentHint": "Optional. Leave blank to keep this page at the top level.",
     "clearParent": "Clear",
     "emptyPageContent": "This page has no content yet.",
-    "parameterNotApplicable": "Some parameters are not defined quantities for this substance. Remove them, or lift the marker / correct the substance class, before saving."
+    "parameterNotApplicable": "Some parameters are not defined quantities for this substance. Remove them, or lift the marker / correct the substance class, before saving.",
+    "pubchemCidShadowsDrugId": "This PubChem CID is already used as the internal id of another drug, and saved cases key that drug by the number. Give that drug its own CID first, or move its cases off the id, before using this CID."
   },
   "coverageAreas": {
     "metabolism": "Metabolism",

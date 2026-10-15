@@ -67,6 +67,7 @@ interface ApiResult {
   warnings?: string[];
   errors?: string[];
   error?: string;
+  code?: string;
 }
 
 /**
@@ -118,7 +119,13 @@ export function ResearchImportAdminSection() {
       const data = (await res.json().catch(() => ({}))) as ApiResult;
       setResult(data);
       if (!res.ok || data.ok === false) {
-        setErrorMsg(data.error ?? (data.errors ? '' : t('admin.researchImport.requestFailed')));
+        // Map known stable error codes to localised strings; fall back to the
+        // API's English `error` for anything not handled (AGENTS.md i18n rule).
+        setErrorMsg(
+          data.code === 'pubchem_cid_shadows_drug_id'
+            ? t('admin.researchImport.pubchemCidShadowsDrugId')
+            : (data.error ?? (data.errors ? '' : t('admin.researchImport.requestFailed'))),
+        );
       } else if (!dryRun) {
         showToast(t('admin.researchImport.imported'));
       }

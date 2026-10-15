@@ -43,6 +43,23 @@ describe('ResearchImportAdminSection', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it('shows the localized message, not the server prose, for a CID that shadows a drug id', async () => {
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: false,
+      json: async () => ({
+        error: 'PubChem CID 446220 is also the internal id of drug 446220',
+        code: 'pubchem_cid_shadows_drug_id',
+      }),
+    });
+    render(<ResearchImportAdminSection />);
+    typeInto(VALID_JSON);
+    fireEvent.click(screen.getByText('admin.researchImport.preview'));
+    expect(
+      await screen.findByText('admin.researchImport.pubchemCidShadowsDrugId'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/internal id of drug/)).not.toBeInTheDocument();
+  });
+
   it('previews via the API and then enables Import', async () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,
