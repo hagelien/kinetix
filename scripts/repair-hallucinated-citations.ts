@@ -613,6 +613,16 @@ async function applyDeletes(
   plan: DeletePlan,
   actorUserId: number,
 ): Promise<void> {
+  // One transaction for the deletes, the recomputes and the block history
+  // they produce: a run that fails part-way leaves nothing removed without a
+  // record, rather than a half-applied repair (#37).
+  await runInPoolTransaction(() => applyDeletesInTransaction(plan, actorUserId));
+}
+
+async function applyDeletesInTransaction(
+  plan: DeletePlan,
+  actorUserId: number,
+): Promise<void> {
   const db = getDb();
   const ids = plan.citationIds;
 
@@ -626,7 +636,7 @@ async function applyDeletes(
     UNION SELECT drug_id FROM drug_elimination_routes WHERE reference_ids && ${intArray(ids)}
     UNION SELECT parent_drug_id FROM drug_metabolites WHERE reference_ids && ${intArray(ids)}
   `);
-  const blockHistory = await beginBlockHistory(db, {
+  const blockHistory = await beginBlockHistory({
     drugIds: blockDrugs.rows.map((r) => Number(r.drug_id)),
     actorUserId,
   });

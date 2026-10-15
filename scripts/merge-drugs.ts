@@ -1224,7 +1224,7 @@ async function main(): Promise<void> {
         // other block data or block history), so the survivor's metabolism
         // box — and the box of every drug at the other end of a moved link —
         // is recorded in the block history (#37). No user: NULL author.
-        const blockHistory = await beginBlockHistory(tx, {
+        const blockHistory = await beginBlockHistory({
           drugIds: [live.survivor.id, live.loser.id],
           blocks: ['metabolism'],
           actorUserId: null,

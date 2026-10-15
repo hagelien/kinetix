@@ -11,7 +11,7 @@
  */
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { drugBlockRevisions, parameterEntries } from '../../db/schema.js';
-import type { getDb } from './db.js';
+import { isInPoolTransaction, type getDb } from './db.js';
 import type { DrugBlockId } from '../../src/lib/drugBlocks.js';
 import { MODEL_STRUCTURE_PARAMETER_IDS } from '../../src/lib/drugParameters.js';
 import type { DrugMetabolism } from '../../src/lib/metabolism.js';
@@ -285,6 +285,14 @@ export async function recordModelStructureRevision(
   actorUserId: number,
   pendingEditId: number | null = null,
 ): Promise<number | null> {
+  // Recorded from inside the entry write's own transaction, so the declaration
+  // and its revision row commit together (every entry write path runs the
+  // recompute in its transaction). Refuse rather than record non-atomically.
+  if (!isInPoolTransaction()) {
+    throw new Error(
+      'recordModelStructureRevision must run inside the entry write transaction',
+    );
+  }
   const next = await modelStructureBlockSnapshot(db, drugId);
   const [latest] = await db
     .select({ newValue: drugBlockRevisions.newValue })

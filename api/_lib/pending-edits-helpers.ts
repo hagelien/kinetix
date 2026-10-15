@@ -1911,14 +1911,13 @@ async function applyApprovedEditEffects(
     const input = toMetabolismWriteInput(payload);
     const targetId = edit.targetId;
     await withBlockHistory(
-      db,
       {
         drugIds: [targetId, ...metabolismInputLinkedDrugIds(input)],
         blocks: ['metabolism'],
         actorUserId: edit.submittedBy,
         pendingEditId: edit.id,
       },
-      () => replaceDrugMetabolism(db, targetId, input, edit.submittedBy),
+      () => replaceDrugMetabolism(getDb(), targetId, input, edit.submittedBy),
     );
   } else if (edit.editType === 'receptor_targets') {
     if (!edit.targetId) throw new Error('Missing target drug id');
@@ -1937,7 +1936,6 @@ async function applyApprovedEditEffects(
     }
     const targetId = edit.targetId;
     await withBlockHistory(
-      db,
       {
         drugIds: [targetId],
         blocks: ['pharmacodynamics'],
@@ -1945,7 +1943,7 @@ async function applyApprovedEditEffects(
         pendingEditId: edit.id,
       },
       () =>
-        replaceDrugReceptorTargets(db, targetId, parsed.data.mechanisms, edit.submittedBy),
+        replaceDrugReceptorTargets(getDb(), targetId, parsed.data.mechanisms, edit.submittedBy),
     );
   } else if (edit.editType === 'enzyme_interaction') {
     if (!edit.targetId) throw new Error('Missing target drug id');

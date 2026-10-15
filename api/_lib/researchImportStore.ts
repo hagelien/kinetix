@@ -309,13 +309,6 @@ export async function runImport(
 
   const drugId = await resolveDrug(db, data, stats);
   stats.drugId = drugId;
-  // The import writes mechanisms, the metabolism box and source entries
-  // (model-structure axes and route-scoped ka among them) directly, so it is
-  // recorded in the block history like any other write to those blocks (#37).
-  const blockHistory = await beginBlockHistory(db, {
-    drugIds: [drugId],
-    actorUserId: opts.userId,
-  });
   const citationMap = await seedCitations(
     db,
     drugId,
@@ -342,8 +335,17 @@ export async function runImport(
   // proposals it marked conflicted — and a wait there, for a fold that holds
   // the key and is queued on those rows, would be a cycle. Waiting while
   // holding only the drug lock cannot be.
+  //
+  // The mechanisms and the metabolism box are written in the same transaction,
+  // bracketed by the block history (#37): every write to the three blocks —
+  // source entries (model-structure axes, route-scoped ka), mechanisms,
+  // metabolism — commits together with its revision rows, or not at all.
   await withDrugApplicabilityLock(drugId, async () => {
     const tx = getDb();
+    const blockHistory = await beginBlockHistory({
+      drugIds: [drugId],
+      actorUserId: opts.userId,
+    });
     await lockCitationMembershipsShared(
       data.parameters.flatMap((p) =>
         p.sourceValues.flatMap((sv) => {
@@ -354,6 +356,9 @@ export async function runImport(
     );
     await seedParameters(tx, drugId, data, citationMap, opts, stats);
     await seedParameterEntries(tx, drugId, data, citationMap, opts, stats);
+    await seedPdTargets(tx, drugId, data, citationMap, opts.userId, stats);
+    await seedMetabolism(tx, drugId, data, citationMap, opts.userId, stats);
+    await blockHistory.record();
   });
   const ionStats = await seedIonizationConstants(
     db,
@@ -367,8 +372,6 @@ export async function runImport(
   stats.ionizationConstantsUpdated = ionStats.updated;
   stats.ionizationConstantsSkipped = ionStats.skipped;
   stats.ionizationConstantsKept = ionStats.kept;
-  await seedPdTargets(db, drugId, data, citationMap, opts.userId, stats);
-  await seedMetabolism(db, drugId, data, citationMap, opts.userId, stats);
   // seedParameters upserts summarizable drug_parameters values directly (incl.
   // the normalization input molecularWeight). For a drug that already has source
   // entries, those values are derived caches — reconcile them so an imported
@@ -379,7 +382,6 @@ export async function runImport(
   await runInPoolTransaction(async () => {
     await recomputeSummariesForDrug(drugId, opts.userId);
   });
-  await blockHistory.record();
   return stats;
 }
 

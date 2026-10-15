@@ -24,9 +24,11 @@ import { getDb, runInPoolTransaction } from '../../api/_lib/db.js';
 import { getDrugMetabolism, replaceDrugMetabolism } from '../../api/_lib/metabolismStore.js';
 import { replaceDrugReceptorTargets } from '../../api/_lib/receptorTargetStore.js';
 import {
+  beginBlockHistory,
   metabolismInputLinkedDrugIds,
   withBlockHistory,
 } from '../../api/_lib/drugBlockHistory.js';
+import { failBlockRevisionInserts } from './setup/block-history.js';
 import {
   collectReferenceUsage,
   collectUsedCitationIdsForDrug,
@@ -82,6 +84,13 @@ async function revisionsFor(drugId: number, block: string) {
   return rows.filter((row) => row.block === block);
 }
 
+/** The entry write paths all run the recompute inside their transaction. */
+function recomputeInTransaction(
+  ...args: Parameters<typeof recomputeParameterAndDependents>
+) {
+  return runInPoolTransaction(() => recomputeParameterAndDependents(...args));
+}
+
 /** A metabolism write the way the API makes one: recorded by the recorder. */
 function recordedMetabolismWrite(
   drugId: number,
@@ -89,7 +98,6 @@ function recordedMetabolismWrite(
   userId: number,
 ) {
   return withBlockHistory(
-    getDb(),
     {
       drugIds: [drugId, ...metabolismInputLinkedDrugIds(input)],
       blocks: ['metabolism'],
@@ -105,7 +113,6 @@ function recordedReceptorWrite(
   userId: number,
 ) {
   return withBlockHistory(
-    getDb(),
     { drugIds: [drugId], blocks: ['pharmacodynamics'], actorUserId: userId },
     () => replaceDrugReceptorTargets(getDb(), drugId, mechanisms, userId),
   );
@@ -196,11 +203,11 @@ describe('drug block revisions', () => {
       );
 
     const first = await declare('two-compartment');
-    await recomputeParameterAndDependents(drugId, 'dispositionModel', userId);
+    await recomputeInTransaction(drugId, 'dispositionModel', userId);
     // A recompute with nothing changed (e.g. a cascade) records nothing.
-    await recomputeParameterAndDependents(drugId, 'dispositionModel', userId);
+    await recomputeInTransaction(drugId, 'dispositionModel', userId);
     await deleteParameterEntryRow(first.id);
-    await recomputeParameterAndDependents(drugId, 'dispositionModel', userId);
+    await recomputeInTransaction(drugId, 'dispositionModel', userId);
 
     const revisions = await revisionsFor(drugId, 'modelStructure');
     expect(revisions).toHaveLength(2);
@@ -237,7 +244,7 @@ describe('drug block revisions', () => {
         { drugId, citationId, parameter, categoricalValue, unit: '' } as ParameterEntryInput,
         userId,
       );
-      await recomputeParameterAndDependents(drugId, parameter as never, userId);
+      await recomputeInTransaction(drugId, parameter as never, userId);
     };
     await declare(winnerId, 'dispositionModel', 'two-compartment');
     await declare(loserId, 'eliminationModel', 'first-order');
@@ -302,7 +309,7 @@ describe('drug block revisions', () => {
       } as ParameterEntryInput,
       userId,
     );
-    await recomputeParameterAndDependents(drugId, 'dispositionModel', userId);
+    await recomputeInTransaction(drugId, 'dispositionModel', userId);
     await runInPoolTransaction(() =>
       recordedMetabolismWrite(
         drugId,
@@ -339,7 +346,7 @@ describe('drug block revisions', () => {
 
     // A recompute with nothing else changed finds the history in step with the
     // live block, so it records nothing.
-    await recomputeParameterAndDependents(drugId, 'dispositionModel', userId);
+    await recomputeInTransaction(drugId, 'dispositionModel', userId);
     expect(await revisionsFor(drugId, 'modelStructure')).toHaveLength(1);
   });
 
@@ -388,7 +395,7 @@ describe('drug block revisions', () => {
       unit: '1/h',
       origin: 'contributor',
     });
-    await recomputeParameterAndDependents(drugId, 'ka', userId);
+    await recomputeInTransaction(drugId, 'ka', userId);
 
     const [revision] = await revisionsFor(drugId, 'modelStructure');
     const { routeValues } = revision!.newValue as {
@@ -416,9 +423,9 @@ describe('drug block revisions', () => {
       } as ParameterEntryInput,
       userId,
     );
-    await recomputeParameterAndDependents(drugId, 'dispositionModel', userId);
+    await recomputeInTransaction(drugId, 'dispositionModel', userId);
     await deleteParameterEntryRow(entry.id);
-    await recomputeParameterAndDependents(drugId, 'dispositionModel', userId);
+    await recomputeInTransaction(drugId, 'dispositionModel', userId);
     // Remove the paper review too, so the history is the only anchor left.
     await db.execute(sql`DELETE FROM paper_reviews WHERE citation_id = ${citationId}`);
 
@@ -472,6 +479,39 @@ describe('drug block revisions', () => {
     expect(metabolism).not.toBeNull();
     expect(metabolism!.evidenceNote).toBeNull();
     expect(metabolism!.referenceIds).toEqual([citationId]);
+  });
+
+  // Codex review on #303: a block write and its revision rows commit together.
+  // A history insert that fails takes the write down with it.
+  it('rolls the block write back when its revision cannot be recorded', async () => {
+    const userId = await seedUser(db);
+    const drugId = await seedDrug(db);
+    await failBlockRevisionInserts(async () => {
+      await expect(
+        recordedMetabolismWrite(drugId, metabolismInput(0.6), userId),
+      ).rejects.toThrow();
+    });
+    expect(await getDrugMetabolism(getDb(), drugId)).toBeNull();
+    expect(await revisionsFor(drugId, 'metabolism')).toEqual([]);
+  });
+
+  it('rolls the revision back when the write fails after it', async () => {
+    const userId = await seedUser(db);
+    const drugId = await seedDrug(db);
+    await expect(
+      runInPoolTransaction(async () => {
+        await recordedMetabolismWrite(drugId, metabolismInput(0.6), userId);
+        throw new Error('later failure in the same unit of work');
+      }),
+    ).rejects.toThrow('later failure');
+    expect(await getDrugMetabolism(getDb(), drugId)).toBeNull();
+    expect(await revisionsFor(drugId, 'metabolism')).toEqual([]);
+  });
+
+  it('refuses to bracket writes outside a transaction', async () => {
+    await expect(beginBlockHistory({ drugIds: [1], actorUserId: null })).rejects.toThrow(
+      /inside a transaction/,
+    );
   });
 
   it('serves a block history from the history endpoint, and refuses an unknown block', async () => {

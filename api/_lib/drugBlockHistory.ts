@@ -19,7 +19,7 @@
  */
 import { and, desc, eq, gt, inArray, or, sql } from 'drizzle-orm';
 import { drugBlockRevisions, drugMetabolites, drugs } from '../../db/schema.js';
-import type { getDb } from './db.js';
+import { getDb, inTransaction, isInPoolTransaction } from './db.js';
 import {
   canonicalJson,
   metabolismBlockSnapshot,
@@ -86,11 +86,32 @@ export interface BlockHistoryScope {
 const key = (drugId: number, block: DrugBlockId) => `${drugId}:${block}`;
 
 /**
+ * A block write and its revision rows must commit together: a write that
+ * commits and then fails before its history is recorded is exactly the silent
+ * gap this history exists to close. So the recorder refuses to run outside a
+ * transaction, and `record()` refuses to run in a different one than `begin`.
+ */
+class BlockHistoryOutsideTransactionError extends Error {
+  constructor(where: string) {
+    super(
+      `${where} must run inside a transaction (runInPoolTransaction / inTransaction), ` +
+        'together with the block writes it records',
+    );
+  }
+}
+
+/**
  * Snapshot the blocks in scope now; the returned `record()` snapshots them
  * again and writes one revision per block that changed, returning how many.
- * Call `record()` inside the same transaction as the write when there is one.
+ * Both halves must run inside the SAME transaction as the writes they
+ * bracket — use {@link withBlockHistory} unless the writes span a function
+ * that already owns its transaction (the drug merge).
  */
-export async function beginBlockHistory(db: Db, scope: BlockHistoryScope) {
+export async function beginBlockHistory(scope: BlockHistoryScope) {
+  if (!isInPoolTransaction()) {
+    throw new BlockHistoryOutsideTransactionError('beginBlockHistory');
+  }
+  const db: Db = getDb();
   const blocks = scope.blocks ?? DRUG_BLOCK_IDS;
   const ids = [...new Set(scope.drugIds)];
   const targets = new Map<DrugBlockId, Set<number>>();
@@ -116,6 +137,9 @@ export async function beginBlockHistory(db: Db, scope: BlockHistoryScope) {
 
   return {
     async record(): Promise<number> {
+      if (!isInPoolTransaction() || getDb() !== db) {
+        throw new BlockHistoryOutsideTransactionError('record()');
+      }
       // A write can add links to drugs that were not linked before.
       const metabolismTargets = targets.get('metabolism');
       if (metabolismTargets) {
@@ -202,14 +226,21 @@ export function metabolismInputLinkedDrugIds(input: {
   ];
 }
 
-/** Run `fn` and record every block in scope that it changed. */
+/**
+ * Run `fn` and record every block in scope that it changed, all in one
+ * transaction: the caller's when there is one, otherwise a new one. `fn` must
+ * write through `getDb()` (which resolves to that transaction), never through
+ * a client it captured outside — an auto-commit write would commit even when
+ * the history insert after it fails.
+ */
 export async function withBlockHistory<T>(
-  db: Db,
   scope: BlockHistoryScope,
   fn: () => Promise<T>,
 ): Promise<T> {
-  const history = await beginBlockHistory(db, scope);
-  const result = await fn();
-  await history.record();
-  return result;
+  return inTransaction(async () => {
+    const history = await beginBlockHistory(scope);
+    const result = await fn();
+    await history.record();
+    return result;
+  });
 }

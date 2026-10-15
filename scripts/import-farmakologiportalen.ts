@@ -525,7 +525,6 @@ async function main(): Promise<void> {
       // Recorded in the block history (#37): this box and the boxes of the
       // metabolites it links. An importer has no user: NULL author.
       const res = await withBlockHistory(
-        getDb(),
         {
           drugIds: [
             drugId,
@@ -534,8 +533,10 @@ async function main(): Promise<void> {
           blocks: ['metabolism'],
           actorUserId: null,
         },
+        // Through the recorder's transaction, so the links and their revision
+        // rows commit together.
         () =>
-          db
+          getDb()
             .insert(drugMetabolites)
             .values(rows)
             // Untargeted: a page can name one substance twice (the bare name

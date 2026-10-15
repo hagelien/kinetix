@@ -34,6 +34,7 @@ import {
   type IntegrationDb,
 } from './setup/harness.js';
 import { seedDrug, seedUser } from './setup/seed.js';
+import { failBlockRevisionInserts } from './setup/block-history.js';
 
 let db: IntegrationDb;
 let userId: number;
@@ -160,6 +161,29 @@ describe('deep-research importer — full DB path (PGlite)', () => {
   // #37: the importer writes the mechanisms and the metabolism box directly,
   // so it is recorded in the block history like any other write to them —
   // once: an idempotent re-run changes nothing and records nothing.
+  // Codex review on #303: the import's block writes and their revision rows
+  // are one transaction — a failed history insert leaves no mechanisms or
+  // metabolism behind.
+  it('writes no block when its history cannot be recorded', async () => {
+    await failBlockRevisionInserts(async () => {
+      await expect(
+        runImport(db, parse(DOC), { userId, overwrite: false }),
+      ).rejects.toThrow();
+    });
+    const [drug] = await db.select({ id: drugs.id }).from(drugs).where(eq(drugs.pubchemCid, 446220));
+    if (drug) {
+      expect(
+        await db.select().from(drugReceptorTargets).where(eq(drugReceptorTargets.drugId, drug.id)),
+      ).toEqual([]);
+      expect(
+        await db.select().from(drugEliminationRoutes).where(eq(drugEliminationRoutes.drugId, drug.id)),
+      ).toEqual([]);
+      expect(
+        await db.select().from(drugBlockRevisions).where(eq(drugBlockRevisions.drugId, drug.id)),
+      ).toEqual([]);
+    }
+  });
+
   it('records the blocks it writes in the block history', async () => {
     const first = await runImport(db, parse(DOC), { userId, overwrite: false });
     const rows = await db

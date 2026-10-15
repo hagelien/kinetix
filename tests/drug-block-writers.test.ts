@@ -133,6 +133,36 @@ describe('writers of the whole-block tables (#37)', () => {
     expect(Object.keys(WRITERS).filter((path) => !writers.includes(path))).toEqual([]);
   });
 
+  // Atomicity (Codex review on #303): a block write that commits before its
+  // revision row can survive a failure that loses the row. The recorder makes
+  // that impossible for code that goes through it — withBlockHistory always
+  // runs in a transaction, and beginBlockHistory / the recompute hook refuse
+  // to run outside one — so what is left to pin is that nobody writes a block
+  // table through an auto-commit client of their own making.
+  it('the recorder only runs inside a transaction', () => {
+    const recorder = readFileSync(join(ROOT, 'api/_lib/drugBlockHistory.ts'), 'utf8');
+    expect(recorder).toMatch(/return inTransaction\(async \(\) => \{\s*const history = await beginBlockHistory/);
+    expect(recorder).toMatch(/if \(!isInPoolTransaction\(\)\) \{\s*throw new BlockHistoryOutsideTransactionError\('beginBlockHistory'\)/);
+    const hook = readFileSync(join(ROOT, 'api/_lib/drugBlockRevisions.ts'), 'utf8');
+    expect(hook).toMatch(/if \(!isInPoolTransaction\(\)\) \{\s*throw new Error\(\s*'recordModelStructureRevision must run inside/);
+  });
+
+  it.each(Object.keys(WRITERS))(
+    '%s writes no block table through an auto-commit client of its own',
+    (path) => {
+      const text = readFileSync(join(ROOT, path), 'utf8');
+      // A module that builds its own neon-http client (`drizzle(neon(...))`)
+      // must not write a block table through it: those writes commit one by
+      // one, outside the recorder's transaction.
+      if (!/\bdrizzle\(/.test(text)) return;
+      for (const [ts] of BLOCK_TABLES) {
+        expect(text).not.toMatch(
+          new RegExp(`\\bdb\\s*\\.\\s*(insert|update|delete)\\(\\s*${ts}\\b`),
+        );
+      }
+    },
+  );
+
   it.each(Object.entries(WRITERS))('%s is recorded as listed', (path, writer) => {
     const text = readFileSync(join(ROOT, path), 'utf8');
     switch (writer.kind) {

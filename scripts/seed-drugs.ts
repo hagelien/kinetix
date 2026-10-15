@@ -354,16 +354,18 @@ async function seedMetabolism(index: SeedIndex): Promise<void> {
     // Recorded in the block history (#37) — this box and the boxes of the
     // drugs its metabolite links reach. A seeder has no user: NULL author.
     await withBlockHistory(
-      getDb(),
       { drugIds: [drugId], blocks: ['metabolism'], actorUserId: null },
       async () => {
-        await db
+        // Through the transaction withBlockHistory opened, so the writes and
+        // their revision rows commit together.
+        const tx = getDb();
+        await tx
           .delete(drugMetabolites)
           .where(eq(drugMetabolites.parentDrugId, drugId));
-        await db
+        await tx
           .delete(drugEliminationRoutes)
           .where(eq(drugEliminationRoutes.drugId, drugId));
-        await db
+        await tx
           .delete(drugMetabolismProfiles)
           .where(eq(drugMetabolismProfiles.drugId, drugId));
 
@@ -389,7 +391,7 @@ async function seedMetabolism(index: SeedIndex): Promise<void> {
         ].map((row, sortOrder) => ({ ...row, sortOrder }));
 
         if (routeRows.length > 0) {
-          await db.insert(drugEliminationRoutes).values(routeRows);
+          await tx.insert(drugEliminationRoutes).values(routeRows);
           routeCount += routeRows.length;
         }
 
@@ -423,7 +425,7 @@ async function seedMetabolism(index: SeedIndex): Promise<void> {
           });
         }
         if (rows.length > 0) {
-          await db.insert(drugMetabolites).values(rows);
+          await tx.insert(drugMetabolites).values(rows);
           metaboliteCount += rows.length;
         }
       },

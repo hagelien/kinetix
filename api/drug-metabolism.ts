@@ -233,7 +233,6 @@ async function handlePut(
       // Recorded in the block history — this drug's box and every drug its
       // metabolite and precursor links touch (#37).
       await withBlockHistory(
-        getDb(),
         {
           drugIds: [drugId, ...metabolismInputLinkedDrugIds(input)],
           blocks: ['metabolism'],

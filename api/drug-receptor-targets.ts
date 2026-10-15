@@ -216,7 +216,6 @@ async function handlePut(
         return { kind: 'changed' };
       }
       await withBlockHistory(
-        getDb(),
         { drugIds: [drugId], blocks: ['pharmacodynamics'], actorUserId: auth.userId },
         () => replaceDrugReceptorTargets(getDb(), drugId, mechanisms, auth.userId),
       );

@@ -2808,7 +2808,7 @@ export async function mergeDrugs(
   // The scope includes the loser (skipped once it is deleted) and, for
   // metabolism, every drug either side is linked to: a repointed metabolite
   // edge changes the box of the drug at its other end too.
-  const blockHistory = await beginBlockHistory(db, {
+  const blockHistory = await beginBlockHistory({
     drugIds: [winnerId, loserId],
     actorUserId,
   });
