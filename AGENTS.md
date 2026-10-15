@@ -1,5 +1,7 @@
 # Kinetix Agent Guidelines
 
+> **Coding agent execution limit:** For ordinary tasks, including "address PR feedback", make one scoped implementation pass, run focused checks, push once, report status, and stop. Do **not** wait for CI or repeat Codex reviews. See [Bounded coding-agent workflow](#bounded-coding-agent-workflow).
+
 **Generated:** 2026-04-03 | **Commit:** b255fb0
 
 ## Overview
@@ -274,81 +276,80 @@ What does *not* move:
 
 The `clinical_case` carve-out is agent-only. Spec §12 Stage 12 asks for a human expert moderator, and an admin acting on the moderator path is one; `applyOnAgentConsensus` still refuses to publish a clinical case without one.
 
+## Bounded coding-agent workflow
+
+**Default for Codex Cloud and all coding agents:** a request to implement a fix,
+address existing PR review feedback, or open a PR is a **single bounded work
+unit**, not an instruction to keep working until every future review is clean.
+This section takes precedence over older "drive to green" guidance in this
+repository. An explicit user request for an extended CI/review campaign may
+override this default; a general "fix the PR" request does not.
+
+1. **Freeze the scope.** At task start, collect the requested changes and
+   review findings already present. Handle all known P0/P1 findings under
+   `docs/REVIEW_POLICY.md`, plus the associated targeted regressions. Classify
+   known P2/P3 findings and file review-debt issues as required. Newly
+   generated findings after a push are **not** automatically added to the
+   current coding task.
+2. **Implement and verify once.** Run the smallest meaningful regression tests
+   and relevant typechecking/linting, normally once after the patch. Use
+   targeted tests for changed code; do not routinely run the entire unit
+   suite, the whole integration suite, or migration-chain replay locally.
+   An actual targeted-check failure must be fixed before pushing. See
+   [Verification before pushing](#verification-before-pushing).
+3. **Commit and push once** when the requested changes pass the focused checks.
+   Open a non-draft PR when needed. Reply to and resolve known review threads
+   only after their fixes are committed. Do not create empty commits to
+   stimulate new runs.
+4. **Report and stop.** Give the commit/PR link, changes made, tests run and
+   results, and any pending CI, outstanding review findings, or merge blockers.
+   **Do not** run `gh pr checks --watch`, poll GitHub Actions or review status
+   in a loop, wait for CI or the review bot, request another `@codex review`,
+   or initiate a new fix-review-fix cycle. After a push, one non-blocking
+   status check is permitted; it must not postpone the final response.
+5. **Keep the safety gate.** CI and Codex review continue asynchronously in
+   GitHub, and `codex-gate` decides whether a PR can merge. P0/P1 findings
+   must never be hidden, dismissed as debt, or merged unresolved. If a *new*
+   P0/P1 appears after the scoped pass, report it as a **blocking follow-up**
+   for a separate task, not as approval to merge. Do not merge or deploy
+   manually.
+
+Do not promise that the PR is green or will merge if the current-head checks
+or review have not completed. If CI is unavailable, identify the gap; use
+`npm run verify` only when explicitly requested, when a required check cannot
+otherwise run, or for a release decision, rather than as a default on every
+coding task.
+
 ## Opening a pull request
 
-**Open every pull request ready for review — never as a draft** (`gh pr create`
-without `--draft`, or `draft: false` through the API). Opening for review is
-what wakes everything the branch needs at once:
+**Open pull requests ready for review, never as drafts** (`draft: false`).
+GitHub runs the Codex review and the full CI suite automatically on opening
+and on subsequent pushes. **Agents do not wait for those runs.** No explicit
+`@codex review` comment is needed. `codex-gate` may merge automatically
+after sign-off and successful required checks; never merge it yourself.
 
-- **Review.** The Codex connector starts a review when a pull request is opened
-  for review, and a fresh one on every later push (`synchronize`). No
-  `@codex review` comment is needed.
-- **The full CI suite.** `unit-tests` and `migrations` (where its `paths:`
-  apply) run alongside the cheap path-filtered workflows (`kinetics-core`,
-  `parity`, `scripts-typecheck`, `server-shared-esm`, `catalog-sync`,
-  `prompt-registry-sync`) on every push.
-- **The merge path.** `codex-gate` merges the pull request on its own once
-  Codex has signed off on the current head and the checks are green. Do not
-  merge it yourself; the gate does that.
+**PR merge-readiness is different from coding-task completion.** Merge-readiness
+requires green required CI, an acceptable Codex review for the current head
+(or properly deferred P2/P3 findings), and no merge conflicts. Coding agents
+perform the bounded pass above and hand off any remaining blockers. The
+automatic gate, not an indefinitely running agent, enforces release criteria.
 
-**A pull request's definition of done is CI green on the current head**, a clean
-Codex review on that head (or one whose only findings are P2/P3, each filed),
-and no merge conflict. Drive it there; a red or pending suite is work, not
-something to report and walk away from.
+**Migrations scope:** `.github/workflows/migrations.yml` has wide path filters,
+including integration/governance tests, DB writes, migration tooling and
+configuration. Review that workflow's authoritative `paths:` when deciding
+which focused migration regressions to run. Run
+`npx tsc -p tsconfig.migrations.json` for migration-related TypeScript
+changes, and the relevant migration smoke/regression checks. Leave the entire
+PGlite integration suite and real-Postgres contention matrix to CI unless the
+user explicitly requests exhaustive local validation or CI is unavailable.
 
-Because every push runs the expensive suites, run the local checks **before**
-pushing rather than letting CI find what they would have. Every branch runs
-`npm run typecheck`, `npm run lint` and `npx vitest run`.
+**Drafts:** Human-created drafts are treated specially by the workflows,
+but coding agents must not open or convert a PR to draft just to avoid tests.
+Never push an empty commit or toggle labels solely to retrigger CI or review.
 
-**A branch in the `migrations` scope runs three more:**
-
-```bash
-npx tsc -p tsconfig.migrations.json                       # migration-path types
-npm run test:integration                                  # PGlite chain replay
-DATABASE_URL='' npx tsx scripts/apply-migrations-build.ts  # no-DB smoke
-```
-
-"In the `migrations` scope" means the branch touches any path in the `paths:`
-list of `.github/workflows/migrations.yml`, which is wider than the workflow's
-name suggests: `tests/integration/**`, `tests/governance/**`, `tests/support/**`,
-`package.json`, `package-lock.json`, `vitest.config.ts`, `tsconfig.json`,
-`vercel.json` and several API write paths (`api/_lib/db.ts`,
-`api/_lib/pending-edits-helpers.ts`, `api/_lib/knowledge-governance/**`,
-`api/drug-parameter.ts`, `api/parameter-entries.ts`) — not just `drizzle/**`.
-Read the workflow for the authoritative list rather than trusting this summary;
-it is the one kept in step with the guards.
-
-**None of those three is reachable from the base checklist**, which is the whole
-reason they are listed separately:
-
-- `npm run typecheck` is `tsc --noEmit` against `tsconfig.json`, whose `include`
-  is `["src", "data", "db", "api"]`. `scripts/` and `tests/` are outside it, so
-  the runner that applies migrations to production is typechecked by nothing
-  else — that is exactly the hole `tsconfig.migrations.json` was added to close,
-  and Vitest transpiles those files without typechecking them.
-- `npx vitest run` cannot reach the integration suite: `vitest.config.ts`
-  excludes `tests/integration/**` and `tests/governance/**` outright, and they
-  run only under `vitest.integration.config.ts`.
-
-The two real-Postgres service-container steps (deadlock shape, import
-contention) are CI-only — PGlite cannot discharge them — so only the
-`migrations` run in CI covers those.
-
-**Drafts.** The workflows still treat a draft specially, for a pull request a
-human chooses to open as one: `unit-tests` and `migrations` are skipped while it
-is a draft (`draft == false` gate), `codex-gate` ignores it, and a push to it
-raises no review — comment `@codex review` to get one. Do not convert a pull
-request to draft yourself, and do not open one as a draft.
-
-**Success, not snapshot.** `codex-gate` requires a *successful* `unit-tests` run
-on the head before it will merge (`REQUIRE_SUCCESS_RE`), which is deliberately
-stricter than the rest of its check logic. The rest is a snapshot — it asks
-what is failing or pending among the check runs that exist at that instant — so
-a head whose suites have not registered yet, or that carries only a `skipped`
-run left from a draft period, would otherwise read as green. Requiring a
-success is what distinguishes "the suites passed" from "the suites have not
-started". It fails closed: an event that queues no run holds the pull request
-and says so in the gate's verdict.
+**Gate safety:** `codex-gate` requires an actual successful `unit-tests`
+check on the current head before merging, not merely the absence of failures.
+Do not weaken this requirement to make agent tasks finish sooner.
 
 ## Reviewing a pull request
 
@@ -385,8 +386,18 @@ In short:
 
 ## Verification before pushing
 
-- `npm run typecheck`
-- `npm run lint`
-- `npx vitest run`
+Choose checks by the change, and do them **once per coherent patch**:
 
-A pull request is not ready while any of these is failing.
+- Documentation or agent-instruction-only changes: review the diff and
+  Markdown references; no application test suite is required.
+- Application code: relevant unit/regression tests, plus
+  `npm run typecheck` and `npm run lint` when their affected code is covered.
+- Database or migration code: focused integration or migration regressions,
+  and the relevant script/migration typecheck or smoke check.
+
+Fix failed focused checks before pushing. Do not routinely run
+`npx vitest run` or `npm run test:integration` across the whole repository
+in a Cloud coding task. Full suites remain required **in CI before merge**,
+not during each agent implementation pass. An explicit user request for
+comprehensive validation or a CI outage may require broader local testing;
+state the reason, avoid duplicate runs, and report any unverified checks.
