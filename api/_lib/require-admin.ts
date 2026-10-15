@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { getUserFromRequest } from './auth.js';
 import { error } from './response.js';
-import { callerCan } from './permissions-store.js';
+import { authCan } from './permissions-store.js';
 import { CAP } from '../../src/lib/permissions.js';
 
 /**
@@ -16,7 +16,7 @@ export async function requireAdmin(
   capability: string = CAP['admin.users.manage'],
 ): Promise<{ userId: number; role: string } | null> {
   const auth = await getUserFromRequest(req);
-  if (!auth || !(await callerCan(auth.role, capability))) {
+  if (!auth || !(await authCan(auth, capability))) {
     error(res, 403, 'Admin role required');
     return null;
   }

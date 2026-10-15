@@ -65,6 +65,12 @@ export interface AuthContext {
   userId: number;
   role: string;
   groups?: AuthGroup[];
+  /**
+   * True when the caller authenticated with a `kxat_` agent token rather than
+   * a human session. `authCan` refuses every admin-group capability to such a
+   * caller, whatever tier the permission matrix lowers it to.
+   */
+  agentToken?: boolean;
 }
 
 function getSecret(): Uint8Array {
@@ -278,7 +284,7 @@ async function resolveAgentTokenContext(
   // Agent tokens must never become admin credentials. Admin-only actions stay
   // reserved for human sessions even if an agent backing user is misconfigured.
   const role = row.role === "admin" ? "editor" : row.role;
-  return { userId: row.userId, role, groups };
+  return { userId: row.userId, role, groups, agentToken: true };
 }
 
 export function setAuthCookie(

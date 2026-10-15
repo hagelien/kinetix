@@ -24,7 +24,7 @@ import {
 import { getDb, getNeonClient } from './_lib/db.js';
 import { getUserFromRequest } from './_lib/auth.js';
 import { CAP } from '../src/lib/permissions.js';
-import { callerCan, requireCapability } from './_lib/permissions-store.js';
+import { authCan, requireCapability } from './_lib/permissions-store.js';
 import {
   applySiteSettings,
   getSiteSettingsMatrix,
@@ -290,7 +290,7 @@ async function handleNavVisibility(
       const auth = await getUserFromRequest(req);
       canSeeProvenance =
         !!auth &&
-        (await callerCan(auth.role, CAP['admin.navVisibility.manage']));
+        (await authCan(auth, CAP['admin.navVisibility.manage']));
     } catch {
       canSeeProvenance = false;
     }
@@ -362,11 +362,11 @@ async function handleUsers(
   // Listing users also backs the group-membership picker, so a delegated
   // group manager needs the read even though role changes stay with
   // admin.users.manage — otherwise the groups pane loads with nobody to add.
-  const canManageUsers = await callerCan(auth.role, CAP['admin.users.manage']);
+  const canManageUsers = await authCan(auth, CAP['admin.users.manage']);
   const canReadUsers =
     canManageUsers ||
     (req.method === 'GET' &&
-      (await callerCan(auth.role, CAP['admin.groups.manage'])));
+      (await authCan(auth, CAP['admin.groups.manage'])));
   if (!canReadUsers) {
     error(res, 403, 'Admin role required');
     return;
@@ -487,7 +487,7 @@ async function handleCategories(
 
   // All write operations require admin
   const auth = await getUserFromRequest(req);
-  if (!auth || !(await callerCan(auth.role, CAP['admin.categories.manage']))) {
+  if (!auth || !(await authCan(auth, CAP['admin.categories.manage']))) {
     error(res, 403, 'Admin role required');
     return;
   }
@@ -548,7 +548,7 @@ async function handleAllowedDomains(
   url: URL,
 ): Promise<void> {
   const auth = await getUserFromRequest(req);
-  if (!auth || !(await callerCan(auth.role, CAP['admin.allowlist.manage']))) {
+  if (!auth || !(await authCan(auth, CAP['admin.allowlist.manage']))) {
     error(res, 403, 'Admin role required');
     return;
   }
@@ -629,7 +629,7 @@ async function handleAgents(
   url: URL,
 ): Promise<void> {
   const auth = await getUserFromRequest(req);
-  if (!auth || !(await callerCan(auth.role, CAP['admin.agents.manage']))) {
+  if (!auth || !(await authCan(auth, CAP['admin.agents.manage']))) {
     error(res, 403, 'Admin role required');
     return;
   }
@@ -1115,7 +1115,7 @@ async function handleAllowedEmails(
   url: URL,
 ): Promise<void> {
   const auth = await getUserFromRequest(req);
-  if (!auth || !(await callerCan(auth.role, CAP['admin.allowlist.manage']))) {
+  if (!auth || !(await authCan(auth, CAP['admin.allowlist.manage']))) {
     error(res, 403, 'Admin role required');
     return;
   }
@@ -1184,7 +1184,7 @@ async function handleGroups(
   url: URL,
 ): Promise<void> {
   const auth = await getUserFromRequest(req);
-  if (!auth || !(await callerCan(auth.role, CAP['admin.groups.manage']))) {
+  if (!auth || !(await authCan(auth, CAP['admin.groups.manage']))) {
     error(res, 403, 'Admin role required');
     return;
   }
@@ -1365,7 +1365,7 @@ async function handleAgentHookRuns(
   const auth = await getUserFromRequest(req);
   if (
     !auth ||
-    !(await callerCan(auth.role, CAP['admin.agentHookRuns.read']))
+    !(await authCan(auth, CAP['admin.agentHookRuns.read']))
   ) {
     error(res, 403, 'Admin role required');
     return;
