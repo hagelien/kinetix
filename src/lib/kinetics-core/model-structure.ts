@@ -73,7 +73,8 @@ export function absorptionHasFirstOrderRate(absorption: AbsorptionKind): boolean
 
 /** Routes that deliver directly into the central compartment with no absorption phase, so they
  *  REQUIRE an IV input shape and never take the extravascular absorption default. Today only
- *  intravenous; IM/SC/sublingual/rectal/inhaled all carry an absorption phase and are extravascular. */
+ *  intravenous; IM/SC/sublingual/buccal/rectal/transdermal/inhaled all carry an absorption phase and
+ *  are extravascular, so each of them takes an extravascular input and (by its family) an F. */
 const SYSTEMIC_INPUT_ROUTES = new Set<RouteId>(['iv']);
 
 /**

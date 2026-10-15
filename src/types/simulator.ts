@@ -1,3 +1,5 @@
+import type { RouteId } from '@/lib/kinetics-core/types';
+
 // --- Distribution types ---
 
 export type DistributionType = 'fixed' | 'uniform' | 'triangular' | 'lognormal';
@@ -42,7 +44,10 @@ export type QuestionMode =
 
 // --- Route types ---
 
-export type RouteType = 'iv' | 'oral' | 'insufflation' | 'inhalation' | 'other';
+// Every kinetics-core administration route, under the simulator's name for it: the core's
+// `intranasal` is `insufflation` here (saved cases carry that name); every other route keeps its
+// core id. The mapping lives in `src/lib/simulatorRoutes.ts`.
+export type RouteType = Exclude<RouteId, 'intranasal'> | 'insufflation';
 
 // --- Events ---
 // A component's inputs are modelled as a chronological list of events. The
