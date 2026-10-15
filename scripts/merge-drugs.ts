@@ -47,6 +47,7 @@ import {
   blockedParametersFor,
   withDrugApplicabilityLock,
 } from '../api/_lib/parameterApplicabilityStore';
+import { recordDrugMergeEvent } from '../api/_lib/drug-merge-lineage';
 import { mergeIdentity } from './drug-merge/identity';
 import { API_ONLY_REFERENCES, apiOnlyRefusal } from './drug-merge/api-only-references';
 import {
@@ -1432,6 +1433,26 @@ async function main(): Promise<void> {
               ),
             );
         }
+
+        // The lineage record (#29), the same one the admin merge writes, so
+        // the loser's identity outlives its row whichever path merged it. No
+        // revision moves here: `drug_parameter_revisions` is not in MOVABLE,
+        // so a loser holding any was refused by the re-run plan above — which
+        // also means no baseline is needed for the survivor's source_diff.
+        await recordDrugMergeEvent(tx, {
+          survivorDrugId: live.survivor.id,
+          loser: {
+            id: live.loser.id,
+            slug: live.loser.slug,
+            pubchemCid: live.loser.pubchemCid,
+            names: live.loser.names ?? {},
+          },
+          parameterRevisionIds: [],
+          parameterBaselines: {},
+          repointedMonographPageId: null,
+          mergedVia: 'script',
+          mergedBy: null,
+        });
 
         await tx.delete(drugs).where(eq(drugs.id, live.loser.id));
 

@@ -97,6 +97,47 @@ describe('POST /api/research-import', () => {
     expect(runImportMock).not.toHaveBeenCalled();
   });
 
+  // Codex P1 on #300 (#12): a scoped source value is written without review
+  // and kept out of the pooled figure, so the plan the operator approves says
+  // which values carry a formulation, regimen or population.
+  it('lists each scoped source value\'s formulation, regimen and population in the plan', async () => {
+    getUserFromRequestMock.mockResolvedValue({ userId: 1, role: 'admin' });
+    const doc = {
+      ...VALID_DOC,
+      kinetixParameterValues: [
+        {
+          parameter: 'tmax',
+          status: 'finalized',
+          value: { min: 1, max: 8, unit: 'h' },
+          sourceIds: ['S1'],
+          sourceValues: [
+            { sourceId: 'S1', low: 1, high: 2, unit: 'h' },
+            {
+              sourceId: 'S1',
+              low: 6,
+              high: 8,
+              unit: 'h',
+              releaseProfile: 'modified',
+              doseRegimen: 'multiple',
+              doseIntervalHours: 12,
+            },
+          ],
+        },
+      ],
+    };
+    const { res, state } = createResponse();
+    await handler(createRequest({ document: doc }), res);
+    expect(state.statusCode).toBe(200);
+    const payload = JSON.parse(state.body);
+    expect(payload.plan.parameters).toEqual([
+      {
+        parameter: 'tmax',
+        sourceCount: 1,
+        scopes: [{ releaseProfile: 'modified', doseRegimen: 'multiple', doseIntervalHours: 12 }],
+      },
+    ]);
+  });
+
   it('returns 400 with structured errors for an invalid document', async () => {
     getUserFromRequestMock.mockResolvedValue({ userId: 1, role: 'admin' });
     const { res, state } = createResponse();

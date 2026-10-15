@@ -390,7 +390,10 @@ interface BaseParameterSpec {
    * (dose, regimen, formulation, population, reported statistic, …) — the
    * Cmax dose-context RFC, docs/plans/2026-09-17-cmax-dose-context.md.
    * `'required'` makes the context part of what the entry IS, with the write
-   * rules in `validateDoseContext` (src/lib/entryDoseContext.ts); `'forbidden'`
+   * rules in `validateDoseContext` (src/lib/entryDoseContext.ts); `'optional'`
+   * lets an entry state its formulation, regimen and population scope
+   * (`OPTIONAL_DOSE_CONTEXT_FIELD_KEYS`) and keeps the rest forbidden (#12);
+   * `'forbidden'`
    * (the default, absent) rejects every dose field but leaves the reported
    * statistic (`centralValue` / `centralStatistic` / `intervalKind`) optional,
    * because what a number IS (mean, median, …) is not dose context.
@@ -615,6 +618,8 @@ export const DRUG_PARAMETERS: Record<DrugParameterId, ParameterSpec> = {
     // derivation reads the route-specific ones — so a route-specific F never mixes into the drug-level F.
     routeOptional: true,
     requiresAdministration: true,
+    // F differs by formulation and population as much as by route (#12).
+    doseContext: 'optional',
     zod: rangeSchema({
       min: 0,
       max: 1,
@@ -686,6 +691,9 @@ export const DRUG_PARAMETERS: Record<DrugParameterId, ParameterSpec> = {
     forensic: false,
     summarizable: true,
     routeOptional: true,
+    // An extended-release Tmax is not the route's Tmax: the formulation and
+    // population it was observed in are stated, not left to prose (#12).
+    doseContext: 'optional',
     zod: rangeSchema({
       min: 0,
       max: 240,
@@ -944,6 +952,7 @@ export const DRUG_PARAMETERS: Record<DrugParameterId, ParameterSpec> = {
     // compound) — the substance-class barrier must reject it, exactly as it does
     // bioavailability and the dose quantities.
     requiresAdministration: true,
+    doseContext: 'optional',
     zod: rangeSchema({ min: 0.001, max: 100, allowedUnits: ['1/h'], requiresMinMax: false }),
     format: rangeFormatter,
   },
@@ -1222,6 +1231,8 @@ export const DRUG_PARAMETERS: Record<DrugParameterId, ParameterSpec> = {
     // would offer "absorption model" for every metabolite on a screening panel
     // and re-offer it forever, since no study can ever answer it.
     requiresAdministration: true,
+    // A depot and an immediate-release tablet of one route absorb differently.
+    doseContext: 'optional',
     zod: z.enum([...ABSORPTION_KINDS] as [string, ...string[]]),
     format: textFormatter,
   },

@@ -275,7 +275,8 @@ Two of these, citing two different sources, is the minimum for any one parameter
 A source's central number is a mean, a median or one subject's value, and its
 bounds are an SD, a CI or an observed range. Say which, on **every** numeric
 parameter, through a `doseContext` block that carries only these three fields
-(the dose fields are Cmax-only and refused elsewhere):
+(the dose fields are Cmax-only and refused elsewhere — except the formulation,
+regimen and population scope `tmax` and `bioavailability` may state, below):
 
 ```jsonc
 {
@@ -304,6 +305,25 @@ parameter, through a `doseContext` block that carries only these three fields
   `low`/`high`/`median` — with no statistic.
 - When the source does not say which statistic it reports, use `unknown`;
   never guess.
+
+#### Tmax and F: formulation, regimen and population
+
+A Tmax or F from an extended-release product, a depot, or a special population
+is not the drug's general figure. Say so in the same `doseContext` block, with
+the Cmax vocabularies (`reference/vocabularies.md`): `releaseProfile`,
+`physicalForm`, `doseRegimen`, `doseIntervalHours`, `pkPopulation`,
+`populationQualifier` — all optional, every other dose field still refused.
+A `modified` release profile or a named special population keeps the value out
+of the pooled figure; it is still stored and shown. A weekly and a monthly
+depot differ in `doseIntervalHours` (168 vs ~720). State a population only when
+the source does — a label that names none is not "adult postoperative patients".
+
+```jsonc
+"doseContext": {                       // beside the statistic fields, when stated
+  "releaseProfile": "modified", "physicalForm": "tablet_capsule",
+  "doseRegimen": "multiple", "doseIntervalHours": 12, "pkPopulation": "healthy_adult"
+}
+```
 
 #### Cmax: structured dose context
 

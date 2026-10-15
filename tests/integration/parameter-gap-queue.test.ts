@@ -1163,10 +1163,13 @@ describe('parameter gap queue — the model-declaration lane', () => {
    * benzoylecgonine loop, rebuilt on purpose. These tests pin the lane's own
    * fill test instead.
    */
+  let citationSeq = 0;
   async function citeSomething(): Promise<number> {
+    // A fresh identifier per call, so one test can cite more than one entry.
+    citationSeq += 1;
     const [citation] = await db
       .insert(citations)
-      .values({ type: 'doi', identifier: '10.1/model', metadata: {} })
+      .values({ type: 'doi', identifier: `10.1/model-${citationSeq}`, metadata: {} })
       .returning({ id: citations.id });
     return citation!.id;
   }
@@ -1175,7 +1178,13 @@ describe('parameter gap queue — the model-declaration lane', () => {
     drugId: number,
     parameter: string,
     categoricalValue: string | null,
-    extra: { route?: string; median?: number; unit?: string } = {},
+    extra: {
+      route?: string;
+      median?: number;
+      unit?: string;
+      releaseProfile?: string;
+      pkPopulation?: string;
+    } = {},
   ): Promise<void> {
     await db.insert(parameterEntries).values({
       drugId,
@@ -1184,9 +1193,11 @@ describe('parameter gap queue — the model-declaration lane', () => {
       route: extra.route ?? null,
       median: extra.median ?? null,
       unit: extra.unit ?? '',
+      releaseProfile: extra.releaseProfile ?? null,
+      pkPopulation: extra.pkPopulation ?? null,
       citationId: await citeSomething(),
       origin: 'contributor',
-    });
+    } as never);
   }
 
   it('offers the three axes and ka for an administered drug', async () => {
@@ -1250,6 +1261,38 @@ describe('parameter gap queue — the model-declaration lane', () => {
     });
 
     expect(await gapPairs()).not.toContain('morfin:ka');
+  });
+
+  it('is not retired by a modified-release or special-population declaration (#12)', async () => {
+    // The route model is derived from reference-scope evidence only, so a
+    // depot-only absorption shape or a hepatic-impairment ka leaves the
+    // generic declaration missing — and the pair open until someone fills it.
+    const drugId = await seedDrug(db, {
+      slug: 'buprenorfin',
+      names: { en: 'Buprenorphine' },
+    });
+    await declare(drugId, 'absorptionModel', 'zero-order', {
+      route: 'im',
+      releaseProfile: 'modified',
+    });
+    await declare(drugId, 'ka', null, {
+      route: 'oral',
+      median: 0.5,
+      unit: '1/h',
+      pkPopulation: 'hepatic_impairment',
+    });
+    expect(await gapPairs()).toEqual(
+      expect.arrayContaining(['buprenorfin:absorptionModel', 'buprenorfin:ka']),
+    );
+
+    // A reference-scope declaration beside it retires the pair as before.
+    await declare(drugId, 'ka', null, {
+      route: 'oral',
+      median: 0.8,
+      unit: '1/h',
+      pkPopulation: 'healthy_adult',
+    });
+    expect(await gapPairs()).not.toContain('buprenorfin:ka');
   });
 
   it('never offers absorption or ka for a metabolite, but still asks the rest', async () => {

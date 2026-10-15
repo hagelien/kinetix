@@ -1882,6 +1882,77 @@ export const drugParameterRevisions = pgTable(
   ],
 );
 
+// ─── Drug merge events (lineage of what a merge moved) ───────────────────────
+
+/**
+ * Where a revision moved by a drug merge came from (#29, migration 0152).
+ *
+ * A merge repoints the loser's `drug_parameter_revisions` onto the survivor
+ * and deletes the loser row, which used to leave no trace of which rows in the
+ * survivor's history were the other drug's. One row per merge, written inside
+ * the merge's own transaction by both `mergeDrugs` (api/_lib/drug-merge.ts)
+ * and `scripts/merge-drugs.ts`.
+ *
+ * Neither drug id carries a foreign key: the loser is deleted by the merge
+ * itself, the survivor can later be merged away or deleted, and the record has
+ * to outlive both. (`scripts/merge-drugs.ts` also refuses a merge while any
+ * table with an FK into `drugs` it cannot move holds rows, so an FK here would
+ * block every later script merge of a survivor.)
+ *
+ * Read through `api/_lib/drug-merge-lineage.ts`, which also answers the
+ * `source_diff` "previous revision" question across a merge.
+ */
+export const drugMergeEvents = pgTable(
+  'drug_merge_events',
+  {
+    id: serial('id').primaryKey(),
+    survivorDrugId: integer('survivor_drug_id').notNull(),
+    loserDrugId: integer('loser_drug_id').notNull(),
+    /** The loser's identity as it stood at the merge — the row is gone after. */
+    loserSlug: varchar('loser_slug', { length: 200 }).notNull(),
+    loserPubchemCid: integer('loser_pubchem_cid'),
+    loserNames: jsonb('loser_names').$type<Record<string, string>>().notNull(),
+    /** `drug_parameter_revisions.id` of every row this merge repointed. */
+    parameterRevisionIds: integer('parameter_revision_ids')
+      .array()
+      .notNull()
+      .default(sql`'{}'::integer[]`),
+    /**
+     * Per parameter, where the survivor's "previous revision" continues from:
+     * `{ [parameter]: { supersededRevisionId, baselineRevisionId } }`. Only
+     * parameters where the newest pre-merge row (by id, across both drugs) is
+     * not the effective previous revision of the side whose value survived.
+     * See `previousRevisionSql` in api/_lib/drug-merge-lineage.ts.
+     */
+    parameterBaselines: jsonb('parameter_baselines')
+      .$type<
+        Record<string, { supersededRevisionId: number; baselineRevisionId: number | null }>
+      >()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    /**
+     * The highest `drug_parameter_revisions.id` when the merge ran (taken
+     * under its locks, before its own recompute). A revision with a higher id
+     * was written after the merge — ordering by id rather than by clock, so
+     * two writes in the same tick cannot be misordered.
+     */
+    revisionHighWater: integer('revision_high_water').notNull(),
+    /** The loser's monograph page when it was kept and repointed to the survivor. */
+    repointedMonographPageId: integer('repointed_monograph_page_id'),
+    /** 'admin' (POST /api/drug-merge) or 'script' (npm run merge:drugs). */
+    mergedVia: varchar('merged_via', { length: 20 }).notNull(),
+    /** The acting admin; null for the operator script, which has no user. */
+    mergedBy: integer('merged_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    mergedAt: timestamp('merged_at').defaultNow().notNull(),
+  },
+  (t) => [
+    index('drug_merge_events_survivor_idx').on(t.survivorDrugId),
+    index('drug_merge_events_loser_idx').on(t.loserDrugId),
+  ],
+);
+
 // ─── Drug parameter discussions (per-drug, optionally per-parameter) ─────────
 
 export const drugParameterDiscussions = pgTable(

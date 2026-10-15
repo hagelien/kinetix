@@ -1065,6 +1065,20 @@
       "when": 1791331200000,
       "tag": "0151_subcutaneous_transdermal_buccal_routes",
       "breakpoints": true
+    },
+    {
+      "idx": 152,
+      "version": "7",
+      "when": 1791417600000,
+      "tag": "0152_drug_merge_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 155,
+      "version": "7",
+      "when": 1791676800000,
+      "tag": "0155_parameter_entries_optional_dose_context",
+      "breakpoints": true
     }
   ]
 }

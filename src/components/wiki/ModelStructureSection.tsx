@@ -18,6 +18,7 @@ import {
 } from '@/lib/drugParameters';
 import { ROUTE_LABEL_KEYS } from '@/lib/routeLabels';
 import type { RouteId } from '@/lib/kinetics-core';
+import { scopeContextLabels } from '@/lib/entryDoseContext';
 
 /** The route-scoped numbers a declared absorption shape runs on: the first-order rate, the
  *  zero-order duration and mixed-input split, and the optional lag. */
@@ -145,6 +146,9 @@ export function ModelStructureSection({
 
   const valueLabel = (value: string) =>
     t(`parameters.modelStructure.value.${value}`, { defaultValue: value });
+  /** A declaration's stated formulation, regimen and population, or null (#12). */
+  const scopeLabel = (dc: ParameterEntryRow['doseContext']): string | null =>
+    scopeContextLabels(dc, t).join(' · ') || null;
 
   // A failed load with no data to fall back on is an error, not an absence —
   // say so (with a retry) rather than showing every axis as "not declared" or,
@@ -247,6 +251,14 @@ export function ModelStructureSection({
                         {ROUTE_LABEL_KEYS[e.route as RouteId]
                           ? t(ROUTE_LABEL_KEYS[e.route as RouteId])
                           : e.route}
+                      </span>
+                    )}
+                    {scopeLabel(e.doseContext) && (
+                      // The formulation/regimen/population an absorption declaration was
+                      // made for (#12): a depot and an immediate-release tablet of one
+                      // route absorb differently, so the chip says which it is.
+                      <span className="text-[10px] text-muted-foreground">
+                        {scopeLabel(e.doseContext)}
                       </span>
                     )}
                     {e.citationId != null && (

@@ -10,7 +10,6 @@
 import {
   and,
   asc,
-  desc,
   eq,
   inArray,
   isNull,
@@ -26,6 +25,7 @@ import {
   citations,
 } from '../../db/schema.js';
 import { getDb, isInPoolTransaction } from './db.js';
+import { previousRevisionForNextWrite } from './drug-merge-lineage.js';
 import { markEntryMutationsConflicted } from './entry-conflicts.js';
 import { getDrugParameterMap, upsertDrugParameter } from './drugParameterStore.js';
 import {
@@ -235,6 +235,8 @@ export async function loadEntryValuesForParameter(
       unit: parameterEntries.unit,
       matrix: parameterEntries.matrix,
       n: parameterEntries.n,
+      releaseProfile: parameterEntries.releaseProfile,
+      pkPopulation: parameterEntries.pkPopulation,
       origin: parameterEntries.origin,
       reviewScore: paperReviews.overallScore,
     })
@@ -265,6 +267,8 @@ export async function loadEntryValuesForParameter(
     unit: r.unit,
     matrix: r.matrix as ReferenceMatrix | null,
     n: r.n,
+    releaseProfile: r.releaseProfile,
+    pkPopulation: r.pkPopulation,
     origin: r.origin,
     reviewScore: r.reviewScore ?? null,
   }));
@@ -372,6 +376,8 @@ export async function getParameterSummariesWithRoutes(
       unit: parameterEntries.unit,
       matrix: parameterEntries.matrix,
       n: parameterEntries.n,
+      releaseProfile: parameterEntries.releaseProfile,
+      pkPopulation: parameterEntries.pkPopulation,
       origin: parameterEntries.origin,
       reviewScore: paperReviews.overallScore,
     })
@@ -409,6 +415,8 @@ export async function getParameterSummariesWithRoutes(
       unit: r.unit,
       matrix: r.matrix as ReferenceMatrix | null,
       n: r.n,
+      releaseProfile: r.releaseProfile,
+      pkPopulation: r.pkPopulation,
       origin: r.origin,
       reviewScore: r.reviewScore ?? null,
     });
@@ -530,22 +538,19 @@ export interface SourceDiff {
   removed: SourceDiffEntry[];
 }
 
+/**
+ * The contributing citations of the revision `source_diff` is measured from.
+ * Ordinarily the newest revision of `(drugId, parameter)`; after a drug merge,
+ * the newest one of the side whose value the survivor kept, until the
+ * survivor writes its own (#29 — the rule and why live in
+ * `drug-merge-lineage.ts`, shared with the source_diff backfill).
+ */
 async function fetchPreviousReferenceIds(
   drugId: number,
   parameter: string,
 ): Promise<number[]> {
-  const [latest] = await getDb()
-    .select({ referenceIds: drugParameterRevisions.referenceIds })
-    .from(drugParameterRevisions)
-    .where(
-      and(
-        eq(drugParameterRevisions.drugId, drugId),
-        eq(drugParameterRevisions.parameter, parameter),
-      ),
-    )
-    .orderBy(desc(drugParameterRevisions.id))
-    .limit(1);
-  return latest?.referenceIds ?? [];
+  const previous = await previousRevisionForNextWrite(getDb(), drugId, parameter);
+  return previous?.referenceIds ?? [];
 }
 
 /** Both sides are sorted ascending (see `sameContributingCitations`). */
@@ -1099,11 +1104,17 @@ function numToStr(v: number | undefined): string | null {
  * Absent means NULL here — not "preserve", which is what `observationContext`
  * and `quote` get on an update. Preserve-when-omitted exists to protect a
  * stored value from a client that predates the field; no client predates the
- * dose fields for the only parameters that may carry them, because dose
- * context is forbidden everywhere else (`validateDoseContext`) and every
- * writer of a dose-context entry is new. A legacy client that edits such an
- * entry omits `valueBasis` and is refused by validation — loudly — rather than
- * silently wiping context.
+ * dose fields for Cmax, because every writer of a Cmax entry is new, and a
+ * legacy client that edits one omits `valueBasis` and is refused by validation
+ * — loudly — rather than silently wiping context.
+ *
+ * The formulation/regimen/population scope a `doseContext: 'optional'`
+ * parameter may carry (tmax, ka, F, the absorption model; #12) follows the
+ * same whole-row rule as the `route`, `matrix` and `n` it sits beside: a
+ * PATCH restates the whole entry (it requires `unit` and `citationId`), so an
+ * update that leaves the release profile out says the entry has none. The
+ * entry editor sends the scope on every save of such a parameter for that
+ * reason.
  *
  * The reported statistic (`centralValue` / `centralStatistic` /
  * `intervalKind`, optional on every parameter since migration 0135) follows

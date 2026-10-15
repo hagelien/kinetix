@@ -33,7 +33,7 @@ import {
   preferredDisplayUnit,
 } from '@/lib/parameterUnits';
 import { getPreferredUnitDisplay } from '@/lib/unitTooltip';
-import { entryCentralValue } from '@/lib/entryDoseContext';
+import { entryCentralValue, scopeContextLabels } from '@/lib/entryDoseContext';
 import { useDisplayUnits } from '@/components/ui/DrugUnitScope';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -181,6 +181,10 @@ function formatMeta(
     const key = ROUTE_LABEL_KEYS[row.route as RouteId];
     parts.push(key ? t(key) : row.route);
   }
+  // Formulation, regimen and population (#12): what sets an extended-release
+  // or special-population row apart from the drug's general figure, and why
+  // it is listed here but not pooled into it.
+  parts.push(...scopeContextLabels(row.doseContext, t));
   // Matrix and scenario are concentration dimensions; a matrix-independent
   // parameter (half-life, logP, B/P, …) stores null for both and its meta line
   // is just the sample size, if reported.

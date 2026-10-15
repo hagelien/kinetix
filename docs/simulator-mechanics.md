@@ -136,9 +136,20 @@ parameters. **The dose-route picker offers exactly the routes the resolved model
 For a Monte Carlo component the panel resolves the model under the same id the run will use
 and lists its routes — intramuscular, subcutaneous, sublingual, buccal, rectal, transdermal
 and the rest included — so a route the model lacks is never offered, and a new dose starts
-on one the model has. A dose already on an undeclared route (a saved case, or a drug or
-engine changed underneath it) is shown struck through, not as a choice, and the run refuses
-it as above until the route is replaced. Intranasal is offered under the simulator's name
+on one the model has. **The picker waits for the drug's live model, as the run does.**
+With the derived tier built live (§2), the panel asks for the drug's live model as soon as
+the drug is shown, not only when it is run, and redraws the picker whenever that answer, or
+a later one a run fetches, changes the model. A new dose cannot be added until the first
+answer has arrived or the request has failed (at most five seconds), so it starts on a route
+of the model the run will resolve, not of the committed artifact that answer replaces. The
+panel and the run share one request, and its outcome — an answer or a failure — is trusted
+for a minute: a run in that minute resolves the same model the picker shows, and after a
+failed request it falls back to the same model rather than retrying into one whose routes
+the picker never offered. Once the minute has passed the run asks again, and an answer that
+changes the model redraws the picker before the run resolves it, so a dose on a route the
+new model lacks is then marked as described next. A dose already on an undeclared route (a saved case,
+or a drug or engine changed underneath it) is shown struck through, not as a choice, and the
+run refuses it as above until the route is replaced. Intranasal is offered under the simulator's name
 for it, *insufflation*. The KineLab and ethanol engines, which run no registry model, and a
 drug with no resolved model keep the fixed list (IV, oral, insufflation, inhalation,
 other). The dose basis (parent drug, active moiety, salt, free base) must likewise be
@@ -361,6 +372,17 @@ The two tiers are treated differently, and deliberately so:
   median. Inputs are drawn independently and the extremes are treated as bounds, so the band is
   a **plausible range** — the curves the reported values allow — and never a confidence or
   prediction interval. An input with only one reported value stays fixed at it.
+  **Only reference-scope evidence feeds a curve.** A Tmax, absorption rate (ka),
+  bioavailability or absorption shape that the catalogue records for a **modified-release**
+  formulation (an extended-release tablet, a depot) or for a named **special population**
+  (hepatic or renal impairment, a metabolizer phenotype, children, the elderly, pregnancy, or
+  another stated population) is stored and listed with its source. It is left out of every
+  pooled value and every route model. Values from healthy adults, from patients the source
+  does not describe further, and from sources that name no formulation or population still
+  pool. So a curve describes an immediate-release product in a general adult population. An
+  extended-release Tmax does not move the oral peak, a depot's absorption shape does not
+  become the route's shape or conflict with it, and a route whose only evidence is scoped is
+  treated as having none.
   Most derived models grade **D**: a model-structure axis is a default, an input has no reported
   spread, or a value traces to no cited source. Those reach a reviewer only through a recorded
   acknowledgement. A model clear of all three can reach **C**. Either way, only when the derived
@@ -386,12 +408,15 @@ The two tiers are treated differently, and deliberately so:
    merely mislabelled — sublingual buprenorphine and intravenous thiopental are the shape of
    that error. Keying the route on the stored value (the drug editor's route selector) is
    what removes the assumption; until then, check the route before trusting the magnitude.
+   An F, ka or Tmax recorded for a modified-release formulation is not used at all (§5):
+   the curve is always the reference formulation's.
 4. **Doses add.** For the closed-form families, multiple doses superpose linearly. Any
    auto-induction, saturation, or depletion across a dosing history is absent unless the
    model is Michaelis–Menten.
 5. **The subject is a healthy adult of the stated weight.** Pregnancy, extremes of age,
    organ impairment, dialysis, critical illness and drug–drug interactions are not
-   modelled — see §7 and §8.
+   modelled — see §7 and §8. For the same reason, catalogue evidence recorded for one of
+   those populations is not used as a catalogue-derived model's input (§5).
 6. **The concentration is a systemic, unbound-plus-bound total in the stated matrix.**
    Protein binding is not modelled; there is no free-fraction calculation, and no
    correction for altered binding in disease.
