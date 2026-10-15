@@ -15,7 +15,7 @@
  */
 
 import { and, asc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
-import { getDb, inTransaction } from '../db.js';
+import { getDb, inTransaction, isInPoolTransaction } from '../db.js';
 import {
   adjudicationCaseSeats,
   adjudicationCases,
@@ -431,6 +431,61 @@ export async function detectAdjudicationCase(args: {
 function requestIdsOf(triggerDetail: Record<string, unknown> | null | undefined): number[] {
   const detail = triggerDetail?.human_request as { requestIds?: unknown } | undefined;
   return Array.isArray(detail?.requestIds) ? (detail.requestIds as number[]) : [];
+}
+
+/**
+ * Re-evaluate the target inside the caller's transaction — the one that just
+ * changed a trigger input (a verdict, a withdrawal) under the target's
+ * source-row lock — so the case and its inputs commit together and no T3
+ * writer can act on the case between the two. Run under a savepoint: a
+ * detector fault is rolled back alone and logged (the sweep and the seal's
+ * own re-check are the backstop), never taking the caller's write with it.
+ * Returns null on a fault.
+ */
+export async function detectAdjudicationCaseWithin(args: {
+  targetType: AgentVerificationTargetType;
+  targetId: number;
+}): Promise<DetectOutcome | null> {
+  const atomic = isInPoolTransaction();
+  const db = getDb();
+  if (atomic) await db.execute(sql`SAVEPOINT adjudication_detect`);
+  try {
+    const outcome = await detectAdjudicationCase(args);
+    if (atomic) await db.execute(sql`RELEASE SAVEPOINT adjudication_detect`);
+    return outcome;
+  } catch (err) {
+    if (atomic) {
+      await db.execute(sql`ROLLBACK TO SAVEPOINT adjudication_detect`).catch(() => undefined);
+    }
+    console.error(
+      `[adjudication] detection failed for ${args.targetType}:${args.targetId}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return null;
+  }
+}
+
+/**
+ * Bring a case up to date with its target before a T3 writer acts on it (a
+ * seat claim, an opinion, the seal), under the source-row lock the caller
+ * already holds. A trigger input can change in any writer — a re-verdict, a
+ * withdrawal, a tier restamp — so the case is re-read through the detector
+ * here rather than trusted: a disagreement that no longer stands retires the
+ * case instead of letting the panel seal it. Returns the case's state now.
+ */
+export async function refreshCaseUnderLock(kase: {
+  id: number;
+  targetType: string;
+  targetId: number;
+}): Promise<string | null> {
+  await detectAdjudicationCase({
+    targetType: kase.targetType as AgentVerificationTargetType,
+    targetId: kase.targetId,
+  });
+  const [now] = await getDb()
+    .select({ state: adjudicationCases.state })
+    .from(adjudicationCases)
+    .where(eq(adjudicationCases.id, kase.id));
+  return now?.state ?? null;
 }
 
 async function caseHasOpinions(caseId: number): Promise<boolean> {
@@ -874,6 +929,9 @@ export async function claimAdjudicationSeat(args: {
       );
     if (mine) return { ok: true, seat: mine.seat, alreadySeated: true };
     if (kase.state !== 'open') return { ok: false, reason: 'case_not_open' };
+    // The disagreement the case rests on may have gone since it was last
+    // refreshed (a re-verdict, a withdrawal): nobody takes a seat on it then.
+    if ((await refreshCaseUnderLock(kase)) !== 'open') return { ok: false, reason: 'case_not_open' };
 
     if ((await liveConflictedAgentIds(kase)).has(args.agentId)) {
       return { ok: false, reason: 'conflicted' };

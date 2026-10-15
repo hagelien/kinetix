@@ -38,11 +38,16 @@ person). The work lands in three pull requests:
    `0120` was taken), `agents.adjudicator` / `agents.model_family` with the
    admin provisioning path, `api/_lib/adjudication/detector.ts` and
    `cases.ts`, and the seat claim. Where it differs from the text below:
-   - the verdict-time check runs right after the verdict commits, in its own
-     transaction under the same source-row lock, rather than inside the
-     verdict's transaction — a detector fault then never rejects a recorded
-     verdict, and the sweep (`POST /api/agent-consensus-sweep`) is the
-     backstop either way;
+   - the verdict-time check runs inside the verdict's transaction, under its
+     source-row lock, in a savepoint of its own (as does a control-phase
+     withdrawal and a person's adjudication request): the case and the
+     inputs it rests on commit together, and a detector fault is rolled back
+     alone and never rejects a recorded verdict. Every T3 writer that acts on
+     a case — a seat claim, each opinion and so the seal — re-reads it
+     through the detector under that same lock first, so a trigger input
+     changed by any writer (a re-verdict, a tier restamp) retires a case
+     whose disagreement no longer stands instead of letting it seal. The
+     sweep (`POST /api/agent-consensus-sweep`) is the backstop;
    - `repeated_correction_loop` counts disputes decided upheld or rejected on
      the target (withdrawn ones excluded), with a disagreement still live, and
      records the count as a lower bound;

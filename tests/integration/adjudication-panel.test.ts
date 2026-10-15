@@ -332,8 +332,15 @@ describe('T3 case feed', () => {
     expect(refused.raw).toContain('adjudication_conflicted');
     expect(await db.select().from(adjudicationCaseSeats)).toEqual([]);
     // A dispute on another version says nothing about this one.
-    await db.update(disputes).set({ targetVersion: 'elsewhere|pending' }).where(eq(disputes.createdBy, s.a.userId));
-    expect((await claim(s.a.userId, s.caseId)).status).toBe(200);
+    await db.insert(disputes).values({
+      targetType: 'pending_edit',
+      targetId: s.editId,
+      createdBy: s.b.userId,
+      source: 'agent',
+      reasonMd: 'Verdien er feil.',
+      targetVersion: 'elsewhere|pending',
+    });
+    expect((await claim(s.b.userId, s.caseId)).status).toBe(200);
   });
 
   it('refuses a seat to an agent that judged the target after the case opened', async () => {
@@ -1602,5 +1609,120 @@ describe('T3 trigger: a person’s request for an adjudication (issue 17)', () =
       triggerDetail: { human_request: { requestIds: [asked.body.id], requestedBy: [editor] } },
       disputeOrigin: 'agent',
     });
+  });
+});
+
+describe('T3 cases act only on triggers that still stand (PR #291 review)', () => {
+  /** A case opened by blind T2's competing-scope finding alone, with both seats taken. */
+  async function seedScopeCase() {
+    const author = await seedAgent('scope-author', { tier: 'mid' });
+    const t2 = await seedAgent('scope-t2', { tier: 'flagship' });
+    const [edit] = await db
+      .insert(pendingEdits)
+      .values({
+        editType: 'param_entry',
+        targetId: 1,
+        parameter: 'clearance',
+        proposedValue: { op: 'create', input: { value: 60, unit: 'L/h', quote: 'The paper reports it.' } },
+        submittedBy: author.userId,
+        status: 'pending',
+      })
+      .returning({ id: pendingEdits.id, submittedAt: pendingEdits.submittedAt });
+    const version = `${edit!.submittedAt.toISOString()}|pending`;
+    await verdictOn(t2.agentId, edit!.id, 'approve', 'flagship', 'Voksne og eldre gir ulike verdier.');
+    await db
+      .update(agentVerifications)
+      .set({ competingScope: true })
+      .where(eq(agentVerifications.agentId, t2.agentId));
+    const { caseId } = await detectAdjudicationCase({ targetType: 'pending_edit', targetId: edit!.id });
+    const a = await seedAgent('scope-adj-a', { tier: 'flagship', adjudicator: true, family: 'claude' });
+    const b = await seedAgent('scope-adj-b', { tier: 'flagship', adjudicator: true, family: 'gpt' });
+    return { editId: edit!.id, version, caseId: caseId!, a, b, t2 };
+  }
+  const caseRow = async (id: number) =>
+    (await db.select().from(adjudicationCases).where(eq(adjudicationCases.id, id)))[0]!;
+
+  it('retires the case instead of sealing it when T2 clears competing scope just before the seal', async () => {
+    const s = await seedScopeCase();
+    expect((await caseRow(s.caseId)).triggers).toEqual(['competing_scope']);
+    await claim(s.a.userId, s.caseId);
+    await claim(s.b.userId, s.caseId);
+    await opinion(s.a.userId, { caseId: s.caseId, targetVersion: s.version, resolvedValue: 60, resolvedUnit: 'L/h' });
+
+    // The second seat seals from outside the re-verdict, as a concurrent
+    // request would, at the first transaction that starts once the cleared
+    // flag is on record: had the verdict committed before the case was
+    // re-read, the seat would seal on the stale trigger there.
+    const outside = AsyncLocalStorage.snapshot();
+    let sealing: ReturnType<typeof opinion> | undefined;
+    beforeTopLevelTransaction.hook = async () => {
+      const [t2Row] = await db
+        .select({ competingScope: agentVerifications.competingScope })
+        .from(agentVerifications)
+        .where(eq(agentVerifications.agentId, s.t2.agentId));
+      if (t2Row?.competingScope !== false) return;
+      beforeTopLevelTransaction.hook = null;
+      sealing = outside(() =>
+        opinion(s.b.userId, { caseId: s.caseId, targetVersion: s.version, resolvedValue: 60, resolvedUnit: 'L/h' }),
+      );
+      await sealing;
+    };
+    const reverdict = await call(verificationsHandler, {
+      userId: s.t2.userId,
+      method: 'POST',
+      url: '/api/agent-verifications',
+      body: {
+        targetType: 'pending_edit',
+        targetId: s.editId,
+        targetVersion: s.version,
+        verdict: 'approve',
+        rationaleMd: 'Ved nærmere lesning gjelder kilden bare voksne; ingen konkurrerende tolkning.',
+      },
+    });
+    beforeTopLevelTransaction.hook = null;
+    expect(reverdict.status).toBeLessThan(300);
+    const late = await (sealing ??
+      opinion(s.b.userId, { caseId: s.caseId, targetVersion: s.version, resolvedValue: 60, resolvedUnit: 'L/h' }));
+    expect(late.status).toBe(409);
+
+    const kase = await caseRow(s.caseId);
+    expect(kase).toMatchObject({ state: 'invalidated', invalidatedReason: 'disagreement_withdrawn', sealedAt: null });
+  });
+
+  it('re-reads the triggers at the seal, whichever writer changed them', async () => {
+    const s = await seedScopeCase();
+    await claim(s.a.userId, s.caseId);
+    await claim(s.b.userId, s.caseId);
+    await opinion(s.a.userId, { caseId: s.caseId, targetVersion: s.version, resolvedValue: 60, resolvedUnit: 'L/h' });
+    // A writer that runs no detector (a tier restamp, a direct correction).
+    await db
+      .update(agentVerifications)
+      .set({ competingScope: false })
+      .where(eq(agentVerifications.agentId, s.t2.agentId));
+
+    const second = await opinion(s.b.userId, {
+      caseId: s.caseId,
+      targetVersion: s.version,
+      resolvedValue: 60,
+      resolvedUnit: 'L/h',
+    });
+    expect([second.status, second.body.code]).toEqual([409, 'adjudication_case_not_open']);
+    expect(await caseRow(s.caseId)).toMatchObject({
+      state: 'invalidated',
+      invalidatedReason: 'disagreement_withdrawn',
+      sealedAt: null,
+    });
+  });
+
+  it('seats nobody on a case whose triggers no longer stand', async () => {
+    const s = await seedScopeCase();
+    await db
+      .update(agentVerifications)
+      .set({ competingScope: false })
+      .where(eq(agentVerifications.agentId, s.t2.agentId));
+    const claimed = await claim(s.a.userId, s.caseId);
+    expect([claimed.status, claimed.body.code]).toEqual([409, 'adjudication_case_not_open']);
+    expect(await db.select().from(adjudicationCaseSeats).where(eq(adjudicationCaseSeats.caseId, s.caseId))).toEqual([]);
+    expect((await caseRow(s.caseId)).state).toBe('invalidated');
   });
 });

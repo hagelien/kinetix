@@ -62,6 +62,7 @@ import {
   liveConflictedAgentIds,
   mergeOpenDisputes,
   openDisputesOnVersion,
+  refreshCaseUnderLock,
   type InvalidatedReason,
 } from './cases.js';
 
@@ -308,6 +309,19 @@ export async function submitAdjudicationOpinion(args: {
         .where(eq(adjudicationCases.id, kase.id));
       return refuse(409, 'target_version_moved', 'The target changed; this case has been closed');
     }
+    // The case's triggers are re-read against the target now, under the lock
+    // every trigger writer takes, before this opinion counts and before any
+    // seal: a disagreement that no longer stands (a verdict changed, a
+    // dispute withdrawn) retires the case instead of letting it seal on
+    // triggers that were true when it opened.
+    if ((await refreshCaseUnderLock(kase)) !== 'open') {
+      return refuse(409, 'case_not_open', 'The disagreement this case rested on no longer stands; it has been closed');
+    }
+    const [refreshed] = await tx
+      .select()
+      .from(adjudicationCases)
+      .where(eq(adjudicationCases.id, kase.id));
+    if (refreshed) Object.assign(kase, refreshed);
     // The hydrated target both seats were served (./snapshot.ts). A target
     // that can no longer be served, or whose baselines moved under the panel,
     // closes the case: no opinion may stand on a packet the panel did not

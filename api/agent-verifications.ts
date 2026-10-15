@@ -80,7 +80,7 @@ import {
   pendingEditsWithStandingUpheldRuling,
   withdrawOpenDispute,
 } from './_lib/disputes.js';
-import { detectAdjudicationCase } from './_lib/adjudication/cases.js';
+import { detectAdjudicationCaseWithin } from './_lib/adjudication/cases.js';
 import {
   contributionAuthorUserId,
   fanOutDisputeNotification,
@@ -521,6 +521,16 @@ async function handlePost(
   // objections were answered that unseen verdict kept a completed handoff in
   // T4 that the case file could not explain.
   //
+  // T3 detection runs in the same transaction, after the bridge, under the same
+  // lock (docs/plans/2026-09-18-t3-adjudication-backend.md §3.3): the moment a
+  // verdict lands is when a disagreement surviving blind T2 becomes knowable,
+  // and a case refreshed in a later transaction would leave a gap in which a
+  // panelist could seal on triggers this verdict has just changed (a cleared
+  // `competingScope`, say). A detector fault is rolled back to its own
+  // savepoint and logged; it never rejects the verdict.
+  const detectWithin = () =>
+    detectAdjudicationCaseWithin({ targetType, targetId: parsed.data.targetId });
+  //
   // Held in one transaction, the source-row lock `recordVerification` takes
   // first is held until the bridge has written too, so a seal sees both or
   // neither. The lock order is the one each write already took on its own —
@@ -537,8 +547,9 @@ async function handlePost(
   // moderator could ever see or close.
   let recorded: { id: number; inserted: boolean };
   let mirrored: { id: number; inserted: boolean } | null = null;
+  let detection: Awaited<ReturnType<typeof detectAdjudicationCaseWithin>> = null;
   try {
-    ({ recorded, mirrored } = await inTransaction(async () => {
+    ({ recorded, mirrored, detection } = await inTransaction(async () => {
       const written = await recordVerification({
         expectTargetVersion: parsed.data.targetVersion,
         agentId: agent.id,
@@ -557,7 +568,7 @@ async function handlePost(
           targetId: parsed.data.targetId,
           createdBy: auth.userId,
         });
-        return { recorded: written, mirrored: null };
+        return { recorded: written, mirrored: null, detection: await detectWithin() };
       }
       // `mirrorAgentDisputeVerdict` (#1324) tells apart a payload revision
       // (nothing left to mirror; the "revise in place" reconciliation handles
@@ -573,7 +584,7 @@ async function handlePost(
         targetVersion: parsed.data.targetVersion,
         verificationId: written.id,
       });
-      return { recorded: written, mirrored: dispute };
+      return { recorded: written, mirrored: dispute, detection: await detectWithin() };
     }));
   } catch (err) {
     if (err instanceof StaleVerificationTargetError) {
@@ -648,23 +659,10 @@ async function handlePost(
     });
   }
 
-  // T3 detection (docs/plans/2026-09-18-t3-adjudication-backend.md §3.3): the
-  // moment a verdict lands is when a disagreement surviving blind T2 becomes
-  // knowable, so check now rather than wait for the sweep. After the dispute
-  // bridge above, so an open dispute this verdict raised is part of the cut.
-  // Never allowed to reject the verdict, which is already recorded: a failure
-  // here is logged and the consensus sweep's backstop picks the target up.
-  // Nor to publish past a case it could not open: consensus is not attempted
-  // after a failed detection (the T3 hold covers the retry sweep).
-  let detectionFailed = false;
-  try {
-    await detectAdjudicationCase({ targetType, targetId: parsed.data.targetId });
-  } catch (err) {
-    detectionFailed = true;
-    console.error(
-      `[adjudication] detection failed for ${targetType}:${parsed.data.targetId}: ${err instanceof Error ? err.message : String(err)}`,
-    );
-  }
+  // T3 detection ran inside the verdict's transaction (above), so the case
+  // and its inputs committed together. Consensus is not attempted after a
+  // failed detection (the T3 hold covers the retry sweep).
+  const detectionFailed = detection === null;
 
   // Agent consensus stands in for a human moderator's approval: once a pending
   // edit collects the required quorum of independent agent approvals with no
