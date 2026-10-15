@@ -46,13 +46,15 @@ import {
 import {
   getRangeSpec,
   isDrugParameterId,
-  isModelStructureParameter,
   parameterIsMatrixRelevant,
   parameterIsSummarizable,
   SUMMARIZED_PARAMETER_IDS,
   type DrugParameterId,
 } from '../../src/lib/drugParameters.js';
-import { recordModelStructureRevision } from './drugBlockRevisions.js';
+import {
+  isModelStructureBlockParameter,
+  recordModelStructureRevision,
+} from './drugBlockRevisions.js';
 import type { ReferenceMatrix } from '../../src/lib/referenceConcentrations.js';
 import {
   resolveBloodPlasmaRatio,
@@ -845,10 +847,11 @@ export async function recomputeParameterAndDependents(
     actorUserId,
     opts?.pendingEditId ?? null,
   );
-  // A model-structure declaration has no aggregate, so the recompute above
-  // records nothing for it. Every declaration write path meets here, so this
-  // is where the model structure's whole-block history is kept (#37).
-  if (isModelStructureParameter(parameter)) {
+  // A model-structure declaration — like the per-route `ka` value the same
+  // section curates — has no aggregate, so the recompute above records nothing
+  // for it. Every entry write path meets here, so this is where the model
+  // structure's whole-block history is kept (#37).
+  if (isModelStructureBlockParameter(parameter)) {
     await recordModelStructureRevision(
       getDb(),
       drugId,

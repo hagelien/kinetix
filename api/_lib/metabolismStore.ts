@@ -27,6 +27,7 @@ import { isUniqueViolation } from './drugs-helpers.js';
 import {
   metabolismBlockSnapshot,
   recordDrugBlockRevision,
+  type MetabolismBlockSnapshot,
 } from './drugBlockRevisions.js';
 import type { getDb } from './db.js';
 
@@ -567,6 +568,26 @@ export async function validateMetabolismInput(
 }
 
 /**
+ * The metabolism box as `drug_block_revisions` records it (#37): the read
+ * model plus the profile's own citations, which the read model leaves out but
+ * an edit can change on their own.
+ */
+export async function getMetabolismBlockSnapshot(
+  db: Db,
+  drugId: number,
+): Promise<MetabolismBlockSnapshot> {
+  const [metabolism, [profile]] = await Promise.all([
+    getDrugMetabolism(db, drugId),
+    db
+      .select({ referenceIds: drugMetabolismProfiles.referenceIds })
+      .from(drugMetabolismProfiles)
+      .where(eq(drugMetabolismProfiles.drugId, drugId))
+      .limit(1),
+  ]);
+  return metabolismBlockSnapshot(metabolism, profile?.referenceIds ?? null);
+}
+
+/**
  * Replace a drug's entire metabolism box (profile note + elimination/metabolism
  * routes + metabolite links + precursor links) with `input`. Metabolites are
  * the rows where the drug is the parent; precursors are the rows where the drug
@@ -583,7 +604,7 @@ export async function replaceDrugMetabolism(
 ): Promise<void> {
   const drugName = await validateMetabolismInput(db, drugId, input);
   // The box as it stood, for the block's revision history (#37).
-  const before = metabolismBlockSnapshot(await getDrugMetabolism(db, drugId));
+  const before = await getMetabolismBlockSnapshot(db, drugId);
 
   // Elimination / metabolism routes. #785 Phase 7: route.enzymeId is a unified
   // bio_entities id, written to bio_entity_id (the legacy enzyme_id column was
@@ -691,7 +712,7 @@ export async function replaceDrugMetabolism(
     drugId,
     block: 'metabolism',
     oldValue: before,
-    newValue: metabolismBlockSnapshot(await getDrugMetabolism(db, drugId)),
+    newValue: await getMetabolismBlockSnapshot(db, drugId),
     createdBy: userId,
     pendingEditId: opts.pendingEditId ?? null,
   });

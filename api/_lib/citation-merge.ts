@@ -53,6 +53,7 @@ import {
 } from './parameter-entries-store.js';
 import { isInPoolTransaction } from './db.js';
 import { rewriteBlockSnapshotCitation } from './drugBlockRevisions.js';
+import { BLOCK_REVISION_CITATION_VALUES } from './citation-usage.js';
 import type { getDb } from './db.js';
 
 type Db = ReturnType<typeof getDb>;
@@ -2081,6 +2082,13 @@ export async function countCitationUsage(
         WHERE reference_id = ${citationId} OR ${citationId} = ANY(reference_ids)) +
       (SELECT count(*) FROM drug_receptor_targets WHERE ${citationId} = ANY(reference_ids)) +
       (SELECT count(*) FROM drug_ionization_constants WHERE ${citationId} = ANY(reference_ids)) +
+      -- Block-history snapshots (#37), which the merge rewrites too.
+      (SELECT count(*) FROM drug_block_revisions b
+        WHERE EXISTS (
+          SELECT 1 FROM (${BLOCK_REVISION_CITATION_VALUES}) t(v)
+          WHERE jsonb_typeof(t.v) = 'number'
+            AND (t.v #>> '{}')::int = ${citationId}
+        )) +
       -- Admitted cohorts, because the merge acts on them: repointed, or deleted
       -- where the winner already carries the same admission. An operator
       -- reading "0 usages" before --apply would be told nothing about atlas

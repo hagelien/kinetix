@@ -74,12 +74,11 @@ import {
 } from './param-entry-payload-locks.js';
 import { lockDrugForEntryApplicability } from './parameterApplicabilityStore.js';
 import {
-  metabolismBlockSnapshot,
   modelStructureBlockSnapshot,
   pharmacodynamicsBlockSnapshot,
   recordDrugBlockRevision,
 } from './drugBlockRevisions.js';
-import { getDrugMetabolism } from './metabolismStore.js';
+import { getMetabolismBlockSnapshot } from './metabolismStore.js';
 import { getDrugReceptorTargets } from './receptorTargetStore.js';
 import { parameterAppliesToSubstanceClass } from '../../src/lib/parameterApplicability.js';
 import { normalizeAliases, resolveDrugName } from '../../src/lib/drugNames.js';
@@ -3869,7 +3868,7 @@ export async function mergeDrugs(
 /** One drug's whole-block snapshots, as `drug_block_revisions` stores them. */
 async function drugBlockSnapshots(db: Db, drugId: number) {
   return {
-    metabolism: metabolismBlockSnapshot(await getDrugMetabolism(db, drugId)),
+    metabolism: await getMetabolismBlockSnapshot(db, drugId),
     pharmacodynamics: pharmacodynamicsBlockSnapshot(
       await getDrugReceptorTargets(db, drugId),
     ),

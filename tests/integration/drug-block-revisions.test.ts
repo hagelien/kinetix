@@ -11,7 +11,7 @@
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 
 const { getUserFromRequestMock } = vi.hoisted(() => ({
   getUserFromRequestMock: vi.fn(),
@@ -20,10 +20,19 @@ vi.mock('../../api/_lib/auth.js', () => ({
   getUserFromRequest: getUserFromRequestMock,
 }));
 
-import { drugBlockRevisions } from '../../db/schema.js';
 import { getDb, runInPoolTransaction } from '../../api/_lib/db.js';
 import { replaceDrugMetabolism } from '../../api/_lib/metabolismStore.js';
 import { replaceDrugReceptorTargets } from '../../api/_lib/receptorTargetStore.js';
+import {
+  collectReferenceUsage,
+  collectUsedCitationIdsForDrug,
+  filterUsedCitationIds,
+} from '../../api/_lib/citation-usage.js';
+import {
+  drugBlockRevisions,
+  drugMetabolismProfiles,
+  parameterEntries,
+} from '../../db/schema.js';
 import {
   deleteParameterEntryRow,
   insertParameterEntry,
@@ -97,6 +106,7 @@ describe('drug block revisions', () => {
     // The box was empty before the first write: an empty snapshot, not NULL.
     expect(first!.oldValue).toEqual({
       evidenceNote: null,
+      referenceIds: [],
       routes: [],
       metabolites: [],
       precursors: [],
@@ -166,6 +176,7 @@ describe('drug block revisions', () => {
     // says its "before" was not recorded rather than claiming an empty block.
     expect(revisions[0]!.oldValue).toBeNull();
     expect(revisions[0]!.newValue).toEqual({
+      routeValues: [],
       declarations: [
         {
           parameter: 'dispositionModel',
@@ -177,7 +188,7 @@ describe('drug block revisions', () => {
       ],
     });
     expect(revisions[1]!.oldValue).toEqual(revisions[0]!.newValue);
-    expect(revisions[1]!.newValue).toEqual({ declarations: [] });
+    expect(revisions[1]!.newValue).toEqual({ declarations: [], routeValues: [] });
   });
 
   // Codex review on #303: a merge repointed the loser's block revisions onto
@@ -227,6 +238,7 @@ describe('drug block revisions', () => {
     expect(metabolism.createdBy).toBe(actorId);
     expect(metabolism.oldValue).toEqual({
       evidenceNote: null,
+      referenceIds: [],
       routes: [],
       metabolites: [],
       precursors: [],
@@ -298,6 +310,92 @@ describe('drug block revisions', () => {
     // live block, so it records nothing.
     await recomputeParameterAndDependents(drugId, 'dispositionModel', userId);
     expect(await revisionsFor(drugId, 'modelStructure')).toHaveLength(1);
+  });
+
+  // Codex review on #303: the profile's own citations are part of the box, so
+  // an edit that only changes them must still be recorded.
+  it('records a metabolism edit that changes only the profile citations', async () => {
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db);
+    const citationId = await seedAdmissibleCitation(db);
+    const write = (referenceIds: number[]) =>
+      runInPoolTransaction(() =>
+        replaceDrugMetabolism(
+          getDb(),
+          drugId,
+          { ...metabolismInput(0.5), profile: { evidenceNote: 'Notat.', referenceIds } },
+          userId,
+        ),
+      );
+    await write([]);
+    await write([citationId]);
+
+    const revisions = await revisionsFor(drugId, 'metabolism');
+    expect(revisions).toHaveLength(2);
+    expect((revisions[1]!.oldValue as { referenceIds: number[] }).referenceIds).toEqual([]);
+    expect((revisions[1]!.newValue as { referenceIds: number[] }).referenceIds).toEqual([
+      citationId,
+    ]);
+    const [profile] = await db
+      .select({ referenceIds: drugMetabolismProfiles.referenceIds })
+      .from(drugMetabolismProfiles)
+      .where(eq(drugMetabolismProfiles.drugId, drugId));
+    expect(profile!.referenceIds).toEqual([citationId]);
+  });
+
+  // Codex review on #303: the model-structure section also curates the
+  // per-route ka values, which have no aggregate revision of their own.
+  it('records a per-route ka value in the model-structure block', async () => {
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db);
+    const citationId = await seedAdmissibleCitation(db);
+    await db.insert(parameterEntries).values({
+      drugId,
+      citationId,
+      parameter: 'ka',
+      route: 'oral',
+      median: '1.2',
+      unit: '1/h',
+      origin: 'contributor',
+    });
+    await recomputeParameterAndDependents(drugId, 'ka', userId);
+
+    const [revision] = await revisionsFor(drugId, 'modelStructure');
+    const { routeValues } = revision!.newValue as {
+      routeValues: Array<{ parameter: string; route: string; median: string; citationId: number }>;
+    };
+    expect(routeValues).toHaveLength(1);
+    expect(routeValues[0]).toMatchObject({ parameter: 'ka', route: 'oral', citationId });
+    expect(Number(routeValues[0]!.median)).toBe(1.2);
+  });
+
+  // Codex review on #303: a citation held only by a block's history is still
+  // cited content — the bibliography, a direct lookup and "cited in" must all
+  // find it, as they do for a parameter revision's citations.
+  it('counts a citation held only in block history as used', async () => {
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db);
+    const citationId = await seedAdmissibleCitation(db);
+    const entry = await insertParameterEntry(
+      {
+        drugId,
+        citationId,
+        parameter: 'dispositionModel',
+        categoricalValue: 'two-compartment',
+        unit: '',
+      } as ParameterEntryInput,
+      userId,
+    );
+    await recomputeParameterAndDependents(drugId, 'dispositionModel', userId);
+    await deleteParameterEntryRow(entry.id);
+    await recomputeParameterAndDependents(drugId, 'dispositionModel', userId);
+    // Remove the paper review too, so the history is the only anchor left.
+    await db.execute(sql`DELETE FROM paper_reviews WHERE citation_id = ${citationId}`);
+
+    expect(await collectUsedCitationIdsForDrug(getDb(), drugId)).toContain(citationId);
+    expect(await filterUsedCitationIds(getDb(), [citationId])).toEqual(new Set([citationId]));
+    const usage = await collectReferenceUsage(getDb(), citationId);
+    expect(usage.some((u) => u.kind === 'drug' && u.id === drugId)).toBe(true);
   });
 
   it('serves a block history from the history endpoint, and refuses an unknown block', async () => {

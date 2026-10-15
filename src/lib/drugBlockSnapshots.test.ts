@@ -119,4 +119,46 @@ describe('blockSnapshotLines', () => {
       await i18nApp.changeLanguage('en');
     }
   });
+
+  it('shows the profile citations on the note line, even without a note', () => {
+    const lines = blockSnapshotLines(
+      'metabolism',
+      { evidenceNote: null, referenceIds: [7], routes: [], metabolites: [], precursors: [] },
+      t,
+      'en',
+    );
+    expect(lines).toEqual(['Note: — · #7']);
+  });
+
+  it('writes one line per route-scoped ka value', () => {
+    const lines = blockSnapshotLines(
+      'modelStructure',
+      {
+        declarations: [],
+        routeValues: [
+          {
+            parameter: 'ka',
+            route: 'oral',
+            low: null,
+            high: null,
+            median: '1.200000',
+            qualifier: null,
+            unit: '1/h',
+            n: 12,
+            comments: null,
+            observationContext: null,
+            citationId: 4,
+            sourceQuote: null,
+          },
+        ],
+      },
+      t,
+      'en',
+    );
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('1.2');
+    expect(lines[0]?.toLowerCase()).toContain('oral');
+    expect(lines[0]).toContain('n=12');
+    expect(lines[0]).toMatch(/#4$/);
+  });
 });

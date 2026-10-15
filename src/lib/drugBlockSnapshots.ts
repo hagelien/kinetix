@@ -104,8 +104,13 @@ function metabolismLines(snapshot: SnapshotRow, t: Translate, lang: string): str
   };
   links('metabolites', t('sidebar.metabolismMetabolites'));
   links('precursors', t('sidebar.metabolismPrecursors'));
+  // The box-level note and its own citations share one line; a citation-only
+  // change to the profile still shows as a changed line.
   const note = text(snapshot.evidenceNote);
-  if (note) lines.push(`${t('sidebar.metabolismNote')}: ${note}`);
+  const profileRefs = refs(snapshot.referenceIds);
+  if (note || profileRefs) {
+    lines.push(join([`${t('sidebar.metabolismNote')}: ${note ?? '—'}`, profileRefs]));
+  }
   return lines;
 }
 
@@ -163,6 +168,44 @@ function pharmacodynamicsLines(snapshot: SnapshotRow, t: Translate): string[] {
 }
 
 function modelStructureLines(snapshot: SnapshotRow, t: Translate): string[] {
+  return [
+    ...declarationLines(snapshot, t),
+    ...rows(snapshot.routeValues).map((entry) => {
+      const parameter = String(entry.parameter ?? '');
+      const label = isDrugParameterId(parameter)
+        ? t(getParameterLongLabelKey(parameter), {
+            defaultValue: DRUG_PARAMETERS[parameter].longLabel,
+          })
+        : parameter;
+      const num = (v: unknown) =>
+        v == null || v === '' || Number.isNaN(Number(v)) ? undefined : Number(v);
+      const value = formatRange(
+        {
+          min: num(entry.low),
+          max: num(entry.high),
+          median: num(entry.median),
+          qualifier: text(entry.qualifier) ?? undefined,
+          unit: text(entry.unit) ?? undefined,
+        } as NumericRange,
+        { showNote: false },
+      );
+      const route = text(entry.route);
+      const routeKey = route ? ROUTE_LABEL_KEYS[route as RouteId] : undefined;
+      const quote = text(entry.sourceQuote);
+      return join([
+        `${label}: ${value || '—'}`,
+        route ? (routeKey ? t(routeKey) : route) : null,
+        typeof entry.n === 'number' ? `n=${entry.n}` : null,
+        text(entry.comments),
+        text(entry.observationContext),
+        typeof entry.citationId === 'number' ? `#${entry.citationId}` : null,
+        quote ? `“${quote}”` : null,
+      ]);
+    }),
+  ];
+}
+
+function declarationLines(snapshot: SnapshotRow, t: Translate): string[] {
   return rows(snapshot.declarations).map((declaration) => {
     const parameter = String(declaration.parameter ?? '');
     const axis = isDrugParameterId(parameter)

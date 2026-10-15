@@ -34,18 +34,27 @@ function withoutRowIdentity<T extends object>(
 
 export interface MetabolismBlockSnapshot {
   evidenceNote: string | null;
+  /** The profile's own citations (the box-level evidence note's sources). */
+  referenceIds: number[];
   routes: Record<string, unknown>[];
   metabolites: Record<string, unknown>[];
   precursors: Record<string, unknown>[];
 }
 
-/** The metabolism box as a content snapshot; an empty box is empty lists. */
+/**
+ * The metabolism box as a content snapshot; an empty box is empty lists.
+ * `profileReferenceIds` is read separately because the public metabolism read
+ * model does not carry the profile's citations, but they are part of what an
+ * edit can change.
+ */
 export function metabolismBlockSnapshot(
   metabolism: DrugMetabolism | null,
+  profileReferenceIds: readonly number[] | null | undefined,
 ): MetabolismBlockSnapshot {
   const strip = (row: object) => withoutRowIdentity(row, ['id', 'sortOrder']);
   return {
     evidenceNote: metabolism?.evidenceNote ?? null,
+    referenceIds: [...(profileReferenceIds ?? [])],
     routes: (metabolism?.routes ?? []).map(strip),
     metabolites: (metabolism?.metabolites ?? []).map(strip),
     precursors: (metabolism?.precursors ?? []).map(strip),
@@ -73,9 +82,46 @@ export interface ModelStructureBlockSnapshot {
     citationId: number | null;
     sourceQuote: string | null;
   }>;
+  /**
+   * The section's per-route values (`ka`). Not categorical, but curated in the
+   * same section, and ka has no aggregate whose revisions would record it.
+   */
+  routeValues: Array<{
+    parameter: string;
+    route: string | null;
+    low: string | null;
+    high: string | null;
+    median: string | null;
+    qualifier: string | null;
+    unit: string;
+    n: number | null;
+    comments: string | null;
+    observationContext: string | null;
+    citationId: number | null;
+    sourceQuote: string | null;
+  }>;
 }
 
-/** Every model-structure declaration of the drug, in a stable order. */
+/**
+ * Parameters whose entries make up the model-structure block: the categorical
+ * axes and the per-route `ka` values the section also curates.
+ */
+export const MODEL_STRUCTURE_BLOCK_PARAMETERS: readonly string[] = [
+  ...MODEL_STRUCTURE_PARAMETER_IDS,
+  'ka',
+];
+
+export function isModelStructureBlockParameter(parameter: string): boolean {
+  return MODEL_STRUCTURE_BLOCK_PARAMETERS.includes(parameter);
+}
+
+function byContent(a: unknown, b: unknown): number {
+  const ka = canonicalJson(a);
+  const kb = canonicalJson(b);
+  return ka < kb ? -1 : ka > kb ? 1 : 0;
+}
+
+/** Every model-structure declaration and route value of the drug, in a stable order. */
 export async function modelStructureBlockSnapshot(
   db: Db,
   drugId: number,
@@ -85,6 +131,14 @@ export async function modelStructureBlockSnapshot(
       parameter: parameterEntries.parameter,
       categoricalValue: parameterEntries.categoricalValue,
       route: parameterEntries.route,
+      low: parameterEntries.low,
+      high: parameterEntries.high,
+      median: parameterEntries.median,
+      qualifier: parameterEntries.qualifier,
+      unit: parameterEntries.unit,
+      n: parameterEntries.n,
+      comments: parameterEntries.comments,
+      observationContext: parameterEntries.observationContext,
       citationId: parameterEntries.citationId,
       sourceQuote: parameterEntries.sourceQuote,
     })
@@ -92,11 +146,12 @@ export async function modelStructureBlockSnapshot(
     .where(
       and(
         eq(parameterEntries.drugId, drugId),
-        inArray(parameterEntries.parameter, MODEL_STRUCTURE_PARAMETER_IDS),
+        inArray(parameterEntries.parameter, [...MODEL_STRUCTURE_BLOCK_PARAMETERS]),
       ),
     );
   // Sorted in JS on the content itself, so the order cannot depend on row ids.
   const declarations = rows
+    .filter((row) => (MODEL_STRUCTURE_PARAMETER_IDS as string[]).includes(row.parameter))
     .map((row) => ({
       parameter: row.parameter,
       categoricalValue: row.categoricalValue ?? null,
@@ -104,14 +159,25 @@ export async function modelStructureBlockSnapshot(
       citationId: row.citationId ?? null,
       sourceQuote: row.sourceQuote ?? null,
     }))
-    .sort((a, b) =>
-      canonicalJson(a) < canonicalJson(b)
-        ? -1
-        : canonicalJson(a) > canonicalJson(b)
-          ? 1
-          : 0,
-    );
-  return { declarations };
+    .sort(byContent);
+  const routeValues = rows
+    .filter((row) => !(MODEL_STRUCTURE_PARAMETER_IDS as string[]).includes(row.parameter))
+    .map((row) => ({
+      parameter: row.parameter,
+      route: row.route ?? null,
+      low: row.low ?? null,
+      high: row.high ?? null,
+      median: row.median ?? null,
+      qualifier: row.qualifier ?? null,
+      unit: row.unit,
+      n: row.n ?? null,
+      comments: row.comments ?? null,
+      observationContext: row.observationContext ?? null,
+      citationId: row.citationId ?? null,
+      sourceQuote: row.sourceQuote ?? null,
+    }))
+    .sort(byContent);
+  return { declarations, routeValues };
 }
 
 /**
@@ -205,7 +271,8 @@ export async function recordDrugBlockRevision(
 }
 
 /**
- * Record the model structure's current state after a declaration was written.
+ * Record the model structure's current state after a declaration (or a
+ * per-route `ka` value) was written.
  *
  * Model-structure declarations are written through several paths (the entry
  * endpoint, an approved `param_entry` edit, conversation ingestion), all of
