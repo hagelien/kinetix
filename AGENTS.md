@@ -112,7 +112,7 @@ The React SPA (`src/`, entry: `src/main.tsx`) is the only frontend. Modeling rou
 - **Search**: Data loader builds `_searchKey` (lowercase name + nameEn + category joined by tabs) for each component at load time.
 - **Typeahead search**: Simulator, wiki-editor, and command-palette lookups should use `GET /api/drugs?view=search&q=...` and only hydrate a full drug row after selection. Avoid calling `loadComponents()` on mount outside views that truly need the whole catalog.
 - **Analytical methods**: Method data and method filters are gated to admins or members of a user group granted `methods.read` in `user_groups.grants` (which group is database data, never named in code). Do not ship method fallbacks in client bundles.
-- **Receptor targets**: Canonical receptor/target rows live in `receptor_targets`; drug-specific affinity, potency, efficacy, Ki/IC50/EC50/Emax, selectivity, interaction role, and references live in `drug_receptor_targets`. The monograph sidebar renders these rows inside the pharmacodynamics box from the single-drug `/api/drugs?id=...` response; insert primary/most important target relationships first because the UI preserves stored relationship order.
+- **Receptor targets**: Canonical receptor/target rows live in `receptor_targets`; drug-specific affinity, potency, efficacy, Ki/IC50/EC50/Emax, selectivity, interaction role, and references live in `drug_receptor_targets`. The monograph sidebar renders these rows inside the pharmacodynamics box from the single-drug `/api/drugs?id=...` response; insert primary/most important target relationships first because the UI preserves stored relationship order. The same rows read from the target's side (`listEntityTargetLigands`, `GET /api/bio-entities?targetLigands=`) back the bio-entity monograph's target-pharmacology collection (`EntityTargetLigands.tsx`); its species classification, activity grouping, unit normalisation and plot derivation live in the pure `src/lib/entityTargetLigands.ts`.
 
 ## Conventions
 
@@ -195,6 +195,11 @@ triggered via `workflow_dispatch` and it always deploys the tip of `main`.
 - Agents may edit the deploy steps (e.g. fix a CLI flag) via a normal reviewed
   PR, but must never add an automatic trigger (push/schedule/PR) or run the
   deploy themselves.
+- Functions are pinned to `fra1` (`vercel.json` → `regions`) because the Neon
+  database is in AWS eu-central-1 (Frankfurt). Each `getDb()` query is its own
+  HTTPS round trip, so running functions anywhere else adds that distance to
+  every query; unpinned they ran in `sfo1` (~150 ms per query). Move the pin
+  with the database; `tests/vercel-function-region.test.ts` guards it.
 
 ### Project-link safety
 

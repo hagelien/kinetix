@@ -20,6 +20,7 @@ import { DeleteWikiPageButton } from '@/components/wiki/DeleteWikiPageButton';
 import { FactDiscussionPanel } from '@/components/wiki/FactDiscussionPanel';
 import { DrugReferencesList } from '@/components/wiki/DrugReferencesList';
 import { EntityMetabolismDrugs } from '@/components/wiki/EntityMetabolismDrugs';
+import { EntityTargetLigands } from '@/components/wiki/EntityTargetLigands';
 import { useDrugBibliography } from '@/lib/useDrugBibliography';
 import { useAuthStore } from '@/stores/authStore';
 import { useCan } from '@/lib/usePermissions';
@@ -607,7 +608,10 @@ export function WikiPage() {
           {childrenList}
 
           {page.pageType === 'entity_monograph' && page.entityId && (
-            <EntityMetabolismDrugs entityId={page.entityId} />
+            <>
+              <EntityTargetLigands entityId={page.entityId} />
+              <EntityMetabolismDrugs entityId={page.entityId} />
+            </>
           )}
         </article>
         {factDiscussionPanel}

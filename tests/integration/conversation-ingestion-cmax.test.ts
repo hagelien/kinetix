@@ -239,6 +239,38 @@ describe('conversation ingestion — the reported statistic on an ordinary param
     expect((shorthand.items[0] as { reading: { median?: number } }).reading.median).toBeUndefined();
   });
 
+  // Codex P1 on #300: a modified-release or special-population Tmax is kept
+  // out of the pooled figure, so the gate must show its scope before approval.
+  it('previews the formulation, regimen and population a scoped Tmax states (#12)', async () => {
+    const plan = await planIngestion(
+      parse(
+        bundle([
+          halfLifeItem(
+            {
+              releaseProfile: 'modified',
+              physicalForm: 'tablet_capsule',
+              doseRegimen: 'multiple',
+              doseIntervalHours: 12,
+              pkPopulation: 'renal_impairment',
+              populationQualifier: 'CrCl < 30 mL/min',
+            },
+            { parameter: 'tmax', low: 3, high: 6, quote: 'Median Tmax 4 h (range 3–6).' },
+          ),
+        ]),
+      ),
+    );
+    expect(plan.items[0]).toMatchObject({
+      reading: {
+        releaseProfile: 'modified',
+        physicalForm: 'tablet_capsule',
+        doseRegimen: 'multiple',
+        doseIntervalHours: 12,
+        pkPopulation: 'renal_impairment',
+        populationQualifier: 'CrCl < 30 mL/min',
+      },
+    });
+  });
+
   it('folds a labelled median shorthand, and a re-run finds the row it wrote', async () => {
     const item = halfLifeItem({ intervalKind: 'range' }, { median: 2.8 });
     const first = await applyIngestion(parse(bundle([item])), { userId, accept: [0] });

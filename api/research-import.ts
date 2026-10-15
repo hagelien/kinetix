@@ -32,6 +32,7 @@ import {
   type NormalizedResearchImport,
 } from '../src/lib/deepResearchImport.js';
 import { runImport } from './_lib/researchImportStore.js';
+import { OPTIONAL_DOSE_CONTEXT_FIELD_KEYS } from '../src/lib/entryDoseContext.js';
 import { ParameterApplyError } from './_lib/drugs-helpers.js';
 import { resolveImportCrosswalk } from './_lib/citation-crosswalk.js';
 
@@ -143,6 +144,19 @@ function summarizePlan(data: NormalizedResearchImport) {
     parameters: data.parameters.map((p) => ({
       parameter: p.parameter,
       sourceCount: p.sourceIds.length,
+      // The source values that state a formulation, regimen or population
+      // (#12): this import writes them without review, and a modified-release
+      // or special-population value is kept out of the pooled figure, so the
+      // operator approving the plan must see which values carry one.
+      scopes: (p.sourceValues ?? [])
+        .map((sv) =>
+          Object.fromEntries(
+            OPTIONAL_DOSE_CONTEXT_FIELD_KEYS.flatMap((k) =>
+              sv[k] == null ? [] : [[k, sv[k]]],
+            ),
+          ),
+        )
+        .filter((scope) => Object.keys(scope).length > 0),
     })),
     // Structured pKa is committed by the same review-bypassing write path, so it
     // must be visible in the dry-run plan an operator approves.

@@ -596,3 +596,112 @@ describe('ParameterEntryEditor — the reported statistic', () => {
     expect(screen.getByLabelText('parameterEntries.editor.intervalKind')).toHaveValue('sd');
   });
 });
+
+/**
+ * #12 — formulation, regimen and population on the absorption parameters. An
+ * extended-release Tmax (OPANA ER) is filed as one, not as a bare oral Tmax
+ * with its formulation in prose; a parameter that cannot carry the scope shows
+ * no control for it.
+ */
+describe('ParameterEntryEditor — formulation and population scope (#12)', () => {
+  function open(parameter: string, row?: unknown) {
+    render(
+      <ParameterEntryEditor
+        drugId={3}
+        parameter={parameter}
+        isAdmin
+        row={row as never}
+        onSaved={() => {}}
+        onCancel={() => {}}
+      />,
+    );
+  }
+
+  it('submits an extended-release, twice-daily Tmax in a qualified population', () => {
+    open('tmax');
+    fireEvent.change(screen.getByLabelText('parameterEntries.editor.low'), { target: { value: '4' } });
+    fireEvent.change(screen.getByLabelText('parameterEntries.editor.high'), { target: { value: '8' } });
+    fireEvent.change(screen.getByLabelText('cmax.editor.releaseProfile'), { target: { value: 'modified' } });
+    fireEvent.change(screen.getByLabelText('doseContext.fields.regimen'), { target: { value: 'multiple' } });
+    fireEvent.change(screen.getByLabelText('cmax.editor.doseIntervalHours'), { target: { value: '12' } });
+    fireEvent.change(screen.getByLabelText('doseContext.fields.population'), {
+      target: { value: 'renal_impairment' },
+    });
+    fireEvent.change(screen.getByLabelText('cmax.editor.populationQualifier'), {
+      target: { value: 'CrCl < 30 mL/min' },
+    });
+    fireEvent.click(screen.getByText('pick-citation'));
+    fireEvent.click(screen.getByText('parameterEntries.editor.save'));
+
+    expect(createParameterEntry).toHaveBeenCalledTimes(1);
+    expect(createParameterEntry.mock.calls[0]![0]).toMatchObject({
+      parameter: 'tmax',
+      releaseProfile: 'modified',
+      doseRegimen: 'multiple',
+      doseIntervalHours: 12,
+      pkPopulation: 'renal_impairment',
+      populationQualifier: 'CrCl < 30 mL/min',
+    });
+  });
+
+  it('offers no interval for a single dose and no qualifier for healthy adults', () => {
+    open('tmax');
+    fireEvent.change(screen.getByLabelText('doseContext.fields.regimen'), { target: { value: 'single' } });
+    fireEvent.change(screen.getByLabelText('doseContext.fields.population'), {
+      target: { value: 'healthy_adult' },
+    });
+    expect(screen.queryByLabelText('cmax.editor.doseIntervalHours')).toBeNull();
+    expect(screen.queryByLabelText('cmax.editor.populationQualifier')).toBeNull();
+  });
+
+  it('refuses a non-positive dosing interval before the round-trip', () => {
+    open('tmax');
+    fireEvent.change(screen.getByLabelText('parameterEntries.editor.low'), { target: { value: '4' } });
+    fireEvent.change(screen.getByLabelText('parameterEntries.editor.high'), { target: { value: '8' } });
+    fireEvent.change(screen.getByLabelText('doseContext.fields.regimen'), { target: { value: 'multiple' } });
+    fireEvent.change(screen.getByLabelText('cmax.editor.doseIntervalHours'), { target: { value: '0' } });
+    fireEvent.click(screen.getByText('pick-citation'));
+    fireEvent.click(screen.getByText('parameterEntries.editor.save'));
+    expect(createParameterEntry).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert').textContent).toBe('parameterEntries.editor.errorDoseInterval');
+  });
+
+  it('prefills a stored scope and keeps it on an unrelated edit', () => {
+    open(
+      'tmax',
+      storedRow({
+        parameter: 'tmax',
+        low: 4,
+        high: 8,
+        doseContext: { releaseProfile: 'modified', physicalForm: 'tablet_capsule' },
+      }),
+    );
+    expect(screen.getByLabelText('cmax.editor.releaseProfile')).toHaveValue('modified');
+    fireEvent.change(screen.getByLabelText('parameterEntries.editor.comments'), {
+      target: { value: 'ER only' },
+    });
+    fireEvent.click(screen.getByText('parameterEntries.editor.save'));
+    expect(updateParameterEntry).toHaveBeenCalledTimes(1);
+    expect(updateParameterEntry.mock.calls[0]![1]).toMatchObject({
+      releaseProfile: 'modified',
+      physicalForm: 'tablet_capsule',
+    });
+  });
+
+  it('scopes a categorical absorption declaration too', () => {
+    open('absorptionModel');
+    fireEvent.change(screen.getByLabelText('cmax.editor.releaseProfile'), { target: { value: 'modified' } });
+    fireEvent.click(screen.getByText('pick-citation'));
+    fireEvent.click(screen.getByRole('button', { name: /save|lagre/i }));
+    expect(createParameterEntry.mock.calls[0]![0]).toMatchObject({
+      parameter: 'absorptionModel',
+      releaseProfile: 'modified',
+    });
+  });
+
+  it('shows no scope control on a parameter that cannot carry it', () => {
+    open('halfLife');
+    expect(screen.queryByTestId('entry-scope')).toBeNull();
+    expect(screen.queryByLabelText('cmax.editor.releaseProfile')).toBeNull();
+  });
+});

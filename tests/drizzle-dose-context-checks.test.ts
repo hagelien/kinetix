@@ -20,6 +20,7 @@ import {
   DOSE_REGIMENS,
   INTERVAL_KINDS,
   IV_INPUT_MODES,
+  OPTIONAL_DOSE_CONTEXT_FIELD_KEYS,
   PHYSICAL_FORMS,
   PK_POPULATIONS,
   PRANDIAL_STATES,
@@ -111,5 +112,44 @@ describe('0135 reported-statistic CHECKs', () => {
   it('holds the statistic rules to every parameter but the dose-context one', () => {
     expect(sql0135).toContain('ADD CONSTRAINT "parameter_entries_reported_statistic"');
     expect(sql0135).toMatch(/"parameter_entries_reported_statistic"\s+CHECK \(\s+"parameter" = 'cmax'/);
+  });
+});
+
+/**
+ * Migration 0155 (#12) opens the formulation/regimen/population scope to the
+ * `doseContext: 'optional'` parameters. The parameter list and the two column
+ * lists must be exactly the registry's and `OPTIONAL_DOSE_CONTEXT_FIELD_KEYS`:
+ * a parameter missing from the list fails its writes as an opaque 500; a
+ * column in the wrong list is either refused where the API accepts it or
+ * stored by a direct writer where the API would refuse it.
+ */
+describe('0155 optional dose-context CHECK', () => {
+  const sql0155 = readFileSync(
+    path.resolve(__dirname, '../drizzle/0155_parameter_entries_optional_dose_context.sql'),
+    'utf8',
+  );
+  const block = sql0155.match(
+    /ADD CONSTRAINT "parameter_entries_dose_context_forbidden"([\s\S]*?)\);\s*$/,
+  )![1]!;
+  const [always, scopedTail] = block.split(/"parameter" IN \(/) as [string, string];
+  const snake = (k: string) => k.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
+  const nullColumns = (text: string) => [...text.matchAll(/"([a-z_]+)" IS NULL/g)].map((m) => m[1]!);
+
+  it('names exactly the optional dose-context parameters', () => {
+    const listed = [...scopedTail.slice(0, scopedTail.indexOf(')')).matchAll(/'([^']*)'/g)].map(
+      (m) => m[1]!,
+    );
+    const optional = DRUG_PARAMETER_IDS.filter((id) => parameterDoseContextMode(id) === 'optional');
+    expect([...listed].sort()).toEqual([...optional].sort());
+    expect(always).toContain(`"parameter" = 'cmax'`);
+  });
+
+  it('holds every other parameter to no dose context, and the optional ones to their scope', () => {
+    const statistic: readonly string[] = REPORTED_STATISTIC_FIELD_KEYS;
+    const scope: readonly string[] = OPTIONAL_DOSE_CONTEXT_FIELD_KEYS;
+    expect(nullColumns(always)).toEqual(
+      DOSE_CONTEXT_FIELD_KEYS.filter((k) => !statistic.includes(k) && !scope.includes(k)).map(snake),
+    );
+    expect(nullColumns(scopedTail)).toEqual(OPTIONAL_DOSE_CONTEXT_FIELD_KEYS.map(snake));
   });
 });

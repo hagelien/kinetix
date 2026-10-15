@@ -24,6 +24,8 @@ on:
       - 'src/lib/simulatorMechanics.ts'
       - 'src/lib/forwardCoreAdapter.ts'
       - 'src/lib/modelingRun.ts'
+      - 'src/lib/liveDerivedModels.ts'
+      - 'src/lib/useLiveDerivedModel.ts'
       - 'src/lib/ethanolEngine/**'
       - 'src/lib/compute/**'
       - 'src/stores/simulatorStore.ts'

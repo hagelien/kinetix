@@ -23,6 +23,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { modeledSimulatorRoutes, routeIdFor } from '@/lib/forwardCoreAdapter';
+import { LIVE_MODEL_TIMEOUT_MS, LIVE_MODEL_TTL_MS } from '@/lib/liveDerivedModels';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
@@ -55,6 +56,15 @@ import {
   CAUTIOUS_DEFAULT_BIOAVAILABILITY,
   resolveDrugModelsByRoute,
 } from '@/lib/modelDerivation';
+
+import {
+  entryInReferenceScope,
+  OUT_OF_SCOPE_RELEASE_PROFILE,
+  PK_POPULATIONS,
+  REFERENCE_SCOPE_POPULATIONS,
+} from '@/lib/entryDoseContext';
+import { aggregateEntries } from '@/lib/parameterEntryAggregation';
+import { parameterDoseContextMode } from '@/lib/drugParameters';
 
 const DOC_PATH = resolve(__dirname, '../../../docs/simulator-mechanics.md');
 const doc = readFileSync(DOC_PATH, 'utf8');
@@ -259,6 +269,20 @@ describe('mechanics document — the refusals it promises', () => {
         model.routes.map((r) => r.route).sort(),
       );
     }
+  });
+
+  it('builds the picker from the live model the run will use (§3 step 1, #292)', () => {
+    expect(doc).toContain("**The picker waits for the drug's live model, as the run does.**");
+    expect(doc.replace(/\s+/g, ' ')).toContain(
+      'A new dose cannot be added until the first answer has arrived or the request has failed (at most five seconds)',
+    );
+    // The wait the document names is the live request's own timeout.
+    expect(LIVE_MODEL_TIMEOUT_MS).toBe(5_000);
+    // A failure is trusted as long as an answer, so the run cannot retry past the picker.
+    expect(doc.replace(/\s+/g, ' ')).toContain(
+      'its outcome — an answer or a failure — is trusted for a minute',
+    );
+    expect(LIVE_MODEL_TTL_MS).toBe(60_000);
   });
 
   it('refuses a subject below the minimum weight rather than extrapolating (§8)', () => {
@@ -527,5 +551,59 @@ describe('mechanics document — catalogue-derived structure (§5)', () => {
       bounds: { kind: 'extrema' },
     });
     expect(assembled.params.vdLitersPerKg).toEqual({ kind: 'fixed', value: 1 });
+  });
+});
+
+describe('mechanics document — reference-scope evidence (§5, §6)', () => {
+  /** The prose names each excluded population in its own words. */
+  const POPULATION_PROSE: Record<string, string> = {
+    hepatic_impairment: 'hepatic or renal impairment',
+    renal_impairment: 'hepatic or renal impairment',
+    metabolizer_phenotype: 'a metabolizer phenotype',
+    paediatric: 'children',
+    elderly: 'the elderly',
+    pregnancy: 'pregnancy',
+    other: 'another stated population',
+  };
+  const flat = doc.replace(/\s+/g, ' ');
+
+  it('states the exclusion for exactly the scoped parameters', () => {
+    expect(doc).toContain('**Only reference-scope evidence feeds a curve.**');
+    for (const id of ['tmax', 'ka', 'bioavailability', 'absorptionModel'] as const) {
+      expect(parameterDoseContextMode(id), id).toBe('optional');
+    }
+    expect(flat).toContain('A Tmax, absorption rate (ka), bioavailability or absorption shape');
+  });
+
+  it('names every excluded population and keeps the pooled ones pooling', () => {
+    expect(OUT_OF_SCOPE_RELEASE_PROFILE).toBe('modified');
+    expect(flat).toContain('**modified-release**');
+    const reference: readonly string[] = REFERENCE_SCOPE_POPULATIONS;
+    const excluded = PK_POPULATIONS.filter((p) => !reference.includes(p));
+    expect([...excluded].sort()).toEqual(Object.keys(POPULATION_PROSE).sort());
+    for (const population of excluded) {
+      expect(flat, population).toContain(POPULATION_PROSE[population]!);
+      expect(entryInReferenceScope({ pkPopulation: population })).toBe(false);
+    }
+    // "Values from healthy adults, from patients the source does not describe further, and
+    // from sources that name no formulation or population still pool."
+    expect(flat).toContain(
+      'Values from healthy adults, from patients the source does not describe further, and from sources that name no formulation or population still pool.',
+    );
+    expect([...reference].sort()).toEqual(['healthy_adult', 'patients_unspecified', 'unknown']);
+    expect(entryInReferenceScope({})).toBe(true);
+  });
+
+  it('keeps a modified-release value out of the pooled input', () => {
+    const summary = aggregateEntries(
+      [
+        { citationId: 1, low: null, high: null, median: 1, qualifier: null, unit: 'h', matrix: null, n: null, reviewScore: null },
+        { citationId: 2, low: null, high: null, median: 8, qualifier: null, unit: 'h', matrix: null, n: null, reviewScore: null, releaseProfile: 'modified' },
+      ],
+      { targetUnit: 'h', matrixRelevant: false },
+    )!;
+    expect(summary.pooledCount).toBe(1);
+    expect(summary.representative).toBe(1);
+    expect(flat).toContain('An F, ka or Tmax recorded for a modified-release formulation is not used at all (§5)');
   });
 });

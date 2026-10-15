@@ -21,6 +21,7 @@ import {
   parameterIsRouteOptional,
   parameterIsRouteScoped,
   parameterIsScenarioRelevant,
+  parameterDoseContextMode,
 } from '@/lib/drugParameters';
 import { ROUTE_LABEL_KEYS, ROUTE_OPTIONS } from '@/lib/routeLabels';
 import { entryUnitsForParameter } from '@/lib/parameterUnits';
@@ -32,17 +33,25 @@ import {
 import { QUALIFIER_OPERATORS } from '@/types';
 import {
   CENTRAL_STATISTICS,
+  DOSE_REGIMENS,
   INTERVAL_KINDS,
   isSymmetricInterval,
+  PHYSICAL_FORMS,
+  PK_POPULATIONS,
+  RELEASE_PROFILES,
   type CentralStatistic,
+  type DoseContextFields,
   type IntervalKind,
 } from '@/lib/entryDoseContext';
 import {
   createParameterEntry,
   updateParameterEntry,
+  type DoseContextEntryWriteInput,
   type ParameterEntryRow,
-  type ParameterEntryWriteInput,
 } from '@/lib/parameterEntriesApi';
+
+/** The editor's write payload, minus the immutable drug and parameter. */
+type EntryWriteBase = Omit<DoseContextEntryWriteInput, 'drugId' | 'parameter'>;
 
 /**
  * Add or edit a single source entry for a summarizable parameter. Contributors
@@ -204,13 +213,61 @@ export function ParameterEntryEditor({
     row?.categoricalValue ?? axisValues[0] ?? '',
   );
   const [route, setRoute] = useState<string>(row?.route ?? '');
+  // Formulation, regimen and population scope (#12), on a parameter that may
+  // state it (tmax, ka, F, the absorption model): what tells an
+  // extended-release Tmax from an immediate-release one, or a hepatic-
+  // impairment F from a healthy-volunteer one, instead of prose. Blank is
+  // "not stated", which is what every entry written before it holds.
+  const showScope = known && parameterDoseContextMode(parameter) === 'optional';
+  const dc: DoseContextFields = row?.doseContext ?? {};
+  const [releaseProfile, setReleaseProfile] = useState<string>(dc.releaseProfile ?? '');
+  const [physicalForm, setPhysicalForm] = useState<string>(dc.physicalForm ?? '');
+  const [doseRegimen, setDoseRegimen] = useState<string>(dc.doseRegimen ?? '');
+  const [doseIntervalHours, setDoseIntervalHours] = useState<string>(
+    dc.doseIntervalHours != null ? String(dc.doseIntervalHours) : '',
+  );
+  const [pkPopulation, setPkPopulation] = useState<string>(dc.pkPopulation ?? '');
+  const [populationQualifier, setPopulationQualifier] = useState<string>(
+    dc.populationQualifier ?? '',
+  );
+  // A single dose has no interval and a healthy adult no qualifier, so those
+  // inputs are offered only where they mean something (and what they hold is
+  // not sent when hidden).
+  const showInterval = doseRegimen !== '' && doseRegimen !== 'single';
+  const showPopulationQualifier = pkPopulation !== '' && pkPopulation !== 'healthy_adult';
   const [error, setError] = useState<string | null>(null);
+
+  /** The one scope rule the form cannot rule out by hiding an input. */
+  function scopeError(): string | null {
+    if (!showScope || !showInterval || doseIntervalHours.trim() === '') return null;
+    const hours = numOrUndef(doseIntervalHours);
+    return hours !== undefined && hours > 0
+      ? null
+      : t('parameterEntries.editor.errorDoseInterval');
+  }
+
+  /**
+   * The scope fields as the write states them, blank as absent. Built on every
+   * save of such a parameter: an update replaces the whole row's dose context,
+   * so a stored scope the curator did not touch must be sent back, not left out.
+   */
+  function scopeFields(): Partial<DoseContextFields> {
+    if (!showScope) return {};
+    return {
+      releaseProfile: (releaseProfile || undefined) as DoseContextFields['releaseProfile'],
+      physicalForm: (physicalForm || undefined) as DoseContextFields['physicalForm'],
+      doseRegimen: (doseRegimen || undefined) as DoseContextFields['doseRegimen'],
+      doseIntervalHours: showInterval ? numOrUndef(doseIntervalHours) : undefined,
+      pkPopulation: (pkPopulation || undefined) as DoseContextFields['pkPopulation'],
+      populationQualifier: showPopulationQualifier
+        ? populationQualifier.trim() || undefined
+        : undefined,
+    };
+  }
   const [saving, setSaving] = useState(false);
 
   /** Persist the write; shared by the numeric and categorical submit paths. */
-  async function persist(
-    base: Omit<ParameterEntryWriteInput, 'drugId' | 'parameter'>,
-  ): Promise<void> {
+  async function persist(base: EntryWriteBase): Promise<void> {
     if (validateEntryForParameter(parameter, base)) {
       setError(t('parameterEntries.editor.errorIncompatibleCombination'));
       return;
@@ -251,6 +308,11 @@ export function ParameterEntryEditor({
       setError(t('parameterEntries.editor.errorRouteRequired'));
       return;
     }
+    const categoricalScopeError = scopeError();
+    if (categoricalScopeError) {
+      setError(categoricalScopeError);
+      return;
+    }
     // A model-structure entry carries only its pick-list value, an optional route (CV-2c-4) and a
     // citation — no unit, matrix, scenario, n or numeric bounds. Context and the quote it is
     // evidence for are the exception: a categorical reading (an absorption model inferred from a
@@ -259,6 +321,7 @@ export function ParameterEntryEditor({
       categoricalValue,
       unit: '',
       ...(showRoute && route ? { route } : {}),
+      ...scopeFields(),
       observationContext: submittedObservationContext(),
       quote: submittedQuote(),
       citationId,
@@ -359,7 +422,12 @@ export function ParameterEntryEditor({
       setError(t('parameterEntries.editor.errorRouteRequired'));
       return;
     }
-    const base: Omit<ParameterEntryWriteInput, 'drugId' | 'parameter'> = {
+    const numericScopeError = scopeError();
+    if (numericScopeError) {
+      setError(numericScopeError);
+      return;
+    }
+    const base: EntryWriteBase = {
       low: lo,
       high: hi,
       median: labelled ? undefined : md,
@@ -370,6 +438,7 @@ export function ParameterEntryEditor({
       route: showRoute && route ? route : undefined,
       matrix: showMatrix ? matrix : undefined,
       scenario: showScenario ? scenario : undefined,
+      ...scopeFields(),
       n: numOrUndef(n),
       observationContext: submittedObservationContext(),
       comments: comments.trim() || undefined,
@@ -406,6 +475,72 @@ export function ParameterEntryEditor({
         ))}
       </select>
     </label>
+  ) : null;
+
+  /** One closed-vocabulary select of the scope; blank is "not stated". */
+  function scopeSelect(
+    field: 'releaseProfile' | 'physicalForm' | 'doseRegimen' | 'pkPopulation',
+    label: string,
+    values: readonly string[],
+    value: string,
+    onChange: (v: string) => void,
+  ) {
+    return (
+      <label className="flex flex-col gap-0.5">
+        <span className={labelCls}>{label}</span>
+        <select
+          className={selectCls}
+          value={value}
+          aria-label={label}
+          onChange={(e) => onChange(e.target.value)}
+        >
+          <option value="">{t('cmax.editor.notStated')}</option>
+          {values.map((v) => (
+            <option key={v} value={v}>
+              {t(`doseContext.values.${field}.${v}`, { defaultValue: v })}
+            </option>
+          ))}
+        </select>
+      </label>
+    );
+  }
+
+  // Shared by BOTH submit paths: an absorption model (categorical) is scoped
+  // by formulation and population exactly as a Tmax or an F is.
+  const scopeFieldset = showScope ? (
+    <fieldset className="mt-2" data-testid="entry-scope">
+      <legend className={labelCls}>{t('parameterEntries.editor.scope')}</legend>
+      <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {scopeSelect('releaseProfile', t('cmax.editor.releaseProfile'), RELEASE_PROFILES, releaseProfile, setReleaseProfile)}
+        {scopeSelect('physicalForm', t('cmax.editor.physicalForm'), PHYSICAL_FORMS, physicalForm, setPhysicalForm)}
+        {scopeSelect('doseRegimen', t('doseContext.fields.regimen'), DOSE_REGIMENS, doseRegimen, setDoseRegimen)}
+        {showInterval && (
+          <label className="flex flex-col gap-0.5">
+            <span className={labelCls}>{t('cmax.editor.doseIntervalHours')}</span>
+            <Input
+              type="number"
+              value={doseIntervalHours}
+              aria-label={t('cmax.editor.doseIntervalHours')}
+              onChange={(e) => setDoseIntervalHours(e.target.value)}
+            />
+          </label>
+        )}
+        {scopeSelect('pkPopulation', t('doseContext.fields.population'), PK_POPULATIONS, pkPopulation, setPkPopulation)}
+        {showPopulationQualifier && (
+          <label className="flex flex-col gap-0.5">
+            <span className={labelCls}>{t('cmax.editor.populationQualifier')}</span>
+            <Input
+              value={populationQualifier}
+              aria-label={t('cmax.editor.populationQualifier')}
+              onChange={(e) => setPopulationQualifier(e.target.value)}
+            />
+          </label>
+        )}
+      </div>
+      <p className="mt-0.5 text-[11px] text-muted-foreground">
+        {t('parameterEntries.editor.scopeHint')}
+      </p>
+    </fieldset>
   ) : null;
 
   // Shared by BOTH submit paths. A model-structure axis is entry-backed and so
@@ -477,6 +612,8 @@ export function ParameterEntryEditor({
         </p>
 
         {routeField && <div className="mt-2">{routeField}</div>}
+
+        {scopeFieldset}
 
         {quoteField}
         {observationContextField}
@@ -679,6 +816,8 @@ export function ParameterEntryEditor({
         )}
         {routeField}
       </div>
+
+      {scopeFieldset}
 
       {/* Without a matrix/scenario dropdown, the study context (population,
           route, assay — why this source differs from the next) has nowhere to

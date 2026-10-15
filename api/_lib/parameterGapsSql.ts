@@ -35,6 +35,7 @@ import {
   DRUG_COVERAGE_AREA_IDS,
   type DrugCoverageAreaId,
 } from '../../src/lib/drugCoverageAreas.js';
+import { referenceScopeSql } from '../../src/lib/entryDoseContext.js';
 
 /**
  * Render a string list as a SQL array literal.
@@ -223,17 +224,23 @@ export function hasStoredValueSql(c: PairColumns): string {
  * flag and tier-C work, exactly as an under-corroborated value is.
  */
 export function hasDeclarationEntrySql(c: PairColumns): string {
+  // Only a reference-scope declaration fills the pair (#12): a depot-only
+  // absorption shape or a modified-release ka is stored and shown, but the
+  // route model is derived without it, so it must not retire the gap the
+  // generic declaration still leaves. A parameter that carries no scope stores
+  // NULL in both columns and passes, so the model-structure axes are unchanged.
   return `EXISTS (
         SELECT 1 FROM parameter_entries pe_fill
         WHERE pe_fill.drug_id = ${c.drugId}
           AND pe_fill.parameter = ${c.parameter}
+          AND ${referenceScopeSql('pe_fill')}
       )`;
 }
 
 /**
  * A dose-context observation (Cmax) is filled when any live source entry
- * records one — the declaration test, for the same reason: the parameter is
- * entry-only, so `drug_parameters` never holds a row for it.
+ * records one — the declaration test's question, for the same reason: the
+ * parameter is entry-only, so `drug_parameters` never holds a row for it.
  *
  * One reading retires the pair. A single cohort is a thin evidence base, and
  * the per-dose headline wants several comparable ones, but deepening it is flag
@@ -242,7 +249,13 @@ export function hasDeclarationEntrySql(c: PairColumns): string {
  * lane to the most-studied drugs and starve every other one.
  */
 export function hasObservationEntrySql(c: PairColumns): string {
-  return hasDeclarationEntrySql(c);
+  // Any reading, whatever its population or formulation: a Cmax's dose
+  // context is part of the reading, not a scope it falls outside of.
+  return `EXISTS (
+        SELECT 1 FROM parameter_entries pe_fill
+        WHERE pe_fill.drug_id = ${c.drugId}
+          AND pe_fill.parameter = ${c.parameter}
+      )`;
 }
 
 /**
