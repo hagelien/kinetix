@@ -55,6 +55,7 @@ describe('blockSnapshotLines', () => {
             interactionType: 'antagonist',
             target: { symbol: 'DRD2' },
             ki: { median: 1.2, unit: 'nM' },
+            selectivityRatio: { median: 30 },
             referenceIds: [3],
           },
         ],
@@ -64,6 +65,7 @@ describe('blockSnapshotLines', () => {
     );
     expect(line).toContain('DRD2');
     expect(line).toContain('Ki 1.2');
+    expect(line).toContain('Selectivity 30');
     expect(line).toMatch(/#3$/);
   });
 
@@ -90,5 +92,31 @@ describe('blockSnapshotLines', () => {
 
   it('yields no lines for a snapshot that is not an object', () => {
     expect(blockSnapshotLines('metabolism', null, t, 'en')).toEqual([]);
+  });
+
+  it('names a worded metric in the reader\'s language', async () => {
+    await i18nApp.changeLanguage('nb');
+    try {
+      const [line] = blockSnapshotLines(
+        'pharmacodynamics',
+        {
+          mechanisms: [
+            {
+              tier: null,
+              interactionType: 'agonist',
+              target: { symbol: 'MOR' },
+              selectivityRatio: { median: 30 },
+              referenceIds: [],
+            },
+          ],
+        },
+        t,
+        'nb',
+      );
+      expect(line).toContain('Selektivitet 30');
+      expect(line).not.toContain('Selectivity');
+    } finally {
+      await i18nApp.changeLanguage('en');
+    }
   });
 });

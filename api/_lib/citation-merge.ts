@@ -4,6 +4,7 @@ import {
   citationIdentifierAliases,
   citationPdfs,
   citations,
+  drugBlockRevisions,
   drugEliminationRoutes,
   drugEnzymeInteractions,
   drugIonizationConstants,
@@ -51,6 +52,7 @@ import {
   recomputeSummariesCitingCitation,
 } from './parameter-entries-store.js';
 import { isInPoolTransaction } from './db.js';
+import { rewriteBlockSnapshotCitation } from './drugBlockRevisions.js';
 import type { getDb } from './db.js';
 
 type Db = ReturnType<typeof getDb>;
@@ -628,6 +630,44 @@ async function rewriteJsonDocuments(
       .update(wikiRevisions)
       .set({ content: value })
       .where(eq(wikiRevisions.id, revision.id));
+    rewritten += 1;
+  }
+
+  // Whole-block revision snapshots (#37) name citations too: a declaration's
+  // citationId, the referenceIds on routes, metabolite links and mechanisms.
+  // Left on the loser they would show a deleted reference in the block's
+  // history, and the model structure's next revision — which takes the newest
+  // snapshot as its "before" — would differ from the live block by the
+  // citation alone.
+  const blockRevisions = await db
+    .select({
+      id: drugBlockRevisions.id,
+      oldValue: drugBlockRevisions.oldValue,
+      newValue: drugBlockRevisions.newValue,
+    })
+    .from(drugBlockRevisions)
+    .where(
+      sql`${drugBlockRevisions.oldValue}::text LIKE ${`%${loserId}%`}
+        OR ${drugBlockRevisions.newValue}::text LIKE ${`%${loserId}%`}`,
+    );
+  for (const revision of blockRevisions) {
+    const before =
+      revision.oldValue == null
+        ? { value: null, changed: false }
+        : rewriteBlockSnapshotCitation(revision.oldValue, loserId, winnerId);
+    const after = rewriteBlockSnapshotCitation(
+      revision.newValue,
+      loserId,
+      winnerId,
+    );
+    if (!before.changed && !after.changed) continue;
+    await db
+      .update(drugBlockRevisions)
+      .set({
+        oldValue: before.value as never,
+        newValue: after.value as never,
+      })
+      .where(eq(drugBlockRevisions.id, revision.id));
     rewritten += 1;
   }
 

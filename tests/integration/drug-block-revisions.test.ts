@@ -32,6 +32,7 @@ import {
 import type { ParameterEntryInput } from '../../src/lib/parameterEntries.js';
 import handler from '../../api/drug-parameter-history.js';
 import { mergeDrugs } from '../../api/_lib/drug-merge.js';
+import { mergeCitations } from '../../api/_lib/citation-merge.js';
 import {
   resetIntegrationDb,
   setupIntegrationDb,
@@ -236,6 +237,67 @@ describe('drug block revisions', () => {
     await declare(winnerId, 'absorptionModel', 'first-order');
     const next = (await revisionsFor(winnerId, 'modelStructure')).at(-1)!;
     expect(next.oldValue).toEqual(merged.newValue);
+  });
+
+  // Codex review on #303: a citation merge left the loser's id in block
+  // snapshots, so the history showed a deleted reference and the model
+  // structure's next revision chained from a snapshot the live block no longer
+  // matched.
+  it('repoints citations inside block snapshots when two citations are merged', async () => {
+    const userId = await seedUser(db);
+    const drugId = await seedDrug(db);
+    const winner = await seedAdmissibleCitation(db, { identifier: '111' });
+    const loser = await seedAdmissibleCitation(db, { identifier: '222' });
+    await insertParameterEntry(
+      {
+        drugId,
+        citationId: loser,
+        parameter: 'dispositionModel',
+        categoricalValue: 'two-compartment',
+        unit: '',
+      } as ParameterEntryInput,
+      userId,
+    );
+    await recomputeParameterAndDependents(drugId, 'dispositionModel', userId);
+    await runInPoolTransaction(() =>
+      replaceDrugMetabolism(
+        getDb(),
+        drugId,
+        {
+          profile: {},
+          routes: [
+            {
+              kind: 'renal_unchanged' as const,
+              fraction: { median: 0.5 },
+              referenceIds: [loser, winner],
+            },
+          ],
+          metabolites: [],
+          precursors: [],
+        },
+        userId,
+      ),
+    );
+
+    await mergeCitations(db, winner, loser);
+
+    const [model] = await revisionsFor(drugId, 'modelStructure');
+    expect(
+      (model!.newValue as { declarations: Array<{ citationId: number }> })
+        .declarations[0]!.citationId,
+    ).toBe(winner);
+    const [metabolism] = await revisionsFor(drugId, 'metabolism');
+    // The list named both papers: the survivor stays, once.
+    expect(
+      (metabolism!.newValue as { routes: Array<{ referenceIds: number[] }> })
+        .routes[0]!.referenceIds,
+    ).toEqual([winner]);
+    expect(JSON.stringify(metabolism!.oldValue)).not.toContain(String(loser));
+
+    // A recompute with nothing else changed finds the history in step with the
+    // live block, so it records nothing.
+    await recomputeParameterAndDependents(drugId, 'dispositionModel', userId);
+    expect(await revisionsFor(drugId, 'modelStructure')).toHaveLength(1);
   });
 
   it('serves a block history from the history endpoint, and refuses an unknown block', async () => {

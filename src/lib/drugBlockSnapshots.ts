@@ -117,15 +117,16 @@ const MECHANISM_METRICS: Array<[string, string | null]> = [
   ['ic50', null],
   ['ec50', null],
   ['emax', null],
-  ['selectivityRatio', null],
+  ['selectivityRatio', 'mechanismEdit.metricSelectivity'],
 ];
 
+// Conventional, language-neutral notation (as the sidebar writes them); every
+// metric with a word for a name goes through `t()` above instead.
 const METRIC_SYMBOLS: Record<string, string> = {
   ki: 'Ki',
   ic50: 'IC50',
   ec50: 'EC50',
   emax: 'Emax',
-  selectivityRatio: 'Selectivity',
 };
 
 const TIER_KEYS: Record<string, string> = {

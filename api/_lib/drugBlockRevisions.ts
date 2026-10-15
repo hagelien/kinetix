@@ -16,6 +16,7 @@ import type { DrugBlockId } from '../../src/lib/drugBlocks.js';
 import { MODEL_STRUCTURE_PARAMETER_IDS } from '../../src/lib/drugParameters.js';
 import type { DrugMetabolism } from '../../src/lib/metabolism.js';
 import type { DrugReceptorTargetSummary } from '../../src/lib/receptorTargets.js';
+import { rewriteCitationIdsInJson } from '../../src/lib/citationHandles.js';
 
 type Db = ReturnType<typeof getDb>;
 
@@ -133,6 +134,38 @@ function sortKeys(value: unknown): unknown {
     return out;
   }
   return value;
+}
+
+/**
+ * Repoint a citation inside a stored block snapshot, for a citation merge.
+ * Key-aware like every other stored-JSON rewrite (a model-structure
+ * declaration's `citationId`, the `referenceIds` lists on routes, metabolite
+ * links and mechanisms), and a list that named both papers keeps the survivor
+ * once — the live `reference_ids` columns are de-duplicated the same way, so a
+ * rewritten snapshot still compares equal to the live block.
+ */
+export function rewriteBlockSnapshotCitation(
+  value: unknown,
+  from: number,
+  to: number,
+): { value: unknown; changed: boolean } {
+  const rewritten = rewriteCitationIdsInJson(value, from, to);
+  if (!rewritten.changed) return rewritten;
+  const dedupe = (node: unknown): unknown => {
+    if (Array.isArray(node)) return node.map(dedupe);
+    if (node && typeof node === 'object') {
+      const out: Record<string, unknown> = {};
+      for (const [key, child] of Object.entries(node as Record<string, unknown>)) {
+        out[key] =
+          key === 'referenceIds' && Array.isArray(child)
+            ? [...new Set(child)]
+            : dedupe(child);
+      }
+      return out;
+    }
+    return node;
+  };
+  return { value: dedupe(rewritten.value), changed: true };
 }
 
 /**
