@@ -258,3 +258,49 @@ describe('case save re-resolves its drug refs under the lock', () => {
     expect(await db.select().from(simulatorCases)).toHaveLength(0);
   });
 });
+
+// Codex on #261: a client loaded before #1256 still sends a drug's bare id.
+// Stored for a drug that has a CID, that key would resolve CID-first to the
+// next drug taking the number, past the CID shadow check that only reads the
+// cases. Under the lock the save keys such a drug by its CID instead.
+describe('case save re-keys a bare internal id onto the drug\'s CID', () => {
+  async function saveCase(drugIds: string[]) {
+    const { res, state } = createResponse();
+    await handler(
+      postRequest({ name: 'Gammel klient', caseData: { drugs: drugIds.map((drugId) => ({ drugId })) } }),
+      res,
+    );
+    return state;
+  }
+
+  async function storedKeys(): Promise<string[]> {
+    const [row] = await db.select({ caseData: simulatorCases.caseData }).from(simulatorCases);
+    return ((row!.caseData as { drugs: Array<{ drugId: string }> }).drugs ?? []).map(
+      (d) => d.drugId,
+    );
+  }
+
+  it('stores a CID-bearing drug sent by its bare id under its CID', async () => {
+    const userId = await seedUser(db);
+    authMock.mockResolvedValue({ userId, role: 'contributor' });
+    const withCid = await seedDrug(db, { slug: 'med-cid', pubchemCid: 5555 });
+
+    const state = await saveCase([String(withCid)]);
+
+    expect(state.statusCode).toBe(201);
+    expect(await storedKeys()).toEqual(['5555']);
+  });
+
+  it('leaves a CID-less drug\'s bare id, a drug:<id> key and a CID key as sent', async () => {
+    const userId = await seedUser(db);
+    authMock.mockResolvedValue({ userId, role: 'contributor' });
+    const cidLess = await seedDrug(db, { slug: 'uten-cid', pubchemCid: null });
+    const internal = await seedDrug(db, { slug: 'intern', pubchemCid: null });
+    await seedDrug(db, { slug: 'med-cid', pubchemCid: 7777 });
+
+    const state = await saveCase([String(cidLess), `drug:${internal}`, '7777']);
+
+    expect(state.statusCode).toBe(201);
+    expect(await storedKeys()).toEqual([String(cidLess), `drug:${internal}`, '7777']);
+  });
+});

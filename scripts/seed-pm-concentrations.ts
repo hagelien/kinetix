@@ -55,6 +55,7 @@ import {
 } from '../db/schema';
 import { getDb, inTransaction, runInPoolTransaction } from '../api/_lib/db';
 import { upsertDrugParameter } from '../api/_lib/drugParameterStore';
+import { assertPubchemCidShadowsNoDrug } from '../api/_lib/drugs-helpers';
 import { ensureDrugMonograph } from '../api/_lib/monograph-helpers';
 import { generateSlug } from '../api/_lib/slug';
 import { buildDrugSearchKey } from '../src/lib/drugNames';
@@ -252,6 +253,11 @@ async function createDrug(
       if (!clash) break;
       slug = `${baseSlug}-${suffix}`;
     }
+    // A CID that is another, CID-less drug's internal id would make that
+    // drug's bare-key saved simulator cases load this substance. The refusal
+    // throws out of the cohort transaction, so nothing from this run commits
+    // and the operator gets the message (same check as PATCH /api/drugs).
+    await assertPubchemCidShadowsNoDrug(row.pubchemCid, null);
     const [inserted] = await db
       .insert(drugs)
       .values({

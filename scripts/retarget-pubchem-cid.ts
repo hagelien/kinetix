@@ -39,6 +39,7 @@ import { catalogForms, candidates, matchesAny } from './pubchem/names';
 import { simulatorDrugKeyCandidates } from '../src/lib/drugComponentId';
 import { embeddedComponents } from '../data/components';
 import { lockDrugForRetarget, rewriteCaseKeysAndCid } from './lib/retarget-cid-apply';
+import { findPubchemCidShadows } from '../api/_lib/drugs-helpers';
 import { seedSourceRefusal, seedSourcesFor } from './pubchem/seed-sources';
 import {
   findLegacyCidKeyedMonographs,
@@ -156,38 +157,43 @@ async function buildPlan(db: Db, drugId: number, to: number, lock: boolean): Pro
     );
   }
 
-  // The NEW number can shadow a drug that has no CID of its own, because such a
-  // drug is keyed in saved cases by its bare `drugs.id` and
+  // The NEW number can shadow another drug's internal id, because saved cases
+  // key a drug by its bare `drugs.id` — a CID-less drug's, and a drug's from
+  // before its first CID that no write since has re-keyed — and
   // `hydrateComponentByRouteId` tries the CID lookup FIRST. Taking that number
   // does not break the other drug's cases — it silently makes them load this
   // substance and simulate it with these parameters, which is the same
   // wrong-answer-that-looks-right the merge refuses on, arriving from the
-  // opposite direction.
-  const shadowed = rowsOf(
-    await db.execute(
-      sql.raw(`
-        SELECT id, slug FROM drugs
-        WHERE id = ${to} AND pubchem_cid IS NULL AND id <> ${drug.id}`),
-    ),
-  )[0];
-  if (shadowed) {
+  // opposite direction. The same check every other CID writer runs
+  // (`findPubchemCidShadows`), so the two cannot drift apart.
+  const [shadowedId] = await findPubchemCidShadows([to], drug.id);
+  if (shadowedId !== undefined) {
+    const shadowed = rowsOf(
+      await db.execute(sql.raw(`SELECT id, slug, pubchem_cid FROM drugs WHERE id = ${shadowedId}`)),
+    )[0]!;
     const shadowedCases = await scalar(
       db,
       `SELECT count(*)::int AS n FROM simulator_cases
        WHERE case_data->'drugs' @> '[{"drugId":"${to}"}]'::jsonb`,
     );
-    // Refused whether or not a case exists TODAY. An earlier revision warned
-    // when the count was zero, on the grounds that no harm had happened yet —
-    // but nothing about taking the number is undone by that. The other drug
-    // still has no CID, so `drugRowToComponent` still keys it by this id, and
-    // the first case anyone saves for it afterwards resolves here instead. A
-    // guard scoped to existing rows is a guard against the past.
+    // A CID-less drug is refused whether or not a case exists TODAY. An
+    // earlier revision warned when the count was zero, on the grounds that no
+    // harm had happened yet — but nothing about taking the number is undone by
+    // that. The other drug still has no CID, so `drugRowToComponent` still
+    // keys it by this id, and the first case anyone saves for it afterwards
+    // resolves here instead. A guard scoped to existing rows is a guard against
+    // the past. A drug that has a CID is named only while such cases exist.
     refusals.push(
-      `CID ${to} is also the internal id of drug ${shadowed.id} ` +
-        `(${String(shadowed.slug)}), which has no CID of its own, so saved cases key ` +
-        `that drug by this number — ${shadowedCases} of them today, and any saved ` +
-        `afterwards too. Taking it would make them load ${drug.slug} instead. Give ` +
-        `${String(shadowed.slug)} its own CID first`,
+      shadowed.pubchem_cid == null
+        ? `CID ${to} is also the internal id of drug ${shadowed.id} ` +
+            `(${String(shadowed.slug)}), which has no CID of its own, so saved cases key ` +
+            `that drug by this number — ${shadowedCases} of them today, and any saved ` +
+            `afterwards too. Taking it would make them load ${drug.slug} instead. Give ` +
+            `${String(shadowed.slug)} its own CID first`
+        : `CID ${to} is also the internal id of drug ${shadowed.id} ` +
+            `(${String(shadowed.slug)}), and ${shadowedCases} saved case(s) from before it ` +
+            `got CID ${String(shadowed.pubchem_cid)} still key it by this number. Taking it ` +
+            `would make them load ${drug.slug} instead. Move those cases off the id first`,
     );
   }
 

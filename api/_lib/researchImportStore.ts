@@ -14,7 +14,7 @@
  * non-destructive toward existing curated values. See the CLI header for the
  * operator-facing contract.
  */
-import { and, desc, eq, inArray, or, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import {
   drugs,
   drugParameters,
@@ -59,6 +59,7 @@ import {
   withDrugApplicabilityLock,
 } from './parameterApplicabilityStore.js';
 import { getDb, runInPoolTransaction } from './db.js';
+import { assertPubchemCidShadowsNoDrug } from './drugs-helpers.js';
 import type {
   NormalizedResearchImport,
   ImportNumericRange,
@@ -411,6 +412,14 @@ async function resolveDrug(
     aliases: data.drug.aliases,
     nameShort: data.drug.nameShort ?? undefined,
   });
+  // A new substance taking a CID that is another, CID-less drug's internal id
+  // would make that drug's bare-key saved cases load this one. Refused before
+  // anything is written (the whole import throws, and the route answers 409
+  // as PATCH /api/drugs does): the document's identity claim conflicts with
+  // the catalog, and quietly inserting without the CID would lose it.
+  if (data.drug.pubchemCid != null) {
+    await assertPubchemCidShadowsNoDrug(data.drug.pubchemCid, null);
+  }
   const inserted = await db
     .insert(drugs)
     .values({
@@ -432,22 +441,47 @@ async function backfillDrug(
   drugId: number,
   data: NormalizedResearchImport,
 ): Promise<void> {
+  // The CID first, so a refusal leaves the matched drug untouched.
+  if (data.drug.pubchemCid != null) {
+    await backfillPubchemCid(drugId, data.drug.pubchemCid);
+  }
   await db
     .update(drugs)
     .set({ source: RESEARCH_IMPORT_SOURCE, updatedAt: new Date() })
     .where(and(eq(drugs.id, drugId), sql`${drugs.source} IS NULL`));
-  if (data.drug.pubchemCid != null) {
-    await db
-      .update(drugs)
-      .set({ pubchemCid: data.drug.pubchemCid, updatedAt: new Date() })
-      .where(and(eq(drugs.id, drugId), sql`${drugs.pubchemCid} IS NULL`));
-  }
   if (data.drug.nameShort) {
     await db
       .update(drugs)
       .set({ nameShort: data.drug.nameShort, updatedAt: new Date() })
       .where(and(eq(drugs.id, drugId), sql`${drugs.nameShort} IS NULL`));
   }
+}
+
+/**
+ * Give a matched drug the document's CID when it has none (fill-if-empty: an
+ * existing CID is kept, as it always was — moving one is `retarget:cid`'s job).
+ *
+ * A first CID equal to another CID-less drug's internal id is refused with
+ * the same `ParameterApplyError` PATCH /api/drugs answers 409 with, and
+ * the import stops there. Read, check and write run under the drug's
+ * applicability lock, the lock PATCH holds around `assertPubchemCidWritable`,
+ * so the "has no CID yet" read is still true when the write lands.
+ */
+async function backfillPubchemCid(drugId: number, cid: number): Promise<void> {
+  await withDrugApplicabilityLock(drugId, async () => {
+    const tx = getDb();
+    const [current] = await tx
+      .select({ pubchemCid: drugs.pubchemCid })
+      .from(drugs)
+      .where(eq(drugs.id, drugId))
+      .limit(1);
+    if (!current || current.pubchemCid !== null) return;
+    await assertPubchemCidShadowsNoDrug(cid, drugId);
+    await tx
+      .update(drugs)
+      .set({ pubchemCid: cid, updatedAt: new Date() })
+      .where(and(eq(drugs.id, drugId), isNull(drugs.pubchemCid)));
+  });
 }
 
 async function seedCitations(

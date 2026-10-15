@@ -46,6 +46,7 @@ import {
   type NormalizedResearchImport,
 } from '../src/lib/deepResearchImport';
 import { runImport } from '../api/_lib/researchImportStore';
+import { ParameterApplyError } from '../api/_lib/drugs-helpers';
 import { resolveImportCrosswalk } from '../api/_lib/citation-crosswalk';
 
 const DEFAULT_USER_EMAIL = process.env.IMPORT_USER_EMAIL ?? 'agent@kinetix.internal';
@@ -187,11 +188,22 @@ async function main(): Promise<void> {
   // could establish from the document alone.
   const warnings = recountSourceValueCoverage(data, crosswalk);
 
-  const stats = await runImport(db, data, {
-    userId: user.id,
-    overwrite: opts.overwrite,
-    crosswalk,
-  });
+  let stats: Awaited<ReturnType<typeof runImport>>;
+  try {
+    stats = await runImport(db, data, {
+      userId: user.id,
+      overwrite: opts.overwrite,
+      crosswalk,
+    });
+  } catch (err) {
+    // A refusal the operator can act on (e.g. the document's PubChem CID is
+    // another CID-less drug's internal id) — print it, not a stack trace.
+    if (err instanceof ParameterApplyError) {
+      console.error(`\nImport refused: ${err.message}`);
+      process.exit(1);
+    }
+    throw err;
+  }
 
   console.log('\nImport summary:');
   console.log(`  drug id              : ${stats.drugId}${stats.drugCreated ? ' (created)' : ' (matched)'}`);

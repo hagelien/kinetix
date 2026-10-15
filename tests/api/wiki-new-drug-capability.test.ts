@@ -235,4 +235,29 @@ describe('POST /api/wiki/pages with newDrug', () => {
     expect(state.statusCode).toBe(403);
     expect(JSON.parse(state.body).code).toBe('wiki_admin_only_whole_page');
   });
+
+  it('answers a new drug whose CID shadows a CID-less drug with 409 and the guard\'s code', async () => {
+    const { ParameterApplyError } = await import(
+      '../../api/_lib/drugs-helpers.js'
+    );
+    callerCanMock.mockResolvedValue(true);
+    getDbMock.mockReturnValue({ select: selectStub([]) });
+    insertDrugMock.mockRejectedValue(
+      new ParameterApplyError(
+        'PubChem CID 446220 is also the internal id of drug 446220',
+        409,
+        'pubchem_cid_shadows_drug_id',
+      ),
+    );
+    const { res, state } = createResponse();
+
+    await handler(createRequest(NEW_DRUG_PAGE), res);
+
+    expect(insertDrugMock).toHaveBeenCalled();
+    expect(state.statusCode).toBe(409);
+    expect(JSON.parse(state.body)).toEqual({
+      error: 'PubChem CID 446220 is also the internal id of drug 446220',
+      code: 'pubchem_cid_shadows_drug_id',
+    });
+  });
 });
