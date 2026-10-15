@@ -424,6 +424,7 @@ describe('mechanics document — live derived tier (§2)', () => {
 
   it('withdraws a drug whose data no longer builds a model, as §2 states', () => {
     expect(doc).toContain('stops resolving, rather than running on what it used to have');
+    expect(doc).toContain('a failed refresh keeps the last live answer rather than reverting');
     const release = loadGeneratedRegistry(reviewed, GENERATED_REGISTRY_ARTIFACT, [
       { analyte: committed.analyte, definition: null, grade: null },
     ]);

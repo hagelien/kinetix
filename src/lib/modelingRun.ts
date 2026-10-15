@@ -1121,9 +1121,10 @@ export async function runComponent(
   deps: ModelingRunDeps,
 ): Promise<DrugSimResult> {
   // Build a catalogue drug's model from the catalogue as it stands now, so a curated value reaches
-  // this run without a regenerated registry; on any failure the committed snapshot is used. Fetched
-  // ONCE per component and pinned: a back-calculation runs a probe and a final simulation, and a
-  // refresh between them would infer the dose from one build and draw the curve from another.
+  // this run without a regenerated registry; on a failure, whatever was already in force is used
+  // (the committed snapshot, or the last live answer once one has arrived). Fetched ONCE per
+  // component and pinned: a back-calculation runs a probe and a final simulation, and a refresh
+  // between them would infer the dose from one build and draw the curve from another.
   await refreshLiveDerivedModel(drugComponent?._slug);
   const pinned = liveDerivedEntries();
   const pinnedDeps: ModelingRunDeps = {

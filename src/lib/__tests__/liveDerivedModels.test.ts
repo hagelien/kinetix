@@ -69,6 +69,42 @@ describe('refreshLiveDerivedModel', () => {
     expect(core.liveDerivedEntry('alprazolam')).toBeUndefined();
   });
 
+  it('keeps the last live answer, not the committed model, when a later refresh fails', async () => {
+    const { refreshLiveDerivedModel, LIVE_MODEL_TTL_MS, core } = await load();
+    const committed = core.resolveModel('alprazolam');
+    const { definition, grade } = committedAlprazolam();
+    definition.routes.oral.eliminationHalfLifeHours = { kind: 'fixed', value: 30 };
+    await refreshLiveDerivedModel('alprazolam', answer({ status: 'assembled', definition, grade }), 0);
+    const live = core.resolveModel('alprazolam');
+    expect(live).not.toEqual(committed);
+
+    const failures: (typeof fetch)[] = [
+      answer({ error: 'down' }, 503),
+      answer({ status: 'something-else' }),
+      vi.fn(async () => {
+        throw new TypeError('offline');
+      }) as unknown as typeof fetch,
+    ];
+    for (const [i, failing] of failures.entries()) {
+      await refreshLiveDerivedModel('alprazolam', failing, (i + 1) * LIVE_MODEL_TTL_MS);
+      expect(failing).toHaveBeenCalledTimes(1);
+      expect(core.resolveModel('alprazolam')).toEqual(live);
+    }
+  });
+
+  it('keeps a live withdrawal in force through an outage, so the committed model does not return', async () => {
+    const { refreshLiveDerivedModel, LIVE_MODEL_TTL_MS, core } = await load();
+    expect(core.resolveModel('alprazolam')).toBeDefined();
+    await refreshLiveDerivedModel('alprazolam', answer({ status: 'not-modelable', entry: {} }), 0);
+    expect(core.resolveModel('alprazolam')).toBeUndefined();
+
+    const down = answer({ error: 'down' }, 503);
+    await refreshLiveDerivedModel('alprazolam', down, LIVE_MODEL_TTL_MS);
+    expect(down).toHaveBeenCalledTimes(1);
+    expect(core.resolveModel('alprazolam')).toBeUndefined();
+    expect(core.liveDerivedEntry('alprazolam')).toEqual({ analyte: 'alprazolam', definition: null, grade: null });
+  });
+
   it('gives up on a server that does not answer in time, keeping the committed model', async () => {
     vi.useFakeTimers();
     try {

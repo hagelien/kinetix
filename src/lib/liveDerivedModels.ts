@@ -7,9 +7,18 @@
  * means a value curated into the catalogue reaches the next run without a rebuilt artifact, a pull
  * request or a deploy.
  *
- * Failure keeps the committed snapshot: an unreachable server, a database outage or a malformed
- * answer leaves the drug resolving exactly as it would have before this existed. A slug the
- * reviewed tier claims is never fetched; an override always wins.
+ * A failed fetch (an unreachable server, a non-OK answer other than 404, a timeout or a malformed
+ * answer) changes nothing that is installed, and the next run asks again. What the drug then
+ * resolves through depends on whether a live answer has arrived before:
+ *
+ * - before the first successful fetch for a slug, the committed snapshot is in force, so the drug
+ *   resolves exactly as it would have before this existed;
+ * - after one, the last live answer stays in force (an assembled model, or a withdrawal). It is
+ *   never older than the committed snapshot, and falling back to the snapshot could bring back a
+ *   model the catalogue has since withdrawn: a drug that no longer builds a model stops resolving
+ *   rather than running on what it used to have, and an outage does not undo that.
+ *
+ * A slug the reviewed tier claims is never fetched; an override always wins.
  */
 import {
   derivedRegistryRolloutEnabled,
@@ -78,6 +87,8 @@ async function fetchAndInstall(slug: string, fetchImpl: typeof fetch, now: numbe
       fetchedAt.set(slug, now);
       return;
     }
+    // A failed or unreadable answer leaves the overlay as it is (see the module comment): an
+    // earlier live answer is kept, not reverted to the committed snapshot.
     if (!res.ok) return;
     const answer = parseAnswer(slug, await res.json());
     if (!answer) return;
@@ -88,8 +99,8 @@ async function fetchAndInstall(slug: string, fetchImpl: typeof fetch, now: numbe
     }
     fetchedAt.set(slug, now);
   } catch {
-    // Offline, too slow, or a bad answer: the committed snapshot stays in force, and the next run
-    // asks again.
+    // Offline, too slow, or a bad answer: nothing installed changes (the committed snapshot, or the
+    // last live answer if one arrived earlier, stays in force), and the next run asks again.
   } finally {
     clearTimeout(timer);
   }
@@ -97,8 +108,9 @@ async function fetchAndInstall(slug: string, fetchImpl: typeof fetch, now: numbe
 
 /**
  * Make sure the registry holds a current live answer for `slug` before it is resolved. Resolves once
- * the answer is installed, or once fetching has failed and the committed snapshot stays in force —
- * never rejects, so a run is never blocked on the network.
+ * the answer is installed, or once fetching has failed and whatever was already in force stays so
+ * (the committed snapshot, or the last live answer) — never rejects, so a run is never blocked on
+ * the network.
  */
 export async function refreshLiveDerivedModel(
   slug: string | undefined,

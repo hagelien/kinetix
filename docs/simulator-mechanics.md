@@ -85,8 +85,11 @@ derived artifact. A value a curator adds or corrects therefore reaches the next 
 within about two minutes, with no regenerated file and no release. The answer is built by the same
 derivation and graded by the same facts as the committed artifact. A drug whose data no longer builds
 a model stops resolving, rather than running on what it used to have. The committed artifact is only
-the fallback, used when the server cannot be reached. This changes the reproducibility promise above,
-but only for derived curves:
+the fallback, used when the server cannot be reached before any live answer for that drug has arrived.
+Once one has, a failed refresh keeps the last live answer rather than reverting to the committed
+artifact: that answer is never older than the artifact, and reverting could bring back a model the
+catalogue has since withdrawn. This changes the reproducibility promise above, but only for derived
+curves:
 
 - a derived curve can move when its catalogue data changes, so the same scenario run a week apart
   can give a different derived curve;
