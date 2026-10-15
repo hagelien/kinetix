@@ -74,6 +74,49 @@ describe('ResearchImportAdminSection', () => {
     expect(screen.getByText('admin.researchImport.import')).not.toBeDisabled();
   });
 
+  // Codex P1 on #300 (#12): the import writes without review, and a scoped
+  // value is kept out of the pooled figure — the plan names each scope.
+  it('names the formulation and population of each scoped source value in the plan', async () => {
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        dryRun: true,
+        plan: {
+          drug: { nameNb: 'Oksymorfon', nameEn: null, pubchemCid: 5284604 },
+          parameters: [
+            {
+              parameter: 'tmax',
+              sourceCount: 2,
+              scopes: [{ releaseProfile: 'modified', pkPopulation: 'elderly' }],
+            },
+          ],
+          counts: {
+            parameters: 1,
+            sources: 2,
+            pharmacodynamicTargets: 0,
+            eliminationRoutes: 0,
+            metabolites: 0,
+            enzymeInteractions: 0,
+          },
+        },
+        warnings: [],
+      }),
+    });
+
+    render(<ResearchImportAdminSection />);
+    typeInto(VALID_JSON);
+    fireEvent.click(screen.getByText('admin.researchImport.preview'));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          'tmax [2] (doseContext.values.releaseProfile.modified, doseContext.values.pkPopulation.elderly)',
+        ),
+      ).toBeInTheDocument(),
+    );
+  });
+
   it('surfaces server validation errors', async () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: false,
