@@ -24,6 +24,8 @@
 import { readFileSync } from 'node:fs';
 import { modeledSimulatorRoutes, routeIdFor } from '@/lib/forwardCoreAdapter';
 import { LIVE_MODEL_TIMEOUT_MS, LIVE_MODEL_TTL_MS } from '@/lib/liveDerivedModels';
+import { isResultModelSuperseded } from '@/lib/resultStaleness';
+import type { DrugSimResult } from '@/types/simulator';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
@@ -443,6 +445,20 @@ describe('mechanics document — live derived tier (§2)', () => {
     expect(doc).toContain('versioned `<version>+live`');
     expect(doc).toContain('each live build carries its own model id (`<id>+live.<hash>`)');
     expect(doc).toContain('fetched once per calculation and held for all of it');
+    // A curve on a replaced build is withheld AND flagged out of date as soon as the build is
+    // replaced (#299 review): `isResultModelSuperseded` is what the page's stale set reads, and the
+    // regrade on a live-model change is pinned in DrugPanel.liveRoutes.test.tsx.
+    expect(doc.replace(/\s+/g, ' ')).toContain(
+      'the older curve is withheld and marked out of date until it is rerun',
+    );
+    expect(doc.replace(/\s+/g, ' ')).toContain(
+      'including one an open panel fetched on its own when the minute was up (§3), with no run and no change to the inputs',
+    );
+    expect(
+      isResultModelSuperseded({
+        assumptions: { modelId: `${committed.modelId}+live.0123abcd` },
+      } as unknown as DrugSimResult),
+    ).toBe(true);
     const replaced = { ...committed, displayName: 'live answer' };
     const release = loadGeneratedRegistry(reviewed, GENERATED_REGISTRY_ARTIFACT, [
       { analyte: committed.analyte, definition: replaced, grade: null },

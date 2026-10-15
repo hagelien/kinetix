@@ -22,7 +22,7 @@ import {
  * waiting for a run to fetch the new model and refuse a dose the picker just allowed.
  */
 export function useLiveDerivedModel(slug: string | undefined): boolean {
-  useSyncExternalStore(subscribeLiveDerivedModels, liveDerivedModelsVersion);
+  useLiveDerivedModelsVersion();
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -47,4 +47,13 @@ export function useLiveDerivedModel(slug: string | undefined): boolean {
     };
   }, [slug]);
   return awaitingLiveDerivedModel(slug);
+}
+
+/**
+ * Re-render whenever a live answer settles for the first time or changes what the registry
+ * resolves, and return a number that changes with it — a memo dependency for anything computed
+ * from the registry (the picker's routes, a result's grade, whether a result is out of date).
+ */
+export function useLiveDerivedModelsVersion(): number {
+  return useSyncExternalStore(subscribeLiveDerivedModels, liveDerivedModelsVersion);
 }

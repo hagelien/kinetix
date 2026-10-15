@@ -12,7 +12,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { GENERATED_REGISTRY_ARTIFACT } from '@/lib/kinetics-core/generated-registry';
 import type { DrugComponent } from '@/types';
-import type { DrugSimConfig } from '@/types/simulator';
+import type { DrugSimConfig, DrugSimResult } from '@/types/simulator';
+import type { ModelAcknowledgement } from '@/stores/modelAcknowledgementStore';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -269,6 +270,96 @@ describe('DrugPanel dose-route picker under the live derived tier (#292)', { tim
       unmount();
       await vi.advanceTimersByTimeAsync(live.LIVE_MODEL_TTL_MS * 3);
       expect(fetchImpl).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('regrades and marks out of date a computed curve whose model the periodic refresh replaced (#299 review)', async () => {
+    const changed = subcutaneousOnlyAnswer();
+    changed.definition.routes.subcutaneous = {
+      ...changed.definition.routes.subcutaneous,
+      eliminationHalfLifeHours: { kind: 'fixed', value: 30 },
+    };
+    let answer: unknown = subcutaneousOnlyAnswer();
+    const fetchImpl = vi.fn(async (_url: string) => new Response(JSON.stringify(answer), { status: 200 }));
+    vi.stubGlobal('fetch', fetchImpl);
+    const { DrugPanel, live } = await load();
+    const core = await import('@/lib/kinetics-core');
+    const { useResultGrades, useStaleResultIds } = await import('@/lib/useResultStatus');
+    const { acknowledgementKey } = await import('@/stores/modelAcknowledgementStore');
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    try {
+      const dosed: DrugSimConfig = {
+        ...config,
+        events: [{ id: 'd1', type: 'dose', t: 0, amount: 10, unit: 'mg', route: 'subcutaneous' }],
+      };
+      // Stable, as the page's store-held `drugs` is: nothing but the live model changes below.
+      const drugs = [dosed];
+      let results: Record<string, DrugSimResult> = {};
+      // What SimulatorPage derives from the held results: the grade gate and the stale set.
+      function ResultStatus({
+        held,
+        acknowledgements,
+      }: {
+        held: Record<string, DrugSimResult>;
+        acknowledgements: Record<string, ModelAcknowledgement>;
+      }) {
+        const grades = useResultGrades(drugs, held, {
+          role: 'admin',
+          displayMatrix: 'whole_blood',
+          acknowledgements,
+          userId: 1,
+        });
+        const stale = useStaleResultIds(drugs, held);
+        const grade = grades[dosed.id];
+        return (
+          <output data-testid="status" data-version={grade?.acknowledgementVersion ?? ''}>
+            {`${grade?.policy.grade ?? 'none'}|${grade?.disposition ?? 'none'}|${stale.has(dosed.id) ? 'stale' : 'current'}`}
+          </output>
+        );
+      }
+      let acknowledgements: Record<string, ModelAcknowledgement> = {};
+      const view = (held: Record<string, DrugSimResult>) => (
+        <>
+          <DrugPanel config={dosed} drugComponent={drug} timeFormat="hours" referenceTime="00:00" />
+          <ResultStatus held={held} acknowledgements={acknowledgements} />
+        </>
+      );
+      const { rerender } = render(view(results));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      // A curve computed on the first live build.
+      const firstModelId = core.resolveModel(SLUG)!.modelId;
+      results = {
+        [dosed.id]: { assumptions: { modelId: firstModelId, route: 'subcutaneous' } } as unknown as DrugSimResult,
+      };
+      rerender(view(results));
+      // A reviewer has acknowledged that build, so its curve is drawn.
+      const version = screen.getByTestId('status').dataset.version!;
+      acknowledgements = {
+        [acknowledgementKey(firstModelId, version, 1)]: {
+          modelId: firstModelId,
+          version,
+          userId: 1,
+          at: new Date().toISOString(),
+        },
+      };
+      rerender(view(results));
+      expect(screen.getByTestId('status').textContent).toMatch(/^D\|render(-with-limitations)?\|current$/);
+
+      // The catalogue changes the model; the panel's own refresh at the end of the window installs
+      // it with no run and no change to the held results.
+      answer = changed;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(live.LIVE_MODEL_TTL_MS);
+      });
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      expect(core.resolveModel(SLUG)!.modelId).not.toBe(firstModelId);
+      // The curve on the superseded build is regraded exactly as a recompute would (withheld) and
+      // flagged out of date, rather than left standing with its old grade.
+      expect(screen.getByTestId('status').textContent).toBe('ungraded|hidden|stale');
     } finally {
       vi.useRealTimers();
     }

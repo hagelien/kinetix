@@ -100,7 +100,9 @@ curves:
   probe and final simulations always run on the same build;
 - each live build carries its own model id (`<id>+live.<hash>`), so a curve on screen is only ever
   graded by the build that produced it; once a newer build replaces it, the older curve is withheld
-  until it is rerun, rather than shown under evidence that did not produce it;
+  and marked out of date until it is rerun, rather than shown under evidence that did not produce
+  it. This happens as soon as the newer build arrives — including one an open panel fetched on its
+  own when the minute was up (§3), with no run and no change to the inputs;
 - reviewed models are untouched: they are never fetched, and a live answer can never displace one.
 
 The reviewed tier is therefore small on purpose. The set of analytes this build resolves, and each
