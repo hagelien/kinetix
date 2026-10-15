@@ -427,9 +427,12 @@ describe('DrugPanel advanced parameter overrides', () => {
       { ...nonEthanolComponent, _slug: 'diazepam' } as DrugComponent,
     );
 
-    // Once the live model has loaded, a new dose lands on its route, not the legacy one.
-    await waitFor(() => expect(liveModel.loaded).toBe(true));
-    fireEvent.click(await screen.findByText('simulator.events.addDose'));
+    // Until the live model has loaded the button is unavailable; afterwards a new dose lands on
+    // its route, not the legacy one.
+    const addDose = screen.getByText('simulator.events.addDose') as HTMLButtonElement;
+    expect(addDose.disabled).toBe(true);
+    await waitFor(() => expect(addDose.disabled).toBe(false));
+    fireEvent.click(addDose);
 
     expect(useSimulatorStore.getState().drugs[0]!.events[0]).toMatchObject({
       route: 'subcutaneous',

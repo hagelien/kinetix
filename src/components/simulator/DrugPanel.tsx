@@ -167,18 +167,21 @@ export function DrugPanel({
   // Load the live derived model before the picker is built, so it offers the routes of the model
   // the run will resolve (a newly assembled SC-only model, say) instead of the committed
   // snapshot's. `runComponent` makes the same call; the TTL cache means it is one fetch.
-  const [, setLiveModelEpoch] = useState(0);
+  const [loadedLiveSlug, setLoadedLiveSlug] = useState<string | undefined>();
   const liveSlug = engine === 'pk-montecarlo' ? drugComponent?._slug : undefined;
   useEffect(() => {
     if (!liveSlug) return;
     let cancelled = false;
     void refreshLiveDerivedModel(liveSlug).then(() => {
-      if (!cancelled) setLiveModelEpoch((n) => n + 1);
+      if (!cancelled) setLoadedLiveSlug(liveSlug);
     });
     return () => {
       cancelled = true;
     };
   }, [liveSlug]);
+  // Until the live model has answered (or failed, or timed out) the picker may still show the
+  // snapshot's routes, so a dose is not created yet.
+  const liveRoutesLoading = liveSlug !== undefined && loadedLiveSlug !== liveSlug;
 
   // The routes the dose picker offers: the resolved model's own routes for a Monte Carlo
   // component, so a route the model does not declare is never offered.
@@ -591,6 +594,7 @@ export function DrugPanel({
             size="sm"
             className="h-7 text-xs"
             onClick={handleAddDose}
+            disabled={liveRoutesLoading}
           >
             {t('simulator.events.addDose')}
           </Button>
