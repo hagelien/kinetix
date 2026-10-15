@@ -1,6 +1,6 @@
 ---
 name: issues
-description: Use when the user asks to work through GitHub issues, drain the issue backlog, implement open issues, or types /issues. Fetches the repo's open issues, builds a dependency-aware priority queue (foundational + important first, dependents after their prerequisites), and implements them — bundling small related issues into shared PRs when it reduces review overhead without entangling concerns.
+description: Use when the user asks to work through GitHub issues, drain the issue backlog, implement open issues, or types /issues. Fetches the repo's open issues, builds a dependency-aware priority queue (P0/P1 labels first, then foundational + important, dependents after their prerequisites), and implements them — bundling small related issues into shared PRs when it reduces review overhead without entangling concerns.
 ---
 
 # GitHub Issue Implementation
@@ -32,11 +32,16 @@ Build a DAG. If you find a cycle, flag both nodes and exclude them from the auto
 
 ## Step 3 — Rank
 
-For each issue with zero unmet dependencies (eligible set), score on:
+For each issue with zero unmet dependencies (eligible set), order first by **priority band** (the
+labels under *Priority labels* below): every `P0` before every `P1`, and every `P1` before
+everything else, whatever the heuristics below say — those two bands mean "blocks a release" and
+"ahead of planned backlog work". A `P0`/`P1` with unmet dependencies pulls its prerequisites up
+into its band. Within each band, and across all of `P2`, `P3` and unlabelled issues as one band,
+score on:
 
 1. **Fundamentality** — does it touch shared abstractions? Heuristics: edits to schema/types, build/CI config, auth, top-level routing, or modules imported by ≥5 others. Foundational work first because later issues are often easier (or moot) once it lands.
 2. **Importance** — labels (`security` > `bug` > `enhancement` > `docs` is a reasonable default, but follow repo conventions if different); reaction count (👍/❤️/🚀); age of unresolved bugs (long-open bugs = ongoing user pain); milestone urgency.
-3. **Tiebreaker** — smaller scope first within the same priority band, to ship momentum.
+3. **Tiebreaker** — `P2` before `P3`, then smaller scope first, to ship momentum.
 
 Issues with unmet dependencies are queued behind their prerequisites in topological order — re-rank within each layer.
 
