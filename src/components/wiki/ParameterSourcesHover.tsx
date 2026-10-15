@@ -154,6 +154,35 @@ export function ParameterSourcesHover({
     };
   }, [open]);
 
+  // The trigger's description is shared: a nested UnitTooltip adds its own id
+  // to this button's `aria-describedby` imperatively. Owning the attribute
+  // through a React prop would overwrite that id when the preview opens and
+  // drop the attribute when it closes, so only the preview's own id token is
+  // added and removed here, leaving any others in place.
+  useEffect(() => {
+    const trigger = triggerRef.current;
+    if (!open || !trigger) return;
+    const tokens = (trigger.getAttribute('aria-describedby') ?? '')
+      .split(/\s+/)
+      .filter(Boolean);
+    if (!tokens.includes(previewId)) {
+      trigger.setAttribute(
+        'aria-describedby',
+        [...tokens, previewId].join(' '),
+      );
+    }
+    return () => {
+      const remaining = (trigger.getAttribute('aria-describedby') ?? '')
+        .split(/\s+/)
+        .filter((token) => token && token !== previewId);
+      if (remaining.length > 0) {
+        trigger.setAttribute('aria-describedby', remaining.join(' '));
+      } else {
+        trigger.removeAttribute('aria-describedby');
+      }
+    };
+  }, [open, previewId]);
+
   // Same order as the dialog, so oral leads and the plots do not reshuffle.
   const routeEntries = Object.entries(routeSummaries ?? {}).sort(
     ([a], [b]) => ROUTE_ORDER.indexOf(a) - ROUTE_ORDER.indexOf(b),
@@ -249,7 +278,6 @@ export function ParameterSourcesHover({
         onKeyDown={(event) => {
           if (event.key === 'Escape' && open) close();
         }}
-        aria-describedby={open ? previewId : undefined}
         className="cursor-pointer text-left font-medium hover:underline focus-visible:underline focus-visible:outline-none"
         data-testid={testId}
       >
