@@ -113,12 +113,14 @@ class BlockHistoryOutsideTransactionError extends Error {
  * approvals, research imports and merges). beginBlockHistory also takes it for
  * standalone script writers. It is re-entrant on the same transaction.
  */
+export const METABOLISM_HISTORY_LOCK_NAMESPACE = 1651273576;
+
 export async function lockMetabolismHistory(): Promise<void> {
   if (!isInPoolTransaction()) {
     throw new BlockHistoryOutsideTransactionError('lockMetabolismHistory');
   }
   // Two-int advisory keys are disjoint from the per-drug bigint keys.
-  await getDb().execute(sql`SELECT pg_advisory_xact_lock(1651273576, 1)`);
+  await getDb().execute(sql`SELECT pg_advisory_xact_lock(${METABOLISM_HISTORY_LOCK_NAMESPACE}::int, 1)`);
 }
 
 /**

@@ -15,6 +15,7 @@ import {
   withBlockHistory,
 } from '../../../api/_lib/drugBlockHistory.js';
 import { lockDrugForEntryApplicability } from '../../../api/_lib/parameterApplicabilityStore.js';
+import { mergeCitations, type CitationMergeStats } from '../../../api/_lib/citation-merge.js';
 import { mergeDrugs } from '../../../api/_lib/drug-merge.js';
 import { replaceDrugMetabolism } from '../../../api/_lib/metabolismStore.js';
 import { applyApprovedEdit } from '../../../api/_lib/pending-edits-helpers.js';
@@ -215,6 +216,163 @@ describe.skipIf(!realPostgresUrl())('metabolism block history on concurrent conn
     expect(rows[1]!.newValue).toEqual(await readDrugBlockSnapshot(getDb(), parentA, 'pharmacodynamics'));
     expect((rows[1]!.newValue as { mechanisms: Array<{ evidenceNote: string }> }).mechanisms[0]!.evidenceNote).toBe('Andre');
   });
+
+  it.each([
+    ['metabolism', true], ['metabolism', false],
+    ['pharmacodynamics', true], ['pharmacodynamics', false],
+  ] as const)('defers a citation fold behind a %s snapshot (actor=%s)', async (block, withActor) => {
+    const papers = await db.insert(citations).values([
+      { type: 'doi', identifier: '10.1000/winner' },
+      { type: 'doi', identifier: '10.1000/loser' },
+    ]).returning({ id: citations.id });
+    const [winner, loser] = papers.map((p) => p.id) as [number, number];
+    const target = block === 'metabolism' ? child : parentA;
+    if (block === 'metabolism') {
+      await db.insert(drugMetabolismProfiles).values({ drugId: child, referenceIds: [loser] });
+    } else {
+      const entity = await seedBioEntity(db as never);
+      await db.insert(drugReceptorTargets).values({
+        drugId: parentA, bioEntityId: entity, interactionType: 'agonist', referenceIds: [loser],
+      });
+    }
+    const before = await readDrugBlockSnapshot(getDb(), target, block);
+    const snapshotted = gate();
+    const release = gate();
+    const writer = runInPoolTransaction(async () => {
+      if (block === 'metabolism') await lockMetabolismHistory();
+      await lockDrugForEntryApplicability(parentA);
+      await withBlockHistory({ drugIds: [parentA, child], blocks: [block], actorUserId: actor }, async () => {
+        snapshotted.open();
+        await release.wait;
+        if (block === 'metabolism') {
+          // The new link changes CHILD's precursor block, although the writer
+          // holds only its parent drug key. Citation-fold graph locking must
+          // cover endpoints not discoverable from the pre-write graph.
+          await replaceDrugMetabolism(getDb(), parentA, input(child), actor);
+        } else {
+          await getDb().update(drugReceptorTargets).set({ evidenceNote: 'Concurrent save' })
+            .where(eq(drugReceptorTargets.drugId, parentA));
+        }
+      });
+    });
+    try {
+      await snapshotted.wait;
+      const folded = await runInPoolTransaction(() => mergeCitations(getDb(), winner, loser,
+        withActor ? { actorUserId: actor } : undefined));
+      expect(folded).toMatchObject({ deferred: true,
+        deferredReason: block === 'metabolism' ? 'block_history_in_flight' : 'drug_locked' });
+      expect(await readDrugBlockSnapshot(getDb(), target, block)).toEqual(before);
+      expect(await db.select().from(citations).where(eq(citations.id, loser))).toHaveLength(1);
+    } finally {
+      release.open();
+      await writer;
+    }
+    const [preFold] = await db.select({ updatedAt: drugs.updatedAt }).from(drugs).where(eq(drugs.id, target));
+    const folded = await runInPoolTransaction(() => mergeCitations(getDb(), winner, loser,
+      withActor ? { actorUserId: actor } : undefined));
+    expect(folded.deferred).not.toBe(true);
+    const [revision] = await db.select().from(drugBlockRevisions).where(eq(drugBlockRevisions.drugId, target));
+    expect(revision).toBeDefined();
+    expect(JSON.stringify(revision!.oldValue)).not.toContain(`"referenceIds":[${loser}]`);
+    expect(JSON.stringify(revision!.newValue)).not.toContain(`"referenceIds":[${loser}]`);
+    expect(revision!.newValue).toEqual(await readDrugBlockSnapshot(getDb(), target, block));
+    const [postFold] = await db.select({ updatedAt: drugs.updatedAt }).from(drugs).where(eq(drugs.id, target));
+    // Existing direct PUT guards compare this version after acquiring the
+    // drug/graph locks: a pre-fold full replacement must be rejected.
+    expect(postFold!.updatedAt.getTime()).toBeGreaterThan(preFold!.updatedAt.getTime());
+  });
+
+  it.each(['history', 'entry'] as const)(
+    'locks a drug whose only loser citation is in a block %s, without an actor', async (surface) => {
+    const papers = await db.insert(citations).values([
+      { type: 'doi', identifier: '10.1000/winner' },
+      { type: 'doi', identifier: '10.1000/loser' },
+    ]).returning({ id: citations.id });
+    const [winner, loser] = papers.map((p) => p.id) as [number, number];
+    if (surface === 'history') {
+      await db.insert(drugBlockRevisions).values({
+        drugId: parentA, block: 'modelStructure', newValue: { declarations: [{ citationId: loser }] }, createdBy: actor,
+      });
+    } else {
+      await db.insert(parameterEntries).values({
+        drugId: parentA, citationId: loser, parameter: 'ka', route: 'oral', median: '1.2', unit: '1/h',
+      });
+    }
+    const locked = gate();
+    const release = gate();
+    const writer = runInPoolTransaction(async () => {
+      await lockDrugForEntryApplicability(parentA);
+      locked.open();
+      await release.wait;
+    });
+    try {
+      await locked.wait;
+      const folded = await runInPoolTransaction(() => mergeCitations(getDb(), winner, loser));
+      expect(folded).toMatchObject({ deferred: true, deferredReason: 'drug_locked', lockedDrugId: parentA });
+    } finally {
+      release.open();
+      await writer;
+    }
+    expect((await runInPoolTransaction(() => mergeCitations(getDb(), winner, loser))).deferred).not.toBe(true);
+    if (surface === 'history') {
+      const [revision] = await db.select().from(drugBlockRevisions);
+      expect(revision!.newValue).toEqual({ declarations: [{ citationId: winner }] });
+    } else {
+      const [entry] = await db.select().from(parameterEntries);
+      expect(entry!.citationId).toBe(winner);
+    }
+  });
+
+  it.each(['metabolism', 'pharmacodynamics'] as const)(
+    'takes the %s snapshot after an earlier citation fold commits', async (block) => {
+      const papers = await db.insert(citations).values([
+        { type: 'doi', identifier: '10.1000/winner' },
+        { type: 'doi', identifier: '10.1000/loser' },
+      ]).returning({ id: citations.id });
+      const [winner, loser] = papers.map((p) => p.id) as [number, number];
+      if (block === 'metabolism') {
+        await db.insert(drugMetabolismProfiles).values({ drugId: parentA, referenceIds: [loser] });
+      } else {
+        const entity = await seedBioEntity(db as never);
+        await db.insert(drugReceptorTargets).values({ drugId: parentA, bioEntityId: entity,
+          interactionType: 'agonist', referenceIds: [loser] });
+      }
+      const folded = gate();
+      const release = gate();
+      let result!: CitationMergeStats;
+      const fold = runInPoolTransaction(async () => {
+        result = await mergeCitations(getDb(), winner, loser);
+        folded.open();
+        await release.wait;
+      });
+      await folded.wait;
+      const writer = runInPoolTransaction(async () => {
+        await getDb().execute(sql`SET LOCAL application_name = 'block-history-after-fold'`);
+        if (block === 'metabolism') await lockMetabolismHistory();
+        await lockDrugForEntryApplicability(parentA);
+        await withBlockHistory({ drugIds: [parentA], blocks: [block], actorUserId: actor }, async () => {
+          if (block === 'metabolism') {
+            await getDb().update(drugMetabolismProfiles).set({ evidenceNote: 'After fold' })
+              .where(eq(drugMetabolismProfiles.drugId, parentA));
+          } else {
+            await getDb().update(drugReceptorTargets).set({ evidenceNote: 'After fold' })
+              .where(eq(drugReceptorTargets.drugId, parentA));
+          }
+        });
+      });
+      try {
+        await waitForAdvisory(db, 'block-history-after-fold');
+      } finally {
+        release.open();
+        await Promise.all([fold, writer]);
+      }
+      expect(result.deferred).not.toBe(true);
+      const [revision] = await db.select().from(drugBlockRevisions);
+      expect(JSON.stringify(revision!.oldValue)).toContain(`"referenceIds":[${winner}]`);
+      expect(JSON.stringify(revision!.newValue)).toContain(`"referenceIds":[${winner}]`);
+      expect(revision!.newValue).toEqual(await readDrugBlockSnapshot(getDb(), parentA, block));
+    },
+  );
 
   it('takes the merge graph lock before drug row locks needed by a linked writer', async () => {
     const beforeWrite = gate();

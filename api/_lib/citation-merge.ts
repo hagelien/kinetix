@@ -12,6 +12,7 @@ import {
   drugMetabolites,
   drugParameterRevisions,
   drugReceptorTargets,
+  drugs,
   learningUnits,
   paperExtractionJobs,
   paperReviewRevisions,
@@ -53,6 +54,7 @@ import {
 } from './parameter-entries-store.js';
 import { isInPoolTransaction } from './db.js';
 import { rewriteBlockSnapshotCitation } from './drugBlockRevisions.js';
+import { METABOLISM_HISTORY_LOCK_NAMESPACE } from './drugBlockHistory.js';
 import { BLOCK_REVISION_CITATION_VALUES } from './citation-usage.js';
 import type { getDb } from './db.js';
 
@@ -359,10 +361,10 @@ async function drugsToRecomputeForFold(
 }
 
 /**
- * Try each drug lock this fold's recompute will need, ascending. Returns the
- * drugs taken, or the first one whose lock stayed held — the fold then defers.
- * Skipped without an actor (the recompute will not run) and outside a
- * transaction (the lock would hold nothing).
+ * Try the drugs whose live blocks or history are rewritten, plus those the
+ * summary recompute needs, ascending. Block locks are required even without
+ * an actor; only summary recomputes are skipped in that case. Outside a
+ * transaction the locks would hold nothing.
  */
 async function lockDrugsForFold(
   db: Db,
@@ -371,10 +373,29 @@ async function lockDrugsForFold(
   actorUserId: number | null | undefined,
 ): Promise<{ locked: Set<number>; heldDrugId: number | null }> {
   const locked = new Set<number>();
-  if (actorUserId == null || !isInPoolTransaction()) {
-    return { locked, heldDrugId: null };
+  if (!isInPoolTransaction()) return { locked, heldDrugId: null };
+  // History-only citations matter too: model recomputes reuse the last
+  // revision as their before-state even when no live entry cites the loser.
+  // Graph serialization above keeps new metabolism edges out of this scan;
+  // the drug tries serialize the remaining snapshots with their writers.
+  const blockDrugs = await db.execute<{ drug_id: number }>(sql`
+    SELECT drug_id FROM drug_metabolism_profiles WHERE ${loserId} = ANY(reference_ids)
+    UNION SELECT drug_id FROM drug_elimination_routes WHERE ${loserId} = ANY(reference_ids)
+    UNION SELECT parent_drug_id FROM drug_metabolites WHERE ${loserId} = ANY(reference_ids)
+    UNION SELECT metabolite_drug_id FROM drug_metabolites
+      WHERE ${loserId} = ANY(reference_ids) AND metabolite_drug_id IS NOT NULL
+    UNION SELECT drug_id FROM drug_receptor_targets WHERE ${loserId} = ANY(reference_ids)
+    UNION SELECT drug_id FROM parameter_entries WHERE citation_id = ${loserId}
+    UNION SELECT b.drug_id FROM drug_block_revisions b
+      WHERE EXISTS (SELECT 1 FROM (${BLOCK_REVISION_CITATION_VALUES}) refs(v)
+        WHERE refs.v = to_jsonb(${loserId}::int))
+    ORDER BY drug_id
+  `);
+  const drugIds = new Set((blockDrugs.rows ?? []).map((row) => Number(row.drug_id)));
+  if (actorUserId != null) {
+    for (const id of await drugsToRecomputeForFold(db, winnerId, loserId)) drugIds.add(id);
   }
-  for (const drugId of await drugsToRecomputeForFold(db, winnerId, loserId)) {
+  for (const drugId of [...drugIds].sort((a, b) => a - b)) {
     if (!(await tryLockDrugForRecompute(db, drugId))) return { locked, heldDrugId: drugId };
     locked.add(drugId);
   }
@@ -422,9 +443,11 @@ export function describeDeferredMerge(stats: CitationMergeStats): string {
         `#${stats.loserId} was locked by an extraction (re)queue or another merge of it.` +
         ' Re-run to pick it up.'
       );
+    case 'block_history_in_flight':
+      return 'A metabolism block write was in flight. Re-run once it has committed.';
     case 'drug_locked':
       return (
-        `drug ${stats.lockedDrugId}, whose parameter summaries the fold recomputes, was locked` +
+        `drug ${stats.lockedDrugId}, whose blocks or summaries the fold rewrites, was locked` +
         ' by another write. Re-run to pick it up.'
       );
     case 'entry_in_flight':
@@ -517,13 +540,16 @@ export interface CitationMergeStats {
    * (`CITATION_MEMBERSHIP_LOCK_NAMESPACE`) was held — a source value citing
    * one of them being written, a re-score of one of them, or another fold of
    * one — so the fold could not settle which drugs' summaries it moves (#254).
+   * `block_history_in_flight`: a metabolism writer holds the graph key, so the
+   * fold cannot settle the linked blocks and revisions it must rewrite.
    */
   deferredReason?:
     | 'merge_in_progress'
     | 'loser_locked'
     | 'extraction_in_flight'
     | 'drug_locked'
-    | 'entry_in_flight';
+    | 'entry_in_flight'
+    | 'block_history_in_flight';
   /** The loser's claimed extraction job, when that is what deferred the merge. */
   inFlightExtractionJobId?: number;
   /** The drug whose held lock deferred the merge (`drug_locked`). */
@@ -1689,6 +1715,32 @@ export async function mergeCitations(
     return stats;
   }
 
+  // Block snapshots include both ends of metabolism edges, including new
+  // links not discoverable by a citation scan. If metabolism needs rewriting,
+  // take its graph key by TRY before any drug or row lock. A fold can already
+  // hold rows from an earlier pair, so waiting here could invert a graph-first
+  // writer's lock order.
+  // Outside a pool transaction a transaction-scoped key would hold nothing.
+  if (isInPoolTransaction()) {
+    const metabolismUse = await db.execute<{ needed: boolean }>(sql`
+      SELECT EXISTS (
+        SELECT 1 FROM drug_metabolism_profiles WHERE ${loserId} = ANY(reference_ids)
+        UNION ALL SELECT 1 FROM drug_elimination_routes WHERE ${loserId} = ANY(reference_ids)
+        UNION ALL SELECT 1 FROM drug_metabolites WHERE ${loserId} = ANY(reference_ids)
+        UNION ALL SELECT 1 FROM drug_block_revisions b
+          WHERE b.block = 'metabolism'
+            AND EXISTS (SELECT 1 FROM (${BLOCK_REVISION_CITATION_VALUES}) refs(v)
+              WHERE refs.v = to_jsonb(${loserId}::int))
+      ) AS needed
+    `);
+    if (metabolismUse.rows[0]?.needed &&
+      !(await tryAdvisoryXactLock(db, METABOLISM_HISTORY_LOCK_NAMESPACE, 1))) {
+      stats.deferred = true;
+      stats.deferredReason = 'block_history_in_flight';
+      return stats;
+    }
+  }
+
   // Before any job row (#243): the drug locks the recompute at the end will
   // need, tried in ascending order — see `tryLockDrugForRecompute` for the
   // global order this keeps and why it is a try. Before the first write too, so
@@ -1773,6 +1825,10 @@ export async function mergeCitations(
   if (atomic) await db.execute(sql`SAVEPOINT citation_fold`);
   let lateHeldDrugId: number | null;
   try {
+    if (summaryDrugs.locked.size > 0) {
+      await db.update(drugs).set({ updatedAt: sql`clock_timestamp()` })
+        .where(inArray(drugs.id, [...summaryDrugs.locked]));
+    }
     lateHeldDrugId = await applyFold(
       db,
       winner,
