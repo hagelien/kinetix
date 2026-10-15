@@ -195,6 +195,11 @@ triggered via `workflow_dispatch` and it always deploys the tip of `main`.
 - Agents may edit the deploy steps (e.g. fix a CLI flag) via a normal reviewed
   PR, but must never add an automatic trigger (push/schedule/PR) or run the
   deploy themselves.
+- Functions are pinned to `fra1` (`vercel.json` → `regions`) because the Neon
+  database is in AWS eu-central-1 (Frankfurt). Each `getDb()` query is its own
+  HTTPS round trip, so running functions anywhere else adds that distance to
+  every query; unpinned they ran in `sfo1` (~150 ms per query). Move the pin
+  with the database; `tests/vercel-function-region.test.ts` guards it.
 
 ### Project-link safety
 

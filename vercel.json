@@ -3,6 +3,7 @@
   "framework": "vite",
   "buildCommand": "npx tsx scripts/apply-migrations-build.ts && npx tsx scripts/fix-monograph-links-build.ts && npx tsx scripts/ensure-entity-monographs-build.ts && npm run build",
   "outputDirectory": "dist",
+  "regions": ["fra1"],
   "headers": [
     {
       "source": "/agent-instructions.json",
