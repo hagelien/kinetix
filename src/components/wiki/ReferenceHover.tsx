@@ -3,7 +3,9 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type KeyboardEvent,
   type ReactNode,
+  type MutableRefObject,
 } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -26,15 +28,20 @@ const TOOLTIP_TARGET_GAP = 14;
 function ReferenceTooltipPortal({
   items,
   targetRect,
-  onPointerEnter,
-  onPointerLeave,
+  panelRef: ref,
+  onEnter,
+  onLeave,
+  onKeyDown,
 }: {
   items: ReferenceItem[];
   targetRect: DOMRect;
-  onPointerEnter: () => void;
-  onPointerLeave: () => void;
+  panelRef: MutableRefObject<HTMLSpanElement | null>;
+  /** Pointer or keyboard focus arrived in the panel. */
+  onEnter: () => void;
+  /** Pointer or keyboard focus left the panel. */
+  onLeave: () => void;
+  onKeyDown: (event: KeyboardEvent<HTMLSpanElement>) => void;
 }) {
-  const ref = useRef<HTMLSpanElement | null>(null);
   const [style, setStyle] = useState({ left: "-9999px", top: "-9999px" });
 
   useLayoutEffect(() => {
@@ -53,15 +60,20 @@ function ReferenceTooltipPortal({
     let top = targetRect.top - tooltipRect.height - TOOLTIP_TARGET_GAP;
     if (top < TOOLTIP_VIEWPORT_PADDING) top = TOOLTIP_VIEWPORT_PADDING;
     setStyle({ left: `${left}px`, top: `${top}px` });
-  }, [targetRect]);
+  }, [targetRect, ref]);
 
   return createPortal(
     <span
       ref={ref}
       className="citation-tooltip-portal"
       style={style}
-      onPointerEnter={onPointerEnter}
-      onPointerLeave={onPointerLeave}
+      onPointerEnter={onEnter}
+      onPointerLeave={onLeave}
+      // focusin/focusout bubble, so focus on any link inside keeps the panel
+      // open exactly as the pointer resting on it does.
+      onFocus={onEnter}
+      onBlur={onLeave}
+      onKeyDown={onKeyDown}
     >
       {items.map(({ index, row }) => (
         <span key={`${index}-${row.id}`} className="citation-tooltip-entry">
@@ -94,10 +106,24 @@ interface ReferenceHoverProps {
  *
  * The wrapper is the value's single tab stop and is marked as a focus host, so
  * a nested `UnitTooltip` rendered with `focusable={false}` opens from it too.
+ *
+ * Keyboard: focusing the value opens the panel; Enter, Space or ArrowDown move
+ * focus onto its first citation link. The panel is portalled to the end of the
+ * document, so it is not next in the tab order — Tab past its last link (or
+ * Shift+Tab before its first) and Escape close it and return focus to the
+ * value, from which Tab carries on through the page.
  */
 export function ReferenceHover({ references, children }: ReferenceHoverProps) {
   const { t } = useTranslation();
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
+  const triggerRef = useRef<HTMLSpanElement | null>(null);
+  const panelRef = useRef<HTMLSpanElement | null>(null);
+  // Set when the keyboard asked to enter a panel that was not open yet; the
+  // layout effect below moves focus once the panel has mounted.
+  const focusPanelOnOpen = useRef(false);
+  // Set while focus is handed back to the value on closing, so that focus
+  // event does not immediately reopen the panel it just closed.
+  const suppressFocusOpen = useRef(false);
   // Hide is deferred (via the shared grace timer) so the pointer can travel
   // across the gap between the value and the portal-rendered panel without it
   // vanishing; entering either cancels the pending hide.
@@ -112,6 +138,63 @@ export function ReferenceHover({ references, children }: ReferenceHoverProps) {
     [cancelHide],
   );
 
+  const firstLink = () =>
+    panelRef.current?.querySelector<HTMLAnchorElement>("a[href]") ?? null;
+
+  useLayoutEffect(() => {
+    if (!targetRect || !focusPanelOnOpen.current) return;
+    focusPanelOnOpen.current = false;
+    firstLink()?.focus();
+  }, [targetRect]);
+
+  const closeToTrigger = () => {
+    cancelHide();
+    setTargetRect(null);
+    suppressFocusOpen.current = true;
+    triggerRef.current?.focus();
+    suppressFocusOpen.current = false;
+  };
+
+  const onTriggerKeyDown = (event: KeyboardEvent<HTMLSpanElement>) => {
+    if (event.key === "Escape") {
+      if (targetRect) {
+        event.preventDefault();
+        cancelHide();
+        setTargetRect(null);
+      }
+      return;
+    }
+    if (event.key !== "Enter" && event.key !== " " && event.key !== "ArrowDown")
+      return;
+    event.preventDefault();
+    const link = firstLink();
+    if (link) {
+      link.focus();
+    } else {
+      focusPanelOnOpen.current = true;
+      show(event.currentTarget);
+    }
+  };
+
+  const onPanelKeyDown = (event: KeyboardEvent<HTMLSpanElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeToTrigger();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const links = Array.from(
+      panelRef.current?.querySelectorAll<HTMLAnchorElement>("a[href]") ?? [],
+    );
+    const active = document.activeElement;
+    const leavingForward = !event.shiftKey && active === links[links.length - 1];
+    const leavingBackward = event.shiftKey && active === links[0];
+    if (leavingForward || leavingBackward) {
+      event.preventDefault();
+      closeToTrigger();
+    }
+  };
+
   if (references.length === 0) return <>{children}</>;
 
   const indices = references.map((item) => item.index);
@@ -123,13 +206,19 @@ export function ReferenceHover({ references, children }: ReferenceHoverProps) {
     <>
       <span
         className="cursor-help border-b border-dotted border-muted-foreground/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        ref={triggerRef}
         tabIndex={0}
+        role="button"
+        aria-expanded={targetRect !== null}
         data-focus-host=""
         data-testid="reference-hover"
         onMouseEnter={(event) => show(event.currentTarget)}
         onMouseLeave={scheduleHide}
-        onFocus={(event) => show(event.currentTarget)}
+        onFocus={(event) => {
+          if (!suppressFocusOpen.current) show(event.currentTarget);
+        }}
         onBlur={scheduleHide}
+        onKeyDown={onTriggerKeyDown}
       >
         {children}
         <span className="sr-only">
@@ -144,8 +233,10 @@ export function ReferenceHover({ references, children }: ReferenceHoverProps) {
         <ReferenceTooltipPortal
           items={references}
           targetRect={targetRect}
-          onPointerEnter={cancelHide}
-          onPointerLeave={scheduleHide}
+          panelRef={panelRef}
+          onEnter={cancelHide}
+          onLeave={scheduleHide}
+          onKeyDown={onPanelKeyDown}
         />
       ) : null}
     </>

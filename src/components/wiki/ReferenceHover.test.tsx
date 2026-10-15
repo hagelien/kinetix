@@ -127,4 +127,71 @@ describe("ReferenceHover", () => {
     });
     expect(screen.queryByRole("link", { name: /Smith, 2026/ })).not.toBeNull();
   });
+  // Review P1: the panel is portalled to the end of <body>, so its links are
+  // not next in the value's tab order. Focus moving from the value into the
+  // panel used to let the value's blur close it 150 ms later, leaving keyboard
+  // users no route to the references.
+  it("keeps the panel open while keyboard focus is on a link inside it", () => {
+    vi.useFakeTimers();
+    const value = renderValue();
+
+    act(() => value.focus());
+    const link = screen.getByRole("link", { name: /Smith, 2026/ });
+    act(() => link.focus());
+    expect(document.activeElement).toBe(link);
+
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(screen.queryByRole("link", { name: /Smith, 2026/ })).not.toBeNull();
+    expect(document.activeElement).toBe(link);
+  });
+
+  it("moves keyboard focus from the value into the panel", () => {
+    const value = renderValue([
+      { index: 1, row: citation({ id: 77 }) },
+      { index: 2, row: citation({ id: 78, metadata: null, identifier: "Jones 2019", type: "freetext" }) },
+    ]);
+    expect(value).toHaveAttribute("role", "button");
+
+    act(() => value.focus());
+    expect(value).toHaveAttribute("aria-expanded", "true");
+    fireEvent.keyDown(value, { key: "Enter" });
+
+    const links = screen.getAllByRole("link");
+    expect(document.activeElement).toBe(links[0]);
+    expect(links[0]?.getAttribute("href")).toBe("/references/77");
+  });
+
+  it("reopens a closed panel and enters it on Enter", () => {
+    const value = renderValue();
+    act(() => value.focus());
+    fireEvent.keyDown(value, { key: "Escape" });
+    expect(screen.queryByRole("link", { name: /Smith, 2026/ })).toBeNull();
+
+    fireEvent.keyDown(value, { key: "Enter" });
+    expect(document.activeElement).toBe(
+      screen.getByRole("link", { name: /Smith, 2026/ }),
+    );
+  });
+
+  it("returns focus to the value, closed, on Tab past the last link or Escape", () => {
+    const value = renderValue();
+
+    act(() => value.focus());
+    fireEvent.keyDown(value, { key: "ArrowDown" });
+    const link = screen.getByRole("link", { name: /Smith, 2026/ });
+    expect(document.activeElement).toBe(link);
+
+    fireEvent.keyDown(link, { key: "Tab" });
+    expect(document.activeElement).toBe(value);
+    expect(screen.queryByRole("link", { name: /Smith, 2026/ })).toBeNull();
+    expect(value).toHaveAttribute("aria-expanded", "false");
+
+    fireEvent.keyDown(value, { key: "Enter" });
+    const reopened = screen.getByRole("link", { name: /Smith, 2026/ });
+    fireEvent.keyDown(reopened, { key: "Escape" });
+    expect(document.activeElement).toBe(value);
+    expect(screen.queryByRole("link", { name: /Smith, 2026/ })).toBeNull();
+  });
 });
