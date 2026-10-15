@@ -3919,6 +3919,7 @@
     "dialogTitle": "{{parameter}} — source values",
     "dialogAriaLabel": "Source values for {{parameter}} in {{drug}}",
     "dialogEmpty": "No source values recorded for this parameter yet.",
+    "previewHint": "Click the value to open the source list and discussion.",
     "routeSection": "Sources for {{route}} administration",
     "discussionHeading": "Discussion",
     "editor": {
