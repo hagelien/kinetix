@@ -67,7 +67,19 @@ interface ApiResult {
   warnings?: string[];
   errors?: string[];
   error?: string;
+  /** Stable code for a refused import, mapped through IMPORT_ERROR_KEYS. */
+  code?: string;
 }
+
+/**
+ * Stable error codes the import can answer, mapped to translated prose; any
+ * other refusal falls back to the server's English `error` (AGENTS.md i18n
+ * rule: server messages reaching the UI go through a code).
+ */
+const IMPORT_ERROR_KEYS: Record<string, string> = {
+  // The document's PubChem CID equals another drug's internal id.
+  pubchem_cid_shadows_drug_id: 'errors.pubchemCidShadowsDrugId',
+};
 
 /**
  * Terminal-free path for the deep-research bulk-seed. An admin pastes or
@@ -118,7 +130,12 @@ export function ResearchImportAdminSection() {
       const data = (await res.json().catch(() => ({}))) as ApiResult;
       setResult(data);
       if (!res.ok || data.ok === false) {
-        setErrorMsg(data.error ?? (data.errors ? '' : t('admin.researchImport.requestFailed')));
+        const key = data.code ? IMPORT_ERROR_KEYS[data.code] : undefined;
+        setErrorMsg(
+          key
+            ? t(key)
+            : (data.error ?? (data.errors ? '' : t('admin.researchImport.requestFailed'))),
+        );
       } else if (!dryRun) {
         showToast(t('admin.researchImport.imported'));
       }

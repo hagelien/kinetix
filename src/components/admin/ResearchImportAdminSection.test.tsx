@@ -89,4 +89,65 @@ describe('ResearchImportAdminSection', () => {
     );
     expect(screen.getByText('drugIdentity: name required')).toBeInTheDocument();
   });
+  // The shadow check runs on the write, not the dry-run: the preview passes
+  // and the import itself is refused with 409 + a stable code.
+  it('localizes a PubChem CID that shadows another drug instead of showing the server prose', async () => {
+    (fetch as unknown as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          dryRun: true,
+          plan: {
+            drug: { nameNb: 'Kokain', nameEn: null, pubchemCid: 446220 },
+            parameters: [],
+            counts: {
+              parameters: 0,
+              sources: 0,
+              pharmacodynamicTargets: 0,
+              eliminationRoutes: 0,
+              metabolites: 0,
+              enzymeInteractions: 0,
+            },
+          },
+          warnings: [],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        json: async () => ({
+          error:
+            'PubChem CID 446220 is also the internal id of drug 446220, and saved cases key that drug by this number',
+          code: 'pubchem_cid_shadows_drug_id',
+        }),
+      });
+
+    render(<ResearchImportAdminSection />);
+    typeInto(VALID_JSON);
+    fireEvent.click(screen.getByText('admin.researchImport.preview'));
+    await waitFor(() =>
+      expect(screen.getByText('admin.researchImport.import')).not.toBeDisabled(),
+    );
+    fireEvent.click(screen.getByText('admin.researchImport.import'));
+
+    await waitFor(() =>
+      expect(screen.getByText('errors.pubchemCidShadowsDrugId')).toBeInTheDocument(),
+    );
+    expect(screen.queryByText(/internal id of drug/)).not.toBeInTheDocument();
+  });
+
+  it('falls back to the server message for a code it does not map', async () => {
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: false,
+      status: 409,
+      json: async () => ({ error: 'Some other refusal', code: 'something_else' }),
+    });
+
+    render(<ResearchImportAdminSection />);
+    typeInto(VALID_JSON);
+    fireEvent.click(screen.getByText('admin.researchImport.preview'));
+
+    await waitFor(() => expect(screen.getByText('Some other refusal')).toBeInTheDocument());
+  });
 });
