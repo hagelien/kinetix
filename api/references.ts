@@ -11,7 +11,7 @@ const DRUG_REFS_CACHE_HEADERS = publicCacheHeaders({
   sMaxAge: 60,
   staleWhileRevalidate: 300,
 });
-import { getDb } from './_lib/db.js';
+import { getDb, runInPoolTransaction } from './_lib/db.js';
 import { getUserFromRequest } from './_lib/auth.js';
 import { assertSameOrigin, parseAndValidate } from './_lib/validate.js';
 import {
@@ -923,22 +923,34 @@ async function handleUpdate(
     metadataToStore = withExplicitAltIds(metadataToStore, suppliedMetadata);
   }
 
-  // This route writes straight to the row with no review, so record the
-  // change — who, and what it replaced — before applying it: a failed audit
-  // write stops the change rather than letting it land untraced.
-  await db.insert(citationMetadataHistory).values({
-    citationId: id,
-    oldMetadata: existing.metadata ?? null,
-    newMetadata: metadataToStore,
-    refreshed: parsed.data.refresh === true,
-    changedBy: auth.userId,
+  // This route writes straight to the row with no review, so every change is
+  // recorded — who, and what it replaced — in the same transaction as the
+  // write: neither lands without the other. The audit row reads the value it
+  // replaces from the row itself under `FOR UPDATE`, not from the snapshot
+  // read above, so two overlapping PATCHes (a refresh can wait seconds on a
+  // resolver) each record what they actually overwrote.
+  const row = await runInPoolTransaction(async () => {
+    const tx = getDb();
+    await tx.execute(sql`
+      WITH current_row AS (
+        SELECT ${references.id} AS id, ${references.metadata} AS metadata
+        FROM ${references}
+        WHERE ${references.id} = ${id}
+        FOR UPDATE
+      )
+      INSERT INTO ${citationMetadataHistory}
+        (citation_id, old_metadata, new_metadata, refreshed, changed_by)
+      SELECT id, metadata, ${JSON.stringify(metadataToStore)}::jsonb,
+             ${parsed.data.refresh === true}, ${auth.userId}
+      FROM current_row
+    `);
+    const [updated] = await tx
+      .update(references)
+      .set({ metadata: metadataToStore })
+      .where(eq(references.id, id))
+      .returning();
+    return updated;
   });
-
-  const [row] = await db
-    .update(references)
-    .set({ metadata: metadataToStore })
-    .where(eq(references.id, id))
-    .returning();
   if (!row) {
     error(res, 500, 'Failed to update reference');
     return;

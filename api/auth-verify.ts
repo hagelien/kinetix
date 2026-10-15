@@ -180,7 +180,10 @@ export default withErrorHandling(async function handler(
     .where(
       and(eq(users.id, user.id), eq(users.magicLinkHash, user.magicLinkHash)),
     )
-    .returning({ id: users.id });
+    // The generation as of the consuming write, not the earlier read: a
+    // revocation landing in between bumps it, and a token signed with the
+    // stale value would be rejected the moment it was issued.
+    .returning({ id: users.id, sessionGeneration: users.sessionGeneration });
 
   if (!consumed) {
     error(res, 401, 'Invalid or expired code');
@@ -192,7 +195,7 @@ export default withErrorHandling(async function handler(
     user.id,
     user.role,
     maxAgeSeconds,
-    user.sessionGeneration ?? 0,
+    consumed.sessionGeneration ?? user.sessionGeneration ?? 0,
   );
   setAuthCookie(res, jwt, maxAgeSeconds);
 

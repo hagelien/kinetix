@@ -100,7 +100,11 @@ function mockDbForWrongCode() {
 }
 
 async function mockDbForCorrectCode(
-  opts: { consumedByConcurrentRequest?: boolean; sessionGeneration?: number } = {},
+  opts: {
+    consumedByConcurrentRequest?: boolean;
+    sessionGeneration?: number;
+    consumedGeneration?: number;
+  } = {},
 ) {
   process.env.JWT_SECRET = 'test-secret-value-that-is-long-enough-for-tests';
   const { hashMagicLinkCode } = await import('../../api/_lib/magic-link.ts');
@@ -108,7 +112,11 @@ async function mockDbForCorrectCode(
   const storedHash = hashMagicLinkCode(code);
   const updateReturning = vi
     .fn()
-    .mockResolvedValue(opts.consumedByConcurrentRequest ? [] : [{ id: 1 }]);
+    .mockResolvedValue(
+      opts.consumedByConcurrentRequest
+        ? []
+        : [{ id: 1, sessionGeneration: opts.consumedGeneration ?? opts.sessionGeneration ?? 0 }],
+    );
   const updateWhere = vi.fn().mockReturnValue({ returning: updateReturning });
   const updateSet = vi.fn().mockReturnValue({ where: updateWhere });
 
@@ -287,6 +295,18 @@ describe('auth-verify atomic magic-link consumption', () => {
 
   // A revoked user signs in again under their current session generation;
   // minting at 0 would hand them a token the revocation check rejects.
+  // A revocation between the read and the consuming write bumps the
+  // generation; the token must carry the value that write saw.
+  it('mints under the generation the consuming write returned', async () => {
+    const { code } = await mockDbForCorrectCode({ sessionGeneration: 3, consumedGeneration: 4 });
+    const { res, state } = makeRes();
+
+    await handler(makeReq({ email: 'user@example.com', code }), res);
+
+    expect(state.statusCode).toBe(200);
+    expect(vi.mocked(signToken)).toHaveBeenCalledWith(1, 'authenticated', 30 * 24 * 60 * 60, 4);
+  });
+
   it('mints the session token under the user\'s current generation', async () => {
     const { code } = await mockDbForCorrectCode({ sessionGeneration: 3 });
     const { res, state } = makeRes();

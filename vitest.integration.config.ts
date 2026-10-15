@@ -68,6 +68,7 @@ const MOCKED = [
   'tests/integration/pdf-requests-pubchem-queue.test.ts',
   'tests/integration/pending-edit-run-session.test.ts',
   'tests/integration/session-revocation.test.ts',
+  'tests/integration/citation-metadata-history.test.ts',
   'tests/integration/pending-edits-consensus-status-batch.test.ts',
   'tests/integration/pending-edits-drug-lock.test.ts',
   'tests/integration/pending-edits-page-lock.test.ts',

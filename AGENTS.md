@@ -272,8 +272,11 @@ The `clinical_case` carve-out is agent-only. Spec §12 Stage 12 asks for a human
 ## Opening a pull request
 
 **Open every pull request ready for review — never as a draft** (`gh pr create`
-without `--draft`, or `draft: false` through the API). Opening for review is
-what wakes everything the branch needs at once:
+without `--draft`, or `draft: false` through the API). The one exception is the
+auto-fix error-fixer (`agents/error-fixer.md`): its input is error text any
+anonymous visitor can shape, so it opens **drafts only** and never marks them
+ready — a person does, after reading the change. Opening for review is what
+wakes everything the branch needs at once:
 
 - **Review.** The Codex connector starts a review when a pull request is opened
   for review, and a fresh one on every later push (`synchronize`). No

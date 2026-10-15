@@ -153,8 +153,14 @@ const SECRET_PATTERNS: ReadonlyArray<readonly [RegExp, string]> = [
   // offending value. Those can be personal data (an email from a sign-in),
   // and are attacker-chosen text the fix agent reads. Keep the query shape,
   // drop the values; the full logs stay in Vercel for whoever needs them.
-  // A newline may arrive literal or JSON-escaped (`cause: {...}`).
-  [/(^|\n|\\n)params: [^\n"\\]*/g, '$1params: <redacted>'],
+  // A newline may arrive literal or JSON-escaped (`cause: {...}`). A value can
+  // itself hold quotes or newlines, so everything from `params:` is dropped up
+  // to the next stack frame, the closing code fence, or the end of the text —
+  // never just up to the first quote or line break inside the values.
+  [
+    /(^|\n|\\n)params: [\s\S]*?(?=\n\s+at |\\n\s+at |\n```|$)/g,
+    '$1params: <redacted>',
+  ],
   [/\bKey \(([^)]*)\)=\((?:[^()]|\([^)]*\))*\)/g, 'Key ($1)=(<redacted>)'],
   [
     /(invalid input (?:syntax|value) for (?:type|enum) [\w ]+: )\\?"[^"\\]*\\?"/gi,

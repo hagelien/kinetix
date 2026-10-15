@@ -32,6 +32,9 @@ const {
 
 vi.mock('../../api/_lib/db.js', () => ({
   getDb: getDbMock,
+  // The PATCH audit row and update run as one unit of work; the route tests
+  // run it inline against the mocked db.
+  runInPoolTransaction: (fn: () => unknown) => fn(),
 }));
 
 vi.mock('../../api/_lib/auth.js', () => ({
@@ -163,11 +166,11 @@ function mockUpdateReferenceDb(options: {
   const updateWhere = vi.fn().mockReturnValue({ returning });
   const set = vi.fn().mockReturnValue({ where: updateWhere });
   const update = vi.fn().mockReturnValue({ set });
-  const historyValues = vi.fn().mockResolvedValue(undefined);
-  const insert = vi.fn().mockReturnValue({ values: historyValues });
+  // The audit row: INSERT … SELECT from the locked citation row.
+  const execute = vi.fn().mockResolvedValue({ rows: [] });
 
-  getDbMock.mockReturnValue({ select, update, insert });
-  return { select, set, update, insert, historyValues };
+  getDbMock.mockReturnValue({ select, update, execute });
+  return { select, set, update, execute };
 }
 
 function mockReferencesQuery(rows: unknown[]) {
@@ -1895,7 +1898,7 @@ describe('PATCH /api/references audit trail', () => {
     createdAt: '2026-05-20T00:00:00.000Z',
   };
 
-  it('records who changed the metadata and what it replaced, before the update', async () => {
+  it('records the change in the same unit of work, before the update', async () => {
     const db = mockUpdateReferenceDb({
       existing,
       updated: { ...existing, metadata: { title: 'New label title' } },
@@ -1910,14 +1913,8 @@ describe('PATCH /api/references audit trail', () => {
     );
 
     expect(state.statusCode).toBe(200);
-    expect(db.historyValues).toHaveBeenCalledWith({
-      citationId: 20,
-      oldMetadata: { title: 'Old label title' },
-      newMetadata: expect.objectContaining({ title: 'New label title' }),
-      refreshed: false,
-      changedBy: 123,
-    });
-    expect(db.historyValues.mock.invocationCallOrder[0]!).toBeLessThan(
+    expect(db.execute).toHaveBeenCalledOnce();
+    expect(db.execute.mock.invocationCallOrder[0]!).toBeLessThan(
       db.set.mock.invocationCallOrder[0]!,
     );
   });
@@ -1927,7 +1924,7 @@ describe('PATCH /api/references audit trail', () => {
       existing,
       updated: { ...existing, metadata: { title: 'New label title' } },
     });
-    db.historyValues.mockRejectedValueOnce(new Error('insert failed'));
+    db.execute.mockRejectedValueOnce(new Error('insert failed'));
     const { res, state } = createResponse();
 
     await handler(

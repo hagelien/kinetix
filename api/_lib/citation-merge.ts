@@ -2,6 +2,7 @@ import { and, eq, inArray, or, sql, type SQL } from 'drizzle-orm';
 import {
   bioEntityFunctions,
   citationIdentifierAliases,
+  citationMetadataHistory,
   citationPdfs,
   citations,
   drugEliminationRoutes,
@@ -1990,6 +1991,14 @@ async function applyFold(
         set: { citationId: winnerId },
       });
   }
+
+  // The loser's metadata audit trail is the same paper's history: carry it to
+  // the winner, or the cascade below would erase the record of who changed
+  // what.
+  await db
+    .update(citationMetadataHistory)
+    .set({ citationId: winnerId })
+    .where(eq(citationMetadataHistory.citationId, loserId));
 
   await db.delete(citations).where(eq(citations.id, loserId));
 
