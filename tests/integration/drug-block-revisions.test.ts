@@ -224,6 +224,9 @@ describe('drug block revisions', () => {
           route: null,
           citationId,
           sourceQuote: null,
+          n: null,
+          comments: null,
+          observationContext: null,
           // No formulation, regimen or population scope (#12).
           doseRegimen: null,
           doseIntervalHours: null,
@@ -527,6 +530,39 @@ describe('drug block revisions', () => {
     expect(row!.sourceQuote).toBeNull();
     expect(await revisionsFor(drugId, 'modelStructure')).toEqual([]);
   });
+
+
+  it.each(['dispositionModel', 'eliminationModel', 'absorptionModel'] as const)(
+    'records evidence-context-only changes to %s declarations', async (parameter) => {
+      const drugId = await seedDrug(db);
+      const userId = await seedUser(db);
+      const citationId = await seedAdmissibleCitation(db);
+      const [entry] = await db.insert(parameterEntries).values({
+        drugId, citationId, parameter, unit: '',
+        categoricalValue: parameter === 'dispositionModel' ? 'two-compartment' : 'first-order',
+      }).returning({ id: parameterEntries.id });
+      await recomputeInTransaction(drugId, parameter, userId);
+      for (const patch of [
+        { observationContext: 'Friske voksne, fastende.' },
+        { n: 12 },
+        { comments: 'Vurdert mot kildens figur.' },
+        { comments: 'Vurdert mot kildens figur.' }, // identical save
+      ]) {
+        await runInPoolTransaction(async () => {
+          await getDb().update(parameterEntries).set(patch).where(eq(parameterEntries.id, entry!.id));
+          await recomputeParameterAndDependents(drugId, parameter, userId);
+        });
+      }
+      const revisions = await revisionsFor(drugId, 'modelStructure');
+      expect(revisions).toHaveLength(4);
+      for (let i = 1; i < revisions.length; i++) {
+        expect(revisions[i]!.oldValue).toEqual(revisions[i - 1]!.newValue);
+      }
+      expect((revisions[3]!.newValue as { declarations: unknown[] }).declarations[0]).toMatchObject({
+        observationContext: 'Friske voksne, fastende.', n: 12, comments: 'Vurdert mot kildens figur.',
+      });
+    },
+  );
 
   // Codex review on #303: a citation held only by a block's history is still
   // cited content — the bibliography, a direct lookup and "cited in" must all

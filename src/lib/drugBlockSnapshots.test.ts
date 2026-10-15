@@ -186,4 +186,16 @@ describe('blockSnapshotLines', () => {
     expect(line).toContain(t('doseContext.values.centralStatistic.median'));
   });
 
+  it('shows declaration observation context, sample size and curator comments', () => {
+    const [line] = blockSnapshotLines('modelStructure', { declarations: [{
+      parameter: 'dispositionModel', categoricalValue: 'two-compartment',
+      observationContext: 'Friske voksne, fastende.', n: 12,
+      comments: 'Vurdert mot kildens figur.', citationId: 9,
+    }] }, t, 'en');
+    expect(line).toContain('Friske voksne, fastende.');
+    expect(line).toContain('n=12');
+    expect(line).toContain('Vurdert mot kildens figur.');
+    expect(line).toMatch(/#9$/);
+  });
+
 });

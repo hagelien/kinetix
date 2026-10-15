@@ -79,6 +79,9 @@ export interface ModelStructureBlockSnapshot {
       route: string | null;
       citationId: number | null;
       sourceQuote: string | null;
+      n: number | null;
+      comments: string | null;
+      observationContext: string | null;
     } & EntryScope
   >;
   /**
@@ -191,6 +194,9 @@ export async function modelStructureBlockSnapshot(
     .map((row) => ({
       parameter: row.parameter,
       categoricalValue: row.categoricalValue ?? null,
+      n: row.n ?? null,
+      comments: row.comments ?? null,
+      observationContext: row.observationContext ?? null,
       route: row.route ?? null,
       citationId: row.citationId ?? null,
       sourceQuote: row.sourceQuote ?? null,

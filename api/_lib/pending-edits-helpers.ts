@@ -1561,7 +1561,13 @@ async function drugAdvisoryLockIdsForEdit(
     const drugId = await paramEntryEditDrugId(db, edit);
     return paramEntryLockSet(drugId, edit.proposedValue);
   }
-  if (edit.editType === 'parameter') {
+  if (
+    edit.editType === 'parameter' ||
+    edit.editType === 'metabolism' ||
+    edit.editType === 'receptor_targets'
+  ) {
+    // Whole-block replacement approvals must queue with other writers before
+    // taking either their pending-edit row or their before-snapshot.
     return edit.targetId != null ? [edit.targetId] : [];
   }
   if (edit.editType === 'paper_review') {

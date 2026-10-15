@@ -258,6 +258,9 @@ function declarationLines(snapshot: SnapshotRow, t: Translate): string[] {
       `${axis}: ${t(`parameters.modelStructure.value.${value}`, { defaultValue: value })}`,
       route ? (routeKey ? t(routeKey) : route) : null,
       scope(declaration, t),
+      typeof declaration.n === 'number' ? `n=${declaration.n}` : null,
+      text(declaration.comments),
+      text(declaration.observationContext),
       typeof declaration.citationId === 'number' ? `#${declaration.citationId}` : null,
       quote ? `“${quote}”` : null,
     ]);

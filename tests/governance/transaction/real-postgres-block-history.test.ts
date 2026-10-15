@@ -17,9 +17,10 @@ import {
 import { lockDrugForEntryApplicability } from '../../../api/_lib/parameterApplicabilityStore.js';
 import { mergeDrugs } from '../../../api/_lib/drug-merge.js';
 import { replaceDrugMetabolism } from '../../../api/_lib/metabolismStore.js';
+import { applyApprovedEdit } from '../../../api/_lib/pending-edits-helpers.js';
 import { planDeletes, applyDeletesInTransaction } from '../../../scripts/repair-hallucinated-citations.js';
 import { seedBioEntity } from '../../integration/setup/seed.js';
-import { citations, drugMetabolismProfiles, drugReceptorTargets, parameterEntries, drugBlockRevisions, drugs, users } from '../../../db/schema.js';
+import { citations, drugMetabolismProfiles, drugReceptorTargets, parameterEntries, pendingEdits, drugBlockRevisions, drugs, users } from '../../../db/schema.js';
 import {
   realPostgresUrl,
   resetRealPostgresDb,
@@ -180,6 +181,40 @@ describe.skipIf(!realPostgresUrl())('metabolism block history on concurrent conn
       expect(rows[1]!.newValue).toEqual(await readDrugBlockSnapshot(getDb(), parentA, block));
     },
   );
+
+
+  it('serializes two receptor-target approvals before their snapshots', async () => {
+    const entity = await seedBioEntity(db as never);
+    const edits = await db.insert(pendingEdits).values(['Første', 'Andre'].map((evidenceNote) => ({
+      editType: 'receptor_targets', targetId: parentA, status: 'pending', submittedBy: actor,
+      proposedValue: { mechanisms: [{ receptorTargetId: entity, interactionType: 'agonist', evidenceNote }] },
+    }))).returning({ id: pendingEdits.id });
+    const firstApplied = gate();
+    const releaseFirst = gate();
+    const first = runInPoolTransaction(async () => {
+      await applyApprovedEdit(edits[0]!.id, actor);
+      firstApplied.open();
+      await releaseFirst.wait;
+    });
+    await firstApplied.wait;
+    const second = runInPoolTransaction(async () => {
+      await getDb().execute(sql`SET LOCAL application_name = 'block-history-approval'`);
+      await applyApprovedEdit(edits[1]!.id, actor);
+    });
+    try {
+      await waitForAdvisory(db, 'block-history-approval');
+    } finally {
+      releaseFirst.open();
+      await Promise.all([first, second]);
+    }
+    const rows = await db.select().from(drugBlockRevisions)
+      .where(eq(drugBlockRevisions.drugId, parentA)).orderBy(asc(drugBlockRevisions.id));
+    expect(rows).toHaveLength(2);
+    expect(rows[1]!.oldValue).toEqual(rows[0]!.newValue);
+    expect(rows[1]!.pendingEditId).toBe(edits[1]!.id);
+    expect(rows[1]!.newValue).toEqual(await readDrugBlockSnapshot(getDb(), parentA, 'pharmacodynamics'));
+    expect((rows[1]!.newValue as { mechanisms: Array<{ evidenceNote: string }> }).mechanisms[0]!.evidenceNote).toBe('Andre');
+  });
 
   it('takes the merge graph lock before drug row locks needed by a linked writer', async () => {
     const beforeWrite = gate();
