@@ -560,6 +560,10 @@ export async function readDrugRouteAssemblyInputs(
         qualifier: parameterEntries.qualifier,
         unit: parameterEntries.unit,
         n: parameterEntries.n,
+        // The formulation/population scope (#12): a modified-release or
+        // special-population Tmax/ka/F is not pooled into the route's value.
+        releaseProfile: parameterEntries.releaseProfile,
+        pkPopulation: parameterEntries.pkPopulation,
         citationId: parameterEntries.citationId,
         origin: parameterEntries.origin,
         reviewScore: paperReviews.overallScore,
@@ -723,6 +727,8 @@ export async function readDrugRouteAssemblyInputs(
       unit: row.unit,
       matrix: null,
       n: row.n ?? null,
+      releaseProfile: row.releaseProfile ?? null,
+      pkPopulation: row.pkPopulation ?? null,
       reviewScore: row.reviewScore ?? null,
       origin: row.origin ?? null,
     });

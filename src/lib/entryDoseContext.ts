@@ -137,6 +137,14 @@ export type ValueBasis = (typeof VALUE_BASES)[number];
  * `median` column, so a mean was stored as a median. On a `'forbidden'`
  * parameter the statistic is therefore OPTIONAL (see
  * `REPORTED_STATISTIC_FIELD_KEYS` and `validateDoseContext`).
+ *
+ * `'optional'` (the absorption parameters — tmax, ka, F, the absorption
+ * model; #12) is `'forbidden'` plus the formulation, regimen and population
+ * scope in `OPTIONAL_DOSE_CONTEXT_FIELD_KEYS`, each optional and held to the
+ * same rules as on a Cmax when stated. An extended-release Tmax and an
+ * immediate-release one of the same route are different observations, as are
+ * a healthy-volunteer F and a hepatic-impairment one; before this they could
+ * only say so in prose.
  */
 export type DoseContextMode = 'required' | 'optional' | 'forbidden';
 
@@ -268,6 +276,79 @@ const REPORTED_STATISTIC_FIELDS: ReadonlySet<DoseContextFieldKey> = new Set(
   REPORTED_STATISTIC_FIELD_KEYS,
 );
 
+/**
+ * The dose-context fields a `doseContext: 'optional'` parameter may carry
+ * (#12): the formulation (`releaseProfile`, `physicalForm`), the regimen it was
+ * observed under (`doseRegimen`, `doseIntervalHours` — a weekly and a monthly
+ * depot are both `modified`, and differ here) and the population
+ * (`pkPopulation`, `populationQualifier`), in the vocabularies Cmax already
+ * uses. Every other dose field — the dose itself, the substance dosed, the
+ * infusion, what a concentration's number is — stays Cmax's alone.
+ */
+export const OPTIONAL_DOSE_CONTEXT_FIELD_KEYS = [
+  'doseRegimen',
+  'doseIntervalHours',
+  'releaseProfile',
+  'physicalForm',
+  'pkPopulation',
+  'populationQualifier',
+] as const satisfies readonly DoseContextFieldKey[];
+
+const OPTIONAL_DOSE_CONTEXT_FIELDS: ReadonlySet<DoseContextFieldKey> = new Set(
+  OPTIONAL_DOSE_CONTEXT_FIELD_KEYS,
+);
+
+/**
+ * The stated formulation, regimen and population of an entry as display
+ * labels, in reading order (#12) — for a list row or a chip, where the whole
+ * `DoseContextDetails` grid would be too much. `t` is the caller's i18next
+ * translator; the labels are the `doseContext.*` keys Cmax already uses.
+ */
+export function scopeContextLabels(
+  fields: DoseContextFields | null | undefined,
+  t: (key: string, options?: Record<string, unknown>) => string,
+): string[] {
+  const f = fields ?? {};
+  const vocab = (field: DoseContextFieldKey, value: string | null | undefined) =>
+    value ? t(`doseContext.values.${field}.${value}`, { defaultValue: value }) : null;
+  return [
+    vocab('releaseProfile', f.releaseProfile),
+    vocab('physicalForm', f.physicalForm),
+    vocab('doseRegimen', f.doseRegimen),
+    f.doseIntervalHours != null ? t('doseContext.everyHours', { hours: f.doseIntervalHours }) : null,
+    vocab('pkPopulation', f.pkPopulation),
+    f.populationQualifier ?? null,
+  ].filter((part): part is string => !!part);
+}
+
+/**
+ * Pooling scope for a `doseContext: 'optional'` parameter (#12): whether an
+ * entry describes the reference case the drug's general figure stands for, or
+ * an explicitly different one that must not be averaged into it.
+ *
+ * A modified-release formulation is not the reference (an OPANA ER Tmax is
+ * not oxymorphone's oral Tmax), nor is a named special population (renal or
+ * hepatic impairment, a metabolizer phenotype, children, the elderly,
+ * pregnancy, `other`). Everything else pools exactly as before: an unstated
+ * field — every entry written before #12 — and `'unknown'` say nothing that
+ * sets the entry apart, and healthy adults or unspecified adult patients are
+ * the populations the general figure has always been drawn from. Excluded
+ * entries stay listed with their context; they are only kept out of the pool.
+ */
+export function entryInReferenceScope(entry: {
+  releaseProfile?: string | null;
+  pkPopulation?: string | null;
+}): boolean {
+  if (entry.releaseProfile === 'modified') return false;
+  const population = entry.pkPopulation;
+  return (
+    population == null ||
+    population === 'healthy_adult' ||
+    population === 'patients_unspecified' ||
+    population === 'unknown'
+  );
+}
+
 if (
   Object.keys(DOSE_CONTEXT_FIELDS).join() !== DOSE_CONTEXT_FIELD_KEYS_TUPLE.join()
 ) {
@@ -295,18 +376,21 @@ export const NO_DOSE_CONTEXT: { readonly [K in DoseContextFieldKey]: null } =
  * `centralValue` is left out: it is the READING, compared with low/high/median
  * by the caller's same-reading test, not part of which observation this is.
  *
- * On a parameter without dose context (`mode: 'forbidden'`) the whole
- * reported statistic is left out for the same reason: there it is only ever a
- * label on the reading, and every row stored before migration 0135 lacks it.
- * Keyed on it, a document re-imported with labels would find no counterpart
- * for the unlabelled row it wrote earlier and insert the paper a second time.
+ * On a parameter without required dose context (`mode: 'forbidden'` or
+ * `'optional'`) the whole reported statistic is left out for the same reason:
+ * there it is only ever a label on the reading, and every row stored before
+ * migration 0135 lacks it. Keyed on it, a document re-imported with labels
+ * would find no counterpart for the unlabelled row it wrote earlier and insert
+ * the paper a second time. An optional parameter's formulation and population
+ * scope stays IN the key: an extended-release and an immediate-release Tmax
+ * from one paper are two observations, not one stored twice.
  */
 export function doseContextIdentityKey(
   entry: { [K in DoseContextFieldKey]?: unknown },
   mode: DoseContextMode = 'required',
 ): string {
   return DOSE_CONTEXT_FIELD_KEYS.filter((k) =>
-    mode === 'forbidden' ? !REPORTED_STATISTIC_FIELDS.has(k) : k !== 'centralValue',
+    mode === 'required' ? k !== 'centralValue' : !REPORTED_STATISTIC_FIELDS.has(k),
   )
     .map((k) => {
       const v = entry[k];
@@ -687,16 +771,38 @@ function validateReportedStatistic(
   return null;
 }
 
+/** A dosing interval is positive, and a single dose has none. */
+function dosingIntervalRule(entry: DoseContextFields): string | null {
+  if (present(entry.doseIntervalHours)) {
+    if (!(entry.doseIntervalHours > 0)) return 'doseIntervalHours must be positive';
+    if (entry.doseRegimen === 'single') return 'A single dose has no dosing interval';
+  }
+  return null;
+}
+
+/** A population qualifier qualifies a stated, non-healthy-adult population. */
+function populationQualifierRule(entry: DoseContextFields): string | null {
+  if (
+    present(entry.populationQualifier) &&
+    (!present(entry.pkPopulation) || entry.pkPopulation === 'healthy_adult')
+  ) {
+    return 'populationQualifier qualifies a non-healthy-adult pkPopulation';
+  }
+  return null;
+}
+
 /**
  * The write-time rules for an entry's dose context, given how the parameter
  * relates to it. Returns the first violated rule's message, or null.
  *
- * `'forbidden'` (every parameter today but the dose-context ones): no dose
- * field may carry a value, and the reported statistic is optional — held to
- * the same shape rules as a Cmax's when stated, but never required, because
- * every entry written before it existed has none. `'required'` (Cmax): the
- * RFC's *Validation invariants* and the storage column of *Required to store
- * is not required to normalize*.
+ * `'forbidden'` (every parameter but the dose-context ones): no dose field may
+ * carry a value, and the reported statistic is optional — held to the same
+ * shape rules as a Cmax's when stated, but never required, because every entry
+ * written before it existed has none. `'optional'` (the absorption parameters,
+ * #12): the same, except that the formulation/regimen/population scope in
+ * `OPTIONAL_DOSE_CONTEXT_FIELD_KEYS` may be stated, under Cmax's rules for
+ * those fields. `'required'` (Cmax): the RFC's *Validation invariants* and the
+ * storage column of *Required to store is not required to normalize*.
  * Expects the entry already through `canonicalizeReportedStatistic`.
  */
 export function validateDoseContext(
@@ -704,13 +810,23 @@ export function validateDoseContext(
   mode: DoseContextMode,
   input: DoseContextFields & DoseContextCoreFields,
 ): string | null {
-  if (mode === 'forbidden') {
+  if (mode !== 'required') {
     const stray = DOSE_CONTEXT_FIELD_KEYS.find(
-      (k) => !REPORTED_STATISTIC_FIELDS.has(k) && present(input[k]),
+      (k) =>
+        !REPORTED_STATISTIC_FIELDS.has(k) &&
+        !(mode === 'optional' && OPTIONAL_DOSE_CONTEXT_FIELDS.has(k)) &&
+        present(input[k]),
     );
-    if (stray) return `${parameter} takes no dose context; "${stray}" must not be set`;
+    if (stray) {
+      return mode === 'optional'
+        ? `${parameter} takes no "${stray}"; its dose context is limited to ${OPTIONAL_DOSE_CONTEXT_FIELD_KEYS.join(', ')}`
+        : `${parameter} takes no dose context; "${stray}" must not be set`;
+    }
+    const scoped = atStoredScale(input);
+    const scopeMessage = dosingIntervalRule(scoped) ?? populationQualifierRule(scoped);
+    if (scopeMessage) return scopeMessage;
     if (!hasReportedStatistic(input)) return null;
-    return validateReportedStatistic(input, atStoredScale(input), 'optional');
+    return validateReportedStatistic(input, scoped, 'optional');
   }
   const entry = atStoredScale(input);
   const statisticMessage = validateReportedStatistic(input, entry, 'required');
@@ -767,10 +883,8 @@ export function validateDoseContext(
 
   // ── Regimen ──
   const regimen = entry.doseRegimen;
-  if (present(entry.doseIntervalHours)) {
-    if (!(entry.doseIntervalHours > 0)) return 'doseIntervalHours must be positive';
-    if (regimen === 'single') return 'A single dose has no dosing interval';
-  }
+  const intervalMessage = dosingIntervalRule(entry);
+  if (intervalMessage) return intervalMessage;
   if (present(entry.doseNumber)) {
     if (entry.doseNumber < 1) return 'doseNumber counts from 1';
     if (regimen !== 'multiple') return 'doseNumber is meaningful only for a "multiple" regimen';
@@ -815,11 +929,5 @@ export function validateDoseContext(
   ) {
     return 'interactingDrugId is only meaningful with coadministrationState "with_interacting_drug"';
   }
-  if (
-    present(entry.populationQualifier) &&
-    (!present(entry.pkPopulation) || entry.pkPopulation === 'healthy_adult')
-  ) {
-    return 'populationQualifier qualifies a non-healthy-adult pkPopulation';
-  }
-  return null;
+  return populationQualifierRule(entry);
 }
