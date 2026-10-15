@@ -31,6 +31,7 @@ import {
   citations,
   disputes,
   paperReviews,
+  parameterEntries,
   pendingEdits,
   wikiPages,
 } from '../../db/schema.js';
@@ -54,7 +55,7 @@ import {
   teardownIntegrationDb,
   type IntegrationDb,
 } from './setup/harness.js';
-import { seedUser } from './setup/seed.js';
+import { seedDrug, seedUser } from './setup/seed.js';
 import { getDb } from '../../api/_lib/db.js';
 import { applyApprovedEdit } from '../../api/_lib/pending-edits-helpers.js';
 import { collectConsensusFacts } from '../../api/_lib/knowledge-governance/policy-shadow.js';
@@ -680,11 +681,14 @@ describe('agent consensus hold, re-stamp and retry', () => {
     expect(results.map((r) => r.pendingEditId)).toEqual([eligible]);
   });
 
-  it("keeps a person's calculation-driving entry update out of the sweep window, quote or not", async () => {
+  it("keeps a person's calculation-driving entry update out of the main sweep window, quote or not", async () => {
     // Whether an update keeps a quote is decided by the write against the
     // stored row (an echoed or inherited quote can be cleared when the reading
     // moves); the window filter cannot evaluate that in bulk, and a person's
-    // held update is not returned, so it is left out.
+    // held update is not returned, so it is left out of the main window. The
+    // separate entry-update pass asks the write, and this one (its target
+    // row does not exist) resolves to no quote, so it is not retried there
+    // either.
     const author = await seedAgent('author');
     const b = await seedAgent('b');
     const c = await seedAgent('c');
@@ -712,6 +716,166 @@ describe('agent consensus hold, re-stamp and retry', () => {
 
     const results = await sweepAgentConsensus(1);
     expect(results.map((r) => r.pendingEditId)).toEqual([eligible]);
+  });
+
+  it("retries a person's calculation-driving entry update whose quote resolves, and not one that would publish unquoted (issue #70)", async () => {
+    const b = await seedAgent('b');
+    const c = await seedAgent('c');
+    const human = await seedUser(db, {
+      email: 'person@example.com',
+      username: 'person',
+      role: 'contributor',
+    });
+    const drugId = await seedDrug(db, { slug: 'ghb' });
+    const [paper] = await db
+      .insert(citations)
+      .values({ type: 'pmid', identifier: '12345678' })
+      .returning({ id: citations.id });
+    const citationId = paper!.id;
+    await db.insert(paperReviews).values({
+      citationId,
+      reviewMarkdown: 'Read in full.',
+      readInFull: true,
+      createdBy: human,
+    });
+    const stored = 'Terminal half-life ranged from 2 to 4 h.';
+    async function seedEntry() {
+      const [entry] = await db
+        .insert(parameterEntries)
+        .values({
+          drugId,
+          parameter: 'halfLife',
+          low: '2',
+          high: '4',
+          unit: 'h',
+          sourceQuote: stored,
+          citationId,
+          createdBy: human,
+        } as never)
+        .returning({ id: parameterEntries.id });
+      return entry!.id;
+    }
+    async function seedUpdate(entryId: number, quote: string) {
+      const [edit] = await db
+        .insert(pendingEdits)
+        .values({
+          editType: 'param_entry',
+          targetId: entryId,
+          parameter: 'halfLife',
+          proposedValue: {
+            op: 'update',
+            patch: { low: 3, high: 5, unit: 'h', citationId, quote },
+          },
+          referenceIds: [citationId],
+          submittedBy: human,
+          status: 'pending',
+        })
+        .returning({ id: pendingEdits.id });
+      await approve(b.agentId, edit!.id, { tier: 'flagship' });
+      await approve(c.agentId, edit!.id, { tier: 'mid' });
+      return edit!.id;
+    }
+
+    // Older: the reading moves but the stated sentence is the stored one. The
+    // write treats it as an echo and clears it, so it would publish unquoted.
+    const echoEntry = await seedEntry();
+    const echo = await seedUpdate(echoEntry, stored);
+    await new Promise((r) => setTimeout(r, 5));
+    // Newer: states the sentence for the new reading, so the write keeps it.
+    const quotedEntry = await seedEntry();
+    const quoted = await seedUpdate(
+      quotedEntry,
+      'Terminal half-life ranged from 3 to 5 h in the fasted arm.',
+    );
+
+    const results = await sweepAgentConsensus();
+    expect(results.map((r) => r.pendingEditId)).toEqual([quoted]);
+    expect(results[0]).toMatchObject({ outcome: 'applied' });
+
+    const rows = await db
+      .select({ id: pendingEdits.id, status: pendingEdits.status })
+      .from(pendingEdits);
+    const statusOf = (id: number) => rows.find((r) => r.id === id)?.status;
+    expect(statusOf(quoted)).toBe('approved');
+    expect(statusOf(echo)).toBe('pending');
+    const [entryAfter] = await db
+      .select({ low: parameterEntries.low, quote: parameterEntries.sourceQuote })
+      .from(parameterEntries)
+      .where(eq(parameterEntries.id, quotedEntry));
+    expect(Number(entryAfter!.low)).toBe(3);
+    expect(entryAfter!.quote).toMatch(/3 to 5 h/);
+  });
+
+  it("bounds the person's entry-update pass and reads it oldest first", async () => {
+    const b = await seedAgent('b');
+    const c = await seedAgent('c');
+    const human = await seedUser(db, {
+      email: 'person@example.com',
+      username: 'person',
+      role: 'contributor',
+    });
+    const drugId = await seedDrug(db, { slug: 'ghb' });
+    const [paper] = await db
+      .insert(citations)
+      .values({ type: 'pmid', identifier: '12345678' })
+      .returning({ id: citations.id });
+    const citationId = paper!.id;
+    await db.insert(paperReviews).values({
+      citationId,
+      reviewMarkdown: 'Read in full.',
+      readInFull: true,
+      createdBy: human,
+    });
+    const ids: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      const [entry] = await db
+        .insert(parameterEntries)
+        .values({
+          drugId,
+          parameter: 'halfLife',
+          low: '2',
+          high: '4',
+          unit: 'h',
+          sourceQuote: 'Terminal half-life ranged from 2 to 4 h.',
+          citationId,
+          createdBy: human,
+        } as never)
+        .returning({ id: parameterEntries.id });
+      const [edit] = await db
+        .insert(pendingEdits)
+        .values({
+          editType: 'param_entry',
+          targetId: entry!.id,
+          parameter: 'halfLife',
+          proposedValue: {
+            op: 'update',
+            patch: {
+              low: 3,
+              high: 5,
+              unit: 'h',
+              citationId,
+              quote: `Half-life was 3 to 5 h (cohort ${i}).`,
+            },
+          },
+          referenceIds: [citationId],
+          submittedBy: human,
+          status: 'pending',
+        })
+        .returning({ id: pendingEdits.id });
+      await approve(b.agentId, edit!.id, { tier: 'flagship' });
+      await approve(c.agentId, edit!.id, { tier: 'mid' });
+      ids.push(edit!.id);
+      await new Promise((r) => setTimeout(r, 5));
+    }
+
+    const first = await sweepAgentConsensus(25, { personEntryUpdateLimit: 1 });
+    expect(first.map((r) => r.pendingEditId)).toEqual([ids[0]]);
+    // A scan budget of one reaches only the oldest remaining row.
+    const second = await sweepAgentConsensus(25, {
+      personEntryUpdateLimit: 5,
+      personEntryUpdateScanBudget: 1,
+    });
+    expect(second.map((r) => r.pendingEditId)).toEqual([ids[1]]);
   });
 
   it("holds a person's proposal to the pool's full quorum when filtering the sweep window", async () => {
