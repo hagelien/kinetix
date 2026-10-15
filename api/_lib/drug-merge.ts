@@ -77,7 +77,7 @@ import {
   NESTED_DRUG_REF_KEYS,
 } from './param-entry-payload-locks.js';
 import { lockDrugForEntryApplicability } from './parameterApplicabilityStore.js';
-import { beginBlockHistory } from './drugBlockHistory.js';
+import { beginBlockHistory, lockMetabolismHistory } from './drugBlockHistory.js';
 import { parameterAppliesToSubstanceClass } from '../../src/lib/parameterApplicability.js';
 import { normalizeAliases, resolveDrugName } from '../../src/lib/drugNames.js';
 import {
@@ -2729,6 +2729,8 @@ export async function mergeDrugs(
   //    the loser after we repointed its table would have that row
   //    cascade-deleted with the loser at step 11, and return success to a
   //    caller whose data was already gone.
+  // Graph history must serialize before either drug or any child rows lock.
+  await lockMetabolismHistory();
   const orderedIds = [winnerId, loserId].sort((a, b) => a - b);
   for (const id of orderedIds) {
     await lockDrugForEntryApplicability(id);

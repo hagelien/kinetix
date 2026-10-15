@@ -59,7 +59,7 @@ import {
   toMetabolismWriteInput,
 } from './metabolismStore.js';
 import { replaceDrugReceptorTargets } from './receptorTargetStore.js';
-import { metabolismInputLinkedDrugIds, withBlockHistory } from './drugBlockHistory.js';
+import { metabolismInputLinkedDrugIds, withBlockHistory, lockMetabolismHistory } from './drugBlockHistory.js';
 import { replaceDrugEnzymeInteractions } from './enzymeInteractionStore.js';
 import {
   createBioEntity,
@@ -1018,6 +1018,8 @@ export async function applyApprovedEdit(
       .where(eq(pendingEdits.id, editId))
       .limit(1);
     if (!preflight) throw new Error('Pending edit not found');
+    // Before the edit row: a merge takes graph → drug → child-row locks.
+    if (preflight.editType === 'metabolism') await lockMetabolismHistory();
     const lockIds = await drugAdvisoryLockIdsForEdit(db, preflight);
     for (const drugId of lockIds) {
       await lockDrugForEntryApplicability(drugId);

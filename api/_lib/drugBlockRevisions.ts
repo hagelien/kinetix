@@ -9,7 +9,7 @@
  * content would otherwise read as a change. An unchanged snapshot records
  * nothing.
  */
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { drugBlockRevisions, parameterEntries } from '../../db/schema.js';
 import { isInPoolTransaction, type getDb } from './db.js';
 import type { DrugBlockId } from '../../src/lib/drugBlocks.js';
@@ -91,6 +91,9 @@ export interface ModelStructureBlockSnapshot {
     low: string | null;
     high: string | null;
     median: string | null;
+    centralValue: string | null;
+    centralStatistic: string | null;
+    intervalKind: string | null;
     qualifier: string | null;
     unit: string;
     n: number | null;
@@ -158,6 +161,9 @@ export async function modelStructureBlockSnapshot(
       low: parameterEntries.low,
       high: parameterEntries.high,
       median: parameterEntries.median,
+      centralValue: parameterEntries.centralValue,
+      centralStatistic: parameterEntries.centralStatistic,
+      intervalKind: parameterEntries.intervalKind,
       qualifier: parameterEntries.qualifier,
       unit: parameterEntries.unit,
       n: parameterEntries.n,
@@ -199,6 +205,9 @@ export async function modelStructureBlockSnapshot(
       low: row.low ?? null,
       high: row.high ?? null,
       median: row.median ?? null,
+      centralValue: row.centralValue ?? null,
+      centralStatistic: row.centralStatistic ?? null,
+      intervalKind: row.intervalKind ?? null,
       qualifier: row.qualifier ?? null,
       unit: row.unit,
       n: row.n ?? null,
@@ -297,6 +306,9 @@ export async function recordDrugBlockRevision(
       oldValue: (args.oldValue ?? null) as never,
       newValue: args.newValue as never,
       createdBy: args.createdBy,
+      // now() is the transaction START, possibly before a previous writer
+      // whose graph lock we waited for. History sorts by the recording time.
+      createdAt: sql`clock_timestamp()`,
       pendingEditId: args.pendingEditId ?? null,
     })
     .returning({ id: drugBlockRevisions.id });

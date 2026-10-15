@@ -445,6 +445,41 @@ describe('drug block revisions', () => {
     expect(Number(routeValues[0]!.median)).toBe(1.2);
   });
 
+
+  it('records ka centre-only, statistic-only and interval-only changes', async () => {
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db);
+    const citationId = await seedAdmissibleCitation(db);
+    const [entry] = await db.insert(parameterEntries).values({
+      drugId, citationId, parameter: 'ka', route: 'oral', unit: '1/h',
+      centralValue: '1.2', centralStatistic: 'arithmetic_mean', intervalKind: 'range',
+      low: '0.8', high: '1.6', origin: 'contributor',
+    }).returning({ id: parameterEntries.id });
+    const change = async (patch: Partial<typeof parameterEntries.$inferInsert>) => {
+      await runInPoolTransaction(async () => {
+        await getDb().update(parameterEntries).set(patch).where(eq(parameterEntries.id, entry!.id));
+        await recomputeParameterAndDependents(drugId, 'ka', userId);
+      });
+    };
+    await recomputeInTransaction(drugId, 'ka', userId);
+    await change({ centralValue: '1.4' });
+    await change({ centralStatistic: 'geometric_mean' });
+    await change({ intervalKind: 'ci95' });
+    await change({ intervalKind: 'ci95' }); // unchanged save creates nothing
+    const revisions = await revisionsFor(drugId, 'modelStructure');
+    expect(revisions).toHaveLength(4);
+    const values = revisions.map((r) =>
+      (r.newValue as { routeValues: Array<Record<string, unknown>> }).routeValues[0]!,
+    );
+    expect(Number(values[0]!.centralValue)).toBe(1.2);
+    expect(Number(values[1]!.centralValue)).toBe(1.4);
+    expect(values[2]!.centralStatistic).toBe('geometric_mean');
+    expect(values[3]!.intervalKind).toBe('ci95');
+    for (let i = 1; i < revisions.length; i++) {
+      expect(revisions[i]!.oldValue).toEqual(revisions[i - 1]!.newValue);
+    }
+  });
+
   // Codex review on #303: a citation held only by a block's history is still
   // cited content — the bibliography, a direct lookup and "cited in" must all
   // find it, as they do for a parameter revision's citations.

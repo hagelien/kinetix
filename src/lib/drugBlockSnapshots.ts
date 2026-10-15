@@ -186,6 +186,16 @@ function pharmacodynamicsLines(snapshot: SnapshotRow, t: Translate): string[] {
   });
 }
 
+function joinReportedValue(centralValue: number, range: NumericRange): string {
+  const centre = formatRange({ median: centralValue }, { showUnit: false });
+  const hasBounds = range.min != null || range.max != null;
+  const bounds = hasBounds
+    ? ` (${formatRange({ min: range.min, max: range.max }, { showUnit: false })})`
+    : '';
+  const unit = range.unit ? ` ${range.unit}` : '';
+  return `${centre}${bounds}${unit}`;
+}
+
 function modelStructureLines(snapshot: SnapshotRow, t: Translate): string[] {
   return [
     ...declarationLines(snapshot, t),
@@ -198,21 +208,28 @@ function modelStructureLines(snapshot: SnapshotRow, t: Translate): string[] {
         : parameter;
       const num = (v: unknown) =>
         v == null || v === '' || Number.isNaN(Number(v)) ? undefined : Number(v);
-      const value = formatRange(
-        {
-          min: num(entry.low),
-          max: num(entry.high),
-          median: num(entry.median),
-          qualifier: text(entry.qualifier) ?? undefined,
-          unit: text(entry.unit) ?? undefined,
-        } as NumericRange,
-        { showNote: false },
-      );
+      const centralValue = num(entry.centralValue);
+      const statistic = text(entry.centralStatistic);
+      const intervalKind = text(entry.intervalKind);
+      const range = {
+        min: num(entry.low),
+        max: num(entry.high),
+        median: num(entry.median),
+        qualifier: text(entry.qualifier) ?? undefined,
+        unit: text(entry.unit) ?? undefined,
+      } as NumericRange;
+      const value = centralValue != null
+        ? joinReportedValue(centralValue, range)
+        : formatRange(range, { showNote: false });
       const route = text(entry.route);
       const routeKey = route ? ROUTE_LABEL_KEYS[route as RouteId] : undefined;
       const quote = text(entry.sourceQuote);
       return join([
         `${label}: ${value || '—'}`,
+        statistic ? t(`doseContext.values.centralStatistic.${statistic}`) : null,
+        intervalKind
+          ? t('doseContext.interval', { kind: t(`doseContext.values.intervalKind.${intervalKind}`) })
+          : null,
         route ? (routeKey ? t(routeKey) : route) : null,
         scope(entry, t),
         typeof entry.n === 'number' ? `n=${entry.n}` : null,

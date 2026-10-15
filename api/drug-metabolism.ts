@@ -21,7 +21,7 @@ import { callerCan } from './_lib/permissions-store.js';
 import { drugs, pendingEdits } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { recordImplicitAgentApproval } from './_lib/agent-verifications.js';
-import { withBlockHistory, metabolismInputLinkedDrugIds } from './_lib/drugBlockHistory.js';
+import { withBlockHistory, metabolismInputLinkedDrugIds, lockMetabolismHistory } from './_lib/drugBlockHistory.js';
 import {
   getDrugMetabolism,
   MetabolismWriteError,
@@ -220,6 +220,7 @@ async function handlePut(
   let outcome: DirectOutcome;
   try {
     outcome = await runInPoolTransaction<DirectOutcome>(async () => {
+      await lockMetabolismHistory();
       await lockDrugForEntryApplicability(drugId);
       const [drugInTx] = await getDb()
         .select({ updatedAt: drugs.updatedAt })

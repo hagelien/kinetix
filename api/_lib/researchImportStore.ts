@@ -59,8 +59,8 @@ import {
   blockedParametersFor,
   withDrugApplicabilityLock,
 } from './parameterApplicabilityStore.js';
-import { getDb, runInPoolTransaction } from './db.js';
-import { beginBlockHistory } from './drugBlockHistory.js';
+import { getDb, inTransaction, runInPoolTransaction } from './db.js';
+import { beginBlockHistory, lockMetabolismHistory } from './drugBlockHistory.js';
 import { assertPubchemCidShadowsNoDrug } from './drugs-helpers.js';
 import type {
   NormalizedResearchImport,
@@ -340,25 +340,28 @@ export async function runImport(
   // bracketed by the block history (#37): every write to the three blocks —
   // source entries (model-structure axes, route-scoped ka), mechanisms,
   // metabolism — commits together with its revision rows, or not at all.
-  await withDrugApplicabilityLock(drugId, async () => {
-    const tx = getDb();
-    const blockHistory = await beginBlockHistory({
-      drugIds: [drugId],
-      actorUserId: opts.userId,
+  await inTransaction(async () => {
+    await lockMetabolismHistory();
+    await withDrugApplicabilityLock(drugId, async () => {
+      const tx = getDb();
+      const blockHistory = await beginBlockHistory({
+        drugIds: [drugId],
+        actorUserId: opts.userId,
+      });
+      await lockCitationMembershipsShared(
+        data.parameters.flatMap((p) =>
+          p.sourceValues.flatMap((sv) => {
+            const citationId = citationMap.get(sv.sourceId);
+            return citationId == null ? [] : [citationId];
+          }),
+        ),
+      );
+      await seedParameters(tx, drugId, data, citationMap, opts, stats);
+      await seedParameterEntries(tx, drugId, data, citationMap, opts, stats);
+      await seedPdTargets(tx, drugId, data, citationMap, opts.userId, stats);
+      await seedMetabolism(tx, drugId, data, citationMap, opts.userId, stats);
+      await blockHistory.record();
     });
-    await lockCitationMembershipsShared(
-      data.parameters.flatMap((p) =>
-        p.sourceValues.flatMap((sv) => {
-          const citationId = citationMap.get(sv.sourceId);
-          return citationId == null ? [] : [citationId];
-        }),
-      ),
-    );
-    await seedParameters(tx, drugId, data, citationMap, opts, stats);
-    await seedParameterEntries(tx, drugId, data, citationMap, opts, stats);
-    await seedPdTargets(tx, drugId, data, citationMap, opts.userId, stats);
-    await seedMetabolism(tx, drugId, data, citationMap, opts.userId, stats);
-    await blockHistory.record();
   });
   const ionStats = await seedIonizationConstants(
     db,

@@ -101,6 +101,25 @@ class BlockHistoryOutsideTransactionError extends Error {
 }
 
 /**
+ * Serialize metabolism graph writes before taking any snapshots. A per-parent
+ * lock is insufficient: two different parents can change the same metabolite's
+ * precursor box, including by adding an edge that did not exist at preflight.
+ *
+ * This deliberately uses one transaction-scoped graph key, rather than locking
+ * a discovered neighbour set that can change while those locks are acquired.
+ * Writers that also take drug/child-row locks must take this FIRST (API writes,
+ * approvals, research imports and merges). beginBlockHistory also takes it for
+ * standalone script writers. It is re-entrant on the same transaction.
+ */
+export async function lockMetabolismHistory(): Promise<void> {
+  if (!isInPoolTransaction()) {
+    throw new BlockHistoryOutsideTransactionError('lockMetabolismHistory');
+  }
+  // Two-int advisory keys are disjoint from the per-drug bigint keys.
+  await getDb().execute(sql`SELECT pg_advisory_xact_lock(1651273576, 1)`);
+}
+
+/**
  * Snapshot the blocks in scope now; the returned `record()` snapshots them
  * again and writes one revision per block that changed, returning how many.
  * Both halves must run inside the SAME transaction as the writes they
@@ -113,6 +132,7 @@ export async function beginBlockHistory(scope: BlockHistoryScope) {
   }
   const db: Db = getDb();
   const blocks = scope.blocks ?? DRUG_BLOCK_IDS;
+  if (blocks.includes('metabolism')) await lockMetabolismHistory();
   const ids = [...new Set(scope.drugIds)];
   const targets = new Map<DrugBlockId, Set<number>>();
   for (const block of blocks) {

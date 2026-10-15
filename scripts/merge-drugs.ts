@@ -43,7 +43,7 @@ import 'dotenv/config';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { drugs, wikiPages, pendingEdits, parameterEntries } from '../db/schema';
 import { getDb, runInPoolTransaction } from '../api/_lib/db';
-import { beginBlockHistory } from '../api/_lib/drugBlockHistory';
+import { beginBlockHistory, lockMetabolismHistory } from '../api/_lib/drugBlockHistory';
 import {
   blockedParametersFor,
   withDrugApplicabilityLock,
@@ -1209,6 +1209,7 @@ async function main(): Promise<void> {
   const firstLock = Math.min(intoId, fromId);
   const secondLock = Math.max(intoId, fromId);
   await runInPoolTransaction(async () => {
+    await lockMetabolismHistory();
     await withDrugApplicabilityLock(firstLock, async () => {
       await withDrugApplicabilityLock(secondLock, async () => {
         const tx = getDb();
