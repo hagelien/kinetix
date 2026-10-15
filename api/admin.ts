@@ -364,7 +364,12 @@ async function revokeSessionsNoLongerAllowed(
 ): Promise<void> {
   await getDb()
     .update(users)
-    .set({ sessionGeneration: sql`${users.sessionGeneration} + 1` })
+    // Also void any sign-in code already issued: a removed person could
+    // otherwise redeem it and mint a session under the new generation.
+    .set({
+      sessionGeneration: sql`${users.sessionGeneration} + 1`,
+      magicLinkHash: null,
+    })
     .where(
       and(
         match,
@@ -446,6 +451,9 @@ async function handleUsers(
       .update(users)
       .set({
         sessionGeneration: sql`${users.sessionGeneration} + 1`,
+        // An outstanding sign-in code would let whoever holds the mailbox
+        // straight back in; a force-logout voids it too.
+        magicLinkHash: null,
         updatedAt: new Date(),
       })
       .where(eq(users.id, userId))

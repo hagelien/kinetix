@@ -74,7 +74,23 @@ async function admin(method: string, url: string): Promise<number> {
 }
 
 async function seedMember(email: string) {
-  return seedUser(db, { email, username: email.split('@')[0]!, role: 'contributor' });
+  // Each member holds an unredeemed sign-in code, so the tests can check that
+  // revocation voids it.
+  return seedUser(db, {
+    email,
+    username: email.split('@')[0]!,
+    role: 'contributor',
+    magicLinkHash: 'v2:' + 'a'.repeat(64),
+    magicLinkExpires: new Date(Date.now() + 10 * 60_000),
+  });
+}
+
+async function codeVoided(userId: number): Promise<boolean> {
+  const [row] = await db
+    .select({ hash: users.magicLinkHash })
+    .from(users)
+    .where(eq(users.id, userId));
+  return row!.hash === null;
 }
 
 async function revoked(userId: number): Promise<boolean> {
@@ -97,7 +113,9 @@ describe('session revocation targets', () => {
     expect(await admin('DELETE', `/api/admin?resource=allowed-emails&id=${entry!.id}`)).toBe(200);
 
     expect(await revoked(userId)).toBe(true);
+    expect(await codeVoided(userId)).toBe(true);
     expect(await revoked(bystander)).toBe(false);
+    expect(await codeVoided(bystander)).toBe(false);
   });
 
   it('leaves a person still allowed through their domain', async () => {
@@ -136,6 +154,7 @@ describe('session revocation targets', () => {
       await admin('POST', `/api/admin?resource=users&action=revoke-sessions&id=${userId}`),
     ).toBe(200);
     expect(await revoked(userId)).toBe(true);
+    expect(await codeVoided(userId)).toBe(true);
     expect(
       await admin('POST', `/api/admin?resource=users&action=revoke-sessions&id=999999`),
     ).toBe(404);
