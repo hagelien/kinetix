@@ -340,6 +340,31 @@ describe('sortLigands', () => {
     expect(sortLigands(mixed, 'ki', 'desc', name).map((r) => r.relationshipId)).toEqual([3, 1, 2, 4, 5]);
   });
 
+  it('ranks Emax only within one common unit, folding fraction into %', () => {
+    const mixed = [
+      ligand({ relationshipId: 1, emax: { median: 60, unit: '%' } }),
+      ligand({ relationshipId: 2, emax: { median: 0.9, unit: 'fraction' } }),
+      ligand({ relationshipId: 3, emax: { median: 75, unit: 'percent' } }),
+      ligand({ relationshipId: 4, emax: { median: 3, unit: 'a.u.' } }),
+      ligand({ relationshipId: 5 }),
+    ];
+    // 0.9 fraction is 90%; the a.u. reading has no common unit and goes
+    // last with the value-less row, in original order, both directions.
+    expect(sortLigands(mixed, 'emax', 'asc', name).map((r) => r.relationshipId)).toEqual([1, 3, 2, 4, 5]);
+    expect(sortLigands(mixed, 'emax', 'desc', name).map((r) => r.relationshipId)).toEqual([2, 3, 1, 4, 5]);
+  });
+
+  it('sorts the Emax / efficacy column by efficacy when Emax is absent', () => {
+    const rows = [
+      ligand({ relationshipId: 1, emax: { median: 60, unit: '%' } }),
+      ligand({ relationshipId: 2, efficacy: { median: 50, unit: '%' } }),
+      ligand({ relationshipId: 3, emax: { median: 40, unit: '%' }, efficacy: { median: 99, unit: '%' } }),
+      ligand({ relationshipId: 4 }),
+    ];
+    expect(sortLigands(rows, 'emax', 'asc', name).map((r) => r.relationshipId)).toEqual([3, 2, 1, 4]);
+    expect(sortLigands(rows, 'emax', 'desc', name).map((r) => r.relationshipId)).toEqual([1, 2, 3, 4]);
+  });
+
   it('sorts by drug name', () => {
     expect(sortLigands(rows, 'drug', 'asc', name).map((r) => r.drugSlug)).toEqual(['a', 'b', 'c']);
   });

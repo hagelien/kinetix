@@ -404,35 +404,82 @@ export function resolvePlotMetric(
 export type LigandSortKey = 'default' | 'drug' | 'activity' | 'ki' | 'ec50' | 'ic50' | 'emax';
 
 /**
- * A comparable number for a measurement column, or null when the value
+ * A comparable number for a Ki, EC50 or IC50 column, or null when the value
  * cannot be ranked against the others.
  *
- * Ki, EC50 and IC50 are concentrations: they rank in nM (so 1 µM sorts after
- * 50 nM), and a value in any other unit — a mass concentration such as
- * ng/mL, a free-text unit, none at all — has no molar position, so it is
- * treated as unsortable rather than compared as a raw number against nM
- * values. Ranking 2.4 ng/mL beside 0.2 nM would assert a molar-vs-mass
- * potency order the data does not support. Such rows stay in the table and
- * sort with the rows that have no value.
+ * These are concentrations: they rank in nM (so 1 µM sorts after 50 nM), and
+ * a value in any other unit — a mass concentration such as ng/mL, a
+ * free-text unit, none at all — has no molar position, so it is treated as
+ * unsortable rather than compared as a raw number against nM values.
+ * Ranking 2.4 ng/mL beside 0.2 nM would assert a molar-vs-mass potency order
+ * the data does not support. Such rows stay in the table and sort with the
+ * rows that have no value.
  */
 export function measurementSortValue(
   range: NumericRange | null | undefined,
-  key: 'ki' | 'ec50' | 'ic50' | 'emax',
 ): number | null {
   const scalar = rangeScalar(range);
   if (!scalar) return null;
-  if (CONCENTRATION_METRICS.has(key)) {
-    return toNanomolar(scalar.value, range?.unit);
+  return toNanomolar(scalar.value, range?.unit);
+}
+
+/**
+ * The value the combined "Emax / efficacy" column shows first: Emax when it
+ * carries a reading, otherwise efficacy.
+ */
+export function emaxOrEfficacy(ligand: EntityTargetLigand): NumericRange | null {
+  return rangeScalar(ligand.emax) ? ligand.emax : ligand.efficacy;
+}
+
+/**
+ * A unit-tagged value for comparing Emax/efficacy readings: `%`, `percent`
+ * and `fraction` share one scale (a fraction is ×100), molar units share nM,
+ * and any other unit — including none — is only comparable with itself.
+ */
+export function efficacyComparable(
+  range: NumericRange | null | undefined,
+): { unit: string; value: number } | null {
+  const scalar = rangeScalar(range);
+  if (!scalar) return null;
+  const raw = (range?.unit ?? '').trim();
+  if (raw.toLowerCase() === 'fraction') {
+    return { unit: '%', value: scalar.value * 100 };
   }
-  return toNanomolar(scalar.value, range?.unit) ?? scalar.value;
+  const { unit, factor } = normalizePdUnit(raw);
+  return { unit, value: scalar.value * factor };
+}
+
+/**
+ * Sort keys for the combined Emax / efficacy column. Values are ranked only
+ * within one common unit — the unit most rows share once compatible units
+ * are folded together (ties: the first such row's unit). A value in any other
+ * unit cannot be ranked against them (0.9 "fraction" is 90%, not below 60%;
+ * a.u. is not a percentage at all), so it is unsortable, like a missing one.
+ */
+function efficacySortValues(
+  ligands: readonly EntityTargetLigand[],
+): Map<EntityTargetLigand, number | null> {
+  const comparable = ligands.map((l) => [l, efficacyComparable(emaxOrEfficacy(l))] as const);
+  const counts = new Map<string, number>();
+  for (const [, c] of comparable) {
+    if (c) counts.set(c.unit, (counts.get(c.unit) ?? 0) + 1);
+  }
+  let common: string | null = null;
+  for (const [unit, n] of counts) {
+    if (common === null || n > counts.get(common)!) common = unit;
+  }
+  return new Map(
+    comparable.map(([l, c]) => [l, c && c.unit === common ? c.value : null]),
+  );
 }
 
 /**
  * Sort a ligand list for the table. `default` keeps the server's stable
  * order. Rows without a sortable value for the sorted measurement (none
- * recorded, or a Ki/EC50/IC50 not in a molar unit) always go last, in either
- * direction and in their original order, so they never crowd out — or get
- * ranked against — the comparable ones.
+ * recorded, a Ki/EC50/IC50 not in a molar unit, or an Emax/efficacy outside
+ * the column's common unit) always go last, in either direction and in their
+ * original order, so they never crowd out — or get ranked against — the
+ * comparable ones.
  */
 export function sortLigands(
   ligands: readonly EntityTargetLigand[],
@@ -455,9 +502,13 @@ export function sortLigands(
       return sign * (byGroup || na.label.localeCompare(nb.label));
     });
   }
+  const values =
+    key === 'emax'
+      ? efficacySortValues(rows)
+      : new Map(rows.map((l) => [l, measurementSortValue(l[key])]));
   return rows.sort((a, b) => {
-    const va = measurementSortValue(a[key], key);
-    const vb = measurementSortValue(b[key], key);
+    const va = values.get(a) ?? null;
+    const vb = values.get(b) ?? null;
     if (va === null && vb === null) return 0;
     if (va === null) return 1;
     if (vb === null) return -1;
