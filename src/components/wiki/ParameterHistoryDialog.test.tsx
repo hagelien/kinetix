@@ -9,15 +9,21 @@ import { render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18nApp from '@/i18n';
 import { ParameterHistoryDialog } from './ParameterHistoryDialog';
-import { fetchDrugParameterHistory, type DrugParameterRevisionDTO } from '@/lib/drugApi';
+import {
+  fetchDrugBlockHistory,
+  fetchDrugParameterHistory,
+  type DrugParameterRevisionDTO,
+} from '@/lib/drugApi';
 
 vi.mock('@/lib/drugApi', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/drugApi')>()),
   fetchDrugParameterHistory: vi.fn(),
+  fetchDrugBlockHistory: vi.fn(),
 }));
 
 
 const fetchDrugParameterHistoryMock = vi.mocked(fetchDrugParameterHistory);
+const fetchDrugBlockHistoryMock = vi.mocked(fetchDrugBlockHistory);
 
 function revision(over: Partial<DrugParameterRevisionDTO>): DrugParameterRevisionDTO {
   return {
@@ -312,5 +318,73 @@ describe('ParameterHistoryDialog', () => {
     expect(
       screen.queryByRole('button', { name: /approv/i }),
     ).not.toBeInTheDocument();
+  });
+
+  // #37: a whole block's history shows its before/after snapshots as lines,
+  // marking what was removed and added, instead of a parameter's formatted value.
+  describe('for a whole block', () => {
+    beforeEach(() => fetchDrugBlockHistoryMock.mockReset());
+
+    const declaration = (categoricalValue: string, citationId: number) => ({
+      parameter: 'dispositionModel',
+      categoricalValue,
+      route: null,
+      citationId,
+      sourceQuote: null,
+    });
+
+    it('lists the lines a revision removed and added', async () => {
+      fetchDrugBlockHistoryMock.mockResolvedValue({
+        revisions: [
+          revision({
+            editSummary: null,
+            oldValue: { declarations: [declaration('one-compartment', 4)] },
+            newValue: { declarations: [declaration('two-compartment', 5)] },
+          }),
+        ],
+      });
+
+      render(
+        <ParameterHistoryDialog
+          drugId={51}
+          parameter="modelStructure"
+          onClose={() => {}}
+        />,
+      );
+
+      expect(
+        await screen.findByRole('dialog', { name: /^model structure — history$/i }),
+      ).toBeInTheDocument();
+      const diff = await screen.findByTestId('block-revision-diff');
+      expect(within(diff).getByText(/^− .*#4$/)).toBeInTheDocument();
+      expect(within(diff).getByText(/^\+ .*#5$/)).toBeInTheDocument();
+      expect(fetchDrugBlockHistoryMock).toHaveBeenCalledWith(51, 'modelStructure');
+      expect(fetchDrugParameterHistoryMock).not.toHaveBeenCalled();
+    });
+
+    it('says when the state before a revision was never recorded', async () => {
+      fetchDrugBlockHistoryMock.mockResolvedValue({
+        revisions: [
+          revision({
+            editSummary: null,
+            oldValue: null,
+            newValue: { declarations: [declaration('two-compartment', 5)] },
+          }),
+        ],
+      });
+
+      render(
+        <ParameterHistoryDialog
+          drugId={51}
+          parameter="modelStructure"
+          onClose={() => {}}
+        />,
+      );
+
+      const diff = await screen.findByTestId('block-revision-diff');
+      expect(within(diff).getByText('Not recorded')).toBeInTheDocument();
+      // Nothing to compare against, so nothing is marked as added.
+      expect(within(diff).queryByText(/^\+ /)).not.toBeInTheDocument();
+    });
   });
 });

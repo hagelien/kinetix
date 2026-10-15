@@ -11,6 +11,7 @@ import {
   type DiscussionHost,
   type FactDiscussionTargetKey,
 } from '@/lib/discussionTargets';
+import type { DrugBlockId } from '@/lib/drugBlocks';
 import type {
   DrugMetabolism,
   EliminationRouteKind,
@@ -682,9 +683,26 @@ export async function fetchDrugParameterHistory(
   );
 }
 
+/**
+ * A whole block's revision history (#37) — metabolism, mechanisms or the model
+ * structure. Same row shape as a parameter's, with the before/after values
+ * being block snapshots and no review round attached.
+ */
+export async function fetchDrugBlockHistory(
+  drugId: number,
+  block: DrugBlockId,
+): Promise<{ revisions: DrugParameterRevisionDTO[] }> {
+  const data = await apiFetch<{
+    revisions: Array<Omit<DrugParameterRevisionDTO, 'editSummary'>>;
+  }>(`/api/drug-parameter-history?drugId=${drugId}&block=${encodeURIComponent(block)}`);
+  return {
+    revisions: data.revisions.map((rev) => ({ ...rev, editSummary: null })),
+  };
+}
+
 export async function fetchDiscussions(
   host: DiscussionHost,
-  parameter?: DrugParameterId | FactDiscussionTargetKey | null,
+  parameter?: DrugParameterId | DrugBlockId | FactDiscussionTargetKey | null,
 ): Promise<{ discussions: DrugDiscussionDTO[] }> {
   const sp = discussionHostParams(host);
   if (parameter) sp.set('parameter', parameter);
@@ -707,7 +725,7 @@ export async function fetchDiscussionById(id: number): Promise<{
 export async function postDiscussion(
   host: DiscussionHost,
   body: string,
-  parameter?: DrugParameterId | FactDiscussionTargetKey | null,
+  parameter?: DrugParameterId | DrugBlockId | FactDiscussionTargetKey | null,
   parentId?: number,
 ): Promise<{ discussion: DrugDiscussionDTO }> {
   const sp = discussionHostParams(host);

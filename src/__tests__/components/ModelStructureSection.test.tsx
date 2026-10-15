@@ -102,6 +102,36 @@ describe('ModelStructureSection', () => {
     );
   });
 
+  // #37: the model structure is one block per drug — its history/discussion
+  // actions sit by the heading, and its citations read like parameter values'.
+  it('shows the block actions by the heading and cites through the shared markers', async () => {
+    store.push(entry({ id: 10, categoricalValue: 'two-compartment', citationId: 7 }));
+    render(
+      <ModelStructureSection
+        drugId={42}
+        actions={<button type="button">block-actions</button>}
+        renderReferences={(citationId) => <sup>[ref-{citationId}]</sup>}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByText('two-compartment')).toBeInTheDocument(),
+    );
+    expect(screen.getByRole('button', { name: 'block-actions' })).toBeInTheDocument();
+    expect(screen.getByText('[ref-7]')).toBeInTheDocument();
+    expect(screen.queryByText('#7')).toBeNull();
+  });
+
+  it('falls back to the #id link while a citation is not in the shared ordering', async () => {
+    store.push(entry({ id: 10, categoricalValue: 'two-compartment', citationId: 7 }));
+    render(<ModelStructureSection drugId={42} renderReferences={() => null} />);
+    await waitFor(() =>
+      expect(screen.getByText('#7').closest('a')).toHaveAttribute(
+        'href',
+        '/references/7',
+      ),
+    );
+  });
+
   // A model-structure axis is entry-backed, so it drives calculations and is
   // high-risk for auto-apply exactly like a numeric parameter. A quote that is
   // required to publish a declaration but invisible once published is

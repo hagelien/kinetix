@@ -1912,6 +1912,7 @@ async function applyApprovedEditEffects(
       edit.targetId,
       toMetabolismWriteInput(payload),
       edit.submittedBy,
+      { pendingEditId: edit.id },
     );
   } else if (edit.editType === 'receptor_targets') {
     if (!edit.targetId) throw new Error('Missing target drug id');
@@ -1933,6 +1934,7 @@ async function applyApprovedEditEffects(
       edit.targetId,
       parsed.data.mechanisms,
       edit.submittedBy,
+      { pendingEditId: edit.id },
     );
   } else if (edit.editType === 'enzyme_interaction') {
     if (!edit.targetId) throw new Error('Missing target drug id');

@@ -24,6 +24,10 @@ import {
 } from '../../src/lib/metabolism.js';
 import { ENTITY_RANKS, type EntityRank } from '../../src/lib/bioEntities.js';
 import { isUniqueViolation } from './drugs-helpers.js';
+import {
+  metabolismBlockSnapshot,
+  recordDrugBlockRevision,
+} from './drugBlockRevisions.js';
 import type { getDb } from './db.js';
 
 type Db = ReturnType<typeof getDb>;
@@ -574,8 +578,12 @@ export async function replaceDrugMetabolism(
   drugId: number,
   input: MetabolismWriteInput,
   userId: number,
+  /** The approved pending edit this write applies, for the revision row. */
+  opts: { pendingEditId?: number | null } = {},
 ): Promise<void> {
   const drugName = await validateMetabolismInput(db, drugId, input);
+  // The box as it stood, for the block's revision history (#37).
+  const before = metabolismBlockSnapshot(await getDrugMetabolism(db, drugId));
 
   // Elimination / metabolism routes. #785 Phase 7: route.enzymeId is a unified
   // bio_entities id, written to bio_entity_id (the legacy enzyme_id column was
@@ -675,6 +683,17 @@ export async function replaceDrugMetabolism(
     drugId,
     userId,
     eventType: 'edit',
+  });
+
+  // The revision history of the whole box. Same transaction as the write, so
+  // a change is never applied without its history row (or vice versa).
+  await recordDrugBlockRevision(db, {
+    drugId,
+    block: 'metabolism',
+    oldValue: before,
+    newValue: metabolismBlockSnapshot(await getDrugMetabolism(db, drugId)),
+    createdBy: userId,
+    pendingEditId: opts.pendingEditId ?? null,
   });
 }
 

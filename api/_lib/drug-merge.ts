@@ -32,6 +32,7 @@ import { and, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import {
   analyticalMethodComponents,
   citations,
+  drugBlockRevisions,
   drugEliminationRoutes,
   drugEnzymeInteractions,
   drugInteractions,
@@ -3490,6 +3491,7 @@ export async function mergeDrugs(
       )`);
   await db.update(parameterEntries).set({ drugId: winnerId }).where(eq(parameterEntries.drugId, loserId));
   await db.update(drugParameterRevisions).set({ drugId: winnerId }).where(eq(drugParameterRevisions.drugId, loserId));
+  await db.update(drugBlockRevisions).set({ drugId: winnerId }).where(eq(drugBlockRevisions.drugId, loserId));
   await db.update(drugParameterDiscussions).set({ drugId: winnerId }).where(eq(drugParameterDiscussions.drugId, loserId));
   await db.update(drugInteractions).set({ drugId: winnerId }).where(eq(drugInteractions.drugId, loserId));
   await db.update(parameterPriorityFlags).set({ drugId: winnerId }).where(eq(parameterPriorityFlags.drugId, loserId));

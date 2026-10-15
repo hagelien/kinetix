@@ -4000,6 +4000,16 @@
     "searching": "Søker i PubChem …",
     "noResults": "Ingen forbindelser funnet i PubChem"
   },
+  "drugBlocks": {
+    "metabolism": "Metabolisme",
+    "pharmacodynamics": "Farmakodynamikk",
+    "modelStructure": "Modellstruktur"
+  },
+  "blockHistory": {
+    "noRevisions": "Ingen endringer er registrert for denne delen ennå. Historikken føres fra den første endringen etter at den ble innført.",
+    "notRecorded": "Ikke registrert",
+    "empty": "(tom)"
+  },
   "paramHistory": {
     "title": "Historikk",
     "dialogHeading": "{{parameter}} — historikk",

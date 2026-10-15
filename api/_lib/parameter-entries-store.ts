@@ -46,11 +46,13 @@ import {
 import {
   getRangeSpec,
   isDrugParameterId,
+  isModelStructureParameter,
   parameterIsMatrixRelevant,
   parameterIsSummarizable,
   SUMMARIZED_PARAMETER_IDS,
   type DrugParameterId,
 } from '../../src/lib/drugParameters.js';
+import { recordModelStructureRevision } from './drugBlockRevisions.js';
 import type { ReferenceMatrix } from '../../src/lib/referenceConcentrations.js';
 import {
   resolveBloodPlasmaRatio,
@@ -843,6 +845,17 @@ export async function recomputeParameterAndDependents(
     actorUserId,
     opts?.pendingEditId ?? null,
   );
+  // A model-structure declaration has no aggregate, so the recompute above
+  // records nothing for it. Every declaration write path meets here, so this
+  // is where the model structure's whole-block history is kept (#37).
+  if (isModelStructureParameter(parameter)) {
+    await recordModelStructureRevision(
+      getDb(),
+      drugId,
+      actorUserId,
+      opts?.pendingEditId ?? null,
+    );
+  }
   if (isNormalizationInput(parameter)) {
     // recomputeSummariesForDrug re-runs this parameter too; that pass is a
     // no-op (the value it just cached is what it recomputes) and the cascade

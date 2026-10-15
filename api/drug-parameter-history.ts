@@ -1,16 +1,25 @@
 /**
  * Drug parameter revision history.
  *   GET ?drugId=&parameter=[&revision=]
+ *   GET ?drugId=&block=   — a whole block's history (metabolism,
+ *                           pharmacodynamics, modelStructure; #37)
  *
  * The newest 100 revisions. `revision` names one more to include even when it
  * is older than that — a notification links to the exact revision it is
  * about, and the dialog must be able to show it.
  */
+import type { ServerResponse } from 'node:http';
 import { desc, eq, and, sql } from 'drizzle-orm';
 import { json, error, withErrorHandling } from './_lib/response.js';
 import { getDb } from './_lib/db.js';
-import { drugParameterRevisions, users, agents } from '../db/schema.js';
+import {
+  drugBlockRevisions,
+  drugParameterRevisions,
+  users,
+  agents,
+} from '../db/schema.js';
 import { isDrugParameterId } from './_lib/drugParameterIds.js';
+import { isDrugBlockId, type DrugBlockId } from '../src/lib/drugBlocks.js';
 import { getUserFromRequest } from './_lib/auth.js';
 import { summariseApprovalsForTargets } from './_lib/approvals.js';
 import {
@@ -37,6 +46,14 @@ export default withErrorHandling(async function handler(req, res): Promise<void>
   if (!drugId || Number.isNaN(drugId)) {
     error(res, 400, 'Missing or invalid drugId');
     return;
+  }
+  const block = url.searchParams.get('block');
+  if (block !== null) {
+    if (parameter !== null || !isDrugBlockId(block)) {
+      error(res, 400, 'Missing or invalid block');
+      return;
+    }
+    return handleBlockHistory(res, drugId, block);
   }
   if (!parameter || !isDrugParameterId(parameter)) {
     error(res, 400, 'Missing or invalid parameter');
@@ -211,3 +228,47 @@ export default withErrorHandling(async function handler(req, res): Promise<void>
     error(res, 500, 'Failed to fetch parameter history');
   }
 });
+
+/**
+ * A block's revisions, newest first. Block revisions carry no approvals,
+ * verdicts or disputes (nothing targets them), so the rows are just the
+ * snapshots and their author. Public like the parameter history above: the
+ * author projection leaves the email out for the same reason.
+ */
+async function handleBlockHistory(
+  res: ServerResponse,
+  drugId: number,
+  block: DrugBlockId,
+): Promise<void> {
+  try {
+    const revisions = await getDb()
+      .select({
+        id: drugBlockRevisions.id,
+        oldValue: drugBlockRevisions.oldValue,
+        newValue: drugBlockRevisions.newValue,
+        pendingEditId: drugBlockRevisions.pendingEditId,
+        createdAt: drugBlockRevisions.createdAt,
+        author: {
+          id: users.id,
+          username: users.username,
+          displayName: users.displayName,
+          role: users.role,
+          isAgent: sql<boolean>`${agents.id} is not null`,
+        },
+      })
+      .from(drugBlockRevisions)
+      .leftJoin(users, eq(drugBlockRevisions.createdBy, users.id))
+      .leftJoin(agents, eq(agents.userId, users.id))
+      .where(
+        and(
+          eq(drugBlockRevisions.drugId, drugId),
+          eq(drugBlockRevisions.block, block),
+        ),
+      )
+      .orderBy(desc(drugBlockRevisions.createdAt), desc(drugBlockRevisions.id))
+      .limit(100);
+    json(res, 200, { revisions });
+  } catch {
+    error(res, 500, 'Failed to fetch block history');
+  }
+}

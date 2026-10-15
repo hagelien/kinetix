@@ -78,6 +78,7 @@ import { ReceptorTargetEditForm } from './ReceptorTargetEditForm';
 import { ParameterFlagDialog } from './ParameterFlagDialog';
 import { ParameterHistoryDialog } from './ParameterHistoryDialog';
 import { ParameterDiscussionPanel } from './ParameterDiscussionPanel';
+import { DrugBlockActions } from './DrugBlockActions';
 import { ParameterBadges } from './ParameterBadges';
 import { fetchParameterVerificationLevels } from '@/lib/verificationLevelsApi';
 import type { VerificationLevelInfo } from '@/lib/verificationLevel';
@@ -1023,6 +1024,40 @@ export function DrugMonographSidebar({
     );
   }
 
+  /**
+   * `[n]` markers for a block entry's citations (a metabolism route or
+   * metabolite link, a model-structure declaration), resolved against the one
+   * shared ordering like parameter values and mechanisms are.
+   */
+  function referenceItemsFor(
+    ids: readonly number[] | null | undefined,
+  ): { index: number; row: CitationRow }[] {
+    return (ids ?? [])
+      .map((id) => {
+        const index = refIndexById.get(id);
+        const row = referencesById.get(id);
+        return index !== undefined && row ? { index, row } : null;
+      })
+      .filter(
+        (item): item is { index: number; row: CitationRow } => item !== null,
+      );
+  }
+
+  function renderReferenceBadges(ids: readonly number[] | null | undefined) {
+    const items = referenceItemsFor(ids);
+    if (items.length === 0) return null;
+    return (
+      <span className="ml-0.5 align-middle">
+        <ParameterBadges
+          refCount={items.length}
+          refIndices={items.map((item) => item.index)}
+          references={items}
+          showRefWarning={false}
+        />
+      </span>
+    );
+  }
+
   function renderMetaboliteLink(link: DrugMetaboliteLink) {
     const activity =
       link.activity === 'active'
@@ -1063,6 +1098,7 @@ export function DrugMonographSidebar({
             {content}
           </Link>
         )}
+        {renderReferenceBadges(link.referenceIds)}
       </li>
     );
   }
@@ -1073,24 +1109,25 @@ export function DrugMonographSidebar({
     );
     return (
       <div className="space-y-2">
-        {canEditMetabolism || canFlag ? (
-          <div className="flex items-center justify-end gap-1">
-            {canEditMetabolism ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="hover-actions h-6 gap-1 px-1.5 text-xs text-muted-foreground opacity-0 transition-opacity group-hover/section:opacity-100 focus-visible:opacity-100 motion-reduce:transition-none"
-                onClick={() => setShowMetabolismEditor(true)}
-              >
-                <Edit2 className="h-3 w-3" />
-                {hasMetabolismData(drugRow.metabolism)
-                  ? t('sidebar.metabolismEdit')
-                  : t('sidebar.metabolismAdd')}
-              </Button>
-            ) : null}
-            {renderCoverageFlagButton('metabolism')}
-          </div>
-        ) : null}
+        {/* History and discussion are for every reader, like a parameter
+            row's; editing and flagging stay permission-gated. */}
+        <div className="flex items-center justify-end gap-1">
+          {canEditMetabolism ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="hover-actions h-6 gap-1 px-1.5 text-xs text-muted-foreground opacity-0 transition-opacity group-hover/section:opacity-100 focus-visible:opacity-100 motion-reduce:transition-none"
+              onClick={() => setShowMetabolismEditor(true)}
+            >
+              <Edit2 className="h-3 w-3" />
+              {hasMetabolismData(drugRow.metabolism)
+                ? t('sidebar.metabolismEdit')
+                : t('sidebar.metabolismAdd')}
+            </Button>
+          ) : null}
+          {renderCoverageFlagButton('metabolism')}
+          <DrugBlockActions drugId={drugRow.id} block="metabolism" />
+        </div>
         {renderCoverageFlagNotice('metabolism')}
         {metabolismPendingEdits.length > 0 ? (
           canReview ? (
@@ -1187,6 +1224,7 @@ export function DrugMonographSidebar({
                     </dt>
                     <dd className="font-medium">
                       {formatFractionRangePercent(route.fraction) ?? ''}
+                      {renderReferenceBadges(route.referenceIds)}
                     </dd>
                   </div>
                 ))}
@@ -1333,24 +1371,23 @@ export function DrugMonographSidebar({
     );
     return (
       <div className="space-y-2">
-        {canEditMechanisms || canFlag ? (
-          <div className="flex items-center justify-end gap-1">
-            {canEditMechanisms ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="hover-actions h-6 gap-1 px-1.5 text-xs text-muted-foreground opacity-0 transition-opacity group-hover/section:opacity-100 focus-visible:opacity-100 motion-reduce:transition-none"
-                onClick={() => setShowReceptorEditor(true)}
-              >
-                <Edit2 className="h-3 w-3" />
-                {(drugRow.receptorTargets ?? []).length > 0
-                  ? t('sidebar.mechanismsEdit')
-                  : t('sidebar.mechanismsAdd')}
-              </Button>
-            ) : null}
-            {renderCoverageFlagButton('pharmacodynamics')}
-          </div>
-        ) : null}
+        <div className="flex items-center justify-end gap-1">
+          {canEditMechanisms ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="hover-actions h-6 gap-1 px-1.5 text-xs text-muted-foreground opacity-0 transition-opacity group-hover/section:opacity-100 focus-visible:opacity-100 motion-reduce:transition-none"
+              onClick={() => setShowReceptorEditor(true)}
+            >
+              <Edit2 className="h-3 w-3" />
+              {(drugRow.receptorTargets ?? []).length > 0
+                ? t('sidebar.mechanismsEdit')
+                : t('sidebar.mechanismsAdd')}
+            </Button>
+          ) : null}
+          {renderCoverageFlagButton('pharmacodynamics')}
+          <DrugBlockActions drugId={drugRow.id} block="pharmacodynamics" />
+        </div>
         {renderCoverageFlagNotice('pharmacodynamics')}
         {receptorPendingEdits.length > 0 ? (
           canReview ? (
@@ -1505,6 +1542,10 @@ export function DrugMonographSidebar({
             canEdit={canSubmitParameterEntry}
             isAdmin={canDirectWrite}
             onMutated={loadDrug}
+            actions={
+              <DrugBlockActions drugId={drugRow.id} block="modelStructure" />
+            }
+            renderReferences={(citationId) => renderReferenceBadges([citationId])}
           />
         ) : null}
         {/* Cmax has no drug-level row above (a peak concentration means

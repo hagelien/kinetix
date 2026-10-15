@@ -4000,6 +4000,16 @@
     "searching": "Searching PubChem…",
     "noResults": "No compounds found on PubChem"
   },
+  "drugBlocks": {
+    "metabolism": "Metabolism",
+    "pharmacodynamics": "Pharmacodynamics",
+    "modelStructure": "Model structure"
+  },
+  "blockHistory": {
+    "noRevisions": "No changes recorded for this section yet. History is kept from the first change after it was introduced.",
+    "notRecorded": "Not recorded",
+    "empty": "(empty)"
+  },
   "paramHistory": {
     "title": "History",
     "dialogHeading": "{{parameter}} — history",

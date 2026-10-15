@@ -6,8 +6,11 @@ import {
   DRUG_PARAMETERS,
   type DrugParameterId,
 } from '@/lib/drugParameters';
-import { useParameterLabels } from '@/lib/useParameterLabels';
+import { isDrugBlockId, type DrugBlockId } from '@/lib/drugBlocks';
+import { blockSnapshotLines } from '@/lib/drugBlockSnapshots';
+import { useTargetLongLabel } from '@/lib/useParameterLabels';
 import {
+  fetchDrugBlockHistory,
   fetchDrugParameterHistory,
   type DrugParameterRevisionDTO,
   type DrugParameterRevisionDisputeDTO,
@@ -22,7 +25,11 @@ import { VerificationSummary } from './VerificationSummary';
 
 interface Props {
   drugId: number;
-  parameter: DrugParameterId;
+  /**
+   * A parameter, or a whole block (metabolism, mechanisms, model structure;
+   * #37) whose revisions are before/after snapshots of the block.
+   */
+  parameter: DrugParameterId | DrugBlockId;
   /** Verification level of this parameter's live value, if known. */
   verification?: VerificationLevelInfo;
   /** Revision to scroll to and highlight (a notification's deep link). */
@@ -256,6 +263,72 @@ function ApprovalsLine({
   );
 }
 
+/**
+ * Before/after of a whole-block revision as lists of lines (one per route,
+ * mechanism or declaration), with the lines only one side has marked as
+ * removed or added. `oldLines` is null when the state before was never
+ * recorded — said so, rather than shown as an empty block.
+ */
+function BlockSnapshotDiff({
+  oldLines,
+  newLines,
+  t,
+}: {
+  oldLines: string[] | null;
+  newLines: string[];
+  t: (key: string, opts?: Record<string, unknown>) => string;
+}) {
+  const before = new Set(oldLines ?? []);
+  const after = new Set(newLines);
+  const list = (lines: string[], other: Set<string> | null, marker: '−' | '+') =>
+    lines.length === 0 ? (
+      <div className="text-muted-foreground">{t('blockHistory.empty')}</div>
+    ) : (
+      <ul className="space-y-0.5">
+        {lines.map((line, i) => {
+          const changed = other !== null && !other.has(line);
+          return (
+            <li
+              key={`${i}-${line}`}
+              className={
+                changed
+                  ? marker === '+'
+                    ? 'text-emerald-700 dark:text-emerald-400'
+                    : 'text-red-700 dark:text-red-400'
+                  : undefined
+              }
+            >
+              {changed ? `${marker} ` : ''}
+              {line}
+            </li>
+          );
+        })}
+      </ul>
+    );
+  return (
+    <div className="grid grid-cols-2 gap-3 text-xs" data-testid="block-revision-diff">
+      <div>
+        <div className="text-muted-foreground mb-1">{t('paramHistory.before')}</div>
+        <div className="break-words">
+          {oldLines === null ? (
+            <div className="text-muted-foreground italic">
+              {t('blockHistory.notRecorded')}
+            </div>
+          ) : (
+            list(oldLines, after, '−')
+          )}
+        </div>
+      </div>
+      <div>
+        <div className="text-muted-foreground mb-1">{t('paramHistory.after')}</div>
+        <div className="break-words">
+          {list(newLines, oldLines === null ? null : before, '+')}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** Explicit verdict count for a revision's linked pending edit; implicit
  * self-approve rows aren't part of "the debate" and don't count. */
 function verdictCount(v: DrugParameterRevisionDTO['verifications']): number {
@@ -270,9 +343,10 @@ export function ParameterHistoryDialog({
   focusRevisionId,
   onClose,
 }: Props) {
-  const { t } = useTranslation();
-  const spec = DRUG_PARAMETERS[parameter];
-  const { longLabel } = useParameterLabels(spec);
+  const { t, i18n } = useTranslation();
+  const block = isDrugBlockId(parameter) ? parameter : null;
+  const spec = block ? null : DRUG_PARAMETERS[parameter as DrugParameterId];
+  const longLabel = useTargetLongLabel(parameter);
   const [revisions, setRevisions] = useState<DrugParameterRevisionDTO[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Which revisions' agent-verdict rationale (the "review debate" behind a
@@ -287,7 +361,10 @@ export function ParameterHistoryDialog({
   const heading = t('paramHistory.dialogHeading', { parameter: longLabel });
 
   const load = useCallback(() => {
-    fetchDrugParameterHistory(drugId, parameter, focusRevisionId)
+    (isDrugBlockId(parameter)
+      ? fetchDrugBlockHistory(drugId, parameter)
+      : fetchDrugParameterHistory(drugId, parameter, focusRevisionId)
+    )
       .then((data) => setRevisions(data.revisions))
       .catch((err) => setError(err instanceof Error ? err.message : String(err)));
   }, [drugId, parameter, focusRevisionId]);
@@ -326,7 +403,7 @@ export function ParameterHistoryDialog({
         )}
         {revisions && revisions.length === 0 && (
           <p className="text-sm text-muted-foreground">
-            {t('paramHistory.noRevisions')}
+            {t(block ? 'blockHistory.noRevisions' : 'paramHistory.noRevisions')}
           </p>
         )}
         {revisions && revisions.length > 0 && (
@@ -383,20 +460,32 @@ export function ParameterHistoryDialog({
                     ) : null}
                   </div>
                 ) : null}
-                <div className="grid grid-cols-2 gap-3 text-xs">
-                  <div>
-                    <div className="text-muted-foreground mb-1">{t('paramHistory.before')}</div>
-                    <div className="font-mono break-words">
-                      {spec.format(rev.oldValue) || '—'}
+                {block ? (
+                  <BlockSnapshotDiff
+                    oldLines={
+                      rev.oldValue == null
+                        ? null
+                        : blockSnapshotLines(block, rev.oldValue, t, i18n.language)
+                    }
+                    newLines={blockSnapshotLines(block, rev.newValue, t, i18n.language)}
+                    t={t}
+                  />
+                ) : (
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <div className="text-muted-foreground mb-1">{t('paramHistory.before')}</div>
+                      <div className="font-mono break-words">
+                        {spec?.format(rev.oldValue) || '—'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground mb-1">{t('paramHistory.after')}</div>
+                      <div className="font-mono break-words">
+                        {spec?.format(rev.newValue) || '—'}
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <div className="text-muted-foreground mb-1">{t('paramHistory.after')}</div>
-                    <div className="font-mono break-words">
-                      {spec.format(rev.newValue) || '—'}
-                    </div>
-                  </div>
-                </div>
+                )}
                 {rev.sourceDiff && <SourceDiffSection diff={rev.sourceDiff} t={t} />}
                 <ReviewRoundSection
                   verifications={rev.reviewVerdicts ?? []}

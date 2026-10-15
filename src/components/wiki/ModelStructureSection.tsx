@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Plus, Trash2 } from 'lucide-react';
@@ -37,6 +43,19 @@ interface Props {
   isAdmin?: boolean;
   /** Reload the parent after a direct write (admins) so derived surfaces refresh. */
   onMutated?: () => void;
+  /**
+   * The block's own actions (revision history, discussion), shown beside the
+   * heading. The model structure is one block per drug (#37), so these belong
+   * to the section, not to each declaration.
+   */
+  actions?: ReactNode;
+  /**
+   * Render a declaration's citation the way parameter values are cited (a
+   * `[n]` marker into the page's shared bibliography). Returns null while the
+   * citation is not in that ordering, and the section then falls back to its
+   * plain `#id` link to the reference.
+   */
+  renderReferences?: (citationId: number) => ReactNode;
 }
 
 export function ModelStructureSection({
@@ -44,6 +63,8 @@ export function ModelStructureSection({
   canEdit = false,
   isAdmin = false,
   onMutated,
+  actions,
+  renderReferences,
 }: Props) {
   const { t } = useTranslation();
   const [entries, setEntries] = useState<ParameterEntryRow[]>([]);
@@ -124,6 +145,10 @@ export function ModelStructureSection({
     }
   }
 
+  // The shared-bibliography marker for a citation, or null to fall back.
+  const citationMarker = (citationId: number): ReactNode | null =>
+    renderReferences?.(citationId) ?? null;
+
   const valueLabel = (value: string) =>
     t(`parameters.modelStructure.value.${value}`, { defaultValue: value });
 
@@ -178,9 +203,14 @@ export function ModelStructureSection({
       className="mt-3 border-t border-border pt-3"
       data-testid="model-structure-section"
     >
-      <h4 className="mb-2 text-xs font-semibold text-muted-foreground">
-        {t('modelStructure.heading')}
-      </h4>
+      <div className="mb-2 flex items-center justify-between gap-1">
+        <h4 className="text-xs font-semibold text-muted-foreground">
+          {t('modelStructure.heading')}
+        </h4>
+        {actions ? (
+          <div className="flex items-center gap-0.5">{actions}</div>
+        ) : null}
+      </div>
       {actionFailed && (
         <p className="mb-2 text-xs text-destructive" role="alert">
           {t('modelStructure.actionError')}
@@ -230,15 +260,16 @@ export function ModelStructureSection({
                           : e.route}
                       </span>
                     )}
-                    {e.citationId != null && (
-                      <a
-                        href={referenceModulePath(e.citationId)}
-                        className="text-primary hover:underline"
-                        title={t('modelStructure.source')}
-                      >
-                        #{e.citationId}
-                      </a>
-                    )}
+                    {e.citationId != null &&
+                      (citationMarker(e.citationId) ?? (
+                        <a
+                          href={referenceModulePath(e.citationId)}
+                          className="text-primary hover:underline"
+                          title={t('modelStructure.source')}
+                        >
+                          #{e.citationId}
+                        </a>
+                      ))}
                     {canEdit && (
                       <button
                         type="button"
@@ -301,7 +332,10 @@ export function ModelStructureSection({
                                 : e.route
                             }`
                           : ''}
-                        {e.citationId != null ? ` · #${e.citationId}` : ''}:
+                        {e.citationId != null
+                          ? (citationMarker(e.citationId) ?? ` · #${e.citationId}`)
+                          : ''}
+                        :
                       </span>{' '}
                       {e.sourceQuote}
                     </p>
