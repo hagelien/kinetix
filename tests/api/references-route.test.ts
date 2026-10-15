@@ -163,9 +163,11 @@ function mockUpdateReferenceDb(options: {
   const updateWhere = vi.fn().mockReturnValue({ returning });
   const set = vi.fn().mockReturnValue({ where: updateWhere });
   const update = vi.fn().mockReturnValue({ set });
+  const historyValues = vi.fn().mockResolvedValue(undefined);
+  const insert = vi.fn().mockReturnValue({ values: historyValues });
 
-  getDbMock.mockReturnValue({ select, update });
-  return { select, set, update };
+  getDbMock.mockReturnValue({ select, update, insert });
+  return { select, set, update, insert, historyValues };
 }
 
 function mockReferencesQuery(rows: unknown[]) {
@@ -1869,5 +1871,73 @@ describe('GET /api/references?view=usage', () => {
 
     expect(state.statusCode).toBe(400);
     expect(collectReferenceUsageMock).not.toHaveBeenCalled();
+  });
+});
+
+// PATCH writes straight to the row with no review, so each change is recorded
+// (who, what it replaced) before it lands — and an audit failure stops it.
+describe('PATCH /api/references audit trail', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getUserFromRequestMock.mockResolvedValue({ userId: 123, role: 'contributor' });
+    consumeRateLimitMock.mockReturnValue({ limited: false, retryAfterSeconds: 0 });
+    getClientAddressKeyMock.mockReturnValue('ip:127.0.0.1');
+    resolveOneCrosswalkMock.mockResolvedValue({});
+  });
+
+  const existing = {
+    id: 20,
+    drugId: null,
+    type: 'url',
+    identifier: 'https://example.org/label',
+    metadata: { title: 'Old label title' },
+    createdBy: 1,
+    createdAt: '2026-05-20T00:00:00.000Z',
+  };
+
+  it('records who changed the metadata and what it replaced, before the update', async () => {
+    const db = mockUpdateReferenceDb({
+      existing,
+      updated: { ...existing, metadata: { title: 'New label title' } },
+    });
+    const { res, state } = createResponse();
+
+    await handler(
+      createJsonRequestWithMethod('PATCH', '/api/references?id=20', {
+        metadata: { title: 'New label title' },
+      }),
+      res,
+    );
+
+    expect(state.statusCode).toBe(200);
+    expect(db.historyValues).toHaveBeenCalledWith({
+      citationId: 20,
+      oldMetadata: { title: 'Old label title' },
+      newMetadata: expect.objectContaining({ title: 'New label title' }),
+      refreshed: false,
+      changedBy: 123,
+    });
+    expect(db.historyValues.mock.invocationCallOrder[0]!).toBeLessThan(
+      db.set.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('does not apply a change whose audit row cannot be written', async () => {
+    const db = mockUpdateReferenceDb({
+      existing,
+      updated: { ...existing, metadata: { title: 'New label title' } },
+    });
+    db.historyValues.mockRejectedValueOnce(new Error('insert failed'));
+    const { res, state } = createResponse();
+
+    await handler(
+      createJsonRequestWithMethod('PATCH', '/api/references?id=20', {
+        metadata: { title: 'New label title' },
+      }),
+      res,
+    );
+
+    expect(state.statusCode).toBe(500);
+    expect(db.set).not.toHaveBeenCalled();
   });
 });

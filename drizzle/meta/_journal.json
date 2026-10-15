@@ -1079,6 +1079,13 @@
       "when": 1791504000000,
       "tag": "0153_users_sessions_valid_after",
       "breakpoints": true
+    },
+    {
+      "idx": 154,
+      "version": "7",
+      "when": 1791590400000,
+      "tag": "0154_citation_metadata_history",
+      "breakpoints": true
     }
   ]
 }

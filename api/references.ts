@@ -51,6 +51,7 @@ import { fetchCrossRefMetadata } from './_lib/crossref.js';
 import { mergeAltIds } from '../src/lib/citationHandles.js';
 import {
   citations as references,
+  citationMetadataHistory,
   drugs,
   drugIonizationConstants,
   drugParameterRevisions,
@@ -921,6 +922,17 @@ async function handleUpdate(
   if (patchNamesAltIds) {
     metadataToStore = withExplicitAltIds(metadataToStore, suppliedMetadata);
   }
+
+  // This route writes straight to the row with no review, so record the
+  // change — who, and what it replaced — before applying it: a failed audit
+  // write stops the change rather than letting it land untraced.
+  await db.insert(citationMetadataHistory).values({
+    citationId: id,
+    oldMetadata: existing.metadata ?? null,
+    newMetadata: metadataToStore,
+    refreshed: parsed.data.refresh === true,
+    changedBy: auth.userId,
+  });
 
   const [row] = await db
     .update(references)

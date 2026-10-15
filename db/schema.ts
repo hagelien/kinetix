@@ -1207,6 +1207,32 @@ export const citations = pgTable(
 );
 
 /**
+ * Every direct change to a citation's cached metadata through
+ * `PATCH /api/references` — the explicit override and the resolver refresh —
+ * with who made it and what it replaced. That route writes straight to the
+ * row with no review (contributor tier, agents included), so this is what
+ * lets a wrong or malicious change be found and reverted.
+ */
+export const citationMetadataHistory = pgTable(
+  'citation_metadata_history',
+  {
+    id: serial('id').primaryKey(),
+    citationId: integer('citation_id')
+      .references(() => citations.id, { onDelete: 'cascade' })
+      .notNull(),
+    oldMetadata: jsonb('old_metadata'),
+    newMetadata: jsonb('new_metadata'),
+    /** True when the change came from `refresh` (resolver), false for an override. */
+    refreshed: boolean('refreshed').notNull(),
+    changedBy: integer('changed_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    changedAt: timestamp('changed_at').defaultNow().notNull(),
+  },
+  (t) => [index('citation_metadata_history_citation_idx').on(t.citationId, t.changedAt)],
+);
+
+/**
  * Handles a merge folded into another citation (migrations 0143, 0144). One
  * row per handle the deleted citation answered to — its own and its alt ids.
  * `metadata.altIds` holds one handle per type and none for free text, so
