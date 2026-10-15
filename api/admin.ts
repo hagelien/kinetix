@@ -21,7 +21,7 @@ import {
   noStoreHeaders,
   withErrorHandling,
 } from './_lib/response.js';
-import { getDb, getNeonClient } from './_lib/db.js';
+import { getDb, getNeonClient, runInPoolTransaction } from './_lib/db.js';
 import { getUserFromRequest } from './_lib/auth.js';
 import { CAP } from '../src/lib/permissions.js';
 import { authCan, requireCapability } from './_lib/permissions-store.js';
@@ -364,7 +364,7 @@ async function revokeSessionsNoLongerAllowed(
 ): Promise<void> {
   await getDb()
     .update(users)
-    .set({ sessionsValidAfter: new Date() })
+    .set({ sessionGeneration: sql`${users.sessionGeneration} + 1` })
     .where(
       and(
         match,
@@ -444,7 +444,10 @@ async function handleUsers(
     }
     const [revoked] = await db
       .update(users)
-      .set({ sessionsValidAfter: new Date(), updatedAt: new Date() })
+      .set({
+        sessionGeneration: sql`${users.sessionGeneration} + 1`,
+        updatedAt: new Date(),
+      })
       .where(eq(users.id, userId))
       .returning({ id: users.id });
     if (!revoked) {
@@ -657,16 +660,21 @@ async function handleAllowedDomains(
       error(res, 400, 'Missing id parameter');
       return;
     }
-    const [removed] = await db
-      .delete(allowedEmailDomains)
-      .where(eq(allowedEmailDomains.id, id))
-      .returning({ domain: allowedEmailDomains.domain });
-    if (removed) {
-      await revokeSessionsNoLongerAllowed(
-        sql`substr(lower(${users.email}), strpos(${users.email}, '@') + 1) = ${removed.domain.toLowerCase()}`,
-        auth.userId,
-      );
-    }
+    // One transaction: if the revocation failed after the delete committed,
+    // the entry would be gone with its sessions still live, and a retried
+    // DELETE (no row left to return) could never revoke them.
+    await runInPoolTransaction(async () => {
+      const [removed] = await getDb()
+        .delete(allowedEmailDomains)
+        .where(eq(allowedEmailDomains.id, id))
+        .returning({ domain: allowedEmailDomains.domain });
+      if (removed) {
+        await revokeSessionsNoLongerAllowed(
+          sql`substr(lower(${users.email}), strpos(${users.email}, '@') + 1) = ${removed.domain.toLowerCase()}`,
+          auth.userId,
+        );
+      }
+    });
     json(res, 200, { deleted: true });
     return;
   }
@@ -1233,16 +1241,19 @@ async function handleAllowedEmails(
       error(res, 400, 'Missing id parameter');
       return;
     }
-    const [removed] = await db
-      .delete(allowedEmails)
-      .where(eq(allowedEmails.id, id))
-      .returning({ email: allowedEmails.email });
-    if (removed) {
-      await revokeSessionsNoLongerAllowed(
-        sql`lower(${users.email}) = ${removed.email.toLowerCase()}`,
-        auth.userId,
-      );
-    }
+    // One transaction, as for a removed domain.
+    await runInPoolTransaction(async () => {
+      const [removed] = await getDb()
+        .delete(allowedEmails)
+        .where(eq(allowedEmails.id, id))
+        .returning({ email: allowedEmails.email });
+      if (removed) {
+        await revokeSessionsNoLongerAllowed(
+          sql`lower(${users.email}) = ${removed.email.toLowerCase()}`,
+          auth.userId,
+        );
+      }
+    });
     json(res, 200, { deleted: true });
     return;
   }

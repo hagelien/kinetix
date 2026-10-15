@@ -1,7 +1,7 @@
 /**
  * Who an allowlist removal and the admin force-logout revoke, against real
- * SQL. `users.sessions_valid_after` rejects session tokens issued before it
- * (api/_lib/auth.ts; that check is unit-tested in src/lib/authSession.test.ts,
+ * SQL. Bumping `users.session_generation` kills session tokens minted under an
+ * older generation (api/_lib/auth.ts; that check is unit-tested in src/lib/authSession.test.ts,
  * since PGlite has no `db.batch` for the real session lookup). Here the
  * caller is mocked and the test reads which rows the admin routes stamp.
  */
@@ -79,10 +79,10 @@ async function seedMember(email: string) {
 
 async function revoked(userId: number): Promise<boolean> {
   const [row] = await db
-    .select({ at: users.sessionsValidAfter })
+    .select({ generation: users.sessionGeneration })
     .from(users)
     .where(eq(users.id, userId));
-  return row!.at !== null;
+  return row!.generation > 0;
 }
 
 describe('session revocation targets', () => {

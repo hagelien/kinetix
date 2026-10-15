@@ -18,6 +18,7 @@ vi.mock('../../api/_lib/auth.js', () => ({
 }));
 
 import handler from '../../api/auth-verify.ts';
+import { signToken } from '../../api/_lib/auth.js';
 
 function makeReq(body: Record<string, unknown>): IncomingMessage {
   const raw = JSON.stringify(body);
@@ -99,7 +100,7 @@ function mockDbForWrongCode() {
 }
 
 async function mockDbForCorrectCode(
-  opts: { consumedByConcurrentRequest?: boolean } = {},
+  opts: { consumedByConcurrentRequest?: boolean; sessionGeneration?: number } = {},
 ) {
   process.env.JWT_SECRET = 'test-secret-value-that-is-long-enough-for-tests';
   const { hashMagicLinkCode } = await import('../../api/_lib/magic-link.ts');
@@ -124,6 +125,7 @@ async function mockDbForCorrectCode(
               magicLinkHash: storedHash,
               magicLinkExpires: new Date(Date.now() + 60_000),
               magicLinkFailedAttempts: 0,
+              sessionGeneration: opts.sessionGeneration ?? 0,
             },
           ]),
         }),
@@ -281,5 +283,17 @@ describe('auth-verify atomic magic-link consumption', () => {
       db.update.mock.results[0]?.value as { set: ReturnType<typeof vi.fn> }
     ).set.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(setArg.sessionMaxDays).toBe(30);
+  });
+
+  // A revoked user signs in again under their current session generation;
+  // minting at 0 would hand them a token the revocation check rejects.
+  it('mints the session token under the user\'s current generation', async () => {
+    const { code } = await mockDbForCorrectCode({ sessionGeneration: 3 });
+    const { res, state } = makeRes();
+
+    await handler(makeReq({ email: 'user@example.com', code }), res);
+
+    expect(state.statusCode).toBe(200);
+    expect(vi.mocked(signToken)).toHaveBeenCalledWith(1, 'authenticated', 30 * 24 * 60 * 60, 3);
   });
 });

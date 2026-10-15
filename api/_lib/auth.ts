@@ -83,8 +83,9 @@ export async function signToken(
   userId: number,
   role: string,
   expiresInSeconds: number = DEFAULT_MAX_AGE_SECONDS,
+  sessionGeneration = 0,
 ): Promise<string> {
-  return new SignJWT({ sub: String(userId), role })
+  return new SignJWT({ sub: String(userId), role, gen: sessionGeneration })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(`${expiresInSeconds}s`)
@@ -93,17 +94,19 @@ export async function signToken(
 
 export async function verifyToken(
   token: string,
-): Promise<{ userId: number; role: string; issuedAt: number | null } | null> {
+): Promise<{ userId: number; role: string; generation: number } | null> {
   try {
     const { payload } = await jwtVerify(token, getSecret());
     const userId = Number(payload.sub);
     const role = payload.role as string;
     if (isNaN(userId) || !role) return null;
-    const issuedAt =
-      typeof payload.iat === 'number' && Number.isFinite(payload.iat)
-        ? payload.iat
-        : null;
-    return { userId, role, issuedAt };
+    // A token minted before generations existed carries none: generation 0,
+    // which every user starts at, so it stays valid until a first revocation.
+    const generation =
+      typeof payload.gen === 'number' && Number.isInteger(payload.gen)
+        ? payload.gen
+        : 0;
+    return { userId, role, generation };
   } catch {
     return null;
   }
@@ -191,7 +194,7 @@ export async function getUserFromRequest(
         role: users.role,
         lastAuthAt: users.lastAuthAt,
         sessionMaxDays: users.sessionMaxDays,
-        sessionsValidAfter: users.sessionsValidAfter,
+        sessionGeneration: users.sessionGeneration,
       })
       .from(users)
       .where(eq(users.id, verified.userId))
@@ -229,20 +232,11 @@ export async function getUserFromRequest(
   const age = Date.now() - row.lastAuthAt.getTime();
   if (age > maxMs) return null;
 
-  // Server-side revocation: a token issued before the user's sessions were
-  // revoked (allowlist removal, admin force-logout) is dead, even after the
-  // person signs in again and moves `lastAuthAt` forward. `iat` has whole-
-  // second precision, so the cutoff is compared at the same precision: a
-  // token minted later in the revocation's own second stays valid rather than
-  // a fresh sign-in being rejected. A token without an `iat` cannot be dated,
-  // so it fails closed once anything was revoked.
-  if (
-    row.sessionsValidAfter &&
-    (verified.issuedAt === null ||
-      verified.issuedAt < Math.floor(row.sessionsValidAfter.getTime() / 1000))
-  ) {
-    return null;
-  }
+  // Server-side revocation: a token from a generation before the user's
+  // sessions were last revoked (allowlist removal, admin force-logout) is
+  // dead, even after the person signs in again and moves `lastAuthAt`
+  // forward. A counter, not a time cutoff, so no same-second ambiguity.
+  if (verified.generation < (row.sessionGeneration ?? 0)) return null;
 
   // Always trust the latest role and group membership from the DB and fail
   // closed if the lookup cannot complete, rather than authorizing from stale

@@ -23,7 +23,7 @@ type UserRow = {
   role: string;
   lastAuthAt: Date | null;
   sessionMaxDays: number;
-  sessionsValidAfter?: Date | null;
+  sessionGeneration?: number;
 };
 
 function requestWithToken(
@@ -173,65 +173,52 @@ describe("getUserFromRequest", () => {
     ).resolves.toBeNull();
   });
 
-  // Server-side revocation (users.sessions_valid_after): allowlist removal and
-  // the admin force-logout end sessions issued before it.
-  function withIssuedAt(iat: number | undefined) {
+  // Server-side revocation (users.session_generation): allowlist removal and
+  // the admin force-logout bump the counter; a token from an older generation
+  // is dead.
+  function withGeneration(gen: number | undefined) {
     vi.mocked(jwtVerify).mockResolvedValue({
-      payload: { sub: "7", role: "contributor", ...(iat === undefined ? {} : { iat }) },
+      payload: { sub: "7", role: "contributor", ...(gen === undefined ? {} : { gen }) },
       protectedHeader: { alg: "HS256" },
       key: new Uint8Array(),
     } as Awaited<ReturnType<typeof jwtVerify>>);
   }
-  const revokedAt = new Date("2026-10-15T07:00:00.000Z");
-  const revokedUser = () => [
+  const userAtGeneration = (sessionGeneration: number) => [
     {
       id: 7,
       role: "contributor",
       lastAuthAt: new Date(),
       sessionMaxDays: 30,
-      sessionsValidAfter: revokedAt,
+      sessionGeneration,
     },
   ];
 
-  it("rejects a session token issued before its user's sessions were revoked", async () => {
-    withIssuedAt(revokedAt.getTime() / 1000 - 60);
-    mockUserLookup(async () => revokedUser());
+  it("rejects a session token from before its user's sessions were revoked", async () => {
+    withGeneration(0);
+    mockUserLookup(async () => userAtGeneration(1));
 
     await expect(
       getUserFromRequest(requestWithToken("signed-token")),
     ).resolves.toBeNull();
   });
 
-  it("accepts a session token issued after the revocation", async () => {
-    withIssuedAt(revokedAt.getTime() / 1000 + 60);
-    mockUserLookup(async () => revokedUser());
+  it("accepts a session token minted under the current generation", async () => {
+    withGeneration(1);
+    mockUserLookup(async () => userAtGeneration(1));
 
     await expect(
       getUserFromRequest(requestWithToken("signed-token")),
     ).resolves.toMatchObject({ userId: 7 });
   });
 
-  // iat is whole seconds; a sign-in later in the revocation's own second must
-  // not be rejected.
-  it("accepts a token issued in the same second as the revocation", async () => {
-    vi.mocked(jwtVerify).mockResolvedValue({
-      payload: { sub: "7", role: "contributor", iat: Math.floor(revokedAt.getTime() / 1000) },
-      protectedHeader: { alg: "HS256" },
-      key: new Uint8Array(),
-    } as Awaited<ReturnType<typeof jwtVerify>>);
-    mockUserLookup(async () => [
-      { ...revokedUser()[0]!, sessionsValidAfter: new Date(revokedAt.getTime() + 600) },
-    ]);
-
+  it("treats a token without a generation as generation 0", async () => {
+    withGeneration(undefined);
+    mockUserLookup(async () => userAtGeneration(0));
     await expect(
       getUserFromRequest(requestWithToken("signed-token")),
     ).resolves.toMatchObject({ userId: 7 });
-  });
 
-  it("fails closed on an undated token once sessions were revoked", async () => {
-    withIssuedAt(undefined);
-    mockUserLookup(async () => revokedUser());
-
+    mockUserLookup(async () => userAtGeneration(1));
     await expect(
       getUserFromRequest(requestWithToken("signed-token")),
     ).resolves.toBeNull();

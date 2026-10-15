@@ -99,6 +99,7 @@ export default withErrorHandling(async function handler(
       lastAuthAt: users.lastAuthAt,
       updatedAt: users.updatedAt,
       sessionMaxDays: users.sessionMaxDays,
+      sessionGeneration: users.sessionGeneration,
       magicLinkHash: users.magicLinkHash,
       magicLinkExpires: users.magicLinkExpires,
       magicLinkFailedAttempts: users.magicLinkFailedAttempts,
@@ -187,7 +188,12 @@ export default withErrorHandling(async function handler(
   }
 
   const maxAgeSeconds = nextSessionMaxDays * 24 * 60 * 60;
-  const jwt = await signToken(user.id, user.role, maxAgeSeconds);
+  const jwt = await signToken(
+    user.id,
+    user.role,
+    maxAgeSeconds,
+    user.sessionGeneration ?? 0,
+  );
   setAuthCookie(res, jwt, maxAgeSeconds);
 
   json(

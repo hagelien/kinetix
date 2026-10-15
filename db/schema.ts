@@ -66,9 +66,11 @@ export const users = pgTable('users', {
   role: varchar('role', { length: 20 }).notNull().default('authenticated'),
   emailVerifiedAt: timestamp('email_verified_at'),
   lastAuthAt: timestamp('last_auth_at'),
-  // Session tokens issued before this are rejected (api/_lib/auth.ts): set
-  // when a person leaves the allowlist or an admin revokes their sessions.
-  sessionsValidAfter: timestamp('sessions_valid_after'),
+  // Bumped to revoke every session the user holds: a session token carries the
+  // generation it was issued under (`gen`) and api/_lib/auth.ts rejects an
+  // older one. Bumped when a person leaves the allowlist or an admin revokes
+  // their sessions.
+  sessionGeneration: integer('session_generation').notNull().default(0),
   sessionMaxDays: integer('session_max_days').notNull().default(30),
   magicLinkHash: varchar('magic_link_hash', { length: 128 }),
   magicLinkExpires: timestamp('magic_link_expires'),
