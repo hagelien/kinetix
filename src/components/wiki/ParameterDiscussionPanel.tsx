@@ -1,18 +1,17 @@
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { ModalOverlay } from '@/components/ui/modal-overlay';
-import {
-  DRUG_PARAMETERS,
-  type DrugParameterId,
-} from '@/lib/drugParameters';
-import { useParameterLabels } from '@/lib/useParameterLabels';
+import type { DrugParameterId } from '@/lib/drugParameters';
+import type { DrugBlockId } from '@/lib/drugBlocks';
+import { useTargetLongLabel } from '@/lib/useParameterLabels';
 import type { VerificationLevelInfo } from '@/lib/verificationLevel';
 import { DiscussionThread } from './DiscussionThread';
 import { VerificationSummary } from './VerificationSummary';
 
 interface Props {
   drugId: number;
-  parameter: DrugParameterId;
+  /** A parameter, or a whole block (metabolism, mechanisms, model structure). */
+  parameter: DrugParameterId | DrugBlockId;
   /** Verification level of this parameter's live value, if known. */
   verification?: VerificationLevelInfo;
   /** Comment to scroll to and highlight (a notification's deep link). */
@@ -28,8 +27,7 @@ export function ParameterDiscussionPanel({
   onClose,
 }: Props) {
   const { t } = useTranslation();
-  const spec = DRUG_PARAMETERS[parameter];
-  const { longLabel } = useParameterLabels(spec);
+  const longLabel = useTargetLongLabel(parameter);
   // One string for the visible heading and the dialog's accessible name, so
   // the two can never drift apart.
   const heading = t('discussion.parameterHeading', { parameter: longLabel });

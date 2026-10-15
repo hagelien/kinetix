@@ -1,3 +1,4 @@
+import { lockBlockCitationReferences } from './blockCitationLocks.js';
 import { asc, eq, inArray } from 'drizzle-orm';
 import {
   bioEntities,
@@ -252,6 +253,12 @@ export async function getDrugMetabolism(
   const metabolism: DrugMetabolism = {
     routes: routeRows.map(serializeRoute),
     evidenceNote: profile?.evidenceNote ?? null,
+    // The profile's own citations — the sources behind the box-level note,
+    // and a box can carry them with no note at all (#37).
+    referenceIds:
+      profile?.referenceIds && profile.referenceIds.length > 0
+        ? profile.referenceIds
+        : null,
     metabolites: dedupeMetaboliteLinks(metaboliteRows.map(serializeLink)),
     precursors: dedupeMetaboliteLinks(precursorRows.map(serializeLink)),
   };
@@ -259,6 +266,7 @@ export async function getDrugMetabolism(
   if (
     metabolism.routes.length === 0 &&
     !metabolism.evidenceNote &&
+    !metabolism.referenceIds &&
     metabolism.metabolites.length === 0 &&
     metabolism.precursors.length === 0
   ) {
@@ -567,7 +575,9 @@ export async function validateMetabolismInput(
  * routes + metabolite links + precursor links) with `input`. Metabolites are
  * the rows where the drug is the parent; precursors are the rows where the drug
  * is the metabolite, so editing precursors reuses the same junction table from
- * the reverse side. Must run inside a transaction.
+ * the reverse side. Must run inside a transaction, wrapped in
+ * `withBlockHistory` (api/_lib/drugBlockHistory.ts) so the change — to this
+ * drug's box and to every linked drug's — is recorded.
  */
 export async function replaceDrugMetabolism(
   db: Db,
@@ -575,6 +585,7 @@ export async function replaceDrugMetabolism(
   input: MetabolismWriteInput,
   userId: number,
 ): Promise<void> {
+  await lockBlockCitationReferences(db, input);
   const drugName = await validateMetabolismInput(db, drugId, input);
 
   // Elimination / metabolism routes. #785 Phase 7: route.enzymeId is a unified
@@ -676,6 +687,7 @@ export async function replaceDrugMetabolism(
     userId,
     eventType: 'edit',
   });
+
 }
 
 /** Map a validated {@link metabolismWriteSchema} payload to a write input. */

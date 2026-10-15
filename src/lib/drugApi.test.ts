@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   drugRowToComponent,
+  fetchDrugBlockHistory,
   fetchDrugById,
   fetchDrugsByIds,
   fetchDrugByWikiDrugId,
@@ -206,3 +207,14 @@ describe('fetchDrugByWikiDrugId', () => {
     ]);
   });
 });
+
+// Block summaries share the history DTO and must survive its API adapter.
+it.each(['metabolism', 'pharmacodynamics', 'modelStructure'] as const)(
+  'preserves the author rationale when fetching %s history', async (block) => {
+    const revisions = [{ id: 17, editSummary: 'Why the curator changed this block.', oldValue: {}, newValue: {} }];
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ revisions }) });
+    vi.stubGlobal('fetch', fetchMock);
+    expect((await fetchDrugBlockHistory(42, block)).revisions).toEqual(revisions);
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining(`block=${block}`), undefined);
+  },
+);

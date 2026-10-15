@@ -1,9 +1,12 @@
 import { useTranslation } from 'react-i18next';
 import {
+  DRUG_PARAMETERS,
   getParameterLabelKey,
   getParameterLongLabelKey,
+  type DrugParameterId,
   type ParameterSpec,
 } from './drugParameters';
+import { drugBlockLabelKey, isDrugBlockId, type DrugBlockId } from './drugBlocks';
 
 /**
  * Resolve a parameter's translated `label` and `longLabel`, falling back
@@ -24,4 +27,15 @@ export function useParameterLabels(spec: ParameterSpec): {
       defaultValue: spec.longLabel,
     }),
   };
+}
+
+/**
+ * The long label of a history/discussion target: a parameter's long label, or
+ * a whole block's name (metabolism, mechanisms, model structure; #37).
+ */
+export function useTargetLongLabel(target: DrugParameterId | DrugBlockId): string {
+  const { t } = useTranslation();
+  if (isDrugBlockId(target)) return t(drugBlockLabelKey(target));
+  const spec = DRUG_PARAMETERS[target];
+  return t(getParameterLongLabelKey(spec.id), { defaultValue: spec.longLabel });
 }

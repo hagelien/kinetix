@@ -112,13 +112,14 @@ async function recomputeCache(
   drugId: number,
   parameter: string,
   actorUserId: number,
+  editSummary?: string | null,
 ): Promise<void> {
   if (!isDrugParameterId(parameter)) return;
   const revisionId = await recomputeParameterAndDependents(
     drugId,
     parameter,
     actorUserId,
-    { approvedBy: actorUserId },
+    { approvedBy: actorUserId, ...(editSummary !== undefined ? { editSummary } : {}) },
   );
   // A trusted admin-direct write produces the live revision; stamp the admin's
   // approval so it isn't shown as unapproved. recordApproval writes a human
@@ -463,7 +464,7 @@ async function handleCreate(
       return { kind: 'duplicate' };
     }
     const row = await insertParameterEntry(input, auth.userId);
-    await recomputeCache(row.drugId, row.parameter, auth.userId);
+    await recomputeCache(row.drugId, row.parameter, auth.userId, typeof data.editSummary === 'string' ? data.editSummary : undefined);
     return { kind: 'ok', row };
   });
   if (outcome.kind === 'not_applicable') {
@@ -668,7 +669,7 @@ async function handleUpdate(
       if (!row) return { kind: 'gone' };
       if (mustCarryQuote && !row.sourceQuote?.trim()) throw new UnquotedDirectWrite();
       await markEntryMutationsConflicted(id);
-      await recomputeCache(row.drugId, row.parameter, auth.userId);
+      await recomputeCache(row.drugId, row.parameter, auth.userId, typeof data.editSummary === 'string' ? data.editSummary : undefined);
       return { kind: 'ok' };
     });
   } catch (err) {

@@ -285,6 +285,45 @@ describe('/api/drug-discussions host validation', () => {
     );
   });
 
+  // #37: metabolism, mechanisms and the model structure are discussed as a
+  // whole block, keyed by the block id rather than by a parameter.
+  it('lists and posts a whole-block thread on a drug', async () => {
+    mockSelectDb([]);
+    const listed = createResponse();
+    await handler(createRequest('drugId=9&parameter=metabolism'), listed.res);
+    expect(listed.state.statusCode).toBe(200);
+
+    getUserFromRequestMock.mockResolvedValue({
+      userId: 7,
+      role: 'contributor',
+    });
+    for (const block of ['metabolism', 'pharmacodynamics', 'modelStructure']) {
+      const chain = mockInsertDb({ id: 2, drugId: 9, wikiPageId: null });
+      const { res, state } = createResponse();
+      await handler(
+        createRequest(`drugId=9&parameter=${block}`, 'POST'),
+        res,
+      );
+      expect(state.statusCode).toBe(201);
+      expect(chain.values).toHaveBeenCalledWith(
+        expect.objectContaining({ drugId: 9, parameter: block }),
+      );
+    }
+  });
+
+  it('refuses a block thread on a topic page and an unknown block id', async () => {
+    const onPage = createResponse();
+    await handler(
+      createRequest('wikiPageId=5&parameter=metabolism'),
+      onPage.res,
+    );
+    expect(onPage.state.statusCode).toBe(400);
+
+    const unknown = createResponse();
+    await handler(createRequest('drugId=9&parameter=metabolismX'), unknown.res);
+    expect(unknown.state.statusCode).toBe(400);
+  });
+
   it('rejects a reply whose parent is not in the same thread', async () => {
     getUserFromRequestMock.mockResolvedValue({
       userId: 7,

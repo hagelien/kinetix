@@ -56,6 +56,7 @@ import { ReferenceMarkdown } from './ReferenceMarkdown';
 // i18n rule — server messages reaching the UI go through a code at the React
 // boundary).
 const REVIEW_ERROR_KEYS: Record<string, string> = {
+  block_reference_missing: 'errors.blockReferenceMissing',
   pending_edit_invalid_parameter: 'review.errors.invalidParameter',
   pending_edit_parameter_reference_required:
     'review.errors.parameterReferenceRequired',

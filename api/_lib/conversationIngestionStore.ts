@@ -1683,7 +1683,7 @@ async function planParameterItem(
         drugId: drug.id,
         current,
       },
-      execute: async () => {
+      execute: async (actor) => {
         // Re-checked under the write: `attachSourceQuoteIfMissing` only writes
         // where the column is still NULL, so a quote added between planning and
         // applying is never overwritten.
@@ -1696,6 +1696,7 @@ async function planParameterItem(
           duplicate.id,
           enrichingQuote,
           quoteEvidenceOf(citationId),
+          actor.userId,
         );
         if (outcome.attached) return duplicate.id;
         // Somebody filled it in between. If they wrote the same sentence, the
@@ -1793,6 +1794,7 @@ async function planParameterItem(
           late.id,
           item.quote,
           quoteEvidenceOf(resolvedCitationId),
+          actor.userId,
         );
         if (outcome.attached) return late.id;
         return alreadySaysTheSame(outcome.current, item.quote) ? late.id : null;

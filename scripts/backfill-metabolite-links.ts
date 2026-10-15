@@ -40,6 +40,8 @@ import { and, eq, inArray } from 'drizzle-orm';
 
 import { drugMetabolites, drugs } from '../db/schema.js';
 import { normalizeMetabolismName } from '../src/lib/metabolism.js';
+import { withBlockHistory } from '../api/_lib/drugBlockHistory.js';
+import { getDb } from '../api/_lib/db.js';
 
 /**
  * The connection the CLI runs against.
@@ -173,11 +175,20 @@ export async function run(
     }
 
     if (APPLY) {
-      await db.insert(drugMetabolites).values({
-        parentDrugId: parent.id,
-        metaboliteDrugId: target.id,
-        metaboliteName: target.label,
-      });
+      // Recorded in both boxes' block history (#37): the parent's metabolites
+      // and the metabolite's precursors. An operator script: NULL author.
+      await withBlockHistory(
+        { drugIds: [parent.id, target.id], blocks: ['metabolism'], actorUserId: null },
+        async () => {
+          // Through the recorder's transaction, never the captured client:
+          // the link and its revision rows commit together.
+          await getDb().insert(drugMetabolites).values({
+            parentDrugId: parent.id,
+            metaboliteDrugId: target.id,
+            metaboliteName: target.label,
+          });
+        },
+      );
     }
     inserted.push(`${parent.label} → ${target.label}`);
   }

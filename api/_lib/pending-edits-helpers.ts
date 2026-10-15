@@ -1,3 +1,4 @@
+import { lockBlockCitationReferences } from './blockCitationLocks.js';
 import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 import { getDb, inTransaction } from './db.js';
 import {
@@ -59,6 +60,7 @@ import {
   toMetabolismWriteInput,
 } from './metabolismStore.js';
 import { replaceDrugReceptorTargets } from './receptorTargetStore.js';
+import { metabolismInputLinkedDrugIds, withBlockHistory, lockMetabolismHistory } from './drugBlockHistory.js';
 import { replaceDrugEnzymeInteractions } from './enzymeInteractionStore.js';
 import {
   createBioEntity,
@@ -1017,6 +1019,8 @@ export async function applyApprovedEdit(
       .where(eq(pendingEdits.id, editId))
       .limit(1);
     if (!preflight) throw new Error('Pending edit not found');
+    // Before the edit row: a merge takes graph → drug → child-row locks.
+    if (preflight.editType === 'metabolism') await lockMetabolismHistory();
     const lockIds = await drugAdvisoryLockIdsForEdit(db, preflight);
     for (const drugId of lockIds) {
       await lockDrugForEntryApplicability(drugId);
@@ -1432,6 +1436,10 @@ async function paramEntryEditDrugId(
 async function lockCitationMembershipForEdit(
   edit: typeof pendingEdits.$inferSelect,
 ): Promise<void> {
+  if (edit.editType === 'metabolism' || edit.editType === 'receptor_targets') {
+    await lockBlockCitationReferences(getDb(), edit.proposedValue);
+    return;
+  }
   if (edit.editType !== 'param_entry') return;
   const value = edit.proposedValue;
   if (!value || typeof value !== 'object') return;
@@ -1558,7 +1566,13 @@ async function drugAdvisoryLockIdsForEdit(
     const drugId = await paramEntryEditDrugId(db, edit);
     return paramEntryLockSet(drugId, edit.proposedValue);
   }
-  if (edit.editType === 'parameter') {
+  if (
+    edit.editType === 'parameter' ||
+    edit.editType === 'metabolism' ||
+    edit.editType === 'receptor_targets'
+  ) {
+    // Whole-block replacement approvals must queue with other writers before
+    // taking either their pending-edit row or their before-snapshot.
     return edit.targetId != null ? [edit.targetId] : [];
   }
   if (edit.editType === 'paper_review') {
@@ -1907,11 +1921,16 @@ async function applyApprovedEditEffects(
     }
     const { editSummary: _editSummary, submitForReview: _submitForReview, ...payload } =
       parsed.data;
-    await replaceDrugMetabolism(
-      db,
-      edit.targetId,
-      toMetabolismWriteInput(payload),
-      edit.submittedBy,
+    const input = toMetabolismWriteInput(payload);
+    const targetId = edit.targetId;
+    await withBlockHistory(
+      {
+        drugIds: [targetId, ...metabolismInputLinkedDrugIds(input)],
+        blocks: ['metabolism'],
+        actorUserId: edit.submittedBy,
+        pendingEditId: edit.id,
+      },
+      () => replaceDrugMetabolism(getDb(), targetId, input, edit.submittedBy),
     );
   } else if (edit.editType === 'receptor_targets') {
     if (!edit.targetId) throw new Error('Missing target drug id');
@@ -1928,11 +1947,16 @@ async function applyApprovedEditEffects(
         400,
       );
     }
-    await replaceDrugReceptorTargets(
-      db,
-      edit.targetId,
-      parsed.data.mechanisms,
-      edit.submittedBy,
+    const targetId = edit.targetId;
+    await withBlockHistory(
+      {
+        drugIds: [targetId],
+        blocks: ['pharmacodynamics'],
+        actorUserId: edit.submittedBy,
+        pendingEditId: edit.id,
+      },
+      () =>
+        replaceDrugReceptorTargets(getDb(), targetId, parsed.data.mechanisms, edit.submittedBy),
     );
   } else if (edit.editType === 'enzyme_interaction') {
     if (!edit.targetId) throw new Error('Missing target drug id');
