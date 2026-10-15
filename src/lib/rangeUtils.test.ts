@@ -73,8 +73,21 @@ describe('rangeUtils', () => {
       expect(formatRange({ ...bounds, qualifier, unit: 'ng/mL' })).toBe(expected);
     });
 
-    it.each(['<', '≤', '>', '≥'] as const)('keeps a %s qualifier on a qualified span', (qualifier) => {
-      expect(formatRange({ min: 3, max: 12, qualifier, unit: 'ng/mL' })).toBe(`${qualifier} 3–12 ng/mL`);
+    // A qualified span's other endpoint is a domain fill (the Farmakologiportalen
+    // importer stores "<3%" as 0–0.03), so the threshold is the endpoint the
+    // operator names: max for </≤, min for >/≥.
+    it.each([
+      ['<', '< 12 ng/mL'],
+      ['≤', '≤ 12 ng/mL'],
+      ['>', '> 3 ng/mL'],
+      ['≥', '≥ 3 ng/mL'],
+    ] as const)('shows the threshold endpoint of a %s-qualified span', (qualifier, expected) => {
+      expect(formatRange({ min: 3, max: 12, qualifier, unit: 'ng/mL' })).toBe(expected);
+    });
+
+    it('renders an imported one-sided fraction as its reported threshold', () => {
+      expect(formatRange({ min: 0, max: 0.03, qualifier: '<', unit: 'fraction' }, { asPercent: true })).toBe('< 3%');
+      expect(formatRange({ min: 0.9, max: 1, qualifier: '>', unit: 'fraction' }, { asPercent: true })).toBe('> 90%');
     });
 
     it('still writes an unqualified one-sided bound inclusively', () => {
