@@ -394,21 +394,35 @@ export function resolvePlotMetric(
 export type LigandSortKey = 'default' | 'drug' | 'activity' | 'ki' | 'ec50' | 'ic50' | 'emax';
 
 /**
- * A comparable number for a measurement column: the representative scalar,
- * converted to nM when the unit is molar so 1 µM sorts after 50 nM.
+ * A comparable number for a measurement column, or null when the value
+ * cannot be ranked against the others.
+ *
+ * Ki, EC50 and IC50 are concentrations: they rank in nM (so 1 µM sorts after
+ * 50 nM), and a value in any other unit — a mass concentration such as
+ * ng/mL, a free-text unit, none at all — has no molar position, so it is
+ * treated as unsortable rather than compared as a raw number against nM
+ * values. Ranking 2.4 ng/mL beside 0.2 nM would assert a molar-vs-mass
+ * potency order the data does not support. Such rows stay in the table and
+ * sort with the rows that have no value.
  */
 export function measurementSortValue(
   range: NumericRange | null | undefined,
+  key: 'ki' | 'ec50' | 'ic50' | 'emax',
 ): number | null {
   const scalar = rangeScalar(range);
   if (!scalar) return null;
+  if (CONCENTRATION_METRICS.has(key)) {
+    return toNanomolar(scalar.value, range?.unit);
+  }
   return toNanomolar(scalar.value, range?.unit) ?? scalar.value;
 }
 
 /**
  * Sort a ligand list for the table. `default` keeps the server's stable
- * order. Rows without a value for the sorted measurement always go last, in
- * either direction, so the qualitative rows never crowd out the measured ones.
+ * order. Rows without a sortable value for the sorted measurement (none
+ * recorded, or a Ki/EC50/IC50 not in a molar unit) always go last, in either
+ * direction and in their original order, so they never crowd out — or get
+ * ranked against — the comparable ones.
  */
 export function sortLigands(
   ligands: readonly EntityTargetLigand[],
@@ -432,8 +446,8 @@ export function sortLigands(
     });
   }
   return rows.sort((a, b) => {
-    const va = measurementSortValue(a[key]);
-    const vb = measurementSortValue(b[key]);
+    const va = measurementSortValue(a[key], key);
+    const vb = measurementSortValue(b[key], key);
     if (va === null && vb === null) return 0;
     if (va === null) return 1;
     if (vb === null) return -1;

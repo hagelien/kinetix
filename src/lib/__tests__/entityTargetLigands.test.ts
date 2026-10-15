@@ -311,6 +311,20 @@ describe('sortLigands', () => {
     expect(sortLigands(rows, 'ki', 'desc', name).map((r) => r.relationshipId)).toEqual([1, 2, 3]);
   });
 
+  it('never ranks a non-molar Ki against molar values', () => {
+    const mixed = [
+      ligand({ relationshipId: 1, ki: { median: 0.2, unit: 'nM' } }),
+      ligand({ relationshipId: 2, ki: { median: 2.4, unit: 'ng/mL' } }),
+      ligand({ relationshipId: 3, ki: { median: 1, unit: 'µM' } }),
+      ligand({ relationshipId: 4 }),
+      ligand({ relationshipId: 5, ki: { median: 8 } }),
+    ];
+    // The ng/mL and unitless rows are unsortable: they go last with the
+    // value-less row, in original order, whichever way the column sorts.
+    expect(sortLigands(mixed, 'ki', 'asc', name).map((r) => r.relationshipId)).toEqual([1, 3, 2, 4, 5]);
+    expect(sortLigands(mixed, 'ki', 'desc', name).map((r) => r.relationshipId)).toEqual([3, 1, 2, 4, 5]);
+  });
+
   it('sorts by drug name', () => {
     expect(sortLigands(rows, 'drug', 'asc', name).map((r) => r.drugSlug)).toEqual(['a', 'b', 'c']);
   });
