@@ -8,7 +8,9 @@
  *                          full list (`?view=all`) or a single entity (`?id=`),
  *                          including its functions, or the drugs the metabolism
  *                          database routes through an entity
- *                          (`?metabolismDrugs=`). Read-only/public.
+ *                          (`?metabolismDrugs=`), or every drug-target
+ *                          relationship pointing at an entity
+ *                          (`?targetLigands=`). Read-only/public.
  *   POST                 — admin only. Create an entity (with functions).
  *   PATCH ?id=           — admin only. Update an entity / its functions.
  *   DELETE ?id=          — admin only. Remove an entity (edge links set null).
@@ -45,6 +47,7 @@ import {
   updateBioEntity,
 } from './_lib/bioEntityStore.js';
 import { listEntityMetabolismDrugs } from './_lib/metabolismStore.js';
+import { listEntityTargetLigands } from './_lib/receptorTargetStore.js';
 import {
   ensureEntityHubPage,
   ensureEntityMonograph,
@@ -152,6 +155,17 @@ async function handleGet(
   if (Number.isInteger(metabolismDrugsFor) && metabolismDrugsFor > 0) {
     const drugs = await listEntityMetabolismDrugs(getDb(), metabolismDrugsFor);
     json(res, 200, { drugs });
+    return;
+  }
+
+  // Reverse pharmacodynamics lookup: every drug_receptor_targets row whose
+  // target is this entity, for the monograph's target-pharmacology collection.
+  // The whole set is returned unfiltered — the client switches species and
+  // metric instantly in memory.
+  const targetLigandsFor = Number(url.searchParams.get('targetLigands'));
+  if (Number.isInteger(targetLigandsFor) && targetLigandsFor > 0) {
+    const ligands = await listEntityTargetLigands(getDb(), targetLigandsFor);
+    json(res, 200, { ligands });
     return;
   }
 

@@ -20,6 +20,7 @@ import { ROUTE_LABEL_KEYS } from '@/lib/routeLabels';
 import { isEthanolDrugId } from '@/lib/ethanolSimulator';
 import { DEFAULT_WORKBOOK_INPUT } from '@/lib/etohScenario';
 import { useDrugName } from '@/lib/useDrugName';
+import { useLiveDerivedModel } from '@/lib/useLiveDerivedModel';
 import { WorkbookBackcalcPanel } from '@/components/simulator/WorkbookBackcalcPanel';
 import { WorkbookForwardPanel } from '@/components/simulator/WorkbookForwardPanel';
 import type { DrugComponent } from '@/types';
@@ -162,6 +163,13 @@ export function DrugPanel({
     (a, b) =>
       (a.t ?? Number.POSITIVE_INFINITY) - (b.t ?? Number.POSITIVE_INFINITY),
   );
+
+  // Load the drug's live derived model before the picker is built from the registry, and re-render
+  // when it lands, so the picker and the run resolve the same model. A Monte Carlo component holds
+  // back a new dose until that first answer settles: until then the routes on offer are the
+  // committed snapshot's, which the run is about to replace.
+  const awaitingLiveModel =
+    useLiveDerivedModel(drugComponent?._slug) && engine === 'pk-montecarlo';
 
   // The routes the dose picker offers: the resolved model's own routes for a Monte Carlo
   // component, so a route the model does not declare is never offered.
@@ -574,6 +582,9 @@ export function DrugPanel({
             size="sm"
             className="h-7 text-xs"
             onClick={handleAddDose}
+            disabled={awaitingLiveModel}
+            aria-busy={awaitingLiveModel || undefined}
+            title={awaitingLiveModel ? t('simulator.events.loadingRoutes') : undefined}
           >
             {t('simulator.events.addDose')}
           </Button>

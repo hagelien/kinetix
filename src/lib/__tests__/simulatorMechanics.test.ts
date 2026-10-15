@@ -23,6 +23,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { modeledSimulatorRoutes, routeIdFor } from '@/lib/forwardCoreAdapter';
+import { LIVE_MODEL_TIMEOUT_MS, LIVE_MODEL_TTL_MS } from '@/lib/liveDerivedModels';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
@@ -268,6 +269,20 @@ describe('mechanics document — the refusals it promises', () => {
         model.routes.map((r) => r.route).sort(),
       );
     }
+  });
+
+  it('builds the picker from the live model the run will use (§3 step 1, #292)', () => {
+    expect(doc).toContain("**The picker waits for the drug's live model, as the run does.**");
+    expect(doc.replace(/\s+/g, ' ')).toContain(
+      'A new dose cannot be added until the first answer has arrived or the request has failed (at most five seconds)',
+    );
+    // The wait the document names is the live request's own timeout.
+    expect(LIVE_MODEL_TIMEOUT_MS).toBe(5_000);
+    // A failure is trusted as long as an answer, so the run cannot retry past the picker.
+    expect(doc.replace(/\s+/g, ' ')).toContain(
+      'its outcome — an answer or a failure — is trusted for a minute',
+    );
+    expect(LIVE_MODEL_TTL_MS).toBe(60_000);
   });
 
   it('refuses a subject below the minimum weight rather than extrapolating (§8)', () => {
