@@ -10,6 +10,8 @@ import {
   REVIEW_SCORE_WEIGHT_FLOOR,
   formulationKey,
   selectPooledFormulation,
+  selectSharedFormulation,
+  poolableFormulationKeys,
   UNSTATED_FORMULATION_KEY,
   type ParameterEntryValue,
   type AggregationContext,
@@ -587,5 +589,31 @@ describe('aggregateEntries — formulation partitioning (#12)', () => {
     expect(selectPooledFormulation(['modified|168', '|'])).toBe('|');
     expect(selectPooledFormulation(['modified|168', 'immediate|'])).toBe('immediate|');
     expect(selectPooledFormulation(['modified|168', 'immediate|12'])).toBeNull();
+  });
+
+  it('pools the formulation a caller chose across several pools, counting the rest as excluded', () => {
+    const entries = [tmax(1, { releaseProfile: 'immediate' }), tmax(72, { releaseProfile: 'modified' })];
+    // On its own this pool would take immediate release (rule 3); the caller chose the depot.
+    const chosen = aggregateEntries(entries, { ...H, pooledFormulationKey: 'modified|' })!;
+    expect(chosen.representative).toBe(72);
+    expect(chosen.formulationExcludedCount).toBe(1);
+    expect(chosen.pooledFormulation).toEqual({ releaseProfile: 'modified', doseIntervalHours: null });
+    // An ambiguous shared choice pools nothing.
+    const none = aggregateEntries(entries, { ...H, pooledFormulationKey: null })!;
+    expect(none.representative).toBeNull();
+    expect(none.formulationExcludedCount).toBe(2);
+  });
+
+  it('selectSharedFormulation: one rule over every pool and declaration together', () => {
+    // A censored reading cannot reach a pool, so it cannot claim the choice.
+    expect(poolableFormulationKeys([tmax(5, { qualifier: '<', releaseProfile: 'immediate' })], H)).toEqual([]);
+    const weeklyKa = { entries: [tmax(0.03, { releaseProfile: 'modified', doseIntervalHours: 168 })], ctx: H };
+    const irF = { entries: [tmax(0.75, { releaseProfile: 'immediate' })], ctx: H };
+    // Each pool alone would take its own formulation; together they take immediate release.
+    expect(selectSharedFormulation([weeklyKa, irF])).toBe('immediate|');
+    // A declaration counts like a reading.
+    expect(selectSharedFormulation([weeklyKa], [{ releaseProfile: 'immediate' }])).toBe('immediate|');
+    expect(selectSharedFormulation([weeklyKa], [{ releaseProfile: 'modified', doseIntervalHours: 720 }])).toBeNull();
+    expect(selectSharedFormulation([], [])).toBeNull();
   });
 });

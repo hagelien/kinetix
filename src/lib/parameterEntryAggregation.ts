@@ -180,6 +180,15 @@ export interface AggregationContext {
    * pooled min/max — see `envelopeBound`. Absent: no bound is filtered.
    */
   valueBounds?: { min: number; max: number };
+  /**
+   * The formulation to pool (a `formulationKey`), when the caller has already
+   * chosen it across several pools that must agree (#12): a route's F, ka and
+   * Tmax, and the absorption model declared for it, describe one product, so
+   * the model derivation chooses once per route (`selectSharedFormulation`)
+   * and pools every one of them from that choice. `null` pools nothing — the
+   * choice was ambiguous. Absent: chosen from this pool's own entries.
+   */
+  pooledFormulationKey?: string | null;
 }
 
 export interface MatrixSummary {
@@ -459,6 +468,71 @@ function buildMatrixSummaries(
 }
 
 /**
+ * The entries that could pool, each with its representative in the summary
+ * frame, before the formulation is chosen: which formulation pools is decided
+ * among readings that would actually reach the number, so a censored or
+ * unconvertible row cannot claim the pool for its formulation and leave it
+ * empty. `entries` is already past `dropSupersededGrandfathered`.
+ */
+function poolCandidates(
+  entries: readonly ParameterEntryValue[],
+  ctx: AggregationContext,
+  ratio: number,
+): { e: ParameterEntryValue; repN: number }[] {
+  const candidates: { e: ParameterEntryValue; repN: number }[] = [];
+  for (const e of entries) {
+    // A censored threshold ("< 120") is not a point observation — keep it in
+    // byMatrix but never pool its bound as an exact value.
+    if (e.qualifier) continue;
+    const rep = entryRepresentative(e);
+    if (rep == null) continue;
+    // Only blood matrices can be normalized to whole blood.
+    if (ctx.matrixRelevant && (!e.matrix || !BLOOD_MATRICES.includes(e.matrix)))
+      continue;
+
+    const repN = normalizeBound(rep, e.unit, e.matrix, ctx, ratio);
+    if (repN == null) continue;
+    candidates.push({ e, repN });
+  }
+  return candidates;
+}
+
+/**
+ * The formulation keys of the entries `aggregateEntries` would choose its
+ * formulation among — the readings that could reach the number.
+ */
+export function poolableFormulationKeys(
+  rawEntries: readonly ParameterEntryValue[],
+  ctx: AggregationContext,
+): string[] {
+  const entries = dropSupersededGrandfathered(rawEntries);
+  return poolCandidates(entries, ctx, bloodRatioScalar(ctx.bloodPlasmaRatio)).map(({ e }) =>
+    formulationKey(e),
+  );
+}
+
+/**
+ * One formulation for several pools that describe one product together (#12),
+ * by the same rule a single pool uses (`selectPooledFormulation`), applied to
+ * all of them at once: the keys of every entry that could reach any of the
+ * pools, plus the keys of any categorical declarations that must agree with
+ * them (an absorption model). Pass the result to each pool as
+ * `pooledFormulationKey`, and keep only the declarations of that key, so no
+ * number or declaration can come from a different formulation than the rest.
+ * Where nothing states a formulation this is the unstated key, and every pool
+ * comes out exactly as it would on its own.
+ */
+export function selectSharedFormulation(
+  pools: readonly { entries: readonly ParameterEntryValue[]; ctx: AggregationContext }[],
+  declarations: readonly { releaseProfile?: string | null; doseIntervalHours?: number | null }[] = [],
+): string | null {
+  return selectPooledFormulation([
+    ...pools.flatMap(({ entries, ctx }) => poolableFormulationKeys(entries, ctx)),
+    ...declarations.map((declaration) => formulationKey(declaration)),
+  ]);
+}
+
+/**
  * Aggregate a set of entries into a summary. Returns null for an empty set.
  * The numeric pool is matrix-normalized to whole blood (when matrixRelevant);
  * non-blood or unconvertible entries are omitted from the pool but still appear
@@ -481,27 +555,13 @@ export function aggregateEntries(
   const bounds: number[] = [];
   const citationIds = new Set<number>();
 
-  // The entries that could pool, before the formulation is chosen: which
-  // formulation pools is decided among readings that would actually reach the
-  // number, so a censored or unconvertible row cannot claim the pool for its
-  // formulation and leave it empty.
-  const candidates: { e: ParameterEntryValue; repN: number }[] = [];
-  for (const e of entries) {
-    // A censored threshold ("< 120") is not a point observation — keep it in
-    // byMatrix but never pool its bound as an exact value.
-    if (e.qualifier) continue;
-    const rep = entryRepresentative(e);
-    if (rep == null) continue;
-    // Only blood matrices can be normalized to whole blood.
-    if (ctx.matrixRelevant && (!e.matrix || !BLOOD_MATRICES.includes(e.matrix)))
-      continue;
-
-    const repN = normalizeBound(rep, e.unit, e.matrix, ctx, ratio);
-    if (repN == null) continue;
-    candidates.push({ e, repN });
-  }
-  // One formulation per pool (#12) — see `selectPooledFormulation`.
-  const pooledKey = selectPooledFormulation(candidates.map(({ e }) => formulationKey(e)));
+  const candidates = poolCandidates(entries, ctx, ratio);
+  // One formulation per pool (#12) — see `selectPooledFormulation` — unless
+  // the caller chose it across several pools at once.
+  const pooledKey =
+    ctx.pooledFormulationKey !== undefined
+      ? ctx.pooledFormulationKey
+      : selectPooledFormulation(candidates.map(({ e }) => formulationKey(e)));
   let formulationExcludedCount = 0;
 
   for (const { e, repN } of candidates) {

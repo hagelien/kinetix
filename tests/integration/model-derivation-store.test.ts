@@ -50,6 +50,13 @@ beforeEach(async () => {
   await resetIntegrationDb(db);
 });
 
+/** The formulation an absorption reading is of (#12): `release_profile` + regimen/interval. */
+type FormulationScope = {
+  releaseProfile?: string;
+  doseRegimen?: string;
+  doseIntervalHours?: string;
+};
+
 /** Insert a categorical model-structure axis row (disposition/elimination drug-level, or a
  *  route-keyed absorption shape). */
 async function insertAxis(
@@ -58,6 +65,7 @@ async function insertAxis(
   parameter: string,
   categoricalValue: string,
   route: string | null = null,
+  scope: FormulationScope = {},
 ): Promise<void> {
   await db.insert(parameterEntries).values({
     drugId,
@@ -65,6 +73,7 @@ async function insertAxis(
     categoricalValue,
     unit: '',
     route,
+    ...scope,
     createdBy: userId,
     origin: 'contributor',
   } as never);
@@ -83,11 +92,13 @@ async function insertNumeric(
     unit?: string;
     qualifier?: string;
     matrix?: string;
+    scope?: FormulationScope;
   } = {},
 ): Promise<void> {
   await db.insert(parameterEntries).values({
     drugId,
     parameter,
+    ...over.scope,
     ...(over.qualifier ? { qualifier: over.qualifier } : {}),
     ...(over.matrix ? { matrix: over.matrix } : {}),
     low: String(over.low ?? 1),
@@ -1776,6 +1787,138 @@ describe('live per-drug derived model read', () => {
     expect(await readLiveDerivedModel('ethanol')).toEqual({ status: 'reviewed' });
     expect(await readLiveDerivedModel('psilocin')).toEqual({ status: 'reviewed' });
     expect(await readLiveDerivedModel('no-such-drug')).toEqual({ status: 'not-found' });
+  });
+});
+
+describe('#12 — one formulation per route, for the absorption declaration and the numbers alike', () => {
+  const IR: FormulationScope = { releaseProfile: 'immediate' };
+  const WEEKLY_DEPOT: FormulationScope = {
+    releaseProfile: 'modified',
+    doseRegimen: 'multiple',
+    doseIntervalHours: '168',
+  };
+  const MONTHLY_DEPOT: FormulationScope = { ...WEEKLY_DEPOT, doseIntervalHours: '720' };
+
+  /** One-compartment, first-order elimination, with the molecule-level t½ and Vd every route shares. */
+  async function seedMolecule(slug: string): Promise<{ drugId: number; userId: number }> {
+    const drugId = await seedDrug(db, { slug, names: { en: slug } });
+    const userId = await seedUser(db);
+    await insertAxis(drugId, userId, 'dispositionModel', 'one-compartment');
+    await insertAxis(drugId, userId, 'eliminationModel', 'first-order');
+    await setDrugLevelParameter(drugId, userId, 'halfLife', { median: 4, unit: 'h' });
+    await setDrugLevelParameter(drugId, userId, 'volumeOfDistribution', { median: 0.7, unit: 'L/kg' });
+    return { drugId, userId };
+  }
+
+  it('reads an immediate-release first-order and a depot zero-order oral product as one formulation, not a conflict', async () => {
+    const { drugId, userId } = await seedMolecule('two-products');
+    await insertAxis(drugId, userId, 'absorptionModel', 'first-order', 'oral', IR);
+    await insertAxis(drugId, userId, 'absorptionModel', 'zero-order', 'oral', WEEKLY_DEPOT);
+    await insertNumeric(drugId, userId, 'bioavailability', 'oral', { low: 0.7, high: 0.8, median: 0.75, unit: 'fraction', scope: IR });
+    await insertNumeric(drugId, userId, 'bioavailability', 'oral', { low: 0.9, high: 1, median: 0.95, unit: 'fraction', scope: WEEKLY_DEPOT });
+    await insertNumeric(drugId, userId, 'ka', 'oral', { low: 1, high: 1.4, median: 1.2, unit: '1/h', scope: IR });
+    await insertNumeric(drugId, userId, 'ka', 'oral', { low: 0.01, high: 0.05, median: 0.03, unit: '1/h', scope: WEEKLY_DEPOT });
+    await insertNumeric(drugId, userId, 'tmax', 'oral', { low: 0.5, high: 1.5, median: 1, unit: 'h', scope: IR });
+    await insertNumeric(drugId, userId, 'tmax', 'oral', { low: 48, high: 96, median: 72, unit: 'h', scope: WEEKLY_DEPOT });
+
+    // The declaration: the immediate-release product's shape alone (rule 3), so no conflict.
+    const inputs = await readDrugModelInputsByRoute(drugId);
+    expect(inputs.routes.oral).toEqual({
+      absorption: ['first-order'],
+      presentParameters: ['bioavailability', 'ka'],
+    });
+    const [oralModel] = await deriveDrugModelsByRoute(drugId);
+    expect(oralModel).toMatchObject({
+      route: 'oral',
+      outcome: 'modelable',
+      family: 'one-compartment-first-order',
+      structure: { absorption: 'first-order' },
+      axisProvenance: { absorption: 'asserted' },
+    });
+    expect(oralModel!.reason).toBeUndefined();
+
+    // The numbers: the same immediate-release product's F and ka, never the depot's.
+    const [oral] = await readDrugRouteAssemblyInputs(drugId);
+    expect(oral!.values.bioavailability).toBe(0.75);
+    expect(oral!.values.ka).toBeCloseTo(1.2, 6);
+    expect(oral!.ranges?.bioavailability).toEqual({ low: 0.7, high: 0.8 });
+
+    // The catalogue-wide scan (batched reads) and the live per-drug read agree on the same model.
+    const live = await readLiveDerivedModel('two-products');
+    const build = await readDerivedRegistrySnapshot();
+    expect(live.status).toBe('assembled');
+    if (live.status !== 'assembled') return;
+    expect(live.definition.routes.oral!.family).toBe('one-compartment-first-order');
+    expect(build.snapshot.definitions.find((d) => d.analyte === 'two-products')).toEqual(live.definition);
+    expect(build.notModelable.find((e) => e.slug === 'two-products')).toBeUndefined();
+  });
+
+  it('does not let a depot-only absorption declaration govern immediate-release numbers', async () => {
+    const { drugId, userId } = await seedMolecule('depot-shape-ir-numbers');
+    // Only the depot states a shape; every number is the immediate-release product's.
+    await insertAxis(drugId, userId, 'absorptionModel', 'zero-order', 'oral', WEEKLY_DEPOT);
+    await insertNumeric(drugId, userId, 'bioavailability', 'oral', { low: 0.7, high: 0.8, median: 0.75, unit: 'fraction', scope: IR });
+    await insertNumeric(drugId, userId, 'ka', 'oral', { low: 1, high: 1.4, median: 1.2, unit: '1/h', scope: IR });
+
+    // The route's formulation is immediate release (rule 3), which states no shape: the depot's
+    // zero-order is left out, and the route takes the disclosed default like any unstated axis.
+    const inputs = await readDrugModelInputsByRoute(drugId);
+    expect(inputs.routes.oral).toEqual({ presentParameters: ['bioavailability', 'ka'] });
+    const [oralModel] = await deriveDrugModelsByRoute(drugId);
+    expect(oralModel).toMatchObject({
+      outcome: 'modelable',
+      family: 'one-compartment-first-order',
+      structure: { absorption: 'first-order' },
+      axisProvenance: { absorption: 'defaulted' },
+    });
+    const [oral] = await readDrugRouteAssemblyInputs(drugId);
+    expect(oral!.values.ka).toBeCloseTo(1.2, 6);
+    expect(oral!.values.bioavailability).toBe(0.75);
+  });
+
+  it('chooses once per route: a depot ka is not paired with an immediate-release F and shape', async () => {
+    const { drugId, userId } = await seedMolecule('mixed-route-pools');
+    await insertAxis(drugId, userId, 'absorptionModel', 'first-order', 'oral', IR);
+    await insertNumeric(drugId, userId, 'bioavailability', 'oral', { low: 0.7, high: 0.8, median: 0.75, unit: 'fraction', scope: IR });
+    // The only ka is the depot's. Pooled on its own it would be "the" ka; for this route it is
+    // another product's.
+    await insertNumeric(drugId, userId, 'ka', 'oral', { low: 0.01, high: 0.05, median: 0.03, unit: '1/h', scope: WEEKLY_DEPOT });
+
+    const inputs = await readDrugModelInputsByRoute(drugId);
+    expect(inputs.routes.oral).toEqual({
+      absorption: ['first-order'],
+      presentParameters: ['bioavailability'],
+    });
+    const [oral] = await readDrugRouteAssemblyInputs(drugId);
+    expect(oral!.values.bioavailability).toBe(0.75);
+    expect(oral!.values.ka).toBeUndefined();
+  });
+
+  it('supplies nothing route-specific when the stated formulations are ambiguous', async () => {
+    const { drugId, userId } = await seedMolecule('two-depots');
+    // A weekly and a monthly depot: no single, unstated or immediate-release pool (rule 4).
+    await insertAxis(drugId, userId, 'absorptionModel', 'zero-order', 'oral', WEEKLY_DEPOT);
+    await insertAxis(drugId, userId, 'absorptionModel', 'first-order', 'oral', MONTHLY_DEPOT);
+    await insertNumeric(drugId, userId, 'bioavailability', 'oral', { low: 0.9, high: 1, median: 0.95, unit: 'fraction', scope: WEEKLY_DEPOT });
+    await insertNumeric(drugId, userId, 'bioavailability', 'oral', { low: 0.7, high: 0.9, median: 0.8, unit: 'fraction', scope: MONTHLY_DEPOT });
+    await insertNumeric(drugId, userId, 'tmax', 'oral', { low: 48, high: 96, median: 72, unit: 'h', scope: WEEKLY_DEPOT });
+    await insertNumeric(drugId, userId, 'tmax', 'oral', { low: 200, high: 400, median: 300, unit: 'h', scope: MONTHLY_DEPOT });
+    // A drug-level Tmax the sole route would otherwise fall back on.
+    await setDrugLevelParameter(drugId, userId, 'tmax', { median: 1, unit: 'h' });
+
+    // The route stays declared (a curator named it), with neither depot's shape: no conflict.
+    const inputs = await readDrugModelInputsByRoute(drugId);
+    expect(inputs.routes.oral).toEqual({});
+    const [oralModel] = await deriveDrugModelsByRoute(drugId);
+    expect(oralModel).toMatchObject({ outcome: 'modelable', axisProvenance: { absorption: 'defaulted' } });
+
+    // And no value: no route F, no cautious F over the curated depot readings, and no ka solved
+    // from a drug-level Tmax standing in for the depots' own.
+    const [oral] = await readDrugRouteAssemblyInputs(drugId);
+    expect(oral!.values.bioavailability).toBeUndefined();
+    expect(oral!.defaultedParameters ?? []).not.toContain('bioavailability');
+    expect(oral!.values.ka).toBeUndefined();
+    expect(oral!.inferredParameters).toBeUndefined();
   });
 });
 

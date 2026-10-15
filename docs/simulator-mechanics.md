@@ -352,6 +352,29 @@ The two tiers are treated differently, and deliberately so:
   median. Inputs are drawn independently and the extremes are treated as bounds, so the band is
   a **plausible range** — the curves the reported values allow — and never a confidence or
   prediction interval. An input with only one reported value stays fixed at it.
+  **A route is read in one formulation.** The catalogue can record which formulation a
+  route's bioavailability, absorption rate, time to peak or absorption model was measured
+  for — its release profile and dosing interval, so an immediate-release tablet, a weekly
+  depot and a monthly depot are three formulations. Two of them are never mixed: a
+  catalogue-derived route uses **one formulation**, chosen once for the route from all of
+  those readings and declarations together, as follows. If only one formulation is present,
+  that one is used. Otherwise, if some readings state no formulation, those are used, since
+  they are what the route's values meant before formulations were recorded. Otherwise, an
+  immediate-release reading with no dosing interval is used: the conventional single-dose
+  figure. The route's F, absorption rate, Tmax **and absorption model** all come from that
+  one formulation. So a depot's zero-order input never governs an immediate-release
+  tablet's numbers, and two products' different shapes are not reported as a conflict. If
+  the formulations leave no such choice, the formulations are ambiguous and the route is
+  supplied **no value** from them. An example is a weekly and a monthly depot with nothing
+  else: there is no absorption model, so the disclosed default applies, and no F,
+  absorption rate or Tmax. Neither the cautious F nor the drug-level Tmax stands in for
+  them, so such a route normally gets no curve. Drug-level values follow the same rule
+  within their own pool. A route where no reading states a formulation is built exactly as
+  before. Readings left out this way are still listed with the drug's sources and counted:
+  the per-parameter summaries served with the drug report them as
+  `formulationExcludedCount`. That count is per parameter, so where a route's parameters
+  state different formulations it can differ from what the route's curve left out. The
+  curve and its grade do not show it, and there is not yet a curve per formulation.
   Most derived models grade **D**: a model-structure axis is a default, an input has no reported
   spread, or a value traces to no cited source. Those reach a reviewer only through a recorded
   acknowledgement. A model clear of all three can reach **C**. Either way, only when the derived
@@ -369,7 +392,8 @@ The two tiers are treated differently, and deliberately so:
    systematically misstated by one-compartment models.
 3. **Bioavailability and absorption rate are route properties, not occasion properties.**
    Food, formulation, gastric emptying, nasal mucosal state, and inhalation technique are
-   not modelled. Between-occasion variability is not represented at all. It follows that on
+   not modelled; a catalogue-derived route is drawn from one formulation's values (§5) and
+   says nothing about another's. Between-occasion variability is not represented at all. It follows that on
    a catalogue-derived model whose route was *attributed* (§5), the F and Tmax behind the
    curve are route-specific values whose route the catalogue never recorded: they may have
    been measured after a sublingual, buccal, intranasal or intravenous dose and are being

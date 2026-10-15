@@ -49,7 +49,9 @@ import { seededSubstanceClass } from '../../data/substanceClasses.js';
 import {
   aggregateEntries,
   dropSupersededGrandfathered,
+  formulationKey,
   isAggregateCacheValue,
+  selectSharedFormulation,
   type ParameterEntryValue,
   type ParameterSummary,
 } from '../../src/lib/parameterEntryAggregation.js';
@@ -145,14 +147,200 @@ const MOLECULE_AXES: readonly string[] = [
 ];
 
 /**
+ * A route-keyed absorption-model declaration, with the formulation it is of (#12). Every read of
+ * these rows selects `ROUTE_AXIS_COLUMNS`, so the route's formulation is chosen from the same facts
+ * whichever path reads them.
+ */
+const ROUTE_AXIS_COLUMNS = {
+  categoricalValue: parameterEntries.categoricalValue,
+  route: parameterEntries.route,
+  releaseProfile: parameterEntries.releaseProfile,
+  doseIntervalHours: parameterEntries.doseIntervalHours,
+};
+type RouteAxisRow = {
+  categoricalValue: string | null;
+  route: string | null;
+  releaseProfile: string | null;
+  doseIntervalHours: string | null;
+};
+
+/** A drug's route-keyed absorption-model declarations (CV-2c): categorical, and naming a route. */
+function routeAxisCondition() {
+  return and(
+    eq(parameterEntries.parameter, MODEL_STRUCTURE_AXIS_PARAMETERS.absorption),
+    isNotNull(parameterEntries.categoricalValue),
+    isNotNull(parameterEntries.route),
+  );
+}
+
+/**
+ * A route-scoped numeric entry, with everything that decides whether — and in which formulation —
+ * it reaches its route's pool. Selected by the declaration reads as well as the value read: which
+ * absorption model a route declares depends on the formulation its numbers are pooled from (#12).
+ */
+const ROUTE_VALUE_COLUMNS = {
+  id: parameterEntries.id,
+  parameter: parameterEntries.parameter,
+  route: parameterEntries.route,
+  low: parameterEntries.low,
+  high: parameterEntries.high,
+  median: parameterEntries.median,
+  centralValue: parameterEntries.centralValue,
+  intervalKind: parameterEntries.intervalKind,
+  qualifier: parameterEntries.qualifier,
+  unit: parameterEntries.unit,
+  n: parameterEntries.n,
+  citationId: parameterEntries.citationId,
+  origin: parameterEntries.origin,
+  // The formulation (#12): a route's entries pool only within one, chosen for the route as a whole
+  // (`selectRouteFormulations`), so an SL tablet's and a depot's ka never meet.
+  releaseProfile: parameterEntries.releaseProfile,
+  doseIntervalHours: parameterEntries.doseIntervalHours,
+};
+type RouteValueRow = {
+  id: number;
+  parameter: string;
+  route: string | null;
+  low: string | null;
+  high: string | null;
+  median: string | null;
+  centralValue: string | null;
+  intervalKind: string | null;
+  qualifier: string | null;
+  unit: string;
+  n: number | null;
+  citationId: number | null;
+  origin: string | null;
+  releaseProfile: string | null;
+  doseIntervalHours: string | null;
+  /** The citation's paper-review score — read only where the values are pooled. */
+  reviewScore?: number | null;
+};
+
+/**
+ * A route-specific NUMERIC catalog parameter (CV-2c): a `route`-scoped `parameter_entries` row
+ * carrying a value (route-specific `bioavailability`, `ka`, `tmax`). Categorical rows are excluded
+ * (they are the axes); a usable value means at least one of low/median/high — or a labelled centre
+ * (`centralValue`) — is present.
+ */
+function routeValueCondition() {
+  return and(
+    isNotNull(parameterEntries.route),
+    isNull(parameterEntries.categoricalValue),
+    or(
+      isNotNull(parameterEntries.low),
+      isNotNull(parameterEntries.median),
+      // A labelled source value keeps its centre here instead of `median`.
+      isNotNull(parameterEntries.centralValue),
+      isNotNull(parameterEntries.high),
+    ),
+  );
+}
+
+/**
  * The declaration rows `mapRouteKeyedInputs` consumes, however they were fetched — one drug at a
  * time, or grouped out of a catalog-wide read.
  */
 interface RouteKeyedInputRows {
   moleculeRows: readonly { parameter: string; categoricalValue: string | null }[];
-  routeAxisRows: readonly { categoricalValue: string | null; route: string | null }[];
-  routeParamRows: readonly { parameter: string; route: string | null }[];
+  routeAxisRows: readonly RouteAxisRow[];
+  routeParamRows: readonly RouteValueRow[];
   drugLevelRows: readonly { parameter: string }[];
+}
+
+/** One route's entries for one route-assembly parameter, ready for the pooling primitive. */
+interface RouteEntryGroup {
+  route: RouteId;
+  parameter: DrugParameterId;
+  entries: ParameterEntryValue[];
+}
+
+/**
+ * Group route-scoped numeric rows by (route, parameter), keeping only the parameters a route
+ * assembles from. `isRouteAssemblyParameter` is the authority here, NOT the engine-role map: `tmax`
+ * is route-keyed and pooled like the others but fills no engine role of its own (it is the
+ * observable the `ka` inference solves against), so a role check would silently drop it.
+ */
+function groupRouteEntries(rows: readonly RouteValueRow[]): Map<string, RouteEntryGroup> {
+  const groups = new Map<string, RouteEntryGroup>();
+  for (const row of rows) {
+    if (!isRouteId(row.route)) continue;
+    const p = row.parameter;
+    if (!isDrugParameterId(p) || !isRouteAssemblyParameter(p)) continue;
+    const key = `${row.route}\u0000${p}`;
+    let group = groups.get(key);
+    if (!group) groups.set(key, (group = { route: row.route, parameter: p, entries: [] }));
+    group.entries.push({
+      entryId: row.id,
+      citationId: row.citationId ?? null,
+      low: parseNumericColumn(row.low),
+      high: parseNumericColumn(row.high),
+      median: parseNumericColumn(row.median),
+      centralValue: parseNumericColumn(row.centralValue),
+      intervalKind: row.intervalKind ?? null,
+      qualifier: row.qualifier ?? null,
+      unit: row.unit,
+      matrix: null,
+      n: row.n ?? null,
+      reviewScore: row.reviewScore ?? null,
+      origin: row.origin ?? null,
+      releaseProfile: row.releaseProfile ?? null,
+      doseIntervalHours: parseNumericColumn(row.doseIntervalHours),
+    });
+  }
+  return groups;
+}
+
+/** How a route's entries for `parameter` are pooled: canonical unit, no matrix (`ka`/`F`/Tmax carry none). */
+function routePoolContext(parameter: DrugParameterId): { targetUnit: string; matrixRelevant: false } | null {
+  const targetUnit = canonicalUnitFor(parameter);
+  return targetUnit === null ? null : { targetUnit, matrixRelevant: false };
+}
+
+/** The formulation key of a route-keyed row — an absorption declaration or a numeric entry. */
+function rowFormulation(row: { releaseProfile: string | null; doseIntervalHours: string | null }): string {
+  return formulationKey({
+    releaseProfile: row.releaseProfile,
+    doseIntervalHours: parseNumericColumn(row.doseIntervalHours),
+  });
+}
+
+/**
+ * The ONE formulation each route is derived from (#12) — or null where the choice is not the
+ * data's to make. A route's F, ka and Tmax and the absorption model declared for it describe one
+ * product together: an immediate-release tablet's F under a weekly depot's zero-order input is a
+ * curve no product has. So the formulation is chosen once per route, by the rule a single pool uses
+ * (`selectPooledFormulation`: the only one present, else the unstated readings, else immediate
+ * release with no interval, else none), over every reading that could reach any of the route's
+ * pools and every absorption declaration for it (`selectSharedFormulation`). The declarations and
+ * every pool are then filtered to it — the declaration read (`mapRouteKeyedInputs`) and the value
+ * read (`readDrugRouteAssemblyInputs`) each call this on the same rows, so they cannot disagree.
+ *
+ * A route whose rows state no formulation gets the unstated key, which every one of its rows
+ * carries: it derives exactly as it did before formulations were recorded.
+ */
+function selectRouteFormulations(
+  groups: Map<string, RouteEntryGroup>,
+  axisRows: readonly RouteAxisRow[],
+): Map<RouteId, string | null> {
+  const pools = new Map<RouteId, { entries: ParameterEntryValue[]; ctx: { targetUnit: string; matrixRelevant: false } }[]>();
+  const declarations = new Map<RouteId, { releaseProfile: string | null; doseIntervalHours: number | null }[]>();
+  for (const { route, parameter, entries } of groups.values()) {
+    const ctx = routePoolContext(parameter);
+    if (ctx) pushInto(pools, route, { entries, ctx });
+  }
+  for (const row of axisRows) {
+    if (!isRouteId(row.route) || !row.categoricalValue) continue;
+    pushInto(declarations, row.route, {
+      releaseProfile: row.releaseProfile,
+      doseIntervalHours: parseNumericColumn(row.doseIntervalHours),
+    });
+  }
+  const chosen = new Map<RouteId, string | null>();
+  for (const route of new Set<RouteId>([...pools.keys(), ...declarations.keys()])) {
+    chosen.set(route, selectSharedFormulation(pools.get(route) ?? [], declarations.get(route) ?? []));
+  }
+  return chosen;
 }
 
 /**
@@ -191,47 +379,20 @@ export async function readDrugModelInputsByRoute(
           isNotNull(parameterEntries.categoricalValue),
         ),
       ),
-    // Per-ROUTE absorption shapes (CV-2c): categorical `absorptionModel` rows scoped to a route.
-    // A drug-level (route NULL) absorption row is a CV-1b legacy declaration that keys no route, so
-    // it does not declare one here — the faithful per-route path needs a route.
+    // Per-ROUTE absorption shapes (CV-2c): categorical `absorptionModel` rows scoped to a route,
+    // with the formulation each is of (#12). A drug-level (route NULL) absorption row is a CV-1b
+    // legacy declaration that keys no route, so it does not declare one here — the faithful
+    // per-route path needs a route.
     db
-      .select({
-        categoricalValue: parameterEntries.categoricalValue,
-        route: parameterEntries.route,
-      })
+      .select(ROUTE_AXIS_COLUMNS)
       .from(parameterEntries)
-      .where(
-        and(
-          eq(parameterEntries.drugId, drugId),
-          eq(parameterEntries.parameter, MODEL_STRUCTURE_AXIS_PARAMETERS.absorption),
-          isNotNull(parameterEntries.categoricalValue),
-          isNotNull(parameterEntries.route),
-        ),
-      ),
-    // Route-specific NUMERIC catalog parameters (CV-2c): a `route`-scoped `parameter_entries` row
-    // carrying a value (route-specific `bioavailability`, `ka`). Categorical rows are excluded
-    // (they are the axes above); a usable value means at least one of low/median/high — or a
-    // labelled centre (`centralValue`) — is present.
+      .where(and(eq(parameterEntries.drugId, drugId), routeAxisCondition())),
+    // Route-specific NUMERIC catalog parameters (CV-2c), read with what decides their pooling, so
+    // the route's formulation can be chosen here exactly as the value read chooses it.
     db
-      .select({
-        parameter: parameterEntries.parameter,
-        route: parameterEntries.route,
-      })
+      .select(ROUTE_VALUE_COLUMNS)
       .from(parameterEntries)
-      .where(
-        and(
-          eq(parameterEntries.drugId, drugId),
-          isNotNull(parameterEntries.route),
-          isNull(parameterEntries.categoricalValue),
-          or(
-            isNotNull(parameterEntries.low),
-            isNotNull(parameterEntries.median),
-            // A labelled source value keeps its centre here instead of `median`.
-            isNotNull(parameterEntries.centralValue),
-            isNotNull(parameterEntries.high),
-          ),
-        ),
-      ),
+      .where(and(eq(parameterEntries.drugId, drugId), routeValueCondition())),
     // Drug-level catalog parameters: the aggregate cache holds one value per drug (half-life, Vd,
     // clearance, and a drug-level bioavailability that the filter below drops as route-specific).
     // Route-scoped parameters (`ka`) never live here.
@@ -272,9 +433,19 @@ function mapRouteKeyedInputs({
     if (!set) map.set(key, (set = new Set<V>()));
     set.add(value);
   };
+  // Each route is read in ONE formulation (#12, `selectRouteFormulations`): only the absorption
+  // declarations and the parameters of that formulation count for it, so a depot's zero-order
+  // input neither conflicts with an immediate-release first-order one nor governs the
+  // immediate-release numbers the value read pools. A row of another formulation still DECLARES
+  // the route — a curator named it — but supplies it nothing, and where the formulations are
+  // ambiguous nothing is supplied at all: the shape takes the disclosed default.
+  const routeFormulation = selectRouteFormulations(groupRouteEntries(routeParamRows), routeAxisRows);
+  const declaredRoutes = new Set<RouteId>();
   const routeAbsorption = new Map<RouteId, Set<string>>();
   for (const row of routeAxisRows) {
     if (!isRouteId(row.route) || !row.categoricalValue) continue;
+    declaredRoutes.add(row.route);
+    if (rowFormulation(row) !== routeFormulation.get(row.route)) continue;
     addTo(routeAbsorption, row.route, row.categoricalValue);
   }
   const routeParameters = new Map<RouteId, Set<DrugParameterId>>();
@@ -285,11 +456,13 @@ function mapRouteKeyedInputs({
       parameterRoleFor(row.parameter) === null ||
       !isRouteAssemblyParameter(row.parameter)
     ) continue;
+    declaredRoutes.add(row.route);
+    if (rowFormulation(row) !== routeFormulation.get(row.route)) continue;
     addTo(routeParameters, row.route, row.parameter);
   }
 
   const routes: Partial<Record<RouteId, RouteDeclaration>> = {};
-  for (const route of new Set<RouteId>([...routeAbsorption.keys(), ...routeParameters.keys()])) {
+  for (const route of declaredRoutes) {
     const absorption = [...(routeAbsorption.get(route) ?? [])].sort();
     const presentParameters = [...(routeParameters.get(route) ?? [])].sort();
     routes[route] = {
@@ -536,7 +709,7 @@ export async function readDrugRouteAssemblyInputs(
   if (derivations.length === 0) return [];
 
   const db = getDb();
-  const [drugLevelRows, routeValueRows, substanceRows] = await Promise.all([
+  const [drugLevelRows, routeValueRows, routeAxisRows, substanceRows] = await Promise.all([
     // Drug-level cached values: the aggregate holds one canonical-unit range per drug parameter.
     db
       .select({ parameter: drugParameters.parameter, value: drugParameters.value })
@@ -548,42 +721,17 @@ export async function readDrugRouteAssemblyInputs(
     // favours higher-quality sources rather than weighting every entry equally. Route params are
     // matrix-independent, so `matrix` is not selected.
     db
-      .select({
-        id: parameterEntries.id,
-        parameter: parameterEntries.parameter,
-        route: parameterEntries.route,
-        low: parameterEntries.low,
-        high: parameterEntries.high,
-        median: parameterEntries.median,
-        centralValue: parameterEntries.centralValue,
-        intervalKind: parameterEntries.intervalKind,
-        qualifier: parameterEntries.qualifier,
-        unit: parameterEntries.unit,
-        n: parameterEntries.n,
-        citationId: parameterEntries.citationId,
-        origin: parameterEntries.origin,
-        // The formulation (#12): a route's entries pool only within one
-        // (`selectPooledFormulation`), so an SL tablet's and a depot's ka never meet.
-        releaseProfile: parameterEntries.releaseProfile,
-        doseIntervalHours: parameterEntries.doseIntervalHours,
-        reviewScore: paperReviews.overallScore,
-      })
+      .select({ ...ROUTE_VALUE_COLUMNS, reviewScore: paperReviews.overallScore })
       .from(parameterEntries)
       .leftJoin(paperReviews, eq(paperReviews.citationId, parameterEntries.citationId))
-      .where(
-        and(
-          eq(parameterEntries.drugId, drugId),
-          isNotNull(parameterEntries.route),
-          isNull(parameterEntries.categoricalValue),
-          or(
-            isNotNull(parameterEntries.low),
-            isNotNull(parameterEntries.median),
-            // A labelled source value keeps its centre here instead of `median`.
-            isNotNull(parameterEntries.centralValue),
-            isNotNull(parameterEntries.high),
-          ),
-        ),
-      ),
+      .where(and(eq(parameterEntries.drugId, drugId), routeValueCondition())),
+    // The route-keyed absorption declarations, read only for their formulation: each route's values
+    // are pooled from the formulation chosen over its numbers AND its declarations, the same choice
+    // the declaration read made (`selectRouteFormulations`).
+    db
+      .select(ROUTE_AXIS_COLUMNS)
+      .from(parameterEntries)
+      .where(and(eq(parameterEntries.drugId, drugId), routeAxisCondition())),
     // Whether the entry is ADMINISTERED at all: a cautious default stands in for an absorption
     // input of a dose, so it has no referent for a metabolite or an endogenous marker.
     db
@@ -700,39 +848,11 @@ export async function readDrugRouteAssemblyInputs(
 
   // Route-scoped values: pool each (route, parameter) group to a canonical median with the shared
   // aggregation primitive, so multiple sources for one route combine the same way the drug-level cache
-  // does. `matrixRelevant: false` — `ka`/`F` carry no matrix.
-  const routeEntryGroups = new Map<
-    string,
-    { route: RouteId; parameter: DrugParameterId; entries: ParameterEntryValue[] }
-  >();
-  for (const row of routeValueRows) {
-    if (!isRouteId(row.route)) continue;
-    const p = row.parameter;
-    // `isRouteAssemblyParameter` is the authority here, NOT the engine-role map: `tmax` is
-    // route-keyed and pooled like the others but fills no engine role of its own (it is the
-    // observable the `ka` inference solves against), so a role check would silently drop it.
-    if (!isDrugParameterId(p) || !isRouteAssemblyParameter(p)) continue;
-    const key = `${row.route}\u0000${p}`;
-    let group = routeEntryGroups.get(key);
-    if (!group) routeEntryGroups.set(key, (group = { route: row.route, parameter: p, entries: [] }));
-    group.entries.push({
-      entryId: row.id,
-      citationId: row.citationId ?? null,
-      low: parseNumericColumn(row.low),
-      high: parseNumericColumn(row.high),
-      median: parseNumericColumn(row.median),
-      centralValue: parseNumericColumn(row.centralValue),
-      intervalKind: row.intervalKind ?? null,
-      qualifier: row.qualifier ?? null,
-      unit: row.unit,
-      matrix: null,
-      n: row.n ?? null,
-      reviewScore: row.reviewScore ?? null,
-      origin: row.origin ?? null,
-      releaseProfile: row.releaseProfile ?? null,
-      doseIntervalHours: parseNumericColumn(row.doseIntervalHours),
-    });
-  }
+  // does. `matrixRelevant: false` — `ka`/`F` carry no matrix. Every pool of a route is drawn from the
+  // ONE formulation chosen for the route (#12, `selectRouteFormulations`) — the one its absorption
+  // declaration was read in — rather than each parameter choosing its own.
+  const routeEntryGroups = groupRouteEntries(routeValueRows);
+  const routeFormulation = selectRouteFormulations(routeEntryGroups, routeAxisRows);
   // Every route that carries a route-scoped entry for a parameter at all, whether or not it pools
   // to a value — curated evidence a fallback must not be drawn over.
   const routesWithScoped = (parameter: DrugParameterId): Set<RouteId> =>
@@ -742,11 +862,27 @@ export async function readDrugRouteAssemblyInputs(
         .map((group) => group.route),
     );
   const routesWithScopedF = routesWithScoped('bioavailability');
+  // Routes whose own Tmax readings were all of another formulation than the route's (or of an
+  // ambiguous set): the drug-level Tmax must not stand in for them, as a drug-level F does not for
+  // a route holding F entries — those readings say the route's product is not the one it describes.
+  const routesWithFormulationExcludedTmax = new Set<RouteId>();
   const routeValues = new Map<RouteId, SourcedValue[]>();
   for (const { route, parameter, entries } of routeEntryGroups.values()) {
-    const targetUnit = canonicalUnitFor(parameter);
-    if (targetUnit === null) continue;
-    const summary = aggregateEntries(entries, { targetUnit, matrixRelevant: false });
+    const ctx = routePoolContext(parameter);
+    if (ctx === null) continue;
+    const targetUnit = ctx.targetUnit;
+    const summary = aggregateEntries(entries, {
+      ...ctx,
+      pooledFormulationKey: routeFormulation.get(route) ?? null,
+    });
+    if (
+      parameter === 'tmax' &&
+      summary &&
+      summary.representative === null &&
+      (summary.formulationExcludedCount ?? 0) > 0
+    ) {
+      routesWithFormulationExcludedTmax.add(route);
+    }
     if (!summary || summary.representative === null) continue;
     // Already pooled into the canonical unit; `toAssemblyValues` re-checks it (identity).
     pushInto(routeValues, route, {
@@ -810,8 +946,12 @@ export async function readDrugRouteAssemblyInputs(
     const values = toAssemblyValues(catalogValues);
     // A route-scoped Tmax always wins over the drug-level figure: it is the one actually measured
     // for this route.
-    const tmaxHours = tmaxHoursFrom(routeCatalogValues) ?? soleRouteTmax;
-    const tmaxValue = firstTmax(routeCatalogValues) ?? soleRouteTmaxValue;
+    // Nor where the route's own Tmax readings are another formulation's (#12).
+    const admitsDrugLevelTmax = !routesWithFormulationExcludedTmax.has(derived.route);
+    const tmaxHours =
+      tmaxHoursFrom(routeCatalogValues) ?? (admitsDrugLevelTmax ? soleRouteTmax : undefined);
+    const tmaxValue =
+      firstTmax(routeCatalogValues) ?? (admitsDrugLevelTmax ? soleRouteTmaxValue : undefined);
     const tmaxSource = tmaxValue?.source;
     const {
       values: withKa,
@@ -1139,41 +1279,17 @@ export async function readDerivedRegistrySnapshot(): Promise<DerivedRegistryBuil
           ),
         )
         .orderBy(parameterEntries.drugId, parameterEntries.id),
+      // The same columns and conditions as the per-drug read, so the route's formulation (#12) is
+      // chosen from the same facts in both.
       db
-        .select({
-          drugId: parameterEntries.drugId,
-          categoricalValue: parameterEntries.categoricalValue,
-          route: parameterEntries.route,
-        })
+        .select({ drugId: parameterEntries.drugId, ...ROUTE_AXIS_COLUMNS })
         .from(parameterEntries)
-        .where(
-          and(
-            eq(parameterEntries.parameter, MODEL_STRUCTURE_AXIS_PARAMETERS.absorption),
-            isNotNull(parameterEntries.categoricalValue),
-            isNotNull(parameterEntries.route),
-          ),
-        )
+        .where(routeAxisCondition())
         .orderBy(parameterEntries.drugId, parameterEntries.id),
       db
-        .select({
-          drugId: parameterEntries.drugId,
-          parameter: parameterEntries.parameter,
-          route: parameterEntries.route,
-        })
+        .select({ drugId: parameterEntries.drugId, ...ROUTE_VALUE_COLUMNS })
         .from(parameterEntries)
-        .where(
-          and(
-            isNotNull(parameterEntries.route),
-            isNull(parameterEntries.categoricalValue),
-            or(
-              isNotNull(parameterEntries.low),
-              isNotNull(parameterEntries.median),
-              // A labelled source value keeps its centre here instead of `median`.
-              isNotNull(parameterEntries.centralValue),
-              isNotNull(parameterEntries.high),
-            ),
-          ),
-        )
+        .where(routeValueCondition())
         .orderBy(parameterEntries.drugId, parameterEntries.id),
       db
         .select({ drugId: drugParameters.drugId, parameter: drugParameters.parameter })

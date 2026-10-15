@@ -56,6 +56,11 @@ import {
   CAUTIOUS_DEFAULT_BIOAVAILABILITY,
   resolveDrugModelsByRoute,
 } from '@/lib/modelDerivation';
+import {
+  aggregateEntries,
+  selectSharedFormulation,
+  type ParameterEntryValue,
+} from '@/lib/parameterEntryAggregation';
 
 const DOC_PATH = resolve(__dirname, '../../../docs/simulator-mechanics.md');
 const doc = readFileSync(DOC_PATH, 'utf8');
@@ -542,5 +547,70 @@ describe('mechanics document — catalogue-derived structure (§5)', () => {
       bounds: { kind: 'extrema' },
     });
     expect(assembled.params.vdLitersPerKg).toEqual({ kind: 'fixed', value: 1 });
+  });
+});
+
+describe('mechanics document — one formulation per route (§5)', () => {
+  const flat = doc.replace(/\s+/g, ' ');
+  const ctx = { targetUnit: '1/h', matrixRelevant: false };
+  const reading = (
+    median: number,
+    releaseProfile: string | null = null,
+    doseIntervalHours: number | null = null,
+  ): ParameterEntryValue => ({
+    citationId: 1,
+    low: null,
+    high: null,
+    median,
+    qualifier: null,
+    unit: '1/h',
+    matrix: null,
+    n: null,
+    reviewScore: null,
+    releaseProfile,
+    doseIntervalHours,
+  });
+  const IR = { releaseProfile: 'immediate' };
+  const WEEKLY = { releaseProfile: 'modified', doseIntervalHours: 168 };
+  const MONTHLY = { releaseProfile: 'modified', doseIntervalHours: 720 };
+
+  it('chooses one formulation for the route, numbers and absorption model together', () => {
+    expect(doc).toContain('**A route is read in one formulation.**');
+    expect(flat).toContain('a catalogue-derived route uses **one formulation**, chosen once for the route');
+    expect(flat).toContain('F, absorption rate, Tmax **and absorption model** all come from that one formulation');
+    // An immediate-release first-order and a depot zero-order declaration: the IR product.
+    expect(selectSharedFormulation([], [IR, WEEKLY])).toBe('immediate|');
+    // A depot-only declaration does not claim a route whose numbers are immediate-release.
+    expect(selectSharedFormulation([{ entries: [reading(1.2, 'immediate')], ctx }], [WEEKLY])).toBe(
+      'immediate|',
+    );
+  });
+
+  it('prefers the one present, then the unstated readings, then immediate release, as §5 states', () => {
+    expect(flat).toContain('If only one formulation is present, that one is used.');
+    expect(flat).toContain('if some readings state no formulation, those are used');
+    expect(flat).toContain('an immediate-release reading with no dosing interval is used');
+    expect(selectSharedFormulation([], [WEEKLY])).toBe('modified|168');
+    expect(selectSharedFormulation([{ entries: [reading(1), reading(0.03, 'modified', 168)], ctx }])).toBe('|');
+    expect(selectSharedFormulation([], [IR, WEEKLY, MONTHLY])).toBe('immediate|');
+    // A route where nothing states a formulation is built exactly as before.
+    expect(flat).toContain('A route where no reading states a formulation is built exactly as before.');
+    const unstated = [reading(0.6), reading(1.0), reading(1.4)];
+    expect(
+      aggregateEntries(unstated, {
+        ...ctx,
+        pooledFormulationKey: selectSharedFormulation([{ entries: unstated, ctx }]),
+      }),
+    ).toEqual(aggregateEntries(unstated, ctx));
+  });
+
+  it('supplies no value for ambiguous formulations, and counts what it leaves out, as §5 states', () => {
+    expect(flat).toContain('the route is supplied **no value** from them');
+    expect(flat).toContain('`formulationExcludedCount`');
+    const depots = [reading(0.03, 'modified', 168), reading(0.01, 'modified', 720)];
+    const key = selectSharedFormulation([{ entries: depots, ctx }], [WEEKLY, MONTHLY]);
+    expect(key).toBeNull();
+    const summary = aggregateEntries(depots, { ...ctx, pooledFormulationKey: key });
+    expect(summary).toMatchObject({ representative: null, pooledCount: 0, formulationExcludedCount: 2 });
   });
 });
