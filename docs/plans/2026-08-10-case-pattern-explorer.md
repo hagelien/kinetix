@@ -2044,8 +2044,10 @@ pattern_inference_overrides
 
 pattern_inference_override_revisions   -- append-only; never updated or deleted
   id
-  override_id             -- the override row it records (no FK: outlives a
-                          -- deleted override)
+  override_id             -- FK to pattern_inference_overrides.id ON DELETE
+                          -- CASCADE; the override row is never hard-deleted
+                          -- (a delete leaves a tombstone), so it is removed
+                          -- only with its case, together with its revisions
   case_id                 -- FK to simulator_cases ON DELETE CASCADE
   finding_id
   action                  -- 'create' | 'edit' | 'delete'
