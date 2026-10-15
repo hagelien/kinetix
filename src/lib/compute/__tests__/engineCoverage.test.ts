@@ -78,6 +78,18 @@ describe('computeEngineCoverage', () => {
     }
   });
 
+  it('reports the fixture catalog slug, not a name derivation (#271)', () => {
+    // Valproat's `drugs.slug` is `valproat`; its English name derives
+    // `valproic-acid`, an id that exists nowhere in the catalog. Coverage must
+    // report the one the seeder writes and the modelling run looks up.
+    const valproat = cov.entries.filter(
+      (_, i) => embeddedComponents[i]?.pubchemCid === 3121,
+    );
+    expect(valproat.length).toBeGreaterThan(0);
+    for (const entry of valproat) expect(entry.slug).toBe('valproat');
+    expect(cov.entries.map((e) => e.slug)).not.toContain('valproic-acid');
+  });
+
   it('excludes the analytes whose only Vd was an absolute-litre extraction', () => {
     // The other half of the snapshot above, named rather than counted: these
     // are data-INcomplete in the fixture now, and saying so is the point.
@@ -105,6 +117,54 @@ describe('coverageSlug', () => {
 
   it('falls back to the Norwegian name when no English name is present', () => {
     expect(coverageSlug({ name: 'Teststoff' })).toBe('teststoff');
+  });
+
+  it('prefers the catalog slug when the component carries one', () => {
+    // The catalog slug is not always derivable from the name, so it wins.
+    expect(
+      coverageSlug({
+        name: 'Valproat',
+        nameEn: 'Valproic acid',
+        slug: 'valproat',
+      }),
+    ).toBe('valproat');
+    expect(
+      coverageSlug({
+        name: 'Paracetamol',
+        nameEn: 'Paracetamol',
+        slug: 'paracetamol-acetaminophen',
+      }),
+    ).toBe('paracetamol-acetaminophen');
+  });
+
+  it('keeps the derived fallback unchanged without a slug', () => {
+    expect(coverageSlug({ name: 'Valproat', nameEn: 'Valproic acid' })).toBe(
+      'valproic-acid',
+    );
+    expect(
+      coverageSlug({ name: 'Valproat', nameEn: 'Valproic acid', slug: null }),
+    ).toBe('valproic-acid');
+  });
+
+  it('treats a blank slug as absent', () => {
+    for (const slug of ['', '   ']) {
+      expect(
+        coverageSlug({ name: 'Valproat', nameEn: 'Valproic acid', slug }),
+      ).toBe('valproic-acid');
+    }
+  });
+
+  it('carries the slug through computeEngineCoverage entries', () => {
+    const { entries } = computeEngineCoverage([
+      { name: 'Valproat', nameEn: 'Valproic acid', slug: 'valproat' },
+      { name: 'Teststoff' },
+      { name: 'Blank', slug: '  ' },
+    ]);
+    expect(entries.map((e) => e.slug)).toEqual([
+      'valproat',
+      'teststoff',
+      'blank',
+    ]);
   });
 });
 
