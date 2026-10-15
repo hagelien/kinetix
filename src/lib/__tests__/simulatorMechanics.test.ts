@@ -274,6 +274,12 @@ describe('mechanics document — the refusals it promises', () => {
       'its outcome — an answer or a failure — is trusted for a minute',
     );
     expect(LIVE_MODEL_TTL_MS).toBe(60_000);
+    // An open panel asks again when the window ends, not only when the next run does (#299); the
+    // behaviour itself is pinned in DrugPanel.liveRoutes.test.tsx.
+    expect(doc).toContain('**The picker asks again when the minute is up.**');
+    expect(doc.replace(/\s+/g, ' ')).toContain(
+      'it asks again as soon as the minute has passed, and every minute after that while it stays open',
+    );
   });
 
   it('refuses a subject below the minimum weight rather than extrapolating (§8)', () => {

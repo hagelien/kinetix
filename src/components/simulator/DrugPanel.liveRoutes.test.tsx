@@ -219,6 +219,61 @@ describe('DrugPanel dose-route picker under the live derived tier (#292)', { tim
     expect(screen.getByTitle('parameters.route.oral')).toBeInTheDocument();
   });
 
+  it('asks again when the window ends while the panel stays open, so the picker drops a route the catalogue dropped (#299)', async () => {
+    const oralOnly = subcutaneousOnlyAnswer();
+    oralOnly.definition.routes = { oral: oralOnly.definition.routes.subcutaneous };
+    oralOnly.grade.routes = oralOnly.grade.routes.map((r: { route: string }) => ({ ...r, route: 'oral' }));
+    let answer: unknown = subcutaneousOnlyAnswer();
+    const fetchImpl = vi.fn(async (_url: string) => new Response(JSON.stringify(answer), { status: 200 }));
+    vi.stubGlobal('fetch', fetchImpl);
+    const { DrugPanel, offeredDoseRoutes, live } = await load();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    try {
+      const dosed: DrugSimConfig = {
+        ...config,
+        events: [{ id: 'd1', type: 'dose', t: 0, amount: 10, unit: 'mg', route: 'subcutaneous' }],
+      };
+      const { unmount } = render(
+        <DrugPanel config={dosed} drugComponent={drug} timeFormat="hours" referenceTime="00:00" />,
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      expect(screen.getByTitle('parameters.route.subcutaneous')).toBeInTheDocument();
+      expect(screen.queryByTitle('simulator.routes.notModeled')).toBeNull();
+
+      // The catalogue drops subcutaneous. Inside the window nothing asks again.
+      answer = oralOnly;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(live.LIVE_MODEL_TTL_MS - 1);
+      });
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      expect(offeredDoseRoutes(config, drug)).toEqual(['subcutaneous']);
+
+      // The window ends with the panel still open and no run: the panel asks again on its own, and
+      // the picker now offers what the next run will resolve.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      expect(offeredDoseRoutes(config, drug)).toEqual(['oral']);
+      expect(screen.getByTitle('simulator.routes.notModeled')).toBeInTheDocument();
+      expect(screen.getByTitle('parameters.route.oral')).toBeInTheDocument();
+
+      // It keeps following the catalogue while open, and stops once the panel is closed.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(live.LIVE_MODEL_TTL_MS);
+      });
+      expect(fetchImpl).toHaveBeenCalledTimes(3);
+      unmount();
+      await vi.advanceTimersByTimeAsync(live.LIVE_MODEL_TTL_MS * 3);
+      expect(fetchImpl).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('does not hold back a dose for an engine that runs no registry model', async () => {
     vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
     const { DrugPanel } = await load();
