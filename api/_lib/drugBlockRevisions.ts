@@ -10,7 +10,7 @@
  * nothing.
  */
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
-import { drugBlockRevisions, parameterEntries } from '../../db/schema.js';
+import { drugBlockRevisions, parameterEntries, pendingEdits } from '../../db/schema.js';
 import { isInPoolTransaction, type getDb } from './db.js';
 import type { DrugBlockId } from '../../src/lib/drugBlocks.js';
 import { MODEL_STRUCTURE_PARAMETER_IDS } from '../../src/lib/drugParameters.js';
@@ -296,6 +296,7 @@ export async function recordDrugBlockRevision(
     /** Null for an operator script that runs without a user. */
     createdBy: number | null;
     pendingEditId?: number | null;
+    editSummary?: string | null;
   },
 ): Promise<number | null> {
   if (
@@ -303,6 +304,13 @@ export async function recordDrugBlockRevision(
     canonicalJson(args.oldValue) === canonicalJson(args.newValue)
   ) {
     return null;
+  }
+  let editSummary = args.editSummary;
+  if (editSummary === undefined && args.pendingEditId != null) {
+    const [edit] = await db.select({ meta: pendingEdits.proposedMeta }).from(pendingEdits)
+      .where(eq(pendingEdits.id, args.pendingEditId)).limit(1);
+    const submitted = (edit?.meta as Record<string, unknown> | null)?.editSummary;
+    editSummary = typeof submitted === 'string' ? submitted : null;
   }
   const [row] = await db
     .insert(drugBlockRevisions)
@@ -312,6 +320,7 @@ export async function recordDrugBlockRevision(
       oldValue: (args.oldValue ?? null) as never,
       newValue: args.newValue as never,
       createdBy: args.createdBy,
+      editSummary: editSummary ?? null,
       // now() is the transaction START, possibly before a previous writer
       // whose graph lock we waited for. History sorts by the recording time.
       createdAt: sql`clock_timestamp()`,
@@ -337,6 +346,7 @@ export async function recordModelStructureRevision(
   drugId: number,
   actorUserId: number | null,
   pendingEditId: number | null = null,
+  editSummary?: string | null,
 ): Promise<number | null> {
   // Recorded from inside the entry write's own transaction, so the declaration
   // and its revision row commit together (every entry write path runs the
@@ -365,5 +375,6 @@ export async function recordModelStructureRevision(
     newValue: next,
     createdBy: actorUserId,
     pendingEditId,
+    editSummary,
   });
 }

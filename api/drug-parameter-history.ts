@@ -247,6 +247,7 @@ async function handleBlockHistory(
       db
         .select({
           id: drugBlockRevisions.id,
+          editSummary: drugBlockRevisions.editSummary,
           oldValue: drugBlockRevisions.oldValue,
           newValue: drugBlockRevisions.newValue,
           pendingEditId: drugBlockRevisions.pendingEditId,

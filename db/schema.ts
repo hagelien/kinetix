@@ -1905,6 +1905,8 @@ export const drugBlockRevisions = pgTable(
     block: varchar('block', { length: 40 }).notNull(),
     oldValue: jsonb('old_value'),
     newValue: jsonb('new_value').notNull(),
+    /** The author's stated rationale, retained even if the linked proposal is deleted. */
+    editSummary: text('edit_summary'),
     pendingEditId: integer('pending_edit_id').references(
       () => pendingEdits.id,
       { onDelete: 'set null' },

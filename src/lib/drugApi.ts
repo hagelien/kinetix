@@ -691,18 +691,15 @@ export async function fetchDrugParameterHistory(
 /**
  * A whole block's revision history (#37) — metabolism, mechanisms or the model
  * structure. Same row shape as a parameter's, with the before/after values
- * being block snapshots and no review round attached.
+ * being block snapshots, with the submitted rationale and linked review decision.
  */
 export async function fetchDrugBlockHistory(
   drugId: number,
   block: DrugBlockId,
 ): Promise<{ revisions: DrugParameterRevisionDTO[] }> {
-  const data = await apiFetch<{
-    revisions: Array<Omit<DrugParameterRevisionDTO, 'editSummary'>>;
-  }>(`/api/drug-parameter-history?drugId=${drugId}&block=${encodeURIComponent(block)}`);
-  return {
-    revisions: data.revisions.map((rev) => ({ ...rev, editSummary: null })),
-  };
+  return apiFetch<{ revisions: DrugParameterRevisionDTO[] }>(
+    `/api/drug-parameter-history?drugId=${drugId}&block=${encodeURIComponent(block)}`,
+  );
 }
 
 export async function fetchDiscussions(

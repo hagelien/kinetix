@@ -337,7 +337,7 @@ describe('ParameterHistoryDialog', () => {
       fetchDrugBlockHistoryMock.mockResolvedValue({
         revisions: [
           revision({
-            editSummary: null,
+            editSummary: 'Changed after re-reading the original methods.',
             oldValue: { declarations: [declaration('one-compartment', 4)] },
             newValue: { declarations: [declaration('two-compartment', 5)] },
           }),
@@ -360,6 +360,7 @@ describe('ParameterHistoryDialog', () => {
       expect(within(diff).getByText(/^\+ .*#5$/)).toBeInTheDocument();
       expect(fetchDrugBlockHistoryMock).toHaveBeenCalledWith(51, 'modelStructure');
       expect(fetchDrugParameterHistoryMock).not.toHaveBeenCalled();
+      expect(screen.getByText(/Changed after re-reading the original methods/)).toBeInTheDocument();
     });
 
     it('says when the state before a revision was never recorded', async () => {

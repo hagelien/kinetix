@@ -241,6 +241,7 @@ async function handlePut(
           drugIds: [drugId, ...metabolismInputLinkedDrugIds(input)],
           blocks: ['metabolism'],
           actorUserId: auth.userId,
+          editSummary,
         },
         () => replaceDrugMetabolism(getDb(), drugId, input, auth.userId),
       );

@@ -83,6 +83,8 @@ export interface BlockHistoryScope {
   actorUserId: number | null;
   /** The approved pending edit the write applies, when it is one. */
   pendingEditId?: number | null;
+  /** Direct-write rationale; an approval defaults to its linked proposal. */
+  editSummary?: string | null;
 }
 
 const key = (drugId: number, block: DrugBlockId) => `${drugId}:${block}`;
@@ -213,6 +215,7 @@ export async function beginBlockHistory(scope: BlockHistoryScope) {
             newValue: after,
             createdBy: scope.actorUserId,
             pendingEditId: scope.pendingEditId ?? null,
+            editSummary: scope.editSummary,
           });
           if (id != null) recorded += 1;
         }

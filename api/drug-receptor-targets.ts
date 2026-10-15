@@ -219,7 +219,7 @@ async function handlePut(
         return { kind: 'changed' };
       }
       await withBlockHistory(
-        { drugIds: [drugId], blocks: ['pharmacodynamics'], actorUserId: auth.userId },
+        { drugIds: [drugId], blocks: ['pharmacodynamics'], actorUserId: auth.userId, editSummary },
         () => replaceDrugReceptorTargets(getDb(), drugId, mechanisms, auth.userId),
       );
       return { kind: 'ok' };

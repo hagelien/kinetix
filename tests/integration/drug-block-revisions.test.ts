@@ -9,6 +9,8 @@
  * structure's first observed change does not claim the block was empty, and
  * the history endpoint serves a block's rows.
  */
+import { Readable } from 'node:stream';
+import { readFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { asc, eq, sql } from 'drizzle-orm';
@@ -18,6 +20,7 @@ const { getUserFromRequestMock } = vi.hoisted(() => ({
 }));
 vi.mock('../../api/_lib/auth.js', () => ({
   getUserFromRequest: getUserFromRequestMock,
+  requestHasAuthCookie: () => true,
 }));
 
 import { getDb, runInPoolTransaction } from '../../api/_lib/db.js';
@@ -36,6 +39,7 @@ import {
 } from '../../api/_lib/citation-usage.js';
 import {
   drugBlockRevisions,
+  pendingEdits,
   drugMetabolismProfiles,
   parameterEntries,
 } from '../../db/schema.js';
@@ -47,6 +51,10 @@ import {
 } from '../../api/_lib/parameter-entries-store.js';
 import type { ParameterEntryInput } from '../../src/lib/parameterEntries.js';
 import handler from '../../api/drug-parameter-history.js';
+import metabolismHandler from '../../api/drug-metabolism.js';
+import receptorHandler from '../../api/drug-receptor-targets.js';
+import entryHandler from '../../api/parameter-entries.js';
+import { applyApprovedEdit } from '../../api/_lib/pending-edits-helpers.js';
 import { mergeDrugs } from '../../api/_lib/drug-merge.js';
 import { mergeCitations } from '../../api/_lib/citation-merge.js';
 import {
@@ -128,7 +136,113 @@ function metabolismInput(fraction: number) {
   };
 }
 
+async function request(
+  route: (req: IncomingMessage, res: ServerResponse) => Promise<void>,
+  method: string, url: string, payload?: unknown,
+) {
+  const raw = payload === undefined ? '' : JSON.stringify(payload);
+  const req = Readable.from(raw ? [raw] : []) as IncomingMessage;
+  req.method = method;
+  req.url = url;
+  req.headers = { host: 'localhost', 'content-type': 'application/json',
+    'content-length': String(Buffer.byteLength(raw)) };
+  const state = { status: 0, body: '' };
+  const res = { headersSent: false, setHeader: vi.fn(),
+    writeHead: vi.fn((status: number) => { state.status = status; return res; }),
+    end: vi.fn((body?: string) => { state.body = body ?? ''; return res; }),
+  } as unknown as ServerResponse;
+  await route(req, res);
+  return { status: state.status, body: state.body ? JSON.parse(state.body) : null };
+}
+
+async function summaryRequest(block: string, drugId: number, citationId: number, editSummary: string, queued = false) {
+  if (block === 'metabolism') return request(metabolismHandler, 'PUT', `/api/drug-metabolism?drugId=${drugId}`,
+    { ...metabolismInput(0.5), editSummary, submitForReview: queued });
+  if (block === 'pharmacodynamics') {
+    const entity = await seedBioEntity(db);
+    return request(receptorHandler, 'PUT', `/api/drug-receptor-targets?drugId=${drugId}`,
+      { mechanisms: [{ receptorTargetId: entity, interactionType: 'agonist' }], editSummary, submitForReview: queued });
+  }
+  return request(entryHandler, 'POST', '/api/parameter-entries', {
+    drugId, citationId, parameter: 'dispositionModel', categoricalValue: 'two-compartment', unit: '',
+    editSummary, submitForReview: queued,
+  });
+}
+
 describe('drug block revisions', () => {
+  it.each(['metabolism', 'pharmacodynamics'] as const)(
+    'retains a direct %s edit summary through the public history API', async (block) => {
+      const drugId = await seedDrug(db);
+      const userId = await seedUser(db, { role: 'admin' });
+      const citationId = await seedAdmissibleCitation(db);
+      getUserFromRequestMock.mockResolvedValue({ userId, role: 'admin' });
+      const summary = 'Revised after checking the original assay — curator rationale.';
+      expect((await summaryRequest(block, drugId, citationId, summary)).status).toBe(200);
+      const [revision] = await revisionsFor(drugId, block);
+      expect(revision!.editSummary).toBe(summary);
+      const history = await request(handler, 'GET', `/api/drug-parameter-history?drugId=${drugId}&block=${block}`);
+      expect(history.status).toBe(200);
+      expect(history.body.revisions[0].editSummary).toBe(summary);
+    },
+  );
+
+  it.each(['metabolism', 'pharmacodynamics', 'modelStructure'] as const)(
+    'copies an approved %s summary into its revision', async (block) => {
+      const drugId = await seedDrug(db);
+      const userId = await seedUser(db, { role: 'admin' });
+      const citationId = await seedAdmissibleCitation(db);
+      getUserFromRequestMock.mockResolvedValue({ userId, role: 'admin' });
+      const summary = 'The submitted reason for this reviewed change.';
+      const queued = await summaryRequest(block, drugId, citationId, summary, true);
+      expect(queued.status).toBe(201);
+      await applyApprovedEdit(queued.body.pendingEditId, userId);
+      const [revision] = await revisionsFor(drugId, block);
+      expect(revision!.editSummary).toBe(summary);
+      expect(revision!.pendingEditId).toBe(queued.body.pendingEditId);
+      // The revision owns a copy, rather than reading mutable proposal text
+      // each time a reader opens history.
+      await db.update(pendingEdits).set({ proposedMeta: { editSummary: 'Later metadata' } })
+        .where(eq(pendingEdits.id, queued.body.pendingEditId));
+      const history = await request(handler, 'GET', `/api/drug-parameter-history?drugId=${drugId}&block=${block}`);
+      expect(history.body.revisions[0].editSummary).toBe(summary);
+    },
+  );
+
+  it('retains direct model-entry create and update summaries', async () => {
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db, { role: 'admin' });
+    const citationId = await seedAdmissibleCitation(db);
+    getUserFromRequestMock.mockResolvedValue({ userId, role: 'admin' });
+    const created = await summaryRequest('modelStructure', drugId, citationId, 'Model selected from the study.');
+    expect(created.status).toBe(201);
+    const updated = await request(entryHandler, 'PATCH', `/api/parameter-entries?id=${created.body.id}`,
+      { categoricalValue: 'one-compartment', citationId, unit: '', editSummary: 'Corrected after re-reading the methods.' });
+    expect(updated.status, JSON.stringify(updated.body)).toBe(200);
+    const revisions = await revisionsFor(drugId, 'modelStructure');
+    expect(revisions.map((r) => r.editSummary)).toEqual([
+      'Model selected from the study.', 'Corrected after re-reading the methods.',
+    ]);
+  });
+
+  it('backfills linked rationale without replacing a summary already saved on the revision', async () => {
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db);
+    const [edit] = await db.insert(pendingEdits).values({ editType: 'metabolism', targetId: drugId,
+      proposedValue: {}, proposedMeta: { editSummary: 'Recoverable original rationale.' },
+      submittedBy: userId, status: 'approved',
+    }).returning({ id: pendingEdits.id });
+    await db.insert(drugBlockRevisions).values([
+      { drugId, block: 'metabolism', newValue: {}, pendingEditId: edit!.id },
+      { drugId, block: 'metabolism', newValue: {}, pendingEditId: edit!.id, editSummary: 'Already saved.' },
+      { drugId, block: 'metabolism', newValue: {} },
+    ]);
+    const migration = readFileSync(new URL('../../drizzle/0158_drug_block_revision_summaries.sql', import.meta.url), 'utf8');
+    for (const statement of migration.split('--> statement-breakpoint')) await db.execute(sql.raw(statement));
+    expect((await revisionsFor(drugId, 'metabolism')).map((r) => r.editSummary)).toEqual([
+      'Recoverable original rationale.', 'Already saved.', null,
+    ]);
+  });
+
   it('records the metabolism box before and after each change, and skips an identical re-save', async () => {
     const drugId = await seedDrug(db);
     const userId = await seedUser(db);
@@ -709,6 +823,7 @@ describe('drug block revisions', () => {
     expect(ok.body.revisions).toHaveLength(1);
     expect(ok.body.revisions[0].author).toMatchObject({ id: userId, displayName: 'Kari' });
     expect(ok.body.revisions[0].author.email).toBeUndefined();
+    expect(ok.body.revisions[0].editSummary).toBeNull();
     expect(ok.body.revisions[0].reviewDecision).toBeUndefined();
     expect(ok.body.revisions[0].verifications).toBeUndefined();
 

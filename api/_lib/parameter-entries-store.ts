@@ -844,7 +844,7 @@ export async function recomputeParameterAndDependents(
   drugId: number,
   parameter: DrugParameterId,
   actorUserId: number,
-  opts?: { pendingEditId?: number | null; approvedBy?: number },
+  opts?: { pendingEditId?: number | null; approvedBy?: number; editSummary?: string | null },
 ): Promise<number | null> {
   const revisionId = await recomputeAndCacheParameterSummary(
     drugId,
@@ -862,6 +862,7 @@ export async function recomputeParameterAndDependents(
       drugId,
       actorUserId,
       opts?.pendingEditId ?? null,
+      opts?.editSummary,
     );
   }
   if (isNormalizationInput(parameter)) {
