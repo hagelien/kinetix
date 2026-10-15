@@ -27,6 +27,7 @@ vi.mock('../../api/_lib/parameter-entries-store.js', () => ({
   recomputeSummariesCitingCitation: vi.fn(async () => undefined),
 }));
 vi.mock('../../api/_lib/citation-merge.js', () => ({
+  tryLockCitationMembership: vi.fn(async () => true),
   tryLockDrugForRecompute: vi.fn(async () => true),
   tryLockLateDrugsCitingCitation: vi.fn(async () => null),
 }));

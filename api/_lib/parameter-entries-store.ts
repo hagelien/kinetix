@@ -25,7 +25,7 @@ import {
   drugParameterRevisions,
   citations,
 } from '../../db/schema.js';
-import { getDb } from './db.js';
+import { getDb, isInPoolTransaction } from './db.js';
 import { markEntryMutationsConflicted } from './entry-conflicts.js';
 import { getDrugParameterMap, upsertDrugParameter } from './drugParameterStore.js';
 import {
@@ -106,6 +106,108 @@ import {
  */
 async function lockDrugForRecompute(drugId: number): Promise<void> {
   await getDb().execute(sql`SELECT pg_advisory_xact_lock(${drugId}::bigint)`);
+}
+
+/**
+ * Serialize "an entry starts citing this paper" with the writes that
+ * recompute every drug citing it (#254): a citation fold (`mergeCitations`)
+ * and a paper-review re-score (`recordPaperReview`). Two-argument key
+ * `(1089, citationId)`; 1087 and 1088 are the citation merge's winner and fold
+ * keys.
+ *
+ * Both of those writes move an aggregation weight — an entry is pooled with
+ * the `overall_score` of the review of the paper it cites — and then recompute
+ * the cached summary of every drug with an entry citing the paper. They find
+ * those drugs by scanning `parameter_entries`, and the drug locks they take
+ * cover exactly the drugs the scan saw. An entry writer on another drug never
+ * meets them: it holds its own drug's lock, inserts a row citing the paper,
+ * and recomputes that drug — reading the review weights as they stand
+ * *before* the uncommitted fold or re-score. If it commits after their last
+ * scan, both commit and that drug's cached pooled value is computed from a
+ * weight that no longer exists, with nothing due to refresh it. Its drug lock
+ * does not help: the re-score never knew to take it.
+ *
+ * So membership in "the entries citing C" is guarded by its own key:
+ *
+ * - **Entry writers take it SHARED and wait** — after their drug locks and
+ *   before any row lock, on the citation the entry will cite (an insert, or an
+ *   update moving an entry onto another paper). Writers on different drugs
+ *   citing one paper share it, so they do not serialize with each other. A
+ *   writer waiting here holds its advisory drug locks and nothing else, and an
+ *   exclusive holder never waits for this key, nor for a drug lock it does not
+ *   already hold (see `tryLockDrugForRecompute` in `citation-merge`), so the
+ *   wait cannot close a cycle. When the holder commits, the writer's recompute
+ *   reads the new weights.
+ * - **Folds and re-scores take it EXCLUSIVE, and only try**
+ *   (`tryLockCitationMembership` in `citation-merge`), because by then they may
+ *   hold rows a writer elsewhere is queued on. Held, they stand aside before
+ *   writing anything: the fold defers as `entry_in_flight`, the re-score throws
+ *   `PaperReviewDrugLockedError` with no drug. Taken, no new entry citing the
+ *   paper can commit until they do, so their scan is the whole membership.
+ *
+ * Not taken by the drug merge, which moves entries between drugs but never
+ * changes the paper an entry cites: the entries it moves already cited the
+ * paper from the merged-away drug, which a fold or re-score of that paper
+ * scanned and holds (so the drug merge, which takes both drugs' locks first,
+ * waits for it), or else finds as a late drug and tries. Nor by the fold's own
+ * repoint, which holds the key exclusively.
+ *
+ * Inside a pool transaction only. On the auto-commit client a
+ * transaction-scoped lock releases with its own statement and serializes
+ * nothing, so outside one these helpers do nothing rather than pretend — the
+ * same convention as the merge's tries, which succeed there. Every production
+ * writer runs inside one: the insert by construction
+ * (`withDrugApplicabilityLock`), the updates under their callers' drug lock.
+ */
+export const CITATION_MEMBERSHIP_LOCK_NAMESPACE = 1089;
+
+/**
+ * The entry-writer side of {@link CITATION_MEMBERSHIP_LOCK_NAMESPACE}: wait
+ * until no fold or re-score of `citationId` is in flight, and keep any from
+ * starting until this transaction ends. After the drug locks, before any row
+ * lock. A null citation cites nothing and takes nothing. Re-entrant within a
+ * transaction, so a caller that took it up front pays nothing at the insert.
+ */
+export async function lockCitationMembershipShared(
+  citationId: number | null | undefined,
+): Promise<void> {
+  if (citationId == null || !isInPoolTransaction()) return;
+  await getDb().execute(
+    sql`SELECT pg_advisory_xact_lock_shared(${CITATION_MEMBERSHIP_LOCK_NAMESPACE}::int, ${citationId}::int)`,
+  );
+}
+
+/**
+ * {@link lockCitationMembershipShared} over several citations, ascending — for
+ * a writer that inserts entries citing several papers in one transaction and
+ * may lock rows between the inserts, so must take every key before its first
+ * row lock rather than one per insert.
+ */
+export async function lockCitationMembershipsShared(
+  citationIds: Iterable<number>,
+): Promise<void> {
+  const ids = [...new Set(citationIds)].sort((a, b) => a - b);
+  for (const id of ids) await lockCitationMembershipShared(id);
+}
+
+/**
+ * The same shared key for an update that may move entry `entryId` onto
+ * `citationId` — taken only when it actually does. An update that leaves the
+ * citation where it was changes no paper's membership, and its drug is one a
+ * fold or re-score of that paper scanned and locked, so the drug lock already
+ * serializes the two; taking the key there would only refuse their tries for
+ * nothing. Decided and taken in one statement, against the row as it is now.
+ */
+export async function lockCitationMembershipForMove(
+  entryId: number,
+  citationId: number | null | undefined,
+): Promise<void> {
+  if (citationId == null || !isInPoolTransaction()) return;
+  await getDb().execute(sql`
+    SELECT pg_advisory_xact_lock_shared(${CITATION_MEMBERSHIP_LOCK_NAMESPACE}::int, ${citationId}::int)
+    FROM parameter_entries
+    WHERE id = ${entryId} AND citation_id IS DISTINCT FROM ${citationId}::int
+  `);
 }
 
 function toNum(v: string | null): number | null {
@@ -1345,6 +1447,11 @@ async function insertParameterEntryRow(
   // A dose-context entry's `median` shorthand is stored as the centralValue it
   // stands for (src/lib/entryDoseContext.ts); a legacy entry is untouched.
   const input = canonicalizeReportedStatistic(rawInput);
+  // The row about to cite this paper must not commit beside an uncommitted
+  // fold or re-score of it, whose scan cannot see it (#254). Here, under the
+  // caller's drug lock and before the insert's own row locks; a caller that
+  // holds rows already (an approval's `pending_edits` row) took it before them.
+  await lockCitationMembershipShared(input.citationId);
   const [row] = await db
     .insert(parameterEntries)
     .values({
@@ -1399,6 +1506,10 @@ export async function updateParameterEntryRow(
 ): Promise<ParameterEntryRow | null> {
   const db = getDb();
   const patch = canonicalizeReportedStatistic(rawPatch);
+  // An update that moves the entry onto another paper joins that paper's
+  // citing entries exactly as an insert does (#254), so it takes the same key
+  // on the new citation first.
+  await lockCitationMembershipForMove(id, patch.citationId);
   const [row] = await db
     .update(parameterEntries)
     .set({

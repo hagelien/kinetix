@@ -132,6 +132,11 @@ on:
       - 'api/paper-reviews.ts'
       - 'api/_lib/wikiArticleImportStore.ts'
       - 'api/_lib/wiki-page-lock.ts'
+      # The entry writers that take the citation-membership key (#254) beyond
+      # the stores above: the research import and the legacy
+      # reference-concentrations path.
+      - 'api/_lib/researchImportStore.ts'
+      - 'api/_lib/reference-concentrations-helpers.ts'
   push:
     branches: [main]
     paths:
@@ -185,6 +190,11 @@ on:
       - 'api/paper-reviews.ts'
       - 'api/_lib/wikiArticleImportStore.ts'
       - 'api/_lib/wiki-page-lock.ts'
+      # The entry writers that take the citation-membership key (#254) beyond
+      # the stores above: the research import and the legacy
+      # reference-concentrations path.
+      - 'api/_lib/researchImportStore.ts'
+      - 'api/_lib/reference-concentrations-helpers.ts'
 
 # Supersede an in-flight PR run when a newer commit lands on the same PR — this
 # repo iterates fast (many "Address Codex Nth pass" commits per PR), so a run
@@ -334,3 +344,9 @@ jobs:
         run: |
           npx vitest run --config vitest.integration.config.ts \
             tests/governance/transaction/real-postgres-wiki-article-import-lock-order.test.ts
+      - name: Real-Postgres citation membership vs. fold and re-score
+        env:
+          KINETIX_TEST_PG_URL: postgres://postgres:postgres@localhost:5432/kinetix_test
+        run: |
+          npx vitest run --config vitest.integration.config.ts \
+            tests/governance/transaction/real-postgres-citation-membership-lock.test.ts

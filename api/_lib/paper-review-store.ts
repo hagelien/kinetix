@@ -32,15 +32,21 @@ import {
   recomputeSummariesCitingCitation,
 } from './parameter-entries-store.js';
 import {
+  tryLockCitationMembership,
   tryLockDrugForRecompute,
   tryLockLateDrugsCitingCitation,
 } from './citation-merge.js';
 
 /**
- * A review write that would have had to wait for a drug lock while holding
- * rows a citation merge may be queued on, and so did not. Nothing is written —
- * the write's own changes are rolled back to its savepoint first — so the
- * caller's transaction is as it was; re-running the write records it.
+ * A review write that would have had to wait for a lock while holding rows a
+ * citation merge may be queued on, and so did not. `drugId` names the drug
+ * whose lock stayed held; null means the paper's citation-membership key did
+ * (`CITATION_MEMBERSHIP_LOCK_NAMESPACE`, #254) — a source value citing the
+ * paper was being written, or the paper was being folded or re-scored
+ * elsewhere. Nothing is written — the write's own changes are rolled back to
+ * its savepoint first — so the caller's transaction is as it was; re-running
+ * the write records it. The routes answer it with the same retryable 409
+ * either way.
  */
 export class PaperReviewDrugLockedError extends Error {
   readonly statusHint = 409;
@@ -48,11 +54,15 @@ export class PaperReviewDrugLockedError extends Error {
 
   constructor(
     readonly citationId: number,
-    readonly drugId: number,
+    readonly drugId: number | null,
   ) {
     super(
-      `paper review of citation ${citationId} not recorded: drug ${drugId}, whose ` +
-        'parameter summaries the review recomputes, was locked by another write. Retry to record it.',
+      drugId === null
+        ? `paper review of citation ${citationId} not recorded: another write was filing a ` +
+            'source value citing the paper, or folding or re-scoring it, and the review ' +
+            'recomputes every summary citing it. Retry to record it.'
+        : `paper review of citation ${citationId} not recorded: drug ${drugId}, whose ` +
+            'parameter summaries the review recomputes, was locked by another write. Retry to record it.',
     );
     this.name = 'PaperReviewDrugLockedError';
   }
@@ -133,6 +143,20 @@ export async function recordPaperReview(args: {
     for (const drugId of await lockDrugsCitingCitation(citationId)) lockedDrugs.add(drugId);
   }
 
+  // The drugs above are the ones whose entries cite the paper now. A source
+  // value filed on another drug while this re-score is uncommitted would
+  // recompute that drug with the score this write is replacing — and, landing
+  // after the recompute's last scan below, keep it once both commit (#254).
+  // The paper's citation-membership key closes that: every entry writer takes
+  // it shared before it writes, so holding it exclusively means no new entry
+  // citing the paper commits before this does, and one in flight has to
+  // finish first. Tried, never waited for, in either mode — under 'try' this
+  // transaction holds rows already, and the entry writers are the ones that
+  // wait — and before the first write, so a refusal leaves nothing behind.
+  if (recomputes && !(await tryLockCitationMembership(db, citationId))) {
+    throw new PaperReviewDrugLockedError(citationId, null);
+  }
+
   // Everything below runs under a savepoint when a recompute follows, so a
   // drug that turns out late and held (see the recompute) can undo it all.
   const atomic = recomputes && isInPoolTransaction();
@@ -141,9 +165,10 @@ export async function recordPaperReview(args: {
     const recorded = await writeReview(db, citationId, authorUserId, input);
     if (recomputes) {
       // The scan above covers entries that cited the paper when it ran. A
-      // drug whose first such entry committed since is tried, never waited
-      // for: this transaction now holds the review row, and a citation merge
-      // that saw the new entry holds that drug and waits for the row.
+      // drug whose first such entry committed since — before the membership
+      // key was taken, or moved there by a drug merge — is tried, never
+      // waited for: this transaction now holds the review row, and waiting
+      // for a drug after a row is the order every other writer avoids (#243).
       const heldDrugId = await tryLockLateDrugsCitingCitation(db, citationId, lockedDrugs);
       if (heldDrugId !== null) throw new PaperReviewDrugLockedError(citationId, heldDrugId);
       // Refresh the cached value for every summarizable parameter whose

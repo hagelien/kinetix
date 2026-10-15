@@ -5,7 +5,11 @@
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { citations, referenceConcentrations } from '../../db/schema.js';
 import { getDb } from './db.js';
-import { preservedQuoteExprFor } from './parameter-entries-store.js';
+import {
+  lockCitationMembershipForMove,
+  lockCitationMembershipShared,
+  preservedQuoteExprFor,
+} from './parameter-entries-store.js';
 import {
   ParameterNotApplicableError,
   parameterWriteBlockedBy,
@@ -214,6 +218,9 @@ async function insertReferenceConcentrationRow(
   createdBy: number,
 ): Promise<ReferenceConcentrationRow> {
   const db = getDb();
+  // The same shared key on the cited paper as every other entry insert (#254;
+  // `CITATION_MEMBERSHIP_LOCK_NAMESPACE`): under the drug lock, before the row.
+  await lockCitationMembershipShared(input.citationId ?? null);
   const [row] = await db
     .insert(referenceConcentrations)
     .values({
@@ -284,6 +291,9 @@ async function updateReferenceConcentrationLocked(
     throw new ParameterNotApplicableError(existing.drugId, parameter, blocked);
   }
 
+  // And on the paper this update may move the row onto, as the entry-update
+  // path does (#254).
+  await lockCitationMembershipForMove(id, input.citationId ?? null);
   const [row] = await db
     .update(referenceConcentrations)
     .set({

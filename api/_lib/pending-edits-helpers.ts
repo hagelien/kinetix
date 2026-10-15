@@ -41,6 +41,8 @@ import {
   recomputeParameterAndDependents,
   recomputeSummariesForDrug,
   isNormalizationInput,
+  lockCitationMembershipForMove,
+  lockCitationMembershipShared,
 } from './parameter-entries-store.js';
 import {
   lockDrugForEntryApplicability,
@@ -1022,6 +1024,12 @@ export async function applyApprovedEdit(
     // …and the drug an entry proposal locked is only the right drug if the
     // entry still belongs to it. See `assertLockedEntryOwner`.
     await assertLockedEntryOwner(db, preflight, lockIds);
+    // A source value the approval files, or moves, onto a paper takes that
+    // paper's shared citation-membership key (#254) — here, with the drug
+    // locks, and not at the insert: by then this transaction holds the edit's
+    // `pending_edits` row, which a fold of the paper rewrites, and waiting for
+    // a fold that holds the key while it waits for that row is a cycle.
+    await lockCitationMembershipForEdit(preflight);
 
     // A page-scoped edit also holds its page row, taken BEFORE the
     // pending_edits row below. Deleting a page locks the page row FOR UPDATE and
@@ -1411,6 +1419,35 @@ async function paramEntryEditDrugId(
     .where(eq(parameterEntries.id, edit.targetId))
     .limit(1);
   return row?.drugId ?? null;
+}
+
+/**
+ * The shared citation-membership key (`CITATION_MEMBERSHIP_LOCK_NAMESPACE`) a
+ * `param_entry` approval's write will need: the paper a create files the entry
+ * against, or the one an update moves it onto. Read from the preflight, like
+ * the drug locks — a payload re-drafted since fails the review-token check
+ * before anything is applied, so a key taken for the wrong paper never guards
+ * a write. The insert and the update take it again, for free.
+ */
+async function lockCitationMembershipForEdit(
+  edit: typeof pendingEdits.$inferSelect,
+): Promise<void> {
+  if (edit.editType !== 'param_entry') return;
+  const value = edit.proposedValue;
+  if (!value || typeof value !== 'object') return;
+  const { op, input, patch } = value as Record<string, unknown>;
+  const citationOf = (payload: unknown): number | null => {
+    const citationId =
+      payload && typeof payload === 'object'
+        ? (payload as Record<string, unknown>).citationId
+        : null;
+    return typeof citationId === 'number' ? citationId : null;
+  };
+  if (op === 'create') {
+    await lockCitationMembershipShared(citationOf(input));
+  } else if (op === 'update' && edit.targetId != null) {
+    await lockCitationMembershipForMove(edit.targetId, citationOf(patch));
+  }
 }
 
 /**

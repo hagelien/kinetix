@@ -382,7 +382,10 @@ export async function resolveCitation(
                 : stats.deferredReason === 'drug_locked'
                   ? `#${duplicate.id} (drug ${stats.lockedDrugId}, whose summaries the ` +
                     `fold recomputes, was locked by another write)`
-                  : `#${duplicate.id} (another merge into it held the lock)`,
+                  : stats.deferredReason === 'entry_in_flight'
+                    ? `#${duplicate.id} (a source value citing it or the survivor was ` +
+                      `being written, or one of them re-scored or folded elsewhere)`
+                    : `#${duplicate.id} (another merge into it held the lock)`,
           );
         } else mergedIds.push(duplicate.id);
       }
