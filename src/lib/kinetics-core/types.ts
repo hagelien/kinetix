@@ -10,7 +10,7 @@
 /** Administration route of a single dose event. */
 /** Administration routes, as a runtime pick-list. The single source of truth for the route
  *  vocabulary — the `RouteId` type derives from it, and the DB's route CHECK (migration 0111,
- *  CV-2c) is held in step with it by `modelStructureVocabulary.test.ts`, exactly as the
+ *  CV-2c, widened by 0151) is held in step with it by `modelStructureVocabulary.test.ts`, exactly as the
  *  model-structure axes are. */
 export const ROUTE_IDS = [
   'oral',
@@ -18,6 +18,9 @@ export const ROUTE_IDS = [
   'iv',
   'im',
   'sublingual',
+  'buccal',
+  'subcutaneous',
+  'transdermal',
   'rectal',
   'inhalation',
   'other',

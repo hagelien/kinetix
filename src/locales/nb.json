@@ -2936,6 +2936,9 @@
       "iv": "Intravenøs",
       "im": "Intramuskulær",
       "sublingual": "Sublingval",
+      "buccal": "Bukkal",
+      "subcutaneous": "Subkutan",
+      "transdermal": "Transdermal",
       "rectal": "Rektal",
       "inhalation": "Inhalasjon",
       "other": "Annen"

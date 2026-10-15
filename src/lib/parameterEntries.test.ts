@@ -566,6 +566,19 @@ describe('CV-2c — route-scoped parameter entries (ka)', () => {
     ).toMatch(/not route-specific/i);
   });
 
+  it.each(['subcutaneous', 'transdermal', 'buccal'])('accepts the %s route on a ka entry', (route) => {
+    expect(
+      parameterEntryInputSchema.safeParse({
+        drugId: 1,
+        parameter: 'ka',
+        median: 1.2,
+        unit: '1/h',
+        route,
+        citationId: 5,
+      }).success,
+    ).toBe(true);
+  });
+
   it('rejects a route outside the RouteId vocabulary', () => {
     expect(
       parameterEntryInputSchema.safeParse({
@@ -573,7 +586,7 @@ describe('CV-2c — route-scoped parameter entries (ka)', () => {
         parameter: 'ka',
         median: 1.2,
         unit: '1/h',
-        route: 'transdermal',
+        route: 'intravitreal',
         citationId: 5,
       }).success,
     ).toBe(false);
@@ -623,7 +636,7 @@ describe('CV-2c-4 — route-optional absorption declarations', () => {
         parameter: 'absorptionModel',
         categoricalValue: 'first-order',
         unit: '',
-        route: 'transdermal',
+        route: 'intravitreal',
         citationId: 5,
       }).success,
     ).toBe(false);

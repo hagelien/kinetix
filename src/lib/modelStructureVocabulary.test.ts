@@ -19,7 +19,7 @@ import {
 import { DRUG_PARAMETERS } from './drugParameters.js';
 
 const MIGRATION = readFileSync('drizzle/0109_model_structure_axes.sql', 'utf8');
-const ROUTE_MIGRATION = readFileSync('drizzle/0111_route_scoped_parameter_entries.sql', 'utf8');
+const ROUTE_MIGRATION = readFileSync('drizzle/0151_route_vocabulary_sc_transdermal_buccal.sql', 'utf8');
 
 /** Extract the `p_value IN ('a', 'b', …)` list the migration's CHECK function uses for one axis. */
 function sqlVocabularyFor(parameter: string): string[] {
@@ -54,10 +54,10 @@ describe('CV-1b — model-structure axis vocabularies agree across engine / regi
 });
 
 describe('CV-2c — route vocabulary agrees across engine and DB', () => {
-  it('0111 migration route CHECK vocabulary == kinetics-core ROUTE_IDS', () => {
+  it('latest (0151) migration route CHECK vocabulary == kinetics-core ROUTE_IDS', () => {
     // The route CHECK is `"route" IN ('oral', 'intranasal', …)`; extract that list.
     const m = ROUTE_MIGRATION.match(/"route" IN \(([^)]*)\)/);
-    if (!m) throw new Error('no route vocabulary found in 0111 migration');
+    if (!m) throw new Error('no route vocabulary found in 0151 migration');
     const sqlRoutes = [...m[1]!.matchAll(/'([^']+)'/g)].map((q) => q[1]!);
     expect(sqlRoutes.sort()).toEqual([...ROUTE_IDS].sort());
   });

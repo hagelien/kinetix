@@ -2936,6 +2936,9 @@
       "iv": "Intravenous",
       "im": "Intramuscular",
       "sublingual": "Sublingual",
+      "buccal": "Buccal",
+      "subcutaneous": "Subcutaneous",
+      "transdermal": "Transdermal",
       "rectal": "Rectal",
       "inhalation": "Inhalation",
       "other": "Other"
