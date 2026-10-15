@@ -12,11 +12,14 @@ import {
   beginBlockHistory,
   lockMetabolismHistory,
   readDrugBlockSnapshot,
+  withBlockHistory,
 } from '../../../api/_lib/drugBlockHistory.js';
 import { lockDrugForEntryApplicability } from '../../../api/_lib/parameterApplicabilityStore.js';
 import { mergeDrugs } from '../../../api/_lib/drug-merge.js';
 import { replaceDrugMetabolism } from '../../../api/_lib/metabolismStore.js';
-import { drugBlockRevisions, drugs, users } from '../../../db/schema.js';
+import { planDeletes, applyDeletesInTransaction } from '../../../scripts/repair-hallucinated-citations.js';
+import { seedBioEntity } from '../../integration/setup/seed.js';
+import { citations, drugMetabolismProfiles, drugReceptorTargets, parameterEntries, drugBlockRevisions, drugs, users } from '../../../db/schema.js';
 import {
   realPostgresUrl,
   resetRealPostgresDb,
@@ -117,6 +120,66 @@ describe.skipIf(!realPostgresUrl())('metabolism block history on concurrent conn
     expect((rows[1]!.newValue as { precursors: unknown[] }).precursors).toHaveLength(2);
     expect(rows[1]!.createdAt.getTime()).toBeGreaterThanOrEqual(rows[0]!.createdAt.getTime());
   });
+
+
+  it.each(['modelStructure', 'pharmacodynamics'] as const)(
+    'locks the repair drug before the %s snapshot', async (block) => {
+      const [citation] = await db.insert(citations).values({
+        type: 'doi', identifier: '10.1000/repair', metadata: {},
+      }).returning({ id: citations.id });
+      const citationId = citation!.id;
+      // Keep the repair's affected-drug set stable even while the other writer
+      // has not committed. The repair removes this citation from all blocks.
+      await db.insert(drugMetabolismProfiles).values({ drugId: parentA, referenceIds: [citationId] });
+      let entryId: number;
+      if (block === 'modelStructure') {
+        const [entry] = await db.insert(parameterEntries).values({
+          drugId: parentA, citationId, parameter: 'ka', route: 'oral', median: '1.2', unit: '1/h',
+        }).returning({ id: parameterEntries.id });
+        entryId = entry!.id;
+      } else {
+        const entity = await seedBioEntity(db as never);
+        const [entry] = await db.insert(drugReceptorTargets).values({
+          drugId: parentA, bioEntityId: entity, evidenceNote: 'Før', referenceIds: [citationId],
+        }).returning({ id: drugReceptorTargets.id });
+        entryId = entry!.id;
+      }
+      const plan = await planDeletes([citationId]);
+      const beforeWrite = gate();
+      const releaseWrite = gate();
+      const writer = runInPoolTransaction(async () => {
+        await lockDrugForEntryApplicability(parentA);
+        await withBlockHistory({ drugIds: [parentA], blocks: [block], actorUserId: actor }, async () => {
+          beforeWrite.open();
+          await releaseWrite.wait;
+          if (block === 'modelStructure') {
+            await getDb().update(parameterEntries).set({ median: '1.4' }).where(eq(parameterEntries.id, entryId));
+          } else {
+            await getDb().update(drugReceptorTargets).set({ evidenceNote: 'Etter' }).where(eq(drugReceptorTargets.id, entryId));
+          }
+        });
+      });
+      await beforeWrite.wait;
+      const repair = runInPoolTransaction(async () => {
+        await getDb().execute(sql`SET LOCAL application_name = 'block-history-repair'`);
+        // applyDeletes normally owns the outer transaction; use its worker so
+        // both writes join this named transaction on the production DB seam.
+        await applyDeletesInTransaction(plan, actor);
+      });
+      try {
+        await waitForAdvisory(db, 'block-history-repair');
+      } finally {
+        releaseWrite.open();
+        await Promise.all([writer, repair]);
+      }
+      const rows = (await db.select().from(drugBlockRevisions)
+        .where(eq(drugBlockRevisions.drugId, parentA)).orderBy(asc(drugBlockRevisions.id)))
+        .filter((r) => r.block === block);
+      expect(rows).toHaveLength(2);
+      expect(rows[1]!.oldValue).toEqual(rows[0]!.newValue);
+      expect(rows[1]!.newValue).toEqual(await readDrugBlockSnapshot(getDb(), parentA, block));
+    },
+  );
 
   it('takes the merge graph lock before drug row locks needed by a linked writer', async () => {
     const beforeWrite = gate();

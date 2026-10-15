@@ -329,7 +329,7 @@ export async function recordDrugBlockRevision(
 export async function recordModelStructureRevision(
   db: Db,
   drugId: number,
-  actorUserId: number,
+  actorUserId: number | null,
   pendingEditId: number | null = null,
 ): Promise<number | null> {
   // Recorded from inside the entry write's own transaction, so the declaration

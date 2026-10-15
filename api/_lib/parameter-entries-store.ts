@@ -1365,6 +1365,7 @@ export async function attachSourceQuoteIfMissing(
   id: number,
   quote: string,
   expected?: QuoteEvidenceSnapshot,
+  actorUserId: number | null = null,
 ): Promise<{ attached: boolean; current: string | null }> {
   // A merge can reassign the row between the read and the lock. Bounded rather
   // than unbounded: a merge is a rare administrative act, two in a row against
@@ -1374,7 +1375,7 @@ export async function attachSourceQuoteIfMissing(
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const drugId = await owningDrugId(id);
     if (drugId == null) return { attached: false, current: null };
-    const outcome = await attachUnderDrugLock(id, drugId, quote, expected);
+    const outcome = await attachUnderDrugLock(id, drugId, quote, expected, actorUserId);
     if (outcome !== ENTRY_MOVED) return outcome;
   }
   return { attached: false, current: await storedQuoteOf(id) };
@@ -1395,6 +1396,7 @@ async function attachUnderDrugLock(
   drugId: number,
   quote: string,
   expected: QuoteEvidenceSnapshot | undefined,
+  actorUserId: number | null,
 ): Promise<{ attached: boolean; current: string | null } | typeof ENTRY_MOVED> {
   return withDrugApplicabilityLock(drugId, async () => {
     // Under the lock, and only now, is the ownership stable. A row that moved
@@ -1413,12 +1415,17 @@ async function attachUnderDrugLock(
           ...(expected ? quoteEvidenceMatches(expected) : []),
         ),
       )
-      .returning({ quote: parameterEntries.sourceQuote });
+      .returning({ quote: parameterEntries.sourceQuote, parameter: parameterEntries.parameter });
     if (updated) {
       // Only when the row actually changed: a no-op attach (somebody filled the
       // column first) invalidates nothing, and conflicting proposals over a
       // write that did not happen would be its own small lie.
       await markEntryMutationsConflicted(id);
+      if (isModelStructureBlockParameter(updated.parameter)) {
+        // The quote is part of this block's evidence. Record only a successful
+        // attach, in the same drug-locked transaction as the row update.
+        await recordModelStructureRevision(db, drugId, actorUserId);
+      }
       return { attached: true, current: updated.quote ?? null };
     }
     const [row] = await db

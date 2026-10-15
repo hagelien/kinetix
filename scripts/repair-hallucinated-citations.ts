@@ -49,9 +49,11 @@
  */
 import 'dotenv/config';
 import fs from 'node:fs';
+import { pathToFileURL } from 'node:url';
 import { sql, type SQL } from 'drizzle-orm';
 import { getDb, runInPoolTransaction } from '../api/_lib/db';
-import { beginBlockHistory } from '../api/_lib/drugBlockHistory';
+import { beginBlockHistory, lockMetabolismHistory } from '../api/_lib/drugBlockHistory';
+import { lockDrugForEntryApplicability } from '../api/_lib/parameterApplicabilityStore';
 import { describeDeferredMerge, mergeCitations } from '../api/_lib/citation-merge';
 import { fetchRecords } from '../api/_lib/pubmed-eutils';
 import { fetchCrossRefMetadata } from '../api/_lib/crossref';
@@ -64,11 +66,6 @@ import {
   isDrugParameterId,
   type DrugParameterId,
 } from '../src/lib/drugParameters';
-
-if (!process.env.DATABASE_URL) {
-  console.error('DATABASE_URL is required');
-  process.exit(1);
-}
 
 /** The relationship tables that carry a `reference_ids` array — the "facts". */
 const FACT_TABLES = [
@@ -532,7 +529,7 @@ async function applyRepoints(
   return { updated, merged, deferred, skipped, done };
 }
 
-interface DeletePlan {
+export interface DeletePlan {
   citationIds: number[];
   entryCount: number;
   affectedPairs: Array<{ drugId: number; parameter: string }>;
@@ -540,7 +537,7 @@ interface DeletePlan {
   facts: Array<{ table: string; touched: number; emptied: number }>;
 }
 
-async function planDeletes(citationIds: number[]): Promise<DeletePlan> {
+export async function planDeletes(citationIds: number[]): Promise<DeletePlan> {
   const db = getDb();
   const entries = (
     await db.execute<{ n: number }>(sql`
@@ -619,12 +616,14 @@ async function applyDeletes(
   await runInPoolTransaction(() => applyDeletesInTransaction(plan, actorUserId));
 }
 
-async function applyDeletesInTransaction(
+export async function applyDeletesInTransaction(
   plan: DeletePlan,
   actorUserId: number,
 ): Promise<void> {
   const db = getDb();
   const ids = plan.citationIds;
+  // Graph → drug advisory → snapshot/write, as on the API and merge paths.
+  await lockMetabolismHistory();
 
   // Every drug whose metabolism, mechanisms or model structure (declarations
   // and ka values are parameter entries) cites a reference being removed: the
@@ -636,8 +635,13 @@ async function applyDeletesInTransaction(
     UNION SELECT drug_id FROM drug_elimination_routes WHERE reference_ids && ${intArray(ids)}
     UNION SELECT parent_drug_id FROM drug_metabolites WHERE reference_ids && ${intArray(ids)}
   `);
+  const drugIds = [...new Set([
+    ...blockDrugs.rows.map((r) => Number(r.drug_id)),
+    ...plan.affectedPairs.map((p) => p.drugId),
+  ])].sort((a, b) => a - b);
+  for (const drugId of drugIds) await lockDrugForEntryApplicability(drugId);
   const blockHistory = await beginBlockHistory({
-    drugIds: blockDrugs.rows.map((r) => Number(r.drug_id)),
+    drugIds,
     actorUserId,
   });
 
@@ -714,6 +718,10 @@ async function applyDeletesInTransaction(
 // ─── Main ───────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
+  if (!process.env.DATABASE_URL) {
+    console.error('DATABASE_URL is required');
+    process.exit(1);
+  }
   const argv = process.argv.slice(2);
   const reportPath = arg(argv, '--report') ?? 'citation-audit.json';
   const apply = argv.includes('--apply');
@@ -880,9 +888,12 @@ async function main(): Promise<void> {
   }
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((err) => {
-    console.error(err);
-    process.exit(1);
-  });
+// Importable for regression tests; importing the repair never executes it.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main()
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
+}

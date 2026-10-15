@@ -36,7 +36,7 @@ const WRITE_PATTERNS: RegExp[] = [
   // The store functions that perform those writes on a caller's behalf.
   /\breplaceDrugMetabolism\(/,
   /\breplaceDrugReceptorTargets\(/,
-  /\b(insertParameterEntry|updateParameterEntryRow|deleteParameterEntryRow)\(/,
+  /\b(insertParameterEntry|updateParameterEntryRow|deleteParameterEntryRow|attachSourceQuoteIfMissing)\(/,
 ];
 
 type Writer =

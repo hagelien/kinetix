@@ -40,6 +40,7 @@ import {
   parameterEntries,
 } from '../../db/schema.js';
 import {
+  attachSourceQuoteIfMissing,
   deleteParameterEntryRow,
   insertParameterEntry,
   recomputeParameterAndDependents,
@@ -478,6 +479,53 @@ describe('drug block revisions', () => {
     for (let i = 1; i < revisions.length; i++) {
       expect(revisions[i]!.oldValue).toEqual(revisions[i - 1]!.newValue);
     }
+  });
+
+
+  it.each([
+    ['dispositionModel', 'two-compartment', null],
+    ['eliminationModel', 'first-order', null],
+    ['absorptionModel', 'first-order', 'oral'],
+    ['ka', null, 'oral'],
+  ] as const)('records a quote-only %s enrichment, attributed to the actor', async (parameter, categoricalValue, route) => {
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db);
+    const citationId = await seedAdmissibleCitation(db);
+    const [entry] = await db.insert(parameterEntries).values({
+      drugId, citationId, parameter: parameter!, categoricalValue, route,
+      unit: parameter === 'ka' ? '1/h' : '',
+      median: parameter === 'ka' ? '1.2' : null,
+    }).returning({ id: parameterEntries.id });
+    await recomputeInTransaction(drugId, parameter, userId);
+    await expect(attachSourceQuoteIfMissing(entry!.id, 'Kildens ordlyd.', undefined, userId))
+      .resolves.toMatchObject({ attached: true });
+    await expect(attachSourceQuoteIfMissing(entry!.id, 'En annen ordlyd.', undefined, userId))
+      .resolves.toMatchObject({ attached: false });
+    const revisions = await revisionsFor(drugId, 'modelStructure');
+    expect(revisions).toHaveLength(2);
+    expect(revisions[1]!.createdBy).toBe(userId);
+    expect(revisions[1]!.oldValue).toEqual(revisions[0]!.newValue);
+    const snapshot = revisions[1]!.newValue as {
+      declarations: Array<{ sourceQuote: string }>;
+      routeValues: Array<{ sourceQuote: string }>;
+    };
+    expect([...snapshot.declarations, ...snapshot.routeValues][0]!.sourceQuote).toBe('Kildens ordlyd.');
+  });
+
+  it('rolls a quote-only block change back if its revision fails', async () => {
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db);
+    const citationId = await seedAdmissibleCitation(db);
+    const [entry] = await db.insert(parameterEntries).values({
+      drugId, citationId, parameter: 'ka', route: 'oral', median: '1.2', unit: '1/h',
+    }).returning({ id: parameterEntries.id });
+    await failBlockRevisionInserts(async () => {
+      await expect(attachSourceQuoteIfMissing(entry!.id, 'Kildens ordlyd.', undefined, userId))
+        .rejects.toThrow();
+    });
+    const [row] = await db.select().from(parameterEntries).where(eq(parameterEntries.id, entry!.id));
+    expect(row!.sourceQuote).toBeNull();
+    expect(await revisionsFor(drugId, 'modelStructure')).toEqual([]);
   });
 
   // Codex review on #303: a citation held only by a block's history is still
