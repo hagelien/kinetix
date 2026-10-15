@@ -131,6 +131,9 @@ export default withErrorHandling(async function handler(
       .set({
         magicLinkFailedAttempts: sql`CASE WHEN ${users.magicLinkFailedAttempts} + 1 >= ${MAX_MAGIC_LINK_FAILURES} THEN 0 ELSE ${users.magicLinkFailedAttempts} + 1 END`,
         magicLinkHash: sql`CASE WHEN ${users.magicLinkFailedAttempts} + 1 >= ${MAX_MAGIC_LINK_FAILURES} THEN NULL ELSE ${users.magicLinkHash} END`,
+        // Survives new codes; only a successful sign-in resets it. It is what
+        // lengthens auth-request's issue cooldown (`issueCooldownMs`).
+        magicLinkFailuresSinceAuth: sql`${users.magicLinkFailuresSinceAuth} + 1`,
         // magicLinkExpires is intentionally NOT cleared on lockout so that
         // auth-request's cooldown check survives: the timestamp records when
         // the last code was issued regardless of lockout state, preventing an
@@ -167,6 +170,7 @@ export default withErrorHandling(async function handler(
       magicLinkHash: null,
       magicLinkExpires: null,
       magicLinkFailedAttempts: 0,
+      magicLinkFailuresSinceAuth: 0,
       emailVerifiedAt: user.emailVerifiedAt ?? new Date(),
       lastAuthAt: new Date(),
       sessionMaxDays: nextSessionMaxDays,

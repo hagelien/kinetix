@@ -4,6 +4,35 @@ export const MAGIC_LINK_CODE_TTL_MS = 15 * 60 * 1000;
 export const MAX_MAGIC_LINK_FAILURES = 5;
 const MAGIC_LINK_HASH_PREFIX = "v2:";
 
+/** Minimum gap between two codes for one account with no recent wrong guesses. */
+export const ISSUE_COOLDOWN_MS = 60_000;
+/** The longest the issue cooldown grows to. */
+export const MAX_ISSUE_COOLDOWN_MS = 60 * 60 * 1000;
+
+/**
+ * Minimum gap between issuing two codes for one account.
+ *
+ * Each code allows MAX_MAGIC_LINK_FAILURES guesses, so a fixed 60 s cooldown
+ * let anyone who knows an allowlisted email guess ~7,200 codes a day,
+ * indefinitely. The cooldown therefore doubles for every
+ * MAX_MAGIC_LINK_FAILURES wrong guesses since the account last signed in, up
+ * to MAX_ISSUE_COOLDOWN_MS (about 120 guesses a day once there). It counts
+ * guesses rather than burned codes so stopping one short of a lockout does
+ * not dodge it, and a successful sign-in resets it, so a person's own typos
+ * cost at most a short wait.
+ */
+export function issueCooldownMs(
+  failuresSinceAuth: number | null | undefined,
+): number {
+  const doublings = Math.floor(
+    Math.max(0, failuresSinceAuth ?? 0) / MAX_MAGIC_LINK_FAILURES,
+  );
+  return Math.min(
+    ISSUE_COOLDOWN_MS * 2 ** Math.min(doublings, 16),
+    MAX_ISSUE_COOLDOWN_MS,
+  );
+}
+
 export function hashMagicLinkCode(code: string): string {
   return `${MAGIC_LINK_HASH_PREFIX}${hmacMagicLinkCode(code)}`;
 }

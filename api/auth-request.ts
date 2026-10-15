@@ -13,13 +13,13 @@
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { randomInt, randomBytes } from 'node:crypto';
-import { and, eq, isNull, lt, lte, or } from 'drizzle-orm';
+import { and, eq, isNull, lte, or } from 'drizzle-orm';
 import { json, error, withErrorHandling } from './_lib/response.js';
 import { getDb } from './_lib/db.js';
 import {
   MAGIC_LINK_CODE_TTL_MS,
-  hasMagicLinkExpired,
   hashMagicLinkCode,
+  issueCooldownMs,
 } from './_lib/magic-link.js';
 import { consumeRateLimit, getClientAddressKey } from './_lib/rate-limit.js';
 import { parseAndValidate } from './_lib/validate.js';
@@ -32,10 +32,11 @@ const STAY_LOGGED_IN_DAYS = 60;
 const DEFAULT_SESSION_DAYS = 30;
 const REQUEST_EMAIL_LIMIT = 3;
 const REQUEST_IP_LIMIT = 10;
-// Minimum interval between issuing two OTP codes for the same email address.
-// Enforced at the DB level (checked against magicLinkExpires) so it holds
-// across all serverless instances, unlike the in-memory rate limiter above.
-const ISSUE_COOLDOWN_MS = 60_000;
+// The minimum interval between issuing two OTP codes for the same email
+// address is `issueCooldownMs` (60 s, growing with wrong guesses since the last
+// sign-in). It is enforced at the DB level (checked against magicLinkExpires)
+// so it holds across all serverless instances, unlike the in-memory rate
+// limiter above.
 
 function generateCode(): string {
   return String(randomInt(100_000, 1_000_000));
@@ -177,11 +178,11 @@ export default withErrorHandling(async function handler(
   // authoritative check. magicLinkExpires is keyed on issue time, not on
   // whether the hash is still active, so it survives both successful auth
   // (cleared) and lockout (preserved intentionally in auth-verify.ts).
+  const cooldownMs = issueCooldownMs(user.magicLinkFailuresSinceAuth);
   if (
     user.magicLinkExpires &&
-    !hasMagicLinkExpired(user.magicLinkExpires) &&
     Date.now() - (user.magicLinkExpires.getTime() - MAGIC_LINK_CODE_TTL_MS) <
-      ISSUE_COOLDOWN_MS
+      cooldownMs
   ) {
     return genericReply();
   }
@@ -193,7 +194,7 @@ export default withErrorHandling(async function handler(
   // issuedAt = expiresAt - TTL  ≤  now - COOLDOWN_MS
   //   ↔  expiresAt  ≤  now - COOLDOWN_MS + TTL
   const cooldownGate = new Date(
-    Date.now() - ISSUE_COOLDOWN_MS + MAGIC_LINK_CODE_TTL_MS,
+    Date.now() - cooldownMs + MAGIC_LINK_CODE_TTL_MS,
   );
 
   // Atomic write: include the cooldown predicate in the WHERE clause so that
@@ -215,9 +216,17 @@ export default withErrorHandling(async function handler(
     .where(
       and(
         eq(users.id, user.id),
+        // The cooldown was sized from this count; a wrong guess landing in
+        // between makes the update miss rather than use a stale, shorter one.
+        eq(
+          users.magicLinkFailuresSinceAuth,
+          user.magicLinkFailuresSinceAuth,
+        ),
+        // No "previous code expired" escape: the cooldown can outgrow the
+        // code's TTL, and expiry must not shortcut it. At the base cooldown
+        // (shorter than the TTL) an expired code already satisfies the gate.
         or(
           isNull(users.magicLinkExpires),          // no code ever issued
-          lt(users.magicLinkExpires, new Date()),   // previous code expired
           lte(users.magicLinkExpires, cooldownGate), // cooldown has elapsed
         ),
       ),

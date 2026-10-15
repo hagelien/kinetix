@@ -72,6 +72,11 @@ export const users = pgTable('users', {
   magicLinkFailedAttempts: integer('magic_link_failed_attempts')
     .notNull()
     .default(0),
+  // Wrong code guesses since the last successful sign-in; not reset by a new
+  // code. Lengthens the issue cooldown (api/_lib/magic-link.ts).
+  magicLinkFailuresSinceAuth: integer('magic_link_failures_since_auth')
+    .notNull()
+    .default(0),
   // Multi-select unit preferences (#306). The first item is the user's
   // primary display unit; the rest are the alternative units they want to
   // see in tooltips, converters, and pickers. Defaults to ['µmol/L','mg/L']
