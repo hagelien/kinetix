@@ -995,15 +995,26 @@ describe('PATCH /api/disputes release guards', () => {
     expect(body).toMatchObject({ resolution: 'rejected', autoApplied: true });
   });
 
-  it("refuses withdrawing someone else's dispute", async () => {
+  // Withdrawing someone else's dispute releases the work like an overrule.
+  it('refuses the contested work\'s author withdrawing the dispute against it', async () => {
     getUserFromRequestMock.mockResolvedValue({ userId: AUTHOR, role: 'editor' });
 
     const { status, body } = await patch('withdrawn');
 
     expect(status).toBe(403);
-    expect(body.code).toBe('dispute_withdraw_not_own');
+    expect(body.code).toBe('dispute_overrule_own_not_allowed');
     expect(resolveDisputeByIdMock).not.toHaveBeenCalled();
     expect(retryAgentConsensusMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses an agent withdrawing a person's dispute", async () => {
+    getUserFromRequestMock.mockResolvedValue({ userId: 99, role: 'editor' });
+    isActiveAgentUserMock.mockResolvedValue(true);
+
+    const { status, body } = await patch('withdrawn');
+
+    expect(status).toBe(403);
+    expect(body.code).toBe('agent_overrule_of_human_dispute_not_allowed');
   });
 
   it('lets the dispute author withdraw it', async () => {
