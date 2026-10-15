@@ -41,7 +41,10 @@
  *        documented disposition, carried out rather than only advised, under
  *        the same moderation guards as a manual return and in one transaction
  *        with the ruling. See `_lib/upheld-dispute-return.ts` for why the
- *        objection *is* the note.
+ *        objection *is* the note. `withdrawn` is the dispute author's own;
+ *        `rejected` is refused to the contested work's author (bar a human
+ *        holding `review.edit.decideOwn`) and to an agent on a human-raised
+ *        dispute — see `releaseRefusal`.
  *
  * Auth is the same getUserFromRequest used everywhere (human JWT or kxat_
  * agent token). Untrusted: reasonMd / evidenceRefs are author-authored data.
@@ -58,6 +61,7 @@ import { assertSameOrigin, parseAndValidate } from './_lib/validate.js';
 import { createDisputeSchema, resolveDisputeSchema } from './_lib/schemas.js';
 import {
   disputeTargetUrl,
+  isActiveAgentUser,
   resolveActiveAgent,
   targetAuthorUserId,
   visibleVerificationTargetIds,
@@ -363,6 +367,74 @@ async function handlePost(
   );
 }
 
+/**
+ * Why this caller may not overrule or withdraw this open dispute, or null.
+ *
+ * Both rulings release what the objection holds: an overruled or withdrawn
+ * dispute stops blocking consensus, which this route retries at once, so a
+ * proposal can apply on the same request. That makes them moderation acts in
+ * favour of the contested work, and `dispute.resolve` alone (editor tier, and
+ * an agent can hold the editor role) must not carry what the manual decision
+ * path refuses:
+ *
+ *  - Withdrawing is the objector's own retraction, so only the dispute's
+ *    author may do it. Anyone else overrules — which is a ruling, with the
+ *    guards below.
+ *  - The contested work's author may not overrule the objection to it.
+ *    `PATCH /api/pending-edits` blocks even an author holding
+ *    `review.edit.decideOwn` from deciding their own edit over a standing
+ *    objection; overruling it first would make that block a single extra
+ *    click. The human `decideOwn` grant is honoured here as on an uphold's
+ *    return, and never for an active agent (an agent token is clamped to
+ *    editor, so a lowered grant would otherwise reach every agent).
+ *  - An active agent never overrules a human-raised dispute: a human
+ *    objection stays human-controlled, as an agent never decides a human's
+ *    proposal on the manual path.
+ *
+ * A dispute that is missing or already closed is left to the resolve call,
+ * which answers `disputes_not_found`.
+ */
+async function releaseRefusal(args: {
+  id: number;
+  resolution: 'rejected' | 'withdrawn';
+  callerUserId: number;
+  mayDecideOwn: boolean;
+}): Promise<{ message: string; code: string } | null> {
+  const dispute = await getDisputeById(args.id);
+  if (!dispute || dispute.status !== 'open') return null;
+
+  if (args.resolution === 'withdrawn') {
+    return dispute.createdBy === args.callerUserId
+      ? null
+      : {
+          message: 'Only the author of a dispute can withdraw it',
+          code: 'dispute_withdraw_not_own',
+        };
+  }
+
+  const callerIsAgent = await isActiveAgentUser(args.callerUserId);
+  const authorUserId = await contributionAuthorUserId({
+    targetType: dispute.targetType,
+    targetId: dispute.targetId,
+  });
+  if (
+    authorUserId === args.callerUserId &&
+    !(args.mayDecideOwn && !callerIsAgent)
+  ) {
+    return {
+      message: 'You cannot overrule a dispute against your own contribution',
+      code: 'dispute_overrule_own_not_allowed',
+    };
+  }
+  if (callerIsAgent && dispute.source !== 'agent') {
+    return {
+      message: 'An agent cannot overrule a dispute raised by a person',
+      code: 'agent_overrule_of_human_dispute_not_allowed',
+    };
+  }
+  return null;
+}
+
 async function handlePatch(
   req: IncomingMessage,
   res: ServerResponse,
@@ -421,6 +493,19 @@ async function handlePatch(
     auth.role,
     CAP['edit.modelStructure.decide'],
   );
+
+  if (resolution !== 'upheld') {
+    const refusal = await releaseRefusal({
+      id,
+      resolution,
+      callerUserId: auth.userId,
+      mayDecideOwn,
+    });
+    if (refusal) {
+      error(res, 403, refusal.message, refusal.code);
+      return;
+    }
+  }
 
   const resolveAndReturn = async () => {
     const resolved = await resolveDisputeById({
