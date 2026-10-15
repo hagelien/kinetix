@@ -82,6 +82,7 @@ export function fixtureFieldForParameter(parameterId: string): string {
 const FIELD_ORDER: ReadonlyArray<keyof RawComponent> = [
   'name',
   'nameEn',
+  'slug',
   'pubchemCid',
   'molecularWeight',
   'halfLife',
@@ -114,6 +115,11 @@ const RANGE_FIELDS = [
 export interface CatalogDrugRow {
   pubchemCid: number | null;
   names: Record<string, string> | null;
+  /**
+   * `drugs.slug`. Optional so a row built without it (older callers, tests)
+   * still projects; such a component simply carries no `slug`.
+   */
+  slug?: string | null;
   /** `drug_parameters.parameter` → `drug_parameters.value` (raw jsonb). */
   parameters: Record<string, unknown>;
   /** `drug_elimination_routes` with `kind='enzyme'`, in sort order. */
@@ -247,6 +253,8 @@ export function toRawComponent(
 
   const component: RawComponent = { name, pubchemCid: row.pubchemCid };
   if (nameEn) component.nameEn = nameEn;
+  const slug = typeof row.slug === 'string' ? row.slug.trim() : '';
+  if (slug) component.slug = slug;
 
   const molecularWeight = sanitizeNumber(row.parameters.molecularWeight);
   if (molecularWeight !== undefined) component.molecularWeight = molecularWeight;
@@ -387,6 +395,10 @@ export function canonicalComponent(
   if (name) out.set('name', name);
   const nameEn = component.nameEn?.trim();
   if (nameEn) out.set('nameEn', nameEn);
+  // Compared like any other field: a fixture entry missing the database's slug
+  // is drift `catalog:export` would clear, so `catalog:check` must report it.
+  const slug = typeof component.slug === 'string' ? component.slug.trim() : '';
+  if (slug) out.set('slug', slug);
 
   const molecularWeight = sanitizeNumber(component.molecularWeight);
   if (molecularWeight !== undefined) out.set('molecularWeight', molecularWeight);
@@ -563,7 +575,7 @@ export function renderComponent(component: RawComponent): string {
   for (const field of FIELD_ORDER) {
     const value = (component as unknown as Record<string, unknown>)[field as string];
     if (value === undefined || value === null) continue;
-    if (field === 'name' || field === 'nameEn') {
+    if (field === 'name' || field === 'nameEn' || field === 'slug') {
       lines.push(`${indent}${field}: ${quote(String(value))}`);
     } else if (field === 'pubchemCid' || field === 'molecularWeight') {
       lines.push(`${indent}${field}: ${String(value)}`);

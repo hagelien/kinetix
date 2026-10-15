@@ -22,6 +22,12 @@ function toComponentFromRaw(raw: RawComponent): DrugComponent {
   const names: Record<string, string> = {};
   if (raw.name) names.nb = raw.name;
   if (raw.nameEn) names.en = raw.nameEn;
+  // Carry the catalog slug when the fixture has one. The modelling run
+  // resolves a catalog-derived kinetics-core model by `_slug` first; without
+  // it the degraded path falls back to a name-derived key, which misses
+  // registry entries such as `paracetamol-acetaminophen`. Entries without a
+  // slug (hand-written, or exported before the field existed) load unchanged.
+  const slug = typeof raw.slug === 'string' ? raw.slug.trim() : '';
   // The fixture's `RangeData` is structurally identical to `NumericRange`
   // ({ min, max, mean, median, unit, qualifier, note }), so each field
   // passes straight through. Carry every parameter the fixture holds —
@@ -48,6 +54,7 @@ function toComponentFromRaw(raw: RawComponent): DrugComponent {
     _searchKey: buildDrugSearchKey({
       names,
     }),
+    ...(slug ? { _slug: slug } : {}),
   };
 }
 

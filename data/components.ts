@@ -14,6 +14,12 @@ interface RangeData {
 export interface RawComponent {
   name: string;
   nameEn?: string;
+  // The drug's catalog slug (`drugs.slug`). Optional because hand-written
+  // entries predate it; `npm run catalog:export` writes it from the database.
+  // The offline fallback maps it to `DrugComponent._slug`, which is the key a
+  // catalog-derived kinetics-core model is looked up by — and that key is not
+  // always derivable from the name (e.g. `paracetamol-acetaminophen`).
+  slug?: string;
   pubchemCid: number;
   molecularWeight?: number;
   bioavailability?: RangeData;
@@ -37,6 +43,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: '3-klormetkatinon',
     nameEn: '3-Chloromethcathinone (3-CMC)',
+    slug: '3-chloromethcathinone-3-cmc',
     pubchemCid: 50999285,
     molecularWeight: 197.66,
     metabolism: {
@@ -48,6 +55,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: '6-monoacetylmorfin',
     nameEn: '6-Monoacetylmorphine (6-MAM)',
+    slug: '6-monoacetylmorphine-6-mam',
     pubchemCid: 5462507,
     molecularWeight: 327.4,
     halfLife: { min: 0.1, max: 0.7, unit: 'h', note: 'rapidly metabolized to morphine; DrugBank' },
@@ -60,6 +68,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Alimemazin',
     nameEn: 'Alimemazine (Trimeprazine)',
+    slug: 'alimemazine-trimeprazine',
     pubchemCid: 5574,
     molecularWeight: 298.4,
     halfLife: { min: 5, max: 8, unit: 'h', note: 'Hu et al. 1990' },
@@ -72,6 +81,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Alprazolam',
     nameEn: 'Alprazolam',
+    slug: 'alprazolam',
     pubchemCid: 2118,
     molecularWeight: 308.8,
     halfLife: { min: 9, max: 16, unit: 'h', note: 'auto-extracted' },
@@ -89,6 +99,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Amfetamin',
     nameEn: 'Amphetamine',
+    slug: 'amphetamine',
     pubchemCid: 3007,
     molecularWeight: 135.21,
     halfLife: { min: 9, max: 11, unit: 'h', note: 'auto-extracted' },
@@ -103,6 +114,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: '2C-B',
     nameEn: '2C-B (4-bromo-2,5-dimethoxyphenethylamine)',
+    slug: '4-brom-25-dimetoksyamfetamin',
     pubchemCid: 62065,
     molecularWeight: 260.16,
     halfLife: { min: 2, max: 4, median: 3, unit: 'h', note: 'limited human data; kinetics-core harmonization baseline uses 3.0 h' },
@@ -111,6 +123,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Benzoylecgonin',
     nameEn: 'Benzoylecgonine',
+    slug: 'benzoylecgonine',
     pubchemCid: 448223,
     molecularWeight: 289.33,
     halfLife: { min: 5, max: 12, unit: 'h', note: 'cocaine metabolite; PMC5573903' },
@@ -123,6 +136,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Betahydroksybutyrat',
     nameEn: 'Beta-hydroxybutyrate (3-hydroxybutyric acid)',
+    slug: 'beta-hydroxybutyrate-3-hydroxybutyric-acid',
     pubchemCid: 441,
     molecularWeight: 104.1,
     metabolism: {
@@ -134,6 +148,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Bromazepam',
     nameEn: 'Bromazepam',
+    slug: 'bromazepam',
     pubchemCid: 2441,
     molecularWeight: 316.15,
     halfLife: { min: 12, max: 30, unit: 'h', note: 'DrugBank DB01558; Jochemsen 1983' },
@@ -144,12 +159,14 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Bromazolam',
     nameEn: 'Bromazolam',
+    slug: 'bromazolam',
     pubchemCid: 12562546,
     molecularWeight: 353.2
   },
   {
     name: 'buprenorfin',
     nameEn: 'buprenorphine',
+    slug: 'buprenorphine',
     pubchemCid: 644073,
     molecularWeight: 467.6,
     halfLife: { min: 27.6, max: 27.6, median: 27.6, unit: 'h' },
@@ -172,6 +189,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Koffein',
     nameEn: 'Caffeine',
+    slug: 'caffeine',
     pubchemCid: 2519,
     molecularWeight: 194.19,
     halfLife: { min: 3, max: 7, median: 5, unit: 'h' },
@@ -189,12 +207,14 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Desalkylgidazepam',
     nameEn: 'Desalkylgidazepam',
+    slug: 'desalkylgidazepam',
     pubchemCid: 76167,
     molecularWeight: 315.16
   },
   {
     name: 'Diazepam',
     nameEn: 'Diazepam',
+    slug: 'diazepam',
     pubchemCid: 3016,
     molecularWeight: 284.74,
     halfLife: { min: 48, max: 120, unit: 'h', note: 'auto-extracted' },
@@ -211,6 +231,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Dimetyltryptamin (DMT)',
     nameEn: 'N,N-Dimethyltryptamine (DMT)',
+    slug: 'dimetyltryptamin',
     pubchemCid: 6089,
     molecularWeight: 188.27,
     halfLife: { min: 0.08, max: 0.32, unit: 'h', note: 'Heijden 2025; IV t1/2alpha 5-6 min, t1/2beta 14-19 min' },
@@ -225,6 +246,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Doksylamin',
     nameEn: 'Doxylamine',
+    slug: 'doxylamine',
     pubchemCid: 3162,
     molecularWeight: 270.37,
     halfLife: { median: 10, unit: 'h', note: 'auto-extracted' },
@@ -240,6 +262,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Etizolam',
     nameEn: 'Etizolam',
+    slug: 'etizolam',
     pubchemCid: 3307,
     molecularWeight: 342.8,
     halfLife: { median: 8.2, unit: 'h', note: 'auto-extracted' },
@@ -251,6 +274,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Etylmorfin',
     nameEn: 'Ethylmorphine',
+    slug: 'ethylmorphine',
     pubchemCid: 5359271,
     molecularWeight: 313.4,
     halfLife: { median: 2, unit: 'h', note: 'Aasmundstad 1995, Br J Clin Pharmacol' },
@@ -259,6 +283,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Fenobarbital',
     nameEn: 'Phenobarbital',
+    slug: 'phenobarbital',
     pubchemCid: 4763,
     molecularWeight: 232.24,
     halfLife: { median: 118, unit: 'h', note: 'auto-extracted' },
@@ -271,6 +296,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Fenazepam',
     nameEn: 'Phenazepam',
+    slug: 'phenazepam',
     pubchemCid: 40113,
     molecularWeight: 349.61,
     halfLife: { min: 60, max: 300, unit: 'h', note: 'DEA Drug Info; mean 140h' },
@@ -285,6 +311,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Fenytoin',
     nameEn: 'Phenytoin',
+    slug: 'phenytoin',
     pubchemCid: 1775,
     molecularWeight: 252.27,
     halfLife: { min: 7, max: 42, unit: 'h', note: 'auto-extracted' },
@@ -302,6 +329,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Fentanyl',
     nameEn: 'Fentanyl',
+    slug: 'fentanyl',
     pubchemCid: 3345,
     molecularWeight: 336.5,
     halfLife: { min: 5, max: 12, unit: 'h', note: 'auto-extracted' },
@@ -320,24 +348,28 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Flualprazolam',
     nameEn: 'Flualprazolam',
+    slug: 'flualprazolam',
     pubchemCid: 10359044,
     molecularWeight: 326.8
   },
   {
     name: 'Flubromazepam',
     nameEn: 'Flubromazepam',
+    slug: 'flubromazepam',
     pubchemCid: 12947024,
     molecularWeight: 333.15
   },
   {
     name: 'Flubromazolam',
     nameEn: 'Flubromazolam',
+    slug: 'flubromazolam',
     pubchemCid: 21930924,
     molecularWeight: 371.2
   },
   {
     name: 'Flunitrazepam',
     nameEn: 'Flunitrazepam',
+    slug: 'flunitrazepam',
     pubchemCid: 3380,
     molecularWeight: 313.28,
     halfLife: { median: 35, unit: 'h', note: 'auto-extracted' },
@@ -350,6 +382,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Gabapentin',
     nameEn: 'Gabapentin',
+    slug: 'gabapentin',
     pubchemCid: 3446,
     molecularWeight: 171.24,
     halfLife: { min: 2, max: 4, unit: 'h', note: 'auto-extracted' },
@@ -362,6 +395,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Gammahydroksybutyrat',
     nameEn: 'Gamma-hydroxybutyrate (GHB)',
+    slug: 'gamma-hydroxybutyrate',
     pubchemCid: 10413,
     molecularWeight: 104.1,
     halfLife: { median: 0.36666666666666664, unit: 'h', note: 'auto-extracted' },
@@ -374,6 +408,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Heksahydrocannabinol',
     nameEn: 'Hexahydrocannabinol (HHC)',
+    slug: 'hexahydrocannabinol-hhc',
     pubchemCid: 16050328,
     molecularWeight: 316.5,
     metabolism: {
@@ -385,6 +420,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Hydroksyzin',
     nameEn: 'Hydroxyzine',
+    slug: 'hydroxyzine',
     pubchemCid: 3658,
     molecularWeight: 374.9,
     halfLife: { min: 14, max: 25, unit: 'h', note: 'auto-extracted' },
@@ -401,12 +437,14 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Isotonitazen',
     nameEn: 'Isotonitazene',
+    slug: 'isotonitazene',
     pubchemCid: 145721979,
     molecularWeight: 410.5
   },
   {
     name: 'Karfentanil',
     nameEn: 'Carfentanil',
+    slug: 'carfentanil',
     pubchemCid: 62156,
     molecularWeight: 394.5,
     halfLife: { min: 0.7, max: 5.7, unit: 'h', note: 'Springer s12630-019-01294-y' },
@@ -419,6 +457,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Ketamin',
     nameEn: 'Ketamine',
+    slug: 'ketamine',
     pubchemCid: 3821,
     molecularWeight: 237.72,
     halfLife: { min: 0.16666666666666666, max: 0.25, unit: 'h', note: 'auto-extracted' },
@@ -432,6 +471,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Klobazam',
     nameEn: 'Clobazam',
+    slug: 'clobazam',
     pubchemCid: 2789,
     molecularWeight: 300.74,
     halfLife: { min: 36, max: 42, unit: 'h', note: 'auto-extracted' },
@@ -448,6 +488,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Cannabidiol',
     nameEn: 'Cannabidiol',
+    slug: 'cannabidiol',
     pubchemCid: 644019,
     molecularWeight: 314.5,
     halfLife: { median: 1.44, unit: 'h', note: 'auto-extracted' },
@@ -461,6 +502,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Delta-8-Tetrahydrocannabinol',
     nameEn: 'Delta-8-Tetrahydrocannabinol',
+    slug: 'delta-8-tetrahydrocannabinol',
     pubchemCid: 638026,
     molecularWeight: 314.5,
     halfLife: { min: 24, max: 36, unit: 'h', note: 'estimated; similar to delta-9-THC' },
@@ -473,6 +515,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Aceton',
     nameEn: 'Acetone',
+    slug: 'acetone',
     pubchemCid: 180,
     molecularWeight: 58.08,
     halfLife: { min: 3, max: 5, unit: 'h', note: 'auto-extracted' },
@@ -490,6 +533,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Etanol',
     nameEn: 'Ethanol',
+    slug: 'ethanol',
     pubchemCid: 702,
     molecularWeight: 46.07,
     halfLife: { median: 0.25, unit: 'h', note: 'auto-extracted' },
@@ -506,6 +550,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Isopropanol',
     nameEn: 'Isopropanol',
+    slug: 'isopropanol',
     pubchemCid: 3776,
     molecularWeight: 60.1,
     halfLife: { min: 2.5, max: 3.2, unit: 'h', note: 'auto-extracted' },
@@ -519,6 +564,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Metanol',
     nameEn: 'Methanol',
+    slug: 'methanol',
     pubchemCid: 887,
     molecularWeight: 32.042,
     halfLife: { min: 2.5, max: 3, unit: 'h', note: 'auto-extracted' },
@@ -558,6 +604,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Fensyklidin',
     nameEn: 'Phencyclidine',
+    slug: 'phencyclidine',
     pubchemCid: 6468,
     molecularWeight: 243.4,
     halfLife: { min: 7, max: 26, unit: 'h', note: 'auto-extracted from PubChem' },
@@ -569,6 +616,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Remifentanil',
     nameEn: 'Remifentanil',
+    slug: 'remifentanil',
     pubchemCid: 60815,
     molecularWeight: 376.4,
     halfLife: { min: 0.16666666666666666, max: 0.3333333333333333, unit: 'h', note: 'auto-extracted' },
@@ -581,6 +629,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Sufentanil',
     nameEn: 'Sufentanil',
+    slug: 'sufentanil',
     pubchemCid: 41693,
     molecularWeight: 386.6,
     halfLife: { min: 0.012, max: 0.02, unit: 'h', note: 'auto-extracted' },
@@ -592,6 +641,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Klometiazol',
     nameEn: 'Clomethiazole',
+    slug: 'clomethiazole',
     pubchemCid: 10783,
     molecularWeight: 161.65,
     halfLife: { min: 3.6, max: 5, unit: 'h', note: 'Jostell 1978; PMC1874494' },
@@ -606,6 +656,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Klonazepam',
     nameEn: 'Clonazepam',
+    slug: 'clonazepam',
     pubchemCid: 2802,
     molecularWeight: 315.71,
     halfLife: { min: 30, max: 40, unit: 'h', note: 'auto-extracted from OpenFDA' },
@@ -624,6 +675,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Kodein',
     nameEn: 'Codeine',
+    slug: 'codeine',
     pubchemCid: 5284371,
     molecularWeight: 299.4,
     halfLife: { min: 2.5, max: 3.5, unit: 'h', note: 'auto-extracted' },
@@ -642,6 +694,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Kokain',
     nameEn: 'Cocaine',
+    slug: 'cocaine',
     pubchemCid: 446220,
     molecularWeight: 303.35,
     halfLife: { min: 0.5, max: 1.5, unit: 'h', note: 'auto-extracted' },
@@ -659,6 +712,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Lorazepam',
     nameEn: 'Lorazepam',
+    slug: 'lorazepam',
     pubchemCid: 3958,
     molecularWeight: 321.2,
     halfLife: { median: 14, unit: 'h', note: 'auto-extracted' },
@@ -672,6 +726,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'LSD',
     nameEn: 'Lysergic acid diethylamide (LSD)',
+    slug: 'lysergic-acid-diethylamide-lsd',
     pubchemCid: 5761,
     molecularWeight: 323.4,
     halfLife: { median: 2.9166666666666665, unit: 'h', note: 'auto-extracted' },
@@ -687,6 +742,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'MDMA (ecstasy)',
     nameEn: '3,4-Methylenedioxymethamphetamine (MDMA)',
+    slug: 'mdma',
     pubchemCid: 1615,
     molecularWeight: 193.24,
     halfLife: { median: 8.6, unit: 'h', note: 'auto-extracted' },
@@ -702,6 +758,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Mefedron',
     nameEn: 'Mephedrone (4-MMC)',
+    slug: 'mephedrone-4-mmc',
     pubchemCid: 45266826,
     molecularWeight: 177.24,
     halfLife: { min: 1.6, max: 2.2, unit: 'h', note: 'Papaseit 2016, PMC5026738' },
@@ -714,6 +771,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Metadon',
     nameEn: 'Methadone',
+    slug: 'methadone',
     pubchemCid: 4095,
     molecularWeight: 309.4,
     halfLife: { min: 15, max: 207, unit: 'h', note: 'auto-extracted' },
@@ -730,6 +788,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Metamfetamin',
     nameEn: 'Methamphetamine',
+    slug: 'methamphetamine',
     pubchemCid: 10836,
     molecularWeight: 149.23,
     halfLife: { min: 4, max: 5, unit: 'h', note: 'auto-extracted' },
@@ -747,12 +806,14 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Metonitazen',
     nameEn: 'Metonitazene',
+    slug: 'metonitazene',
     pubchemCid: 53316366,
     molecularWeight: 382.5
   },
   {
     name: 'Metylfenidat',
     nameEn: 'Methylphenidate',
+    slug: 'methylphenidate',
     pubchemCid: 4158,
     molecularWeight: 233.31,
     halfLife: { median: 2.4, unit: 'h', note: 'auto-extracted' },
@@ -766,6 +827,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Midazolam',
     nameEn: 'Midazolam',
+    slug: 'midazolam',
     pubchemCid: 4192,
     molecularWeight: 325.8,
     halfLife: { min: 1.8, max: 6.4, unit: 'h', note: 'auto-extracted' },
@@ -783,6 +845,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Morfin',
     nameEn: 'Morphine',
+    slug: 'morphine',
     pubchemCid: 5288826,
     molecularWeight: 285.34,
     halfLife: { min: 2, max: 3, median: 2.5, unit: 'h' },
@@ -800,6 +863,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'N-desmetyldiazepam',
     nameEn: 'Nordazepam (N-desmethyldiazepam; Nordiazepam)',
+    slug: 'nordazepam',
     pubchemCid: 2997,
     molecularWeight: 270.71,
     halfLife: { min: 36, max: 200, unit: 'h', note: 'commonly 50-120h; wide range' },
@@ -813,6 +877,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'N-pyrrolidinmetonitazen',
     nameEn: 'N-Pyrrolidino metonitazene',
+    slug: 'n-pyrrolidino-metonitazene',
     pubchemCid: 168323127,
     molecularWeight: 380.4,
     metabolism: {
@@ -824,6 +889,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'N-pyrrolidinprotonitazen',
     nameEn: 'N-Pyrrolidino protonitazene',
+    slug: 'n-pyrrolidino-protonitazene',
     pubchemCid: 168322728,
     molecularWeight: 408.5,
     metabolism: {
@@ -835,6 +901,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Naloxon',
     nameEn: 'Naloxone',
+    slug: 'nalokson',
     pubchemCid: 5284596,
     molecularWeight: 327.4,
     halfLife: { min: 1.8, max: 2.7, unit: 'h', note: 'auto-extracted' },
@@ -848,6 +915,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Nitrazepam',
     nameEn: 'Nitrazepam',
+    slug: 'nitrazepam',
     pubchemCid: 4506,
     molecularWeight: 281.27,
     halfLife: { median: 26, unit: 'h', note: 'auto-extracted' },
@@ -863,6 +931,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Oksykodon',
     nameEn: 'Oxycodone',
+    slug: 'oxycodone',
     pubchemCid: 5284603,
     molecularWeight: 315.4,
     halfLife: { median: 3.2, unit: 'h', note: 'auto-extracted' },
@@ -879,6 +948,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Oxazepam',
     nameEn: 'Oxazepam',
+    slug: 'oxazepam',
     pubchemCid: 4616,
     molecularWeight: 286.71,
     halfLife: { min: 3, max: 21, unit: 'h', note: 'auto-extracted' },
@@ -898,6 +968,7 @@ export const embeddedComponents: RawComponent[] = [
     // seed-drugs and the embedded-catalog fallback build search_key from names
     // only, so without it a freshly seeded / offline database can't find "PMMA".
     nameEn: 'para-Methoxymethamphetamine (PMMA)',
+    slug: 'para-methoxymethamphetamine-pmma',
     pubchemCid: 90766,
     molecularWeight: 179.26,
     metabolism: {
@@ -909,6 +980,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Pregabalin',
     nameEn: 'Pregabalin',
+    slug: 'pregabalin',
     pubchemCid: 5486971,
     molecularWeight: 159.23,
     halfLife: { median: 6.3, unit: 'h', note: 'auto-extracted' },
@@ -921,6 +993,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Prometazin',
     nameEn: 'Promethazine',
+    slug: 'promethazine',
     pubchemCid: 4927,
     molecularWeight: 284.42,
     halfLife: { min: 12, max: 15, unit: 'h', note: 'auto-extracted' },
@@ -934,12 +1007,14 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Protonitazen',
     nameEn: 'Protonitazene',
+    slug: 'protonitazene',
     pubchemCid: 156589001,
     molecularWeight: 410.5
   },
   {
     name: 'Psilocin',
     nameEn: 'Psilocin',
+    slug: 'psilocin',
     pubchemCid: 4980,
     molecularWeight: 204.27,
     halfLife: { min: 1.2, max: 4.8, unit: 'h', note: 'PMC12030428, Holze 2023' },
@@ -953,6 +1028,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Psilocinglukuronid',
     nameEn: 'Psilocin glucuronide',
+    slug: 'psilocin-glucuronide',
     pubchemCid: 101264121,
     molecularWeight: 380.4,
     metabolism: {
@@ -968,6 +1044,7 @@ export const embeddedComponents: RawComponent[] = [
     // parent entry — one of the non-canonical CIDs `audit:pubchem-identity`
     // reports as a variant record, and the reason the catalog carried two
     // scopolamine rows. Repointed at the canonical CID the merge adopts.
+    slug: 'scopolamine-2',
     pubchemCid: 5184,
     molecularWeight: 303.35,
     halfLife: { median: 3.55, unit: 'h', note: 'auto-extracted' },
@@ -985,6 +1062,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Tapentadol',
     nameEn: 'Tapentadol',
+    slug: 'tapentadol',
     pubchemCid: 9838022,
     molecularWeight: 221.34,
     halfLife: { median: 4, unit: 'h', note: 'auto-extracted' },
@@ -1002,6 +1080,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'THC',
     nameEn: 'Δ9-Tetrahydrocannabinol (THC)',
+    slug: '9-tetrahydrocannabinol-thc',
     pubchemCid: 16078,
     molecularWeight: 314.5,
     halfLife: { min: 25, max: 36, unit: 'h', note: 'auto-extracted' },
@@ -1015,6 +1094,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Tramadol',
     nameEn: 'Tramadol',
+    slug: 'tramadol',
     pubchemCid: 33741,
     molecularWeight: 263.37,
     halfLife: { min: 5, max: 6, unit: 'h', note: 'auto-extracted' },
@@ -1032,6 +1112,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Zolpidem',
     nameEn: 'Zolpidem',
+    slug: 'zolpidem',
     pubchemCid: 5732,
     molecularWeight: 307.4,
     halfLife: { median: 9.9, unit: 'h', note: 'auto-extracted from OpenFDA' },
@@ -1043,6 +1124,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Zopiclon',
     nameEn: 'Zopiclone',
+    slug: 'zopiclone',
     pubchemCid: 5735,
     molecularWeight: 388.8,
     halfLife: { min: 3.8, max: 6.5, unit: 'h', note: 'auto-extracted' },
@@ -1057,6 +1139,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Amitriptylin',
     nameEn: 'Amitriptyline',
+    slug: 'amitriptyline',
     pubchemCid: 2160,
     molecularWeight: 277.4,
     halfLife: { min: 10, max: 50, unit: 'h', note: 'auto-extracted' },
@@ -1074,6 +1157,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Aripiprazol',
     nameEn: 'Aripiprazole',
+    slug: 'aripiprazole',
     pubchemCid: 60795,
     molecularWeight: 448.39,
     halfLife: { median: 146, unit: 'h', note: 'auto-extracted' },
@@ -1087,6 +1171,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Baklofen',
     nameEn: 'Baclofen',
+    slug: 'baclofen',
     pubchemCid: 2284,
     molecularWeight: 213.66,
     halfLife: { min: 2, max: 6, unit: 'h', note: 'auto-extracted' },
@@ -1100,6 +1185,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Citalopram',
     nameEn: 'Citalopram',
+    slug: 'citalopram',
     pubchemCid: 2771,
     molecularWeight: 324.39,
     halfLife: { median: 35, unit: 'h', note: 'auto-extracted' },
@@ -1116,6 +1202,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Deksklorfeniramin',
     nameEn: 'Dexchlorpheniramine',
+    slug: 'dexchlorpheniramine',
     pubchemCid: 33036,
     molecularWeight: 274.79,
     halfLife: { median: 20, unit: 'h', note: 'DrugBank DB09555; Paton & Webster 1985' },
@@ -1130,6 +1217,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Diltiazem',
     nameEn: 'Diltiazem',
+    slug: 'diltiazem',
     pubchemCid: 39186,
     molecularWeight: 414.52,
     halfLife: { min: 3, max: 4.5, unit: 'h', note: 'auto-extracted' },
@@ -1143,6 +1231,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Doxepin',
     nameEn: 'Doxepin',
+    slug: 'doxepin',
     pubchemCid: 3158,
     molecularWeight: 279.38,
     halfLife: { median: 15, unit: 'h', note: 'auto-extracted' },
@@ -1156,6 +1245,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Duloksetin',
     nameEn: 'Duloxetine',
+    slug: 'duloxetine',
     pubchemCid: 60835,
     molecularWeight: 297.42,
     halfLife: { min: 8, max: 17, unit: 'h', note: 'auto-extracted' },
@@ -1171,6 +1261,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Fenazon',
     nameEn: 'Phenazone (Antipyrine)',
+    slug: 'phenazone-antipyrine',
     pubchemCid: 2206,
     molecularWeight: 188.23,
     halfLife: { min: 8, max: 20, unit: 'h', note: 'PubMed 7201837; mean ~12h' },
@@ -1184,6 +1275,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Fluoxetin',
     nameEn: 'Fluoxetine',
+    slug: 'fluoxetine',
     pubchemCid: 3386,
     molecularWeight: 309.33,
     halfLife: { min: 24, max: 72, unit: 'h', note: 'auto-extracted' },
@@ -1200,6 +1292,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Haloperidol',
     nameEn: 'Haloperidol',
+    slug: 'haloperidol',
     pubchemCid: 3559,
     molecularWeight: 375.86,
     halfLife: { min: 14.5, max: 36.7, unit: 'h', note: 'auto-extracted' },
@@ -1217,6 +1310,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Hydroksybupropion',
     nameEn: 'Hydroxybupropion',
+    slug: 'hydroxybupropion',
     pubchemCid: 446,
     molecularWeight: 255.74,
     halfLife: { min: 15, max: 25, unit: 'h', note: 'FDA Wellbutrin label' },
@@ -1229,6 +1323,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Klomipramin',
     nameEn: 'Clomipramine',
+    slug: 'clomipramine',
     pubchemCid: 2801,
     molecularWeight: 314.86,
     halfLife: { min: 19, max: 37, unit: 'h', note: 'auto-extracted' },
@@ -1245,6 +1340,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Klozapin',
     nameEn: 'Clozapine',
+    slug: 'clozapine',
     pubchemCid: 135398737,
     molecularWeight: 326.83,
     halfLife: { min: 4, max: 12, unit: 'h', note: 'auto-extracted' },
@@ -1261,6 +1357,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Klorprotixen',
     nameEn: 'Chlorprothixene',
+    slug: 'chlorprothixene',
     pubchemCid: 667467,
     molecularWeight: 315.86,
     halfLife: { min: 12, max: 40, unit: 'h', note: 'Brosen 1996, PubMed 8901143' },
@@ -1271,6 +1368,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Lamotrigin',
     nameEn: 'Lamotrigine',
+    slug: 'lamotrigine',
     pubchemCid: 3878,
     molecularWeight: 256.09,
     halfLife: { min: 14, max: 59, unit: 'h', note: 'auto-extracted' },
@@ -1284,6 +1382,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Levomepromazin',
     nameEn: 'Levomepromazine',
+    slug: 'levomepromazine',
     pubchemCid: 72287,
     molecularWeight: 328.47,
     halfLife: { min: 15, max: 78, unit: 'h', note: 'Dahl 1977; PubMed 1269194' },
@@ -1298,6 +1397,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Metoprolol',
     nameEn: 'Metoprolol',
+    slug: 'metoprolol',
     pubchemCid: 4171,
     molecularWeight: 267.36,
     halfLife: { min: 3, max: 7, unit: 'h', note: 'auto-extracted' },
@@ -1310,6 +1410,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Mianserin',
     nameEn: 'Mianserin',
+    slug: 'mianserin',
     pubchemCid: 4184,
     molecularWeight: 264.37,
     halfLife: { min: 10, max: 61, unit: 'h', note: 'PubMed 6824562, PMC1379723' },
@@ -1321,6 +1422,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Mirtazapin',
     nameEn: 'Mirtazapine',
+    slug: 'mirtazapine',
     pubchemCid: 4205,
     molecularWeight: 265.35,
     halfLife: { min: 20, max: 40, unit: 'h', note: 'auto-extracted from OpenFDA' },
@@ -1337,6 +1439,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Nortriptylin',
     nameEn: 'Nortriptyline',
+    slug: 'nortriptyline',
     pubchemCid: 4543,
     molecularWeight: 263.38,
     halfLife: { median: 26, unit: 'h', note: 'auto-extracted' },
@@ -1353,6 +1456,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'O-desmetyltramadol',
     nameEn: 'O-Desmethyltramadol',
+    slug: 'o-desmethyltramadol',
     pubchemCid: 9838803,
     molecularWeight: 249.35,
     halfLife: { min: 6, max: 9, unit: 'h', note: 'active metabolite of tramadol; population PK' },
@@ -1365,6 +1469,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Olanzapin',
     nameEn: 'Olanzapine',
+    slug: 'olanzapine',
     pubchemCid: 135398745,
     molecularWeight: 312.43,
     halfLife: { min: 21, max: 54, unit: 'h', note: 'auto-extracted' },
@@ -1377,6 +1482,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Paracetamol',
     nameEn: 'Paracetamol (Acetaminophen)',
+    slug: 'paracetamol-acetaminophen',
     pubchemCid: 1983,
     molecularWeight: 151.16,
     halfLife: { min: 4, max: 8, unit: 'h', note: 'auto-extracted' },
@@ -1394,6 +1500,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Paroxetin',
     nameEn: 'Paroxetine',
+    slug: 'paroxetine',
     pubchemCid: 43815,
     molecularWeight: 329.37,
     halfLife: { median: 21, unit: 'h', note: 'auto-extracted' },
@@ -1411,6 +1518,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Pentobarbital',
     nameEn: 'Pentobarbital',
+    slug: 'pentobarbital',
     pubchemCid: 4737,
     molecularWeight: 226.27,
     halfLife: { min: 35, max: 50, unit: 'h', note: 'auto-extracted' },
@@ -1422,6 +1530,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Petidin',
     nameEn: 'Pethidine (Meperidine)',
+    slug: 'pethidine-meperidine',
     pubchemCid: 4058,
     molecularWeight: 247.33,
     halfLife: { min: 0.03333333333333333, max: 0.18333333333333332, unit: 'h', note: 'auto-extracted' },
@@ -1439,6 +1548,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Proklorperazin',
     nameEn: 'Prochlorperazine',
+    slug: 'prochlorperazine',
     pubchemCid: 4917,
     molecularWeight: 373.94,
     halfLife: { min: 7, max: 9, unit: 'h', note: 'Taylor 1987, PMC1386060' },
@@ -1451,6 +1561,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Propranolol',
     nameEn: 'Propranolol',
+    slug: 'propranolol',
     pubchemCid: 4946,
     molecularWeight: 259.34,
     halfLife: { min: 3, max: 6, unit: 'h', note: 'auto-extracted' },
@@ -1466,6 +1577,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Quetiapin',
     nameEn: 'Quetiapine',
+    slug: 'quetiapine',
     pubchemCid: 5002,
     molecularWeight: 383.51,
     halfLife: { min: 6, max: 7, unit: 'h', note: 'auto-extracted' },
@@ -1479,6 +1591,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Salisylsyre',
     nameEn: 'Salicylic Acid',
+    slug: 'salicylic-acid',
     pubchemCid: 338,
     molecularWeight: 138.12,
     halfLife: { min: 2, max: 30, unit: 'h', note: 'dose-dependent; PubMed 3888490' },
@@ -1490,6 +1603,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Sertralin',
     nameEn: 'Sertraline',
+    slug: 'sertraline',
     pubchemCid: 68617,
     molecularWeight: 306.23,
     halfLife: { min: 22, max: 36, unit: 'h', note: 'auto-extracted' },
@@ -1505,6 +1619,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Teofyllin',
     nameEn: 'Theophylline',
+    slug: 'theophylline',
     pubchemCid: 2153,
     molecularWeight: 180.16,
     halfLife: { min: 4, max: 5, unit: 'h', note: 'auto-extracted' },
@@ -1523,6 +1638,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Tiopental',
     nameEn: 'Thiopental',
+    slug: 'thiopental',
     pubchemCid: 3000715,
     molecularWeight: 242.34,
     halfLife: { min: 3, max: 22, unit: 'h', note: 'auto-extracted' },
@@ -1538,6 +1654,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Trimipramin',
     nameEn: 'Trimipramine',
+    slug: 'trimipramine',
     pubchemCid: 5584,
     molecularWeight: 294.43,
     halfLife: { min: 8, max: 24, unit: 'h', note: 'PubMed 6697642; DrugBank DB00726' },
@@ -1552,6 +1669,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Venlafaxin',
     nameEn: 'Venlafaxine',
+    slug: 'venlafaxine',
     pubchemCid: 5656,
     molecularWeight: 277.4,
     halfLife: { median: 2, unit: 'h', note: 'auto-extracted' },
@@ -1568,6 +1686,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Zuklopentixol',
     nameEn: 'Zuclopenthixol',
+    slug: 'zuclopenthixol',
     pubchemCid: 5311507,
     molecularWeight: 400.97,
     halfLife: { min: 12, max: 28, unit: 'h', note: 'Lundbeck product monograph' },
@@ -1578,6 +1697,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: '10-OH-karbazepin (MHD)',
     nameEn: '10-Hydroxycarbamazepine (MHD)',
+    slug: '10-hydroxycarbamazepine-mhd',
     pubchemCid: 114709,
     molecularWeight: 254.28,
     halfLife: { min: 7, max: 20, unit: 'h', note: 'FDA Trileptal label' },
@@ -1590,6 +1710,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: '7-aminoflunitrazepam',
     nameEn: '7-Aminoflunitrazepam',
+    slug: '7-aminoflunitrazepam',
     pubchemCid: 92294,
     molecularWeight: 283.3,
     metabolism: {
@@ -1601,6 +1722,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: '7-aminoklonazepam',
     nameEn: '7-Aminoclonazepam',
+    slug: '7-aminoclonazepam',
     pubchemCid: 188298,
     molecularWeight: 285.73,
     metabolism: {
@@ -1612,6 +1734,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: '7-aminonitrazepam',
     nameEn: '7-Aminonitrazepam',
+    slug: '7-aminonitrazepam',
     pubchemCid: 78641,
     molecularWeight: 251.28,
     metabolism: {
@@ -1623,6 +1746,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Paliperidon',
     nameEn: 'Paliperidone',
+    slug: '9-hydroxyrisperidone-paliperidone',
     pubchemCid: 115237,
     molecularWeight: 426.49,
     halfLife: { median: 23, unit: 'h', note: 'auto-extracted' },
@@ -1634,6 +1758,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Ketobemidon',
     nameEn: 'Ketobemidone',
+    slug: 'ketobemidone',
     pubchemCid: 10101,
     molecularWeight: 247.33,
     halfLife: { min: 2, max: 4.4, unit: 'h', note: 'PMC1874494, PubMed 7215421' },
@@ -1648,6 +1773,7 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Karbamazepin',
     nameEn: 'Carbamazepine',
+    slug: 'carbamazepine',
     pubchemCid: 2554,
     molecularWeight: 236.27,
     halfLife: { min: 35, max: 40, unit: 'h', note: 'auto-extracted' },
@@ -1666,30 +1792,35 @@ export const embeddedComponents: RawComponent[] = [
   {
     name: 'Amisulprid',
     nameEn: 'Amisulpride',
+    slug: 'amisulpride',
     pubchemCid: 2159,
     molecularWeight: 369.48,
   },
   {
     name: 'Atomoksetin',
     nameEn: 'Atomoxetine',
+    slug: 'atomoxetine',
     pubchemCid: 54841,
     molecularWeight: 255.36,
   },
   {
     name: 'Brekspiprazol',
     nameEn: 'Brexpiprazole',
+    slug: 'brexpiprazole',
     pubchemCid: 11978813,
     molecularWeight: 433.56,
   },
   {
     name: 'Bupropion',
     nameEn: 'Bupropion',
+    slug: 'bupropion',
     pubchemCid: 444,
     molecularWeight: 239.74,
   },
   {
     name: 'Escitalopram',
     nameEn: 'Escitalopram',
+    slug: 'escitalopram',
     pubchemCid: 146570,
     molecularWeight: 324.39,
   },
@@ -1702,96 +1833,112 @@ export const embeddedComponents: RawComponent[] = [
     // (C15H14N2O2, 254.29), so only the number was wrong. Repointed rather
     // than deleted: this file is both the offline fallback catalog and a
     // `seed:drugs` input, so a stale CID here recreates the bad row.
+    slug: 'eslicarbazepine',
     pubchemCid: 9881504,
     molecularWeight: 254.28,
   },
   {
     name: 'Flupentiksol',
     nameEn: 'Flupentixol',
+    slug: 'flupentixol',
     pubchemCid: 5281881,
     molecularWeight: 434.52,
   },
   {
     name: 'Fluvoksamin',
     nameEn: 'Fluvoxamine',
+    slug: 'fluvoxamine',
     pubchemCid: 5324346,
     molecularWeight: 318.33,
   },
   {
     name: 'Kariprazin',
     nameEn: 'Cariprazine',
+    slug: 'cariprazine',
     pubchemCid: 11154555,
     molecularWeight: 427.41,
   },
   {
     name: 'Levetiracetam',
     nameEn: 'Levetiracetam',
+    slug: 'levetiracetam',
     pubchemCid: 5284583,
     molecularWeight: 170.21,
   },
   {
     name: 'Litium',
     nameEn: 'Lithium',
+    slug: 'lithium',
     pubchemCid: 3028194,
     molecularWeight: 6.94,
   },
   {
     name: 'Lurasidon',
     nameEn: 'Lurasidone',
+    slug: 'lurasidone',
     pubchemCid: 213046,
     molecularWeight: 492.68,
   },
   {
     name: 'Okskarbazepin',
     nameEn: 'Oxcarbazepine',
+    slug: 'oxcarbazepine',
     pubchemCid: 34312,
     molecularWeight: 252.27,
   },
   {
     name: 'Perfenazin',
     nameEn: 'Perphenazine',
+    slug: 'perphenazine',
     pubchemCid: 4748,
     molecularWeight: 403.97,
   },
   {
     name: 'Risperidon',
     nameEn: 'Risperidone',
+    slug: 'risperidone',
     pubchemCid: 5073,
     molecularWeight: 410.49,
   },
   {
     name: 'Sertindol',
     nameEn: 'Sertindole',
+    slug: 'sertindole',
     pubchemCid: 60149,
     molecularWeight: 440.95,
   },
   {
     name: 'Topiramat',
     nameEn: 'Topiramate',
+    slug: 'topiramate',
     pubchemCid: 5284627,
     molecularWeight: 339.36,
   },
   {
     name: 'Valproat',
     nameEn: 'Valproic acid',
+    slug: 'valproat',
     pubchemCid: 3121,
     molecularWeight: 144.21,
   },
   {
     name: 'Vortioksetin',
     nameEn: 'Vortioxetine',
+    slug: 'vortioxetine',
     pubchemCid: 9966051,
     molecularWeight: 298.45,
   },
   {
     name: 'Ziprasidon',
     nameEn: 'Ziprasidone',
+    slug: 'ziprasidone',
     pubchemCid: 60854,
     molecularWeight: 412.94,
   },
   {
     name: 'MDA',
     nameEn: '3,4-Methylenedioxyamphetamine (MDA)',
+    slug: 'metylendioksyamfetamin',
     pubchemCid: 1614,
     molecularWeight: 179.22,
   },
@@ -1804,156 +1951,182 @@ export const embeddedComponents: RawComponent[] = [
     // left at 9294 it would recreate the merged-away row on the next seed run,
     // and the exporter keeps fixture-only entries so it would not even show up
     // as drift. Same molecular weight either way: same formula, C10H15NO.
+    slug: 'efedrin',
     pubchemCid: 5032,
     molecularWeight: 165.23,
   },
   {
     name: 'Pseudoefedrin',
     nameEn: 'Pseudoephedrine',
+    slug: 'pseudoephedrine',
     pubchemCid: 7028,
     molecularWeight: 165.23,
   },
   {
     name: 'Norefedrin',
     nameEn: 'Norephedrine (Phenylpropanolamine)',
+    slug: 'norephedrine-phenylpropanolamine',
     pubchemCid: 10297,
     molecularWeight: 151.21,
   },
   {
     name: 'Norpseudoefedrin',
     nameEn: 'Norpseudoephedrine (Cathine)',
+    slug: 'norpseudoephedrine-cathine',
     pubchemCid: 441457,
     molecularWeight: 151.21,
   },
   {
     name: 'Katinon',
     nameEn: 'Cathinone',
+    slug: 'katinon',
     pubchemCid: 62258,
     molecularWeight: 149.19,
   },
   {
     name: 'Ritalinsyre',
     nameEn: 'Ritalinic acid',
+    slug: 'ritalinic-acid',
     pubchemCid: 86863,
     molecularWeight: 219.28,
   },
   {
     name: 'EDDP',
     nameEn: '2-Ethylidene-1,5-dimethyl-3,3-diphenylpyrrolidine (EDDP)',
+    slug: '2-ethylidene-15-dimethyl-33-diphenylpyrrolidine-eddp',
     pubchemCid: 5352621,
     molecularWeight: 277.4,
   },
   {
     name: 'Buprenorfinglukuronid',
     nameEn: 'Buprenorphine glucuronide',
+    slug: 'buprenorphine-glucuronide',
     pubchemCid: 92131860,
     molecularWeight: 643.8,
   },
   {
     name: 'Norbuprenorfinglukuronid',
     nameEn: 'Norbuprenorphine glucuronide',
+    slug: 'norbuprenorphine-glucuronide',
     pubchemCid: 91800110,
     molecularWeight: 589.7,
   },
   {
     name: 'Norfentanyl',
     nameEn: 'Norfentanyl',
+    slug: 'norfentanyl',
     pubchemCid: 259381,
     molecularWeight: 232.32,
   },
   {
     name: 'Norketamin',
     nameEn: 'Norketamine',
+    slug: 'norketamine',
     pubchemCid: 123767,
     molecularWeight: 223.70,
   },
   {
     name: 'Dehydronorketamin',
     nameEn: 'Dehydronorketamine',
+    slug: 'dehydronorketamine',
     pubchemCid: 162835,
     molecularWeight: 221.68,
   },
   {
     name: 'Alfentanil',
     nameEn: 'Alfentanil',
+    slug: 'alfentanil',
     pubchemCid: 51263,
     molecularWeight: 416.5,
   },
   {
     name: 'Norpetidin',
     nameEn: 'Norpethidine (Normeperidine)',
+    slug: 'norpethidine-normeperidine',
     pubchemCid: 32414,
     molecularWeight: 233.31,
   },
   {
     name: 'Remifentanilsyre',
     nameEn: 'Remifentanil acid',
+    slug: 'remifentanil-acid',
     pubchemCid: 131560,
     molecularWeight: 362.4,
   },
   {
     name: 'Kotinin',
     nameEn: 'Cotinine',
+    slug: 'cotinine',
     pubchemCid: 854019,
     molecularWeight: 176.21,
   },
   {
     name: 'Lakosamid',
     nameEn: 'Lacosamide',
+    slug: 'lakosamid',
     pubchemCid: 219078,
     molecularWeight: 250.29,
   },
   {
     name: '3-OH Diazepam',
     nameEn: '3-Hydroxydiazepam (Temazepam)',
+    slug: 'temazepam',
     pubchemCid: 5391,
     molecularWeight: 300.74,
   },
   {
     name: '3-OH-fenazepam',
     nameEn: '3-Hydroxyphenazepam',
+    slug: '3-hydroxyphenazepam',
     pubchemCid: 125820,
     molecularWeight: 365.61,
   },
   {
     name: 'Alfa-OH-alprazolam',
     nameEn: 'alpha-Hydroxyalprazolam',
+    slug: 'alpha-hydroxyalprazolam',
     pubchemCid: 162244,
     molecularWeight: 324.8,
   },
   {
     name: 'Zopiclon-N-oksid',
     nameEn: 'Zopiclone N-oxide',
+    slug: 'zopiclone-n-oxide',
     pubchemCid: 162548,
     molecularWeight: 404.8,
   },
   {
     name: 'Zolpidem-fenyl-4-karboksylsyre',
     nameEn: 'Zolpidem phenyl-4-carboxylic acid',
+    slug: 'zolpidem-phenyl-4-carboxylic-acid',
     pubchemCid: 11966044,
     molecularWeight: 337.4,
   },
   {
     name: '1-OH midazolam',
     nameEn: 'alpha-Hydroxymidazolam (1-Hydroxymidazolam)',
+    slug: 'alpha-hydroxymidazolam-1-hydroxymidazolam',
     pubchemCid: 107917,
     molecularWeight: 341.8,
   },
   {
     name: 'Alfa-hydroksyetizolam',
     nameEn: 'alpha-Hydroxyetizolam',
+    slug: 'alpha-hydroxyetizolam',
     pubchemCid: 15135972,
     molecularWeight: 358.8,
   },
   {
     name: 'Alfa-hydroksyflualprazolam',
     nameEn: 'alpha-Hydroxyflualprazolam',
+    slug: 'alpha-hydroxyflualprazolam',
     pubchemCid: 19865837,
     molecularWeight: 342.8,
   },
   {
     name: 'Valproinsyre',
     nameEn: 'Valproic acid',
+    slug: 'valproat',
     pubchemCid: 3121,
     molecularWeight: 144.21,
   },

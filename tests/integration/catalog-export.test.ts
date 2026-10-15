@@ -75,6 +75,7 @@ describe('catalog export — projecting the live catalog back to the fixture sha
       {
         name: 'Alprazolam',
         nameEn: 'Alprazolam',
+        slug: 'alprazolam',
         pubchemCid: 2118,
         molecularWeight: 308.8,
         halfLife: { min: 9, max: 16, unit: 'h' },
@@ -268,6 +269,7 @@ describe('catalog export — projecting the live catalog back to the fixture sha
     const stale = [
       {
         name: 'Alprazolam',
+        slug: 'alprazolam',
         pubchemCid: 2118,
         halfLife: { min: 9, max: 16, unit: 'h' },
       },
@@ -276,6 +278,26 @@ describe('catalog export — projecting the live catalog back to the fixture sha
 
     expect(isCatalogInSync(diff)).toBe(false);
     expect(diff.changed).toHaveLength(1);
-    expect(diff.changed[0].fields[0].field).toBe('halfLife');
+    expect(diff.changed[0].fields.map((f) => f.field)).toEqual(['halfLife']);
+  });
+
+  it('reports a fixture entry without the database slug as drift', async () => {
+    // The offline fallback resolves kinetics-core models by `_slug`, which it
+    // reads from the fixture's `slug`. A fixture written before the field
+    // existed must show up in `catalog:check` so a refresh fills it in.
+    await seedDrug(db, {
+      slug: 'paracetamol-acetaminophen',
+      names: { nb: 'Paracetamol' },
+      pubchemCid: 1983,
+    });
+
+    const { components } = buildRawComponents(await loadCatalogRows());
+    expect(components[0]!.slug).toBe('paracetamol-acetaminophen');
+
+    const diff = diffCatalogs([{ name: 'Paracetamol', pubchemCid: 1983 }], components);
+    expect(diff.changed).toHaveLength(1);
+    expect(diff.changed[0].fields).toEqual([
+      { field: 'slug', file: '—', db: 'paracetamol-acetaminophen' },
+    ]);
   });
 });

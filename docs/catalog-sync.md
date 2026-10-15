@@ -139,6 +139,13 @@ Metabolism comes from `drug_elimination_routes` (split into `enzymes` for
 `kind='enzyme'` and `eliminationRoutes` for the rest, each in `sort_order`) and
 `drug_metabolites` (in `sort_order`).
 
+`slug` comes from `drugs.slug` and is compared like any other field. The
+offline fallback maps it to `DrugComponent._slug`, the key a catalog-derived
+kinetics-core model is resolved by; it is not always derivable from the name
+(`paracetamol-acetaminophen`), so it has to be carried rather than recomputed.
+An entry without one still loads, it just falls back to the name-derived key.
+`seed-drugs.ts` mints a fixture entry's own `slug` when it has one.
+
 ## Safety properties
 
 The refresh overwrites a curated file, so it is deliberately conservative:

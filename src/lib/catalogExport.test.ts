@@ -220,6 +220,26 @@ describe('toRawComponent', () => {
     expect(result.component.name).toBe('Kodein');
     expect(result.component.nameEn).toBeUndefined();
   });
+
+  it('carries the catalog slug, which is not always derivable from the name', () => {
+    const result = toRawComponent(
+      row({
+        names: { nb: 'Paracetamol', en: 'Paracetamol' },
+        pubchemCid: 1983,
+        slug: '  paracetamol-acetaminophen ',
+      }),
+    ) as { component: RawComponent };
+    expect(result.component.slug).toBe('paracetamol-acetaminophen');
+  });
+
+  it('omits the slug when the row has none', () => {
+    for (const slug of [undefined, null, '   ']) {
+      const result = toRawComponent(row({ slug })) as {
+        component: RawComponent;
+      };
+      expect(result.component).not.toHaveProperty('slug');
+    }
+  });
 });
 
 describe('fixtureFieldForParameter', () => {
@@ -304,6 +324,19 @@ describe('diffCatalogs', () => {
       ],
     );
     expect(isCatalogInSync(diff)).toBe(true);
+  });
+
+  it('reports a slug the fixture lacks as drift a refresh would clear', () => {
+    const diff = diffCatalogs(file, [
+      { ...file[0]!, slug: 'alprazolam' },
+    ]);
+    expect(diff.changed).toEqual([
+      {
+        pubchemCid: 2118,
+        name: 'Alprazolam',
+        fields: [{ field: 'slug', file: '—', db: 'alprazolam' }],
+      },
+    ]);
   });
 
   it('reports a field-level change', () => {
@@ -463,6 +496,24 @@ describe('renderComponent', () => {
     );
   });
 
+  it('renders the slug as a quoted string after the names', () => {
+    expect(
+      renderComponent({
+        name: 'Paracetamol',
+        slug: 'paracetamol-acetaminophen',
+        pubchemCid: 1983,
+      }),
+    ).toBe(
+      [
+        '  {',
+        "    name: 'Paracetamol',",
+        "    slug: 'paracetamol-acetaminophen',",
+        '    pubchemCid: 1983',
+        '  }',
+      ].join('\n'),
+    );
+  });
+
   it('breaks a long metabolism block across lines', () => {
     const rendered = renderComponent({
       name: 'X',
@@ -569,6 +620,23 @@ describe('mergeForRender', () => {
       { name: 'Amfetamin', pubchemCid: 3007 },
     ]);
     expect(result.components[0]!.molecularWeight).toBe(308.8);
+  });
+
+  it('fills a missing fixture slug from the database, and the DB slug wins', () => {
+    const result = mergeForRender(
+      [
+        { name: 'Alprazolam', pubchemCid: 2118 },
+        { name: 'Amfetamin', slug: 'stale-slug', pubchemCid: 3007 },
+      ],
+      [
+        { name: 'Alprazolam', slug: 'alprazolam', pubchemCid: 2118 },
+        { name: 'Amfetamin', slug: 'amphetamine', pubchemCid: 3007 },
+      ],
+    );
+    expect(result.components.map((c) => c.slug)).toEqual([
+      'alprazolam',
+      'amphetamine',
+    ]);
   });
 
   it('preserves existing order and appends new drugs by name', () => {

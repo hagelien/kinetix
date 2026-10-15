@@ -87,7 +87,8 @@ export interface DrugComponent {
   /** Wiki page slug for the drug's monograph, when included by the API. */
   _monographSlug?: string;
   /**
-   * The drug's own catalog slug (`drugs.slug`), when loaded from the API. A catalog-derived
+   * The drug's own catalog slug (`drugs.slug`), when loaded from the API or from an offline
+   * fallback entry in `data/components.ts` that carries one. A catalog-derived
    * kinetics model is keyed by it, so the modelling run resolves the model through it first.
    */
   _slug?: string;

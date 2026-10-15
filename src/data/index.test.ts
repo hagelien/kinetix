@@ -184,6 +184,20 @@ describe('loadComponents embedded fallback', () => {
     expect(components.length).toBeGreaterThan(0);
     expect(components.some((c) => c.fatalConcentration != null)).toBe(true);
   });
+
+  // #133: the committed fixture carries each drug's catalog slug, so the
+  // fallback resolves a catalog-derived model by it — including the slugs no
+  // name derives (the registry key is the slug, not the English name).
+  it('carries the catalog slug the fixture holds onto each component', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ drugs: [] })));
+
+    const components = await loadComponents();
+    const slugOf = (cid: number) => components.find((c) => c.pubchemCid === cid)?._slug;
+
+    expect(slugOf(1983)).toBe('paracetamol-acetaminophen');
+    expect(slugOf(3121)).toBe('valproat');
+    expect(slugOf(5288826)).toBe('morphine');
+  });
 });
 
 describe('loadMethods staleness', () => {
