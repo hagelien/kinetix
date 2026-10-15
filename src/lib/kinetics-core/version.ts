@@ -180,8 +180,17 @@
  * Additive: no shipped model declares one (a reviewed error model is evidence-gated per
  * analyte), so the new field is inert and every existing curve and the registry checksum
  * are unchanged. Correlated (non-i.i.d.) residual components remain a follow-up.
+ *
+ * 1.11.0 — MINOR: adds three administration routes to the `RouteId` vocabulary
+ * (`ROUTE_IDS`): `subcutaneous`, `transdermal` and `buccal` (#81). A scenario dose and a
+ * model's `routes` map may now name them. All three are extravascular — they take an
+ * extravascular input shape and, through their family, a bioavailability — so no
+ * equation, solver or result shape changes. Additive: every existing route id keeps its
+ * meaning, no shipped model declares a new route, and every existing curve and the
+ * registry checksum are unchanged. A consumer pinned to 1.10.0 never receives a dose on
+ * a route it does not know.
  */
-export const CORE_VERSION = '1.10.0';
+export const CORE_VERSION = '1.11.0';
 
 /**
  * The CanonicalScenario.schemaVersion the current core understands. A consumer

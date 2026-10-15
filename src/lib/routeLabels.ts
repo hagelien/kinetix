@@ -13,8 +13,11 @@ export const ROUTE_LABEL_KEYS: Record<RouteId, string> = {
   intranasal: 'parameters.route.intranasal',
   iv: 'parameters.route.iv',
   im: 'parameters.route.im',
+  subcutaneous: 'parameters.route.subcutaneous',
   sublingual: 'parameters.route.sublingual',
+  buccal: 'parameters.route.buccal',
   rectal: 'parameters.route.rectal',
+  transdermal: 'parameters.route.transdermal',
   inhalation: 'parameters.route.inhalation',
   other: 'parameters.route.other',
 };

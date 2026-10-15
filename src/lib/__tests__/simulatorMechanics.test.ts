@@ -22,6 +22,7 @@
  * literal `{{live:…}}` to a reviewer.
  */
 import { readFileSync } from 'node:fs';
+import { modeledSimulatorRoutes, routeIdFor } from '@/lib/forwardCoreAdapter';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
@@ -248,6 +249,16 @@ describe('mechanics document — the refusals it promises', () => {
     );
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.failure).toBe('unsupported-scenario');
+  });
+
+  it('offers exactly the resolved model\'s routes in the dose picker (§3 step 1)', () => {
+    expect(doc).toMatch(/dose-route picker offers exactly the routes the resolved model declares/);
+    for (const model of mechanicsModels()) {
+      const offered = modeledSimulatorRoutes(model.analyte)!;
+      expect(offered.map(routeIdFor).sort(), model.analyte).toEqual(
+        model.routes.map((r) => r.route).sort(),
+      );
+    }
   });
 
   it('refuses a subject below the minimum weight rather than extrapolating (§8)', () => {

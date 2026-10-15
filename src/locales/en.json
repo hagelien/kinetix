@@ -1332,7 +1332,14 @@
     },
     "routes": {
       "oral": "Oral",
-      "other": "Other"
+      "other": "Other",
+      "im": "IM",
+      "subcutaneous": "SC",
+      "sublingual": "SL",
+      "buccal": "Buccal",
+      "rectal": "Rectal",
+      "transdermal": "Transdermal",
+      "notModeled": "This route is not modeled for this drug. Pick one of the modeled routes."
     }
   },
   "unitConverter": {
@@ -2940,8 +2947,11 @@
       "intranasal": "Intranasal",
       "iv": "Intravenous",
       "im": "Intramuscular",
+      "subcutaneous": "Subcutaneous",
       "sublingual": "Sublingual",
+      "buccal": "Buccal",
       "rectal": "Rectal",
+      "transdermal": "Transdermal",
       "inhalation": "Inhalation",
       "other": "Other"
     }
@@ -3924,6 +3934,7 @@
     "dialogTitle": "{{parameter}} — source values",
     "dialogAriaLabel": "Source values for {{parameter}} in {{drug}}",
     "dialogEmpty": "No source values recorded for this parameter yet.",
+    "previewHint": "Click the value to open the source list and discussion.",
     "routeSection": "Sources for {{route}} administration",
     "discussionHeading": "Discussion",
     "editor": {
