@@ -87,6 +87,21 @@ describe('classifyAssaySpecies', () => {
     expect(classifyAssaySpecies('humanized mouse')).toBe('non_human');
   });
 
+  it('never classifies an explicitly non-human assay as human', () => {
+    for (const label of [
+      'non-human primate',
+      'Non-Human tissue',
+      'nonhuman primate',
+      'non human primate',
+      'not human',
+      'non_human',
+      'non\u2011human primate',
+      'non–human primate',
+    ]) {
+      expect([label, classifyAssaySpecies(label)]).toEqual([label, 'non_human']);
+    }
+  });
+
   it('treats null and blank as unstated, never human', () => {
     expect(classifyAssaySpecies(null)).toBe('unstated');
     expect(classifyAssaySpecies('')).toBe('unstated');

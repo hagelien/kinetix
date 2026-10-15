@@ -86,16 +86,26 @@ export type SpeciesClass = (typeof SPECIES_CLASSES)[number];
 export type SpeciesFilter = 'all' | SpeciesClass;
 
 /**
+ * A negated "human": "non-human", "nonhuman", "non human", "not human",
+ * "non‑human" (any hyphen or dash). Matched before the positive test, because
+ * the word "human" inside one would otherwise read as a human assay.
+ */
+const NEGATED_HUMAN = /\b(?:non|not)[\s_\u2010-\u2015-]*human/;
+
+/**
  * Conservative read-time classification of `assaySpecies`. Blank is
  * unstated — never human. Only an explicit "Homo sapiens" or the standalone
  * word "human" counts as human, so "recombinant human (HEK293)" is human while
- * a bare "HEK293" is not assumed to carry a human receptor construct.
+ * a bare "HEK293" is not assumed to carry a human receptor construct. A label
+ * that negates "human" anywhere ("non-human primate", "nonhuman tissue") is
+ * explicitly animal evidence and is never classified as human.
  */
 export function classifyAssaySpecies(
   value: string | null | undefined,
 ): SpeciesClass {
   const normalized = (value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
   if (!normalized) return 'unstated';
+  if (NEGATED_HUMAN.test(normalized)) return 'non_human';
   if (normalized.includes('homo sapiens') || /\bhuman\b/.test(normalized)) {
     return 'human';
   }
