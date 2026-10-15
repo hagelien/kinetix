@@ -438,4 +438,24 @@ describe('DrugPanel advanced parameter overrides', () => {
       route: 'subcutaneous',
     });
   });
+
+  it('keeps an existing dose\'s route choices disabled until the live routes have loaded (#292)', async () => {
+    liveModel.loaded = false;
+    renderPanel(
+      baseConfig({
+        drugId: '123',
+        drugName: 'Diazepam',
+        engine: 'pk-montecarlo',
+        events: [{ id: 'd1', type: 'dose', t: 0, amount: 5, unit: 'mg', route: 'oral' }],
+      }),
+      { ...nonEthanolComponent, _slug: 'diazepam' } as DrugComponent,
+    );
+
+    const routeButton = () => screen.getByTitle('parameters.route.oral') as HTMLButtonElement;
+    expect(routeButton().disabled).toBe(true);
+    await waitFor(() => expect(screen.queryByTitle('parameters.route.oral')).toBeNull());
+    expect(
+      (screen.getByTitle('parameters.route.subcutaneous') as HTMLButtonElement).disabled,
+    ).toBe(false);
+  });
 });

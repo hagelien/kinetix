@@ -577,6 +577,7 @@ export function DrugPanel({
                 isEthanolEngine={isEthanolEngine}
                 isKinelabEngine={isKinelabEngine}
                 doseRoutes={doseRoutes}
+                routesLoading={liveRoutesLoading}
                 selected={selectedMarkerId === `${config.id}:${event.id}`}
                 onChange={(updates) =>
                   updateEvent(config.id, event.id, updates)
@@ -763,6 +764,8 @@ interface EventRowProps {
   isKinelabEngine: boolean;
   /** The routes a dose may be given by (see `offeredDoseRoutes`). */
   doseRoutes: readonly RouteType[];
+  /** True while the live model is loading: the route choices may still be the snapshot's. */
+  routesLoading: boolean;
   selected?: boolean;
   onChange: (updates: Partial<SimEvent>) => void;
   onRemove: () => void;
@@ -776,6 +779,7 @@ function EventRow({
   isEthanolEngine,
   isKinelabEngine,
   doseRoutes,
+  routesLoading,
   selected = false,
   onChange,
   onRemove,
@@ -987,6 +991,7 @@ function EventRow({
                 size="sm"
                 className="h-6 text-xs px-2"
                 title={t(ROUTE_LABEL_KEYS[coreRouteFor(route)])}
+                disabled={routesLoading}
                 onClick={() => onChange({ route } as Partial<SimEvent>)}
               >
                 {routeButtonLabel(route)}
