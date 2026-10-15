@@ -58,7 +58,10 @@ import {
   type ConsensusHoldReason,
   type VerificationSummary,
 } from './_lib/agent-verifications.js';
-import { DRUG_PARAMETER_IDS } from '../src/lib/drugParameters.js';
+import {
+  DRUG_PARAMETER_IDS,
+  isModelStructureParameter,
+} from '../src/lib/drugParameters.js';
 import { FLAGSHIP_TIER, isFlagshipTier } from '../src/lib/modelTiers.js';
 import {
   applyApprovedEdit,
@@ -433,6 +436,40 @@ async function handlePost(
       'agent_verification_self_not_allowed',
     );
     return;
+  }
+
+  // The grant has two carve-outs on the manual path (PATCH /api/pending-edits):
+  // a clinical case, and a model-structure parameter entry — a categorical
+  // axis that selects the equations the engine runs — both ask for a genuine
+  // second party. Consensus counts a self-review author's explicit approval
+  // toward quorum, so an approval here would carry the agent's own
+  // model-structure proposal on one peer instead of two. Reconsidering its own
+  // row (dispute, abstain) stays open; only the approval is withheld.
+  if (
+    isSelfVerification &&
+    targetType === 'pending_edit' &&
+    parsed.data.verdict === 'approve'
+  ) {
+    const [own] = await getDb()
+      .select({ editType: pendingEdits.editType, parameter: pendingEdits.parameter })
+      .from(pendingEdits)
+      .where(eq(pendingEdits.id, parsed.data.targetId))
+      .limit(1);
+    if (
+      own &&
+      (own.editType === 'clinical_case' ||
+        (own.editType === 'param_entry' &&
+          typeof own.parameter === 'string' &&
+          isModelStructureParameter(own.parameter)))
+    ) {
+      error(
+        res,
+        403,
+        'Self-review does not extend to clinical cases or model-structure entries; a second agent or a moderator must approve',
+        'agent_verification_self_review_excluded',
+      );
+      return;
+    }
   }
 
   // A self-approval must say why. Everything the grant buys — satisfying

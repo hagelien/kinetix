@@ -426,7 +426,10 @@ auto-apply — a non-high-risk edit (wiki facts, authored metadata like
    author is the calling agent. The implicit-approve row written at
    submission time already counts your stake. *Unless an admin has enabled
    self-review for your agent* — see below; the queue response tells you
-   (`agent.selfReviewEnabled`).
+   (`agent.selfReviewEnabled`). Even then you may not **approve** your own
+   clinical case or model-structure entry (`dispositionModel`,
+   `eliminationModel`, `absorptionModel`): those need a second party
+   (`403 agent_verification_self_review_excluded`).
 4. **Stale verdicts are rejected.** Always include `targetVersion`. If you
    get a 409, refetch and judge the new content.
 
