@@ -2048,8 +2048,9 @@ pattern_inference_override_revisions   -- append-only; never updated or deleted
                           -- CASCADE; the override row is never hard-deleted
                           -- (a delete leaves a tombstone), so it is removed
                           -- only with its case, together with its revisions
-  case_id                 -- FK to simulator_cases ON DELETE CASCADE
-  finding_id
+                          -- (no case_id or finding_id of its own: both
+                          -- come through override_id, so a revision can
+                          -- never name a different case than its override)
   action                  -- 'create' | 'edit' | 'delete'
   statement               -- the text after this action (NULL for 'delete')
   superseded_statement
