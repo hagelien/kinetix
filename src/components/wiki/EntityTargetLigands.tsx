@@ -39,6 +39,7 @@ const OMISSION_LABEL_KEYS: Record<PlotOmissionReason, string> = {
   unsupported_unit: 'bioEntity.omitUnsupportedUnit',
   non_positive: 'bioEntity.omitNonPositive',
   non_positive_bound: 'bioEntity.omitNonPositiveBound',
+  non_finite: 'bioEntity.omitNonFinite',
   heterogeneous_units: 'bioEntity.omitHeterogeneousUnits',
 };
 

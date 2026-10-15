@@ -298,7 +298,102 @@ export type PlotOmissionReason =
   | 'unsupported_unit'
   | 'non_positive'
   | 'non_positive_bound'
+  | 'non_finite'
   | 'heterogeneous_units';
+
+/** How a measurement is placed on a common scale. */
+export type MeasurementScale =
+  /** Molar concentration in nM; must be strictly positive (log axis). */
+  | 'concentration'
+  /** Linear value on its {@link comparableUnit} scale; any finite number. */
+  | 'linear';
+
+/**
+ * The verdict of {@link assessMeasurement}: either an exact value (with its
+ * span) expressed on one common scale, or the reason it cannot be placed.
+ */
+export type MeasurementVerdict =
+  | {
+      ok: true;
+      /** The common scale's unit (nM, %, or the stored unit). */
+      unit: string;
+      value: number;
+      low: number | null;
+      high: number | null;
+      fromBounds: boolean;
+    }
+  | { ok: false; reason: PlotOmissionReason | 'missing' };
+
+/**
+ * THE single validity predicate for a stored measurement. Both the activity
+ * plot and the table's sort keys use it, so a value is ranked exactly when
+ * it is plotted, and for the same reasons when it is not:
+ *
+ * - no stored median, mean or bound (or only NaN/Infinity) → `missing`;
+ * - a one-sided bound (min-only, max-only, or a `<`/`>`/`≤`/`≥` qualifier)
+ *   → `one_sided` — a limit, never an exact value;
+ * - `concentration`: a unit that is not molar → `unsupported_unit`; a value
+ *   ≤ 0 → `non_positive`; a range bound ≤ 0 → `non_positive_bound`;
+ * - a value that is not finite once scaled → `non_finite`.
+ *
+ * On success the value and its bounds are scaled onto the common unit — the
+ * unit and the number always move together.
+ */
+export function assessMeasurement(
+  range: NumericRange | null | undefined,
+  scale: MeasurementScale,
+): MeasurementVerdict {
+  const scalar = rangeScalar(range);
+  if (!range || !scalar) return { ok: false, reason: 'missing' };
+  if (!scalar.exact) return { ok: false, reason: 'one_sided' };
+  let unit: string;
+  let factor: number;
+  if (scale === 'concentration') {
+    const nm = nanomolarFactor(range.unit);
+    if (nm === null) return { ok: false, reason: 'unsupported_unit' };
+    if (scalar.value <= 0) return { ok: false, reason: 'non_positive' };
+    if (
+      (scalar.low !== null && scalar.low <= 0) ||
+      (scalar.high !== null && scalar.high <= 0)
+    ) {
+      return { ok: false, reason: 'non_positive_bound' };
+    }
+    unit = CONCENTRATION_DISPLAY_UNIT;
+    factor = nm;
+  } else {
+    ({ unit, factor } = comparableUnit(range.unit));
+  }
+  const value = scalar.value * factor;
+  const low = scalar.low === null ? null : scalar.low * factor;
+  const high = scalar.high === null ? null : scalar.high * factor;
+  if (![value, low ?? 0, high ?? 0].every(Number.isFinite)) {
+    return { ok: false, reason: 'non_finite' };
+  }
+  return { ok: true, unit, value, low, high, fromBounds: scalar.fromBounds };
+}
+
+/**
+ * Assess a whole column of measurements on one scale. On the linear scale
+ * the valid values must also share ONE common unit; if they do not, none of
+ * them is comparable and every one is `heterogeneous_units` (the plot is
+ * disabled and the column does not rank, rather than pretending mixed units
+ * line up). Concentrations always share nM.
+ */
+export function assessColumn(
+  ranges: readonly (NumericRange | null | undefined)[],
+  scale: MeasurementScale,
+): MeasurementVerdict[] {
+  const verdicts = ranges.map((r) => assessMeasurement(r, scale));
+  if (scale === 'linear') {
+    const units = new Set(verdicts.flatMap((v) => (v.ok ? [v.unit] : [])));
+    if (units.size > 1) {
+      return verdicts.map((v) =>
+        v.ok ? { ok: false, reason: 'heterogeneous_units' as const } : v,
+      );
+    }
+  }
+  return verdicts;
+}
 
 export interface ActivityPlotPoint {
   ligand: EntityTargetLigand;
@@ -357,16 +452,30 @@ function groupPoints(
 }
 
 /**
- * Derive the activity-grouped plot for one metric.
- *
- * Concentration metrics are converted to nM on a log axis; a value in any
- * other unit, a one-sided bound, a non-positive value, or a range reaching
- * zero or below stays in the table but is listed as omitted. Non-concentration metrics (Emax, efficacy, and
- * affinity/potency recorded without a molar unit) use a linear axis on one
- * common scale (see {@link comparableUnit}; values and bounds are scaled onto
- * it) — and only when every exact value folds onto that scale; mixed units
- * disable the plot rather than pretending the numbers are comparable.
- * One-sided bounds are never plotted as points on either axis.
+ * The scale a plot metric uses for these ligands: Ki/EC50/IC50 are always
+ * concentrations; affinity/potency are when any of them is recorded in a
+ * molar unit; Emax/efficacy (and non-molar affinity/potency) are linear.
+ */
+export function metricScale(
+  ligands: readonly EntityTargetLigand[],
+  metric: TargetMetric,
+): MeasurementScale {
+  if (CONCENTRATION_METRICS.has(metric)) return 'concentration';
+  if (
+    MAYBE_CONCENTRATION_METRICS.has(metric) &&
+    ligands.some((l) => nanomolarFactor(l[metric]?.unit) !== null)
+  ) {
+    return 'concentration';
+  }
+  return 'linear';
+}
+
+/**
+ * Derive the activity-grouped plot for one metric. Which rows are plotted —
+ * and why the others are not — is decided entirely by {@link assessColumn}:
+ * concentrations go on a log nM axis, everything else on a linear axis in
+ * one common unit. Rows without any value are neither plotted nor listed;
+ * every other non-plottable row stays in the table and is listed as omitted.
  *
  * Within each activity group, concentration points run smallest first;
  * linear points largest first.
@@ -375,97 +484,37 @@ export function buildActivityPlot(
   ligands: readonly EntityTargetLigand[],
   metric: TargetMetric,
 ): ActivityPlot {
-  const measured = ligands
-    .map((ligand) => ({ ligand, range: ligand[metric], scalar: rangeScalar(ligand[metric]) }))
-    .filter(
-      (m): m is { ligand: EntityTargetLigand; range: NumericRange; scalar: RangeScalar } =>
-        m.range !== null && m.scalar !== null,
-    );
+  const scale = metricScale(ligands, metric);
+  const verdicts = assessColumn(
+    ligands.map((l) => l[metric]),
+    scale,
+  );
   const omitted: ActivityPlot['omitted'] = [];
   const points: ActivityPlotPoint[] = [];
-
-  const logScale =
-    CONCENTRATION_METRICS.has(metric) ||
-    (MAYBE_CONCENTRATION_METRICS.has(metric) &&
-      measured.some((m) => nanomolarFactor(m.range.unit) !== null));
-
-  if (logScale) {
-    for (const { ligand, range, scalar } of measured) {
-      const factor = nanomolarFactor(range.unit);
-      if (factor === null) {
-        omitted.push({ ligand, reason: 'unsupported_unit' });
-      } else if (!scalar.exact) {
-        omitted.push({ ligand, reason: 'one_sided' });
-      } else if (scalar.value <= 0) {
-        omitted.push({ ligand, reason: 'non_positive' });
-      } else if (
-        (scalar.low !== null && scalar.low <= 0) ||
-        (scalar.high !== null && scalar.high <= 0)
-      ) {
-        // A log axis cannot show a range that reaches zero or below. Dropping
-        // just the bounds would draw the midpoint as an exact value, so the
-        // whole measurement stays in the table instead.
-        omitted.push({ ligand, reason: 'non_positive_bound' });
-      } else {
-        points.push({
-          ligand,
-          group: normalizeInteractionType(ligand.interactionType).group,
-          value: scalar.value * factor,
-          low: scalar.low === null ? null : scalar.low * factor,
-          high: scalar.high === null ? null : scalar.high * factor,
-          fromBounds: scalar.fromBounds,
-        });
+  let unit = scale === 'concentration' ? CONCENTRATION_DISPLAY_UNIT : '';
+  ligands.forEach((ligand, i) => {
+    const verdict = verdicts[i]!;
+    if (!verdict.ok) {
+      if (verdict.reason !== 'missing') {
+        omitted.push({ ligand, reason: verdict.reason });
       }
+      return;
     }
-    return {
-      metric,
-      scale: 'log',
-      unit: CONCENTRATION_DISPLAY_UNIT,
-      groups: groupPoints(points, true),
-      omitted,
-      pointCount: points.length,
-    };
-  }
-
-  // One-sided bounds are never plotted, so they neither join nor break the
-  // unit check; compatible units are folded AND scaled onto one scale.
-  const exact = measured.filter((m) => m.scalar.exact);
-  for (const { ligand } of measured.filter((m) => !m.scalar.exact)) {
-    omitted.push({ ligand, reason: 'one_sided' });
-  }
-  const units = new Set(exact.map((m) => comparableUnit(m.range.unit).unit));
-  if (units.size > 1) {
-    return {
-      metric,
-      scale: 'linear',
-      unit: '',
-      groups: [],
-      omitted: [
-        ...exact.map(({ ligand }) => ({
-          ligand,
-          reason: 'heterogeneous_units' as const,
-        })),
-        ...omitted,
-      ],
-      pointCount: 0,
-    };
-  }
-  for (const { ligand, range, scalar } of exact) {
-    const { factor } = comparableUnit(range.unit);
+    unit = verdict.unit;
     points.push({
       ligand,
       group: normalizeInteractionType(ligand.interactionType).group,
-      value: scalar.value * factor,
-      low: scalar.low === null ? null : scalar.low * factor,
-      high: scalar.high === null ? null : scalar.high * factor,
-      fromBounds: scalar.fromBounds,
+      value: verdict.value,
+      low: verdict.low,
+      high: verdict.high,
+      fromBounds: verdict.fromBounds,
     });
-  }
+  });
   return {
     metric,
-    scale: 'linear',
-    unit: [...units][0] ?? '',
-    groups: groupPoints(points, false),
+    scale: scale === 'concentration' ? 'log' : 'linear',
+    unit,
+    groups: groupPoints(points, scale === 'concentration'),
     omitted,
     pointCount: points.length,
   };
@@ -498,26 +547,15 @@ export function resolvePlotMetric(
 export type LigandSortKey = 'default' | 'drug' | 'activity' | 'ki' | 'ec50' | 'ic50' | 'emax';
 
 /**
- * A comparable number for a Ki, EC50 or IC50 column, or null when the value
- * cannot be ranked against the others.
- *
- * These are concentrations: they rank in nM (so 1 µM sorts after 50 nM), and
- * a value in any other unit — a mass concentration such as ng/mL, a
- * free-text unit, none at all — has no molar position, so it is treated as
- * unsortable rather than compared as a raw number against nM values.
- * Ranking 2.4 ng/mL beside 0.2 nM would assert a molar-vs-mass potency order
- * the data does not support. Such rows stay in the table and sort with the
- * rows that have no value. So does a one-sided bound, which is a limit rather
- * than a value that can be ranked.
+ * Sort key for a Ki, EC50 or IC50 cell: its nM value when
+ * {@link assessMeasurement} accepts it as a concentration — exactly the rows
+ * the plot draws — otherwise null (unsortable).
  */
 export function measurementSortValue(
   range: NumericRange | null | undefined,
 ): number | null {
-  const scalar = rangeScalar(range);
-  // A one-sided bound (min-only, max-only, or `<`/`>`/`≤`/`≥`) is a limit,
-  // not a value: it has no exact rank among the measured ones.
-  if (!scalar || !scalar.exact) return null;
-  return toNanomolar(scalar.value, range?.unit);
+  const verdict = assessMeasurement(range, 'concentration');
+  return verdict.ok ? verdict.value : null;
 }
 
 /**
@@ -529,50 +567,29 @@ export function emaxOrEfficacy(ligand: EntityTargetLigand): NumericRange | null 
 }
 
 /**
- * A unit-tagged value for comparing Emax/efficacy readings, on the scale of
- * {@link comparableUnit}; null for a missing value or a one-sided bound.
- */
-export function efficacyComparable(
-  range: NumericRange | null | undefined,
-): { unit: string; value: number } | null {
-  const scalar = rangeScalar(range);
-  // One-sided bounds are limits, not rankable values.
-  if (!scalar || !scalar.exact) return null;
-  const { unit, factor } = comparableUnit(range?.unit);
-  return { unit, value: scalar.value * factor };
-}
-
-/**
- * Sort keys for the combined Emax / efficacy column. Values are ranked only
- * within one common unit — the unit most rows share once compatible units
- * are folded together (ties: the first such row's unit). A value in any other
- * unit cannot be ranked against them (0.9 "fraction" is 90%, not below 60%;
- * a.u. is not a percentage at all), so it is unsortable, like a missing one.
+ * Sort keys for the combined Emax / efficacy column, through the same
+ * {@link assessColumn} rule as the linear plot: exact values in one common
+ * unit rank; anything else (missing, one-sided, non-finite, or a column whose
+ * units do not fold onto one scale) is unsortable.
  */
 function efficacySortValues(
   ligands: readonly EntityTargetLigand[],
 ): Map<EntityTargetLigand, number | null> {
-  const comparable = ligands.map((l) => [l, efficacyComparable(emaxOrEfficacy(l))] as const);
-  const counts = new Map<string, number>();
-  for (const [, c] of comparable) {
-    if (c) counts.set(c.unit, (counts.get(c.unit) ?? 0) + 1);
-  }
-  let common: string | null = null;
-  for (const [unit, n] of counts) {
-    if (common === null || n > counts.get(common)!) common = unit;
-  }
+  const verdicts = assessColumn(ligands.map(emaxOrEfficacy), 'linear');
   return new Map(
-    comparable.map(([l, c]) => [l, c && c.unit === common ? c.value : null]),
+    ligands.map((l, i) => {
+      const v = verdicts[i]!;
+      return [l, v.ok ? v.value : null];
+    }),
   );
 }
 
 /**
  * Sort a ligand list for the table. `default` keeps the server's stable
- * order. Rows without a sortable value for the sorted measurement (none
- * recorded, a one-sided bound, a Ki/EC50/IC50 not in a molar unit, or an
- * Emax/efficacy outside the column's common unit) always go last, in either direction and in their
- * original order, so they never crowd out — or get ranked against — the
- * comparable ones.
+ * order. Rows the shared {@link assessMeasurement} predicate rejects for the
+ * sorted column — the same rows the plot omits — always go last, in either
+ * direction and in their original order, so they never crowd out, or get
+ * ranked against, the comparable ones.
  */
 export function sortLigands(
   ligands: readonly EntityTargetLigand[],

@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assessMeasurement,
   buildActivityPlot,
   classifyAssaySpecies,
   formatMeasurement,
   formatPlotPointValue,
+  measurementSortValue,
   countLigandsBySpecies,
   filterLigandsBySpecies,
   normalizeInteractionType,
@@ -14,6 +16,7 @@ import {
   toNanomolar,
 } from '@/lib/entityTargetLigands';
 import type { EntityTargetLigand } from '@/lib/receptorTargets';
+import type { NumericRange } from '@/types';
 
 function ligand(
   overrides: Partial<EntityTargetLigand> & { relationshipId: number },
@@ -451,13 +454,23 @@ describe('sortLigands', () => {
       ligand({ relationshipId: 1, emax: { median: 60, unit: '%' } }),
       ligand({ relationshipId: 2, emax: { median: 0.9, unit: 'fraction' } }),
       ligand({ relationshipId: 3, emax: { median: 75, unit: 'percent' } }),
-      ligand({ relationshipId: 4, emax: { median: 3, unit: 'a.u.' } }),
+      ligand({ relationshipId: 4, emax: { min: 99, unit: '%' } }),
       ligand({ relationshipId: 5 }),
     ];
-    // 0.9 fraction is 90%; the a.u. reading has no common unit and goes
-    // last with the value-less row, in original order, both directions.
+    // 0.9 fraction is 90%; the one-sided reading goes last with the
+    // value-less row, in original order, both directions.
     expect(sortLigands(mixed, 'emax', 'asc', name).map((r) => r.relationshipId)).toEqual([1, 3, 2, 4, 5]);
     expect(sortLigands(mixed, 'emax', 'desc', name).map((r) => r.relationshipId)).toEqual([2, 3, 1, 4, 5]);
+  });
+
+  it('ranks nothing in an Emax column whose units do not share one scale', () => {
+    const mixed = [
+      ligand({ relationshipId: 1, emax: { median: 60, unit: '%' } }),
+      ligand({ relationshipId: 2, emax: { median: 3, unit: 'a.u.' } }),
+      ligand({ relationshipId: 3, emax: { median: 75, unit: '%' } }),
+    ];
+    expect(sortLigands(mixed, 'emax', 'desc', name).map((r) => r.relationshipId)).toEqual([1, 2, 3]);
+    expect(buildActivityPlot(mixed, 'emax').pointCount).toBe(0);
   });
 
   it('sorts the Emax / efficacy column by efficacy when Emax is absent', () => {
@@ -493,5 +506,97 @@ describe('sortLigands', () => {
 
   it('sorts by drug name', () => {
     expect(sortLigands(rows, 'drug', 'asc', name).map((r) => r.drugSlug)).toEqual(['a', 'b', 'c']);
+  });
+});
+
+/**
+ * One validity predicate for both views: for every edge case, a value is
+ * ranked in the table exactly when it is drawn on the plot, and the plot
+ * names the same reason the sort ignores it.
+ */
+describe('plot and sort agree on what is a valid measurement', () => {
+  const name = (l: EntityTargetLigand) => l.drugSlug;
+  type Case = [label: string, range: NumericRange | null, expected: 'ok' | string];
+
+  const concentrationCases: Case[] = [
+    ['exact molar', { median: 3, unit: 'µM' }, 'ok'],
+    ['two-sided molar range', { min: 1, max: 9, unit: 'nM' }, 'ok'],
+    ['zero', { median: 0, unit: 'nM' }, 'non_positive'],
+    ['negative', { median: -1, unit: 'nM' }, 'non_positive'],
+    ['min-only', { min: 1, unit: 'nM' }, 'one_sided'],
+    ['max-only', { max: 1, unit: 'nM' }, 'one_sided'],
+    ['qualified', { median: 1, qualifier: '<', unit: 'nM' }, 'one_sided'],
+    ['range crossing zero', { min: 0, max: 10, unit: 'nM' }, 'non_positive_bound'],
+    ['median with negative bound', { median: 4, min: -1, max: 9, unit: 'nM' }, 'non_positive_bound'],
+    ['mass unit', { median: 1, unit: 'ng/mL' }, 'unsupported_unit'],
+    ['unitless', { median: 1 }, 'unsupported_unit'],
+    ['NaN', { median: Number.NaN, unit: 'nM' }, 'missing'],
+    ['Infinity', { median: Number.POSITIVE_INFINITY, unit: 'nM' }, 'missing'],
+    ['overflows when scaled', { median: 1e300, unit: 'M' }, 'non_finite'],
+    ['missing', null, 'missing'],
+  ];
+
+  it.each(concentrationCases)('Ki: %s', (_label, range, expected) => {
+    const rows = [
+      ligand({ relationshipId: 1, ki: { median: 5, unit: 'nM' } }),
+      ligand({ relationshipId: 2, ki: range }),
+    ];
+    const plot = buildActivityPlot(rows, 'ki');
+    const plotted = plot.groups.flatMap((g) => g.points).some((p) => p.ligand.relationshipId === 2);
+    const ranked = measurementSortValue(range) !== null;
+    expect(assessMeasurement(range, 'concentration')).toMatchObject(
+      expected === 'ok' ? { ok: true } : { ok: false, reason: expected },
+    );
+    expect(plotted).toBe(expected === 'ok');
+    expect(ranked).toBe(plotted);
+    const omission = plot.omitted.find((o) => o.ligand.relationshipId === 2)?.reason;
+    expect(omission).toBe(expected === 'ok' || expected === 'missing' ? undefined : expected);
+    if (!ranked) {
+      // Unsortable rows go last in both directions.
+      for (const dir of ['asc', 'desc'] as const) {
+        expect(sortLigands(rows, 'ki', dir, name).map((r) => r.relationshipId)).toEqual([1, 2]);
+      }
+    }
+  });
+
+  const linearCases: Case[] = [
+    ['percent', { median: 80, unit: '%' }, 'ok'],
+    ['fraction folds onto %', { median: 0.8, unit: 'fraction' }, 'ok'],
+    ['zero is a real Emax', { median: 0, unit: '%' }, 'ok'],
+    ['negative', { median: -5, unit: '%' }, 'ok'],
+    ['range crossing zero', { min: -5, max: 5, unit: '%' }, 'ok'],
+    ['min-only', { min: 90, unit: '%' }, 'one_sided'],
+    ['qualified', { median: 90, qualifier: '>', unit: '%' }, 'one_sided'],
+    ['NaN', { median: Number.NaN, unit: '%' }, 'missing'],
+    ['missing', null, 'missing'],
+    ['incompatible unit', { median: 3, unit: 'a.u.' }, 'heterogeneous_units'],
+  ];
+
+  it.each(linearCases)('Emax: %s', (_label, range, expected) => {
+    const rows = [
+      ligand({ relationshipId: 1, emax: { median: 60, unit: '%' } }),
+      ligand({ relationshipId: 2, emax: range }),
+    ];
+    const plot = buildActivityPlot(rows, 'emax');
+    const plottedIds = plot.groups.flatMap((g) => g.points).map((p) => p.ligand.relationshipId);
+    const ascIds = sortLigands(rows, 'emax', 'asc', name).map((r) => r.relationshipId);
+    const descIds = sortLigands(rows, 'emax', 'desc', name).map((r) => r.relationshipId);
+    expect(plottedIds.includes(2)).toBe(expected === 'ok');
+    const omission = plot.omitted.find((o) => o.ligand.relationshipId === 2)?.reason;
+    expect(omission).toBe(expected === 'ok' || expected === 'missing' ? undefined : expected);
+    if (expected === 'heterogeneous_units') {
+      // Mixed units: neither row is comparable — nothing plotted, nothing ranked.
+      expect(plottedIds).toEqual([]);
+    }
+    if (expected === 'ok') {
+      // Both ranked: the order follows the plotted values in both directions.
+      const second = plot.groups.flatMap((g) => g.points).find((p) => p.ligand.relationshipId === 2)!;
+      expect(ascIds).toEqual(second.value < 60 ? [2, 1] : [1, 2]);
+      expect(descIds).toEqual(second.value > 60 ? [2, 1] : [1, 2]);
+    } else {
+      // Unsortable: original order, last, in both directions.
+      expect(ascIds).toEqual([1, 2]);
+      expect(descIds).toEqual([1, 2]);
+    }
   });
 });
