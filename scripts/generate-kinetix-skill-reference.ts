@@ -19,8 +19,10 @@ import { writeFileSync, readFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  DRUG_PARAMETER_IDS,
   ENTRY_ONLY_PARAMETER_IDS,
   SUMMARIZED_PARAMETER_IDS,
+  parameterDoseContextMode,
   getRangeSpec,
   parameterIsMatrixRelevant,
   parameterIsScenarioRelevant,
@@ -42,6 +44,7 @@ import {
   DOSE_REGIMENS,
   INTERVAL_KINDS,
   IV_INPUT_MODES,
+  OPTIONAL_DOSE_CONTEXT_FIELD_KEYS,
   PHYSICAL_FORMS,
   PK_POPULATIONS,
   PRANDIAL_STATES,
@@ -174,7 +177,8 @@ function build(): string {
   lines.push(
     '`doseContext` — `centralValue`, `centralStatistic`, `intervalKind` — optionally',
   );
-  lines.push('(see SKILL.md, "What the number is"); every dose field is refused there.');
+  lines.push('(see SKILL.md, "What the number is"); every dose field is refused there,');
+  lines.push('except the formulation, regimen and population scope below.');
   lines.push('');
   for (const id of ENTRY_ONLY_PARAMETER_IDS) {
     const spec = getRangeSpec(id);
@@ -185,6 +189,17 @@ function build(): string {
         `\`"dose_normalized"\`; range ${fmtBound(spec.bounds.min)}–${fmtBound(spec.bounds.max)}.`,
     );
   }
+  lines.push('');
+  const optionalScope = DRUG_PARAMETER_IDS.filter(
+    (id) => parameterDoseContextMode(id) === 'optional',
+  );
+  lines.push(
+    `${optionalScope.map((id) => `\`${id}\``).join(', ')} may also state, optionally, ` +
+      `${OPTIONAL_DOSE_CONTEXT_FIELD_KEYS.map((k) => `\`${k}\``).join(', ')} — ` +
+      'an extended-release or depot formulation, the regimen and interval it was ' +
+      'observed under, a special population. An entry with a `modified` release ' +
+      'profile or a named special population is listed but kept out of the pooled value.',
+  );
   lines.push('');
   const vocab: Array<[string, readonly string[]]> = [
     ['valueBasis', VALUE_BASES],

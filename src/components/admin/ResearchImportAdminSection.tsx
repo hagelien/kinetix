@@ -2,10 +2,13 @@ import { useRef, useState, type ChangeEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { showToast } from '@/lib/toast';
+import { scopeContextLabels, type DoseContextFields } from '@/lib/entryDoseContext';
 
 interface PlanParameter {
   parameter: string;
   sourceCount: number;
+  /** The formulation/regimen/population each scoped source value states (#12). */
+  scopes?: DoseContextFields[];
 }
 
 interface PlanIonizationConstant {
@@ -274,7 +277,16 @@ export function ResearchImportAdminSection() {
           {plan.parameters.length > 0 && (
             <div className="text-xs text-muted-foreground">
               {plan.parameters
-                .map((p) => `${p.parameter}${p.sourceCount ? ` [${p.sourceCount}]` : ''}`)
+                .map((p) => {
+                  // A scoped value is written but kept out of the pooled figure,
+                  // so each one's scope is named in the plan being approved.
+                  const scopes = (p.scopes ?? [])
+                    .map((scope) => scopeContextLabels(scope, t).join(', '))
+                    .filter(Boolean);
+                  return `${p.parameter}${p.sourceCount ? ` [${p.sourceCount}]` : ''}${
+                    scopes.length ? ` (${scopes.join('; ')})` : ''
+                  }`;
+                })
                 .join(' · ')}
             </div>
           )}

@@ -4032,7 +4032,10 @@
       "modelStructureValue": "Model structure",
       "modelStructureHint": "A model-structure declaration is a cited choice, not a measured value — pick the shape this source supports.",
       "errorModelStructureRequired": "Choose a model-structure value.",
-      "errorIncompatibleCombination": "The administration route, absorption model, and parameter are not compatible."
+      "errorIncompatibleCombination": "The administration route, absorption model, and parameter are not compatible.",
+      "scope": "Formulation, regimen and population",
+      "scopeHint": "What the source value was measured in. A modified-release formulation or a named special population is listed but kept out of the pooled value.",
+      "errorDoseInterval": "The dosing interval must be a positive number of hours."
     },
     "summary": {
       "line": "Pooled: {{value}} · {{count}} sources",

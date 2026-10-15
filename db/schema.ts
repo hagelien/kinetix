@@ -2302,7 +2302,7 @@ export const agentVerifications = pgTable(
     /** True for the auto-row written when the agent submitted the target. */
     isImplicit: boolean('is_implicit').notNull().default(false),
     /**
-     * T3 trigger 2 (agents/drug-db-adjudication.md §2, migration 0153): the
+     * T3 trigger 2 (agents/drug-db-adjudication.md §2, migration 0156): the
      * verifier found that the disagreement turns on materially different scope
      * that cannot be collapsed into one answer. Rewritten on every verdict
      * write; the T3 detector reads it only on an explicit flagship verdict.
@@ -3060,7 +3060,7 @@ export const adjudicationCases = pgTable(
 );
 
 /**
- * T3 trigger 5 (agents/drug-db-adjudication.md §2, migration 0153): a person
+ * T3 trigger 5 (agents/drug-db-adjudication.md §2, migration 0156): a person
  * asking for an agent adjudication of one version of a target, while keeping
  * the final authority. Bound to the version they read, like a person's
  * dispute; one row per person per version. Written by
