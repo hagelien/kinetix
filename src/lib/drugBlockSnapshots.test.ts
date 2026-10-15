@@ -198,4 +198,56 @@ describe('blockSnapshotLines', () => {
     expect(line).toMatch(/#9$/);
   });
 
+  it.each(['mean', 'median', 'note'] as const)('makes a mechanism %s-only change visible with unchanged bounds', (field) => {
+    const measurement = { min: 1, max: 3, mean: 1.8, median: 2, unit: 'nM', note: 'Tidligere merknad.' };
+    const lines = (value: unknown) => blockSnapshotLines('pharmacodynamics', {
+      mechanisms: [{ target: { symbol: 'DRD2' }, interactionType: 'antagonist', ki: value }],
+    }, t, 'en');
+    const next = { ...measurement, [field]: field === 'note' ? 'Ny merknad.' : field === 'mean' ? 2.2 : 2.5 };
+    expect(lines(next)).not.toEqual(lines(measurement));
+    expect(lines(next)[0]).toContain(String(next[field]));
+    expect(lines(next)[0]).toContain('1–3 nM');
+  });
+
+  it.each(['en', 'nb'])('labels both mechanism central statistics in %s', async (lang) => {
+    await i18nApp.changeLanguage(lang);
+    try {
+      const [line] = blockSnapshotLines('pharmacodynamics', { mechanisms: [{
+        target: { symbol: 'DRD2' }, ki: { min: 1, max: 3, mean: 1.8, median: 2, unit: 'nM', note: 'Kildens merknad.' },
+      }] }, t, lang);
+      expect(line).toContain(`2 nM (${t('doseContext.values.centralStatistic.median')})`);
+      expect(line).toContain(`1.8 nM (${t('doseContext.values.centralStatistic.arithmetic_mean')})`);
+      expect(line).toContain('Kildens merknad.');
+    } finally { await i18nApp.changeLanguage('en'); }
+  });
+
+  it('keeps source precision in mechanism values and ka centres with bounds', () => {
+    const metric = (mean: number) => blockSnapshotLines('pharmacodynamics', { mechanisms: [{
+      target: { symbol: 'MOR' }, ki: { min: 1, max: 2, mean, unit: 'nM' },
+    }] }, t, 'en');
+    expect(metric(1.000001)[0]).toContain('1.000001');
+    expect(metric(1.000001)).not.toEqual(metric(1.000002));
+    const [ka] = blockSnapshotLines('modelStructure', { routeValues: [{
+      parameter: 'ka', median: '1.200001', low: '1.100001', high: '1.300001', unit: '1/h',
+    }] }, t, 'en');
+    expect(ka).toContain('1.200001 (1.100001–1.300001) 1/h');
+  });
+
+  it('preserves strict metric thresholds and zero central values', () => {
+    const [line] = blockSnapshotLines('pharmacodynamics', { mechanisms: [{
+      target: { symbol: 'MOR' }, ki: { max: 1.234567, qualifier: '<', unit: 'nM' },
+      emax: { mean: 0, unit: '%' },
+    }] }, t, 'en');
+    expect(line).toContain('Ki < 1.234567 nM');
+    expect(line).toContain('Emax 0 %');
+  });
+
+  it('keeps small stored fraction changes visible in metabolism history', () => {
+    const lines = (median: number) => blockSnapshotLines('metabolism', { routes: [{
+      kind: 'renal_unchanged', fraction: { min: 0.1, max: 0.2, median },
+    }] }, t, 'en');
+    expect(lines(0.1234)).not.toEqual(lines(0.1235));
+    expect(lines(0.1234)[0]).toMatch(/12[.,]34%/);
+  });
+
 });

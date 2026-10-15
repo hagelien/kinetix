@@ -18,6 +18,9 @@ import {
   pendingEdits,
 } from '../../db/schema.js';
 import { parseResearchOutput } from '../../src/lib/deepResearchImport.js';
+import { getDb } from '../../api/_lib/db.js';
+import { getDrugMetabolism } from '../../api/_lib/metabolismStore.js';
+import { metabolismBlockSnapshot } from '../../api/_lib/drugBlockRevisions.js';
 import { runImport } from '../../api/_lib/researchImportStore.js';
 import {
   getIonizationConstantsForDrug,
@@ -209,6 +212,34 @@ describe('deep-research importer — full DB path (PGlite)', () => {
       .from(drugBlockRevisions)
       .where(eq(drugBlockRevisions.drugId, first.drugId));
     expect(after).toHaveLength(2);
+  });
+
+
+  it.each(['Benzoylecgonine', 'BE'])('snapshots an existing newly linked metabolite before importing %s', async (name) => {
+    const childId = await seedDrug(db, {
+      slug: 'benzoylecgonine', names: { en: 'Benzoylecgonine', nb: 'Benzoylecgonin' },
+      aliases: ['BE'], searchKey: 'benzoylecgonine\tbenzoylecgonin\tbe',
+    });
+    // Legacy live content, with no revision to fall back to.
+    await db.insert(drugMetabolismProfiles).values({ drugId: childId, evidenceNote: 'Eksisterende metabolisme.' });
+    await db.insert(drugEliminationRoutes).values({ drugId: childId, kind: 'renal_unchanged', fraction: '0.7' });
+    const before = metabolismBlockSnapshot(await getDrugMetabolism(getDb(), childId));
+    expect(await db.select().from(drugBlockRevisions)).toEqual([]);
+    const doc = structuredClone(DOC);
+    doc.metabolism.metabolites[0]!.metaboliteName = name;
+    const result = await runImport(db, parse(doc), { userId, overwrite: false });
+    const revisions = await db.select().from(drugBlockRevisions).where(eq(drugBlockRevisions.drugId, childId));
+    expect(revisions).toHaveLength(1);
+    expect(revisions[0]!.block).toBe('metabolism');
+    expect(revisions[0]!.oldValue).toEqual(before);
+    expect(revisions[0]!.newValue).toEqual(metabolismBlockSnapshot(await getDrugMetabolism(getDb(), childId)));
+    const after = revisions[0]!.newValue as { evidenceNote: string; routes: unknown[]; precursors: Array<{ drug: { id: number } }> };
+    expect(after.evidenceNote).toBe('Eksisterende metabolisme.');
+    expect(after.routes).toHaveLength(1);
+    expect(after.precursors).toHaveLength(1);
+    expect(after.precursors[0]!.drug.id).toBe(result.drugId);
+    await runImport(db, parse(doc), { userId, overwrite: false });
+    expect(await db.select().from(drugBlockRevisions).where(eq(drugBlockRevisions.drugId, childId))).toHaveLength(1);
   });
 
   it('seeds a new drug with parameters, citations, revisions, PD targets and metabolism', async () => {

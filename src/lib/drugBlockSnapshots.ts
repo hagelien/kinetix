@@ -8,7 +8,6 @@
  * so a reader sees what changed without reading two JSON documents. Citations
  * are kept on each line (`#id`) because a changed source is a change too.
  */
-import { formatRange } from './rangeUtils';
 import {
   eliminationRouteEnzymeLabel,
   eliminationRouteKindKey,
@@ -89,7 +88,7 @@ function metabolismLines(snapshot: SnapshotRow, t: Translate, lang: string): str
     lines.push(
       join([
         label,
-        formatFractionRangePercent(route.fraction as MetabolismFractionRange | null),
+        formatFractionRangePercent(route.fraction as MetabolismFractionRange | null, 6),
         text(route.note),
         refs(route.referenceIds),
       ]),
@@ -114,6 +113,7 @@ function metabolismLines(snapshot: SnapshotRow, t: Translate, lang: string): str
           activity,
           formatFractionRangePercent(
             link.conversionFraction as MetabolismFractionRange | null,
+            6,
           ),
           text(link.evidenceNote),
           refs(link.referenceIds),
@@ -159,6 +159,31 @@ const TIER_KEYS: Record<string, string> = {
   tertiary: 'sidebar.mechanismTertiary',
 };
 
+/** Authored figures in audit history must not lose a centre, note or precision. */
+function measurementHistory(value: NumericRange, t: Translate): string {
+  const unit = text(value.unit);
+  const withUnit = (number: number) => `${number}${unit ? ` ${unit}` : ''}`;
+  const min = typeof value.min === 'number' ? value.min : null;
+  const max = typeof value.max === 'number' ? value.max : null;
+  const centres = [
+    [value.median, 'median'],
+    [value.mean, 'arithmetic_mean'],
+  ] as const;
+  const hasCentre = centres.some(([number]) => typeof number === 'number');
+  let bounds: string | null = null;
+  if (value.qualifier && !hasCentre && (min != null || max != null)) {
+    const upper = value.qualifier === '<' || value.qualifier === '≤';
+    bounds = `${value.qualifier} ${withUnit((upper ? max ?? min : min ?? max)!)}`;
+  } else if (min != null && max != null) {
+    bounds = min === max ? withUnit(min) : `${min}–${withUnit(max)}`;
+  } else if (min != null) bounds = `≥ ${withUnit(min)}`;
+  else if (max != null) bounds = `≤ ${withUnit(max)}`;
+  const central = centres.map(([number, statistic]) => typeof number === 'number'
+    ? `${value.qualifier ? `${value.qualifier} ` : ''}${withUnit(number)} (${t(`doseContext.values.centralStatistic.${statistic}`)})`
+    : null);
+  return join([bounds, ...central, !bounds && !hasCentre ? unit : null, text(value.note)]);
+}
+
 function pharmacodynamicsLines(snapshot: SnapshotRow, t: Translate): string[] {
   return rows(snapshot.mechanisms).map((mechanism) => {
     const target = (mechanism.target ?? {}) as { symbol?: string };
@@ -168,7 +193,7 @@ function pharmacodynamicsLines(snapshot: SnapshotRow, t: Translate): string[] {
         : t('sidebar.mechanismOther');
     const metrics = MECHANISM_METRICS.map(([key, labelKey]) => {
       const value = mechanism[key] as NumericRange | null | undefined;
-      const formatted = value ? formatRange(value, { showNote: false }) : '';
+      const formatted = value ? measurementHistory(value, t) : '';
       if (!formatted) return null;
       return `${labelKey ? t(labelKey) : METRIC_SYMBOLS[key]} ${formatted}`;
     });
@@ -186,11 +211,24 @@ function pharmacodynamicsLines(snapshot: SnapshotRow, t: Translate): string[] {
   });
 }
 
+function rawBounds(range: NumericRange): string {
+  const { min, max, qualifier, unit } = range;
+  const suffix = unit ? ` ${unit}` : '';
+  if (qualifier && (min != null || max != null)) {
+    const upper = qualifier === '<' || qualifier === '≤';
+    return `${qualifier} ${upper ? max ?? min : min ?? max}${suffix}`;
+  }
+  if (min != null && max != null) return `${min}–${max}${suffix}`;
+  if (min != null) return `≥ ${min}${suffix}`;
+  if (max != null) return `≤ ${max}${suffix}`;
+  return '';
+}
+
 function joinReportedValue(centralValue: number, range: NumericRange): string {
-  const centre = formatRange({ median: centralValue }, { showUnit: false });
+  const centre = String(centralValue);
   const hasBounds = range.min != null || range.max != null;
   const bounds = hasBounds
-    ? ` (${formatRange({ min: range.min, max: range.max }, { showUnit: false })})`
+    ? ` (${rawBounds({ ...range, unit: undefined })})`
     : '';
   const unit = range.unit ? ` ${range.unit}` : '';
   return `${centre}${bounds}${unit}`;
@@ -218,9 +256,12 @@ function modelStructureLines(snapshot: SnapshotRow, t: Translate): string[] {
         qualifier: text(entry.qualifier) ?? undefined,
         unit: text(entry.unit) ?? undefined,
       } as NumericRange;
-      const value = centralValue != null
-        ? joinReportedValue(centralValue, range)
-        : formatRange(range, { showNote: false });
+      const centre = centralValue ?? range.median;
+      const value = range.qualifier
+        ? rawBounds({ ...range, min: range.min ?? centre, max: range.max ?? centre })
+        : centre != null
+          ? joinReportedValue(centre, range)
+          : rawBounds(range);
       const route = text(entry.route);
       const routeKey = route ? ROUTE_LABEL_KEYS[route as RouteId] : undefined;
       const quote = text(entry.sourceQuote);

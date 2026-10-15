@@ -75,6 +75,8 @@ async function linkedMetabolismDrugIds(db: Db, drugIds: number[]): Promise<numbe
 export interface BlockHistoryScope {
   /** The drugs the write targets. Metabolism widens to their linked drugs. */
   drugIds: readonly number[];
+  /** Prospective edge endpoints: snapshot only their metabolism blocks. */
+  metabolismDrugIds?: readonly number[];
   /** The blocks the write can change; all three when omitted. */
   blocks?: readonly DrugBlockId[];
   /** Who made the change; null for an operator script without a user. */
@@ -138,7 +140,9 @@ export async function beginBlockHistory(scope: BlockHistoryScope) {
   for (const block of blocks) {
     const drugIdsForBlock = new Set(ids);
     if (block === 'metabolism') {
-      for (const id of await linkedMetabolismDrugIds(db, ids)) drugIdsForBlock.add(id);
+      const metabolismIds = [...new Set([...ids, ...(scope.metabolismDrugIds ?? [])])];
+      for (const id of metabolismIds) drugIdsForBlock.add(id);
+      for (const id of await linkedMetabolismDrugIds(db, metabolismIds)) drugIdsForBlock.add(id);
     }
     targets.set(block, drugIdsForBlock);
   }

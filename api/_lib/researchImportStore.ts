@@ -344,8 +344,12 @@ export async function runImport(
     await lockMetabolismHistory();
     await withDrugApplicabilityLock(drugId, async () => {
       const tx = getDb();
+      // Resolve once, before snapshots, and use these exact endpoints for the
+      // inserts too. A newly linked drug may have live data but no history yet.
+      const metaboliteDrugs = await resolveImportMetabolites(tx, data);
       const blockHistory = await beginBlockHistory({
         drugIds: [drugId],
+        metabolismDrugIds: [...metaboliteDrugs.values()],
         actorUserId: opts.userId,
       });
       await lockCitationMembershipsShared(
@@ -359,7 +363,7 @@ export async function runImport(
       await seedParameters(tx, drugId, data, citationMap, opts, stats);
       await seedParameterEntries(tx, drugId, data, citationMap, opts, stats);
       await seedPdTargets(tx, drugId, data, citationMap, opts.userId, stats);
-      await seedMetabolism(tx, drugId, data, citationMap, opts.userId, stats);
+      await seedMetabolism(tx, drugId, data, citationMap, opts.userId, stats, metaboliteDrugs);
       await blockHistory.record();
     });
   });
@@ -1311,6 +1315,28 @@ async function seedPdTargets(
   }
 }
 
+/** The same name resolution supplies the history scope and the actual edges. */
+async function resolveImportMetabolites(
+  db: AnyDb,
+  data: NormalizedResearchImport,
+): Promise<Map<string, number>> {
+  const candidates = await findDrugNameCandidates(db, data.metabolism.metabolites.map((m) => m.name));
+  const byName = new Map<string, number>();
+  for (const drug of candidates) {
+    for (const name of Object.values(drug.names ?? {}))
+      byName.set(normalizeMetabolismName(String(name)), drug.id);
+    for (const alias of drug.aliases ?? [])
+      byName.set(normalizeMetabolismName(alias), drug.id);
+  }
+  const resolved = new Map<string, number>();
+  for (const metabolite of data.metabolism.metabolites) {
+    const name = normalizeMetabolismName(metabolite.name);
+    const id = byName.get(name);
+    if (id != null) resolved.set(name, id);
+  }
+  return resolved;
+}
+
 async function seedMetabolism(
   db: AnyDb,
   drugId: number,
@@ -1318,6 +1344,7 @@ async function seedMetabolism(
   citationMap: Map<string, number>,
   uid: number,
   stats: ImportStats,
+  metaboliteDrugs: ReadonlyMap<string, number>,
 ): Promise<void> {
   const m = data.metabolism;
 
@@ -1385,17 +1412,6 @@ async function seedMetabolism(
   }
 
   if (m.metabolites.length) {
-    const allDrugs = await findDrugNameCandidates(
-      db,
-      m.metabolites.map((mb) => mb.name),
-    );
-    const byName = new Map<string, number>();
-    for (const d of allDrugs) {
-      for (const n of Object.values(d.names ?? {}))
-        byName.set(normalizeMetabolismName(String(n)), d.id);
-      for (const a of (d.aliases ?? []) as string[])
-        byName.set(normalizeMetabolismName(a), d.id);
-    }
     // What the drug already links, so a skip can be explained rather than just
     // counted. The ON CONFLICT below is still the authority on whether a row
     // was written — this read only decides what to tell the operator.
@@ -1426,7 +1442,7 @@ async function seedMetabolism(
     for (const mb of m.metabolites) {
       const refIds = resolveRefIds(mb.sourceIds, citationMap);
       const normalized = normalizeMetabolismName(mb.name);
-      const linkedDrugId = byName.get(normalized) ?? null;
+      const linkedDrugId = metaboliteDrugs.get(normalized) ?? null;
       // Already there under another name: the substance index will refuse the
       // insert, and the document's range, note and citations go nowhere. Say
       // so. A row the drug already lists under the *same* name is an ordinary

@@ -183,10 +183,13 @@ export interface EntityMetabolismDrug {
 }
 
 /** Format a single 0–1 fraction as a percent string, or null when absent. */
-export function formatFractionPercent(value: number | null | undefined): string | null {
+export function formatFractionPercent(
+  value: number | null | undefined,
+  maximumFractionDigits = 1,
+): string | null {
   if (value == null || !Number.isFinite(value)) return null;
   return `${(value * 100).toLocaleString(undefined, {
-    maximumFractionDigits: 1,
+    maximumFractionDigits,
   })}%`;
 }
 
@@ -200,11 +203,12 @@ export function formatFractionPercent(value: number | null | undefined): string 
  */
 export function formatFractionRangePercent(
   range: MetabolismFractionRange | null | undefined,
+  maximumFractionDigits = 1,
 ): string | null {
   if (fractionRangeIsEmpty(range) || !range) return null;
-  const min = formatFractionPercent(range.min);
-  const max = formatFractionPercent(range.max);
-  const median = formatFractionPercent(range.median);
+  const min = formatFractionPercent(range.min, maximumFractionDigits);
+  const max = formatFractionPercent(range.max, maximumFractionDigits);
+  const median = formatFractionPercent(range.median, maximumFractionDigits);
 
   let bounds: string | null = null;
   if (min && max) bounds = min === max ? min : `${min}–${max}`;

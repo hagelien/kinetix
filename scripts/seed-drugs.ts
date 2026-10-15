@@ -354,7 +354,15 @@ async function seedMetabolism(index: SeedIndex): Promise<void> {
     // Recorded in the block history (#37) — this box and the boxes of the
     // drugs its metabolite links reach. A seeder has no user: NULL author.
     await withBlockHistory(
-      { drugIds: [drugId], blocks: ['metabolism'], actorUserId: null },
+      {
+        drugIds: [drugId],
+        metabolismDrugIds: (c.metabolism?.metabolites ?? []).flatMap((name) => {
+          const id = index.nameToDrugId.get(normalizeMetabolismName(name));
+          return id == null ? [] : [id];
+        }),
+        blocks: ['metabolism'],
+        actorUserId: null,
+      },
       async () => {
         // Through the transaction withBlockHistory opened, so the writes and
         // their revision rows commit together.
