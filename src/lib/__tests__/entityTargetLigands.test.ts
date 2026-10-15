@@ -6,6 +6,8 @@ import {
   formatMeasurement,
   formatPlotPointValue,
   measurementSortValue,
+  metricOmissions,
+  omissionReasons,
   countLigandsBySpecies,
   filterLigandsBySpecies,
   normalizeInteractionType,
@@ -415,6 +417,48 @@ describe('metric selection', () => {
     // A choice that is no longer plottable falls back.
     expect(resolvePlotMetric(available, 'ic50')).toBe('ki');
     expect(resolvePlotMetric([], 'ki')).toBeNull();
+  });
+});
+
+describe('metricOmissions', () => {
+  it('reports why recorded values are left out even when no metric is plottable', () => {
+    const rows = [
+      ligand({ relationshipId: 1, ki: { min: 10, unit: 'nM' } }),
+      ligand({ relationshipId: 2, ki: { median: 2.4, unit: 'ng/mL' } }),
+      ligand({ relationshipId: 3, emax: { median: 60, unit: '%' } }),
+      ligand({ relationshipId: 4, emax: { median: 3, unit: 'a.u.' } }),
+      // Qualitative only: nothing recorded, so nothing to report.
+      ligand({ relationshipId: 5 }),
+    ];
+    expect(plottableMetrics(rows)).toEqual([]);
+
+    const omissions = metricOmissions(rows);
+    expect(omissions.map((m) => m.metric)).toEqual(['ki', 'emax']);
+    const [ki, emax] = omissions;
+    expect(ki!.omitted.map((o) => [o.ligand.relationshipId, o.reason])).toEqual([
+      [1, 'one_sided'],
+      [2, 'unsupported_unit'],
+    ]);
+    expect(emax!.omitted.map((o) => [o.ligand.relationshipId, o.reason])).toEqual([
+      [3, 'heterogeneous_units'],
+      [4, 'heterogeneous_units'],
+    ]);
+    expect(omissionReasons(emax!.omitted)).toEqual(['heterogeneous_units']);
+  });
+
+  it('gives the same reasons as the plot for a metric that is plottable', () => {
+    const rows = [
+      ligand({ relationshipId: 1, ki: { median: 1, unit: 'nM' } }),
+      ligand({ relationshipId: 2, ki: { max: 5, unit: 'nM' } }),
+    ];
+    expect(metricOmissions(rows)).toEqual([
+      { metric: 'ki', omitted: buildActivityPlot(rows, 'ki').omitted },
+    ]);
+  });
+
+  it('is empty when every recorded value is plottable', () => {
+    const rows = [ligand({ relationshipId: 1, ki: { median: 1, unit: 'nM' } })];
+    expect(metricOmissions(rows)).toEqual([]);
   });
 });
 

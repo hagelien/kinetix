@@ -10,10 +10,13 @@ import {
   countLigandsBySpecies,
   filterLigandsBySpecies,
   formatMeasurement,
+  metricOmissions,
   normalizeInteractionType,
+  omissionReasons,
   plottableMetrics,
   resolvePlotMetric,
   sortLigands,
+  type ActivityPlot,
   type LigandSortKey,
   type PlotOmissionReason,
   type SpeciesFilter,
@@ -117,6 +120,12 @@ export function EntityTargetLigands({ entityId }: EntityTargetLigandsProps) {
   const plot = useMemo(
     () => (metric ? buildActivityPlot(filtered, metric) : null),
     [filtered, metric],
+  );
+  // With nothing plottable there is no selected metric to report against,
+  // so the omissions are derived per metric, independently of the plot.
+  const unplottedOmissions = useMemo(
+    () => (plot ? [] : metricOmissions(filtered)),
+    [filtered, plot],
   );
 
   const drugName = (ligand: EntityTargetLigand) =>
@@ -239,10 +248,10 @@ export function EntityTargetLigands({ entityId }: EntityTargetLigandsProps) {
     );
   };
 
-  const omittedCount = plot?.omitted.length ?? 0;
-  const omittedReasons = plot
-    ? [...new Set(plot.omitted.map((o) => o.reason))]
-    : [];
+  const omissionSummary = (omitted: ActivityPlot['omitted']) =>
+    `${t('bioEntity.plotOmitted', { count: omitted.length })} ${omissionReasons(omitted)
+      .map((reason) => t(OMISSION_LABEL_KEYS[reason]))
+      .join('; ')}`;
 
   return (
     <section className="mt-8 border-t border-border pt-6" aria-labelledby={headingId}>
@@ -317,11 +326,19 @@ export function EntityTargetLigands({ entityId }: EntityTargetLigandsProps) {
           {t('bioEntity.noPlottableMeasurements')}
         </p>
       )}
-      {omittedCount > 0 && (
+      {plot && plot.omitted.length > 0 && (
         <p className="mt-2 text-xs text-muted-foreground" data-testid="target-plot-omitted">
-          {t('bioEntity.plotOmitted', { count: omittedCount })}{' '}
-          {omittedReasons.map((reason) => t(OMISSION_LABEL_KEYS[reason])).join('; ')}
+          {omissionSummary(plot.omitted)}
         </p>
+      )}
+      {unplottedOmissions.length > 0 && (
+        <ul className="mt-2 space-y-0.5 text-xs text-muted-foreground" data-testid="target-plot-omitted">
+          {unplottedOmissions.map(({ metric: m, omitted }) => (
+            <li key={m}>
+              {metricLabel(m)}: {omissionSummary(omitted)}
+            </li>
+          ))}
+        </ul>
       )}
 
       <div className="mt-4 w-full overflow-x-auto rounded-xl border border-border">

@@ -529,6 +529,35 @@ export function plottableMetrics(
   );
 }
 
+export interface MetricOmissions {
+  metric: TargetMetric;
+  omitted: ActivityPlot['omitted'];
+}
+
+/**
+ * Per metric, in selector order, the recorded values among `ligands` that
+ * cannot be plotted and why — for every metric that has any, whether or not
+ * the metric itself is plottable. Lets the panel explain what was left out
+ * even when no metric has a single plottable point (so there is no plot,
+ * and no selected metric, to report against). The reasons are exactly those
+ * {@link buildActivityPlot} gives, i.e. {@link assessColumn}'s verdicts.
+ */
+export function metricOmissions(
+  ligands: readonly EntityTargetLigand[],
+): MetricOmissions[] {
+  return TARGET_METRICS.map((metric) => ({
+    metric,
+    omitted: buildActivityPlot(ligands, metric).omitted,
+  })).filter((m) => m.omitted.length > 0);
+}
+
+/** The distinct reasons among omitted rows, in first-seen order. */
+export function omissionReasons(
+  omitted: ActivityPlot['omitted'],
+): PlotOmissionReason[] {
+  return [...new Set(omitted.map((o) => o.reason))];
+}
+
 /**
  * The metric to show: the reader's choice while it stays plottable, else Ki
  * when available (the most direct binding-affinity measure), else the first
