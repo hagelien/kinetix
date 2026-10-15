@@ -74,6 +74,7 @@ import 'dotenv/config';
 import { writeFileSync } from 'node:fs';
 import { and, asc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { drugs, parameterEntries } from '../db/schema.js';
+import { entryInReferenceScope } from '../src/lib/entryDoseContext.js';
 import { getDb, runInPoolTransaction } from '../api/_lib/db.js';
 import { readDrugRouteAssemblyInputs } from '../api/_lib/model-derivation-store.js';
 import { describeDerivedModel } from '../src/lib/modelGradeDisclosure.js';
@@ -253,6 +254,8 @@ async function readAxisSourceRows(drugId: number): Promise<AxisSourceRow[]> {
       route: parameterEntries.route,
       categoricalValue: parameterEntries.categoricalValue,
       citationId: parameterEntries.citationId,
+      releaseProfile: parameterEntries.releaseProfile,
+      pkPopulation: parameterEntries.pkPopulation,
     })
     .from(parameterEntries)
     .where(
@@ -265,6 +268,9 @@ async function readAxisSourceRows(drugId: number): Promise<AxisSourceRow[]> {
   return rows.flatMap((r): AxisSourceRow[] => {
     const axis = PARAM_TO_AXIS[r.parameter];
     if (!axis || r.categoricalValue === null) return [];
+    // The derivation reads reference-scope declarations only (#12), so the evidence listed beside
+    // an axis is the evidence it was derived from — not a depot-only shape it ignored.
+    if (!entryInReferenceScope(r)) return [];
     return [{ axis, route: r.route, value: r.categoricalValue, citationId: r.citationId ?? null }];
   });
 }

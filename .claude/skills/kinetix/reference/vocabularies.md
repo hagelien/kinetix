@@ -68,9 +68,12 @@ SKILL.md, "Cmax: structured dose context"). A `valueBasis` is required.
 
 Every other numeric parameter takes only the reported-statistic fields of
 `doseContext` — `centralValue`, `centralStatistic`, `intervalKind` — optionally
-(see SKILL.md, "What the number is"); every dose field is refused there.
+(see SKILL.md, "What the number is"); every dose field is refused there,
+except the formulation, regimen and population scope below.
 
 - `cmax` — matrix **required**; concentration units as above for `valueBasis: "concentration"`; a concentration-per-dose unit (e.g. `µmol/L/mg`, `ng/mL/(mg/kg)`) for `"dose_normalized"`; range 0–100000.
+
+`bioavailability`, `tmax`, `ka`, `absorptionModel` may also state, optionally, `doseRegimen`, `doseIntervalHours`, `releaseProfile`, `physicalForm`, `pkPopulation`, `populationQualifier` — an extended-release or depot formulation, the regimen and interval it was observed under, a special population. An entry with a `modified` release profile or a named special population is listed but kept out of the pooled value.
 
 | doseContext field | values |
 | --- | --- |

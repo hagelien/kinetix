@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { showToast } from '@/lib/toast';
 import { formatRange } from '@/lib/rangeUtils';
 import type { NumericRange } from '@/types';
+import { scopeContextLabels, type DoseContextFields } from '@/lib/entryDoseContext';
 
 type Disposition = 'ready' | 'review' | 'duplicate' | 'blocked';
 
@@ -41,6 +42,13 @@ interface ParameterItemPlan extends ItemPlanCommon {
     matrix?: string;
     scenario?: string;
     n?: number;
+    /** The formulation, regimen and population the reading is scoped to (#12). */
+    releaseProfile?: string;
+    physicalForm?: string;
+    doseRegimen?: string;
+    doseIntervalHours?: number;
+    pkPopulation?: string;
+    populationQualifier?: string;
   };
   current: { value: unknown; entryCount: number } | null;
   comments: string | null;
@@ -992,6 +1000,10 @@ function formatReading(reading: ParameterItemPlan['reading'], t: TFunction): str
       : null,
     matrix,
     scenario,
+    // The scope (#12): a modified-release or special-population reading is
+    // stored but kept out of the pooled value, and the card must say which
+    // one the admin is approving.
+    ...scopeContextLabels(reading as DoseContextFields, t),
   ].filter(Boolean);
   return parts.join(' · ');
 }

@@ -4031,7 +4031,10 @@
       "modelStructureValue": "Modellstruktur",
       "modelStructureHint": "En modellstruktur-angivelse er et kildebelagt valg, ikke en målt verdi — velg formen denne kilden støtter.",
       "errorModelStructureRequired": "Velg en modellstruktur-verdi.",
-      "errorIncompatibleCombination": "Administrasjonsveien, absorpsjonsmodellen og parameteren er ikke kompatible."
+      "errorIncompatibleCombination": "Administrasjonsveien, absorpsjonsmodellen og parameteren er ikke kompatible.",
+      "scope": "Formulering, doseringsregime og populasjon",
+      "scopeHint": "Hva kildeverdien ble målt i. En formulering med modifisert frisetting eller en navngitt spesialpopulasjon vises, men holdes utenfor den samlede verdien.",
+      "errorDoseInterval": "Doseringsintervallet må være et positivt antall timer."
     },
     "summary": {
       "line": "Samlet: {{value}} · {{count}} kilder",
