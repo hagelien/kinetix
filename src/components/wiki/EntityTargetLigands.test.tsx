@@ -209,6 +209,44 @@ describe('EntityTargetLigands', () => {
     expect(screen.getByText(/no measurement in this selection/i)).toBeInTheDocument();
   });
 
+  it('says which values were left out and why when nothing is plottable', async () => {
+    vi.mocked(fetchEntityTargetLigands).mockResolvedValue([
+      ligand({
+        relationshipId: 1,
+        drugSlug: 'morphine',
+        ki: { min: 10, unit: 'nM' },
+      }),
+      ligand({
+        relationshipId: 2,
+        drugSlug: 'tramadol',
+        ki: { median: 2.4, unit: 'ng/mL' },
+      }),
+      ligand({
+        relationshipId: 3,
+        drugSlug: 'fentanyl',
+        emax: { median: 60, unit: '%' },
+      }),
+      ligand({
+        relationshipId: 4,
+        drugSlug: 'methadone',
+        emax: { median: 3, unit: 'a.u.' },
+      }),
+    ]);
+    renderSection();
+    await screen.findByRole('heading', { name: /target pharmacology/i });
+
+    expect(plottedDrugs()).toEqual([]);
+    expect(screen.queryByLabelText('Measurement')).toBeNull();
+    expect(screen.getByText(/no measurement in this selection/i)).toBeInTheDocument();
+    const omitted = screen.getByTestId('target-plot-omitted');
+    const lines = within(omitted).getAllByRole('listitem').map((li) => li.textContent);
+    expect(lines).toEqual([
+      'Ki: 2 recorded values are not plotted: one-sided bound (shown in the table); unit is not a molar concentration',
+      'Emax: 2 recorded values are not plotted: units differ between rows, so the values are not comparable',
+    ]);
+    expect(tableRows()).toHaveLength(4);
+  });
+
   it('reveals evidence notes and references without hover', async () => {
     vi.mocked(fetchEntityTargetLigands).mockResolvedValue(LIGANDS);
     renderSection();
