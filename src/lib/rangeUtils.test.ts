@@ -102,17 +102,38 @@ describe('rangeUtils', () => {
         expect(formatRange({ min: 10, qualifier: '>', unit: 'nM' })).not.toContain('≥');
       });
 
-      it.each(['<', '≤', '>', '≥'] as const)(
-        'keeps the %s operator on a qualified min–max span',
-        (qualifier) => {
-          expect(formatRange({ min: 3, max: 12, qualifier, unit: 'h' })).toBe(
-            `${qualifier} 3–12 h`,
-          );
+      it.each([
+        ['<', '< 12 h'],
+        ['≤', '≤ 12 h'],
+        ['>', '> 3 h'],
+        ['≥', '≥ 3 h'],
+      ] as const)(
+        'shows a qualified %s span as its one threshold bound, with the operator',
+        (qualifier, expected) => {
+          expect(formatRange({ min: 3, max: 12, qualifier, unit: 'h' })).toBe(expected);
         },
       );
 
-      it('writes a qualified span whose bounds are equal as one figure', () => {
-        expect(formatRange({ min: 5, max: 5, qualifier: '<', unit: 'mg' })).toBe('< 5 mg');
+      it('renders the buildFraction shapes as the source wrote them', () => {
+        // The Farmakologiportalen importer fills the open side of a censored
+        // fraction with its natural limit: "<3%" → 0–0.03, ">90%" → 0.9–1.
+        // That filler is not part of the reported value.
+        const below = { min: 0, max: 0.03, qualifier: '<', unit: 'fraction' } as const;
+        const above = { min: 0.9, max: 1, qualifier: '>', unit: 'fraction' } as const;
+        expect(formatRange(below, { asPercent: true })).toBe('< 3%');
+        expect(formatRange(above, { asPercent: true })).toBe('> 90%');
+        expect(formatRange(below)).toBe('< 0.03');
+        expect(formatRange(above)).toBe('> 0.9');
+      });
+
+      it('writes a qualified range whose bounds are equal as one figure', () => {
+        // ensureMinMax mirrors a lone "> x" bound onto both sides.
+        expect(formatRange({ min: 5, max: 5, qualifier: '>', unit: 'h' })).toBe('> 5 h');
+      });
+
+      it('falls back to the other bound when the threshold side is missing', () => {
+        expect(formatRange({ min: 4, qualifier: '<', unit: 'h' })).toBe('< 4 h');
+        expect(formatRange({ max: 4, qualifier: '≥', unit: 'h' })).toBe('≥ 4 h');
       });
 
       it('keeps the operator when scaling to percent and hiding the unit', () => {
@@ -121,7 +142,7 @@ describe('rangeUtils', () => {
         ).toBe('< 5%');
         expect(
           formatRange({ min: 0.2, max: 0.4, qualifier: '>' }, { asPercent: true }),
-        ).toBe('> 20–40%');
+        ).toBe('> 20%');
         expect(formatRange({ max: 10, qualifier: '<', unit: 'nM' }, { showUnit: false })).toBe(
           '< 10',
         );

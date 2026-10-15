@@ -132,16 +132,18 @@ export function formatRange(
   // shadow the real min–max range in the formatted output; the value then
   // falls through to the range/value branches below.
   //
-  // The stored operator is written out as recorded — never swapped for the
-  // inclusive "≥"/"≤" of an unqualified bound, and never dropped from a span —
-  // so a strict "< 10" does not read as "≤10" and a censored "> 3–12" does not
-  // read as the exact span "3–12".
+  // A comparison operator marks one censored threshold, and is written out as
+  // recorded — never swapped for the inclusive "≥"/"≤" of an unqualified bound,
+  // so a strict "< 10" does not read as "≤10". When there is no central value,
+  // the threshold is the bound the operator points at: `max` for "<"/"≤",
+  // `min` for ">"/"≥". The other bound, when stored, is only the natural limit
+  // an importer filled in (`buildFraction` stores "<3%" as 0–0.03 and ">90%"
+  // as 0.9–1), so it is never shown as part of the value.
   const operator = isQualifierOperator(qualifier) ? qualifier : null;
-  const bound = min ?? max;
+  const threshold =
+    operator === '<' || operator === '≤' ? (max ?? min) : (min ?? max);
   if (operator && rep != null) s = `${operator} ${fmt(rep)}${unitSuffix}`;
-  else if (operator && min != null && max != null && min !== max)
-    s = `${operator} ${fmt(min)}–${fmt(max)}${unitSuffix}`;
-  else if (operator && bound != null) s = `${operator} ${fmt(bound)}${unitSuffix}`;
+  else if (operator && threshold != null) s = `${operator} ${fmt(threshold)}${unitSuffix}`;
   else if (min != null && max != null && min !== max) s = `${fmt(min)}–${fmt(max)}${unitSuffix}`;
   else if (min != null && max === min) s = `${fmt(min)}${unitSuffix}`;
   else if (rep != null) s = `${fmt(rep)}${unitSuffix}`;
