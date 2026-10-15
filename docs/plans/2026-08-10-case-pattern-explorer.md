@@ -2014,7 +2014,10 @@ pattern_inference_overrides
                           -- case row directly and cleans up no children, so a
                           -- restricting FK would make any case with an override
                           -- undeletable.
-  finding_id              -- UNIQUE (case_id, finding_id): one override per
+  finding_id              -- the full id (section 28), kept for inspection;
+                          -- unbounded, so never indexed
+  finding_key             -- sha256(finding_id), fixed width.
+                          -- UNIQUE (case_id, finding_key): one override per
                           -- finding, so the UI always has one statement to show
   statement               -- the expert's text
   superseded_statement    -- the engine text the expert's browser showed when
@@ -2671,7 +2674,7 @@ api/_lib/patternInferenceOverrideStore.ts
 The inference override layer (section 30.12) gets its storage here, with the inferences it overrides. Nothing earlier writes to `pattern_inference_overrides`, and `/api/simulator/cases` reads and writes `simulator_cases` only, so the table needs its own plumbing:
 
 - **Migration.** Creates `pattern_inference_overrides` and its append-only `pattern_inference_override_revisions` as sketched in section 30.12, with `case_id` a foreign key to `simulator_cases` `ON DELETE CASCADE`. The existing case DELETE path removes the case row directly and cleans up no children, so a restricting key would make any case with an override undeletable.
-- **One override per finding, saved against the version the client saw.** The migration adds a unique constraint on `(case_id, finding_id)`, and every override row carries `revision` (an integer, 1 on create, +1 on each real edit). A save sends `expectedRevision`: `null` for a new override, otherwise the revision the client last read. Under the row lock (`SELECT … FOR UPDATE`, or the insert's unique conflict for a create) the store then:
+- **One override per finding, saved against the version the client saw.** The migration adds a unique constraint on `(case_id, finding_key)` (`finding_key` = sha256 of the unbounded `finding_id`, so a finding citing many results never exceeds the index's tuple limit), and every override row carries `revision` (an integer, 1 on create, +1 on each real edit). A save sends `expectedRevision`: `null` for a new override, otherwise the revision the client last read. Under the row lock (`SELECT … FOR UPDATE`, or the insert's unique conflict for a create) the store then:
   - **applies** the save when the stored revision equals `expectedRevision` (or no row exists and `expectedRevision` is null) and the text differs: it updates the row, bumps `revision`, stamps the edit fields and appends the revision row;
   - **returns the stored row unchanged** when the row is active (not deleted) and its text already equals the save's text, whatever the revision: a retry of a save that committed, or two tabs saving the same words, records nothing;
   - **refuses with 409** and the current row when the revision does not match and the text differs: a delayed retry or a stale tab can never overwrite a newer expert statement, and the client shows the newer text to decide from.
