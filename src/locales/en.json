@@ -2274,6 +2274,7 @@
     "omitOneSided": "one-sided bound (shown in the table)",
     "omitUnsupportedUnit": "unit is not a molar concentration",
     "omitNonPositive": "value is not positive",
+    "omitNonPositiveBound": "the range reaches zero or below, which a logarithmic axis cannot show",
     "omitHeterogeneousUnits": "units differ between rows, so the values are not comparable",
     "pointDetail": "{{drug}} · {{activity}} · {{metric}} {{value}} · {{species}} · {{references}}",
     "colDrug": "Drug",

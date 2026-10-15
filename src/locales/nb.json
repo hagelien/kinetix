@@ -2274,6 +2274,7 @@
     "omitOneSided": "ensidig grense (vises i tabellen)",
     "omitUnsupportedUnit": "enheten er ikke en molar konsentrasjon",
     "omitNonPositive": "verdien er ikke positiv",
+    "omitNonPositiveBound": "spennet når null eller lavere, noe en logaritmisk akse ikke kan vise",
     "omitHeterogeneousUnits": "enhetene varierer mellom radene, så verdiene er ikke sammenlignbare",
     "pointDetail": "{{drug}} · {{activity}} · {{metric}} {{value}} · {{species}} · {{references}}",
     "colDrug": "Legemiddel",

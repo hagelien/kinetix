@@ -136,7 +136,11 @@ describe('EntityTargetLigands', () => {
     // Null species is spelled out, never shown as human.
     expect(within(naloxoneRow).getByText('Unstated')).toBeInTheDocument();
     // A range stays a range in the table.
-    expect(screen.getByText('1–3 nM')).toBeInTheDocument();
+    const morphineRow = screen.getAllByTestId('target-ligand-row')[0]!;
+    expect(within(morphineRow).getByText('1–3 nM')).toBeInTheDocument();
+    // The stored interaction type is shown as recorded, not re-labelled.
+    expect(within(screen.getAllByTestId('target-ligand-row')[1]!).getByText('partial agonist')).toBeInTheDocument();
+    expect(within(screen.getAllByTestId('target-ligand-row')[3]!).getByText('biased agonist')).toBeInTheDocument();
     // The drug links to its monograph when one exists, else the drug route.
     expect(screen.getByRole('link', { name: 'Morphine' })).toHaveAttribute(
       'href',
@@ -163,6 +167,12 @@ describe('EntityTargetLigands', () => {
 
     const other = screen.getByRole('group', { name: 'Other / unspecified' });
     expect(within(other).getByText('Oliceridine')).toBeInTheDocument();
+    // The morphine Ki has no median: the plot shows its range, not a midpoint.
+    const morphinePoint = screen
+      .getAllByTestId('target-plot-point')
+      .find((p) => p.getAttribute('data-drug') === 'morphine')!;
+    expect(within(morphinePoint).getByText('1–3 nM')).toBeInTheDocument();
+    expect(within(morphinePoint).queryByText(/^2 nM/)).toBeNull();
   });
 
   it('selecting EC50 drops rows without an EC50 from the plot but not the table', async () => {

@@ -4,13 +4,13 @@ import { useTranslation } from 'react-i18next';
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import { fetchEntityTargetLigands } from '@/lib/bioEntitiesApi';
 import { capitalizeGenericDrugName, resolveDrugName } from '@/lib/drugNames';
-import { formatInteractionLabel } from '@/lib/receptorInteractions';
-import { formatRange } from '@/lib/rangeUtils';
 import { referenceModulePath } from '@/lib/referencesApi';
 import {
   buildActivityPlot,
   countLigandsBySpecies,
   filterLigandsBySpecies,
+  formatMeasurement,
+  normalizeInteractionType,
   plottableMetrics,
   resolvePlotMetric,
   sortLigands,
@@ -38,6 +38,7 @@ const OMISSION_LABEL_KEYS: Record<PlotOmissionReason, string> = {
   one_sided: 'bioEntity.omitOneSided',
   unsupported_unit: 'bioEntity.omitUnsupportedUnit',
   non_positive: 'bioEntity.omitNonPositive',
+  non_positive_bound: 'bioEntity.omitNonPositiveBound',
   heterogeneous_units: 'bioEntity.omitHeterogeneousUnits',
 };
 
@@ -53,10 +54,6 @@ type LoadState =
   | { status: 'loading' }
   | { status: 'error' }
   | { status: 'ready'; ligands: EntityTargetLigand[] };
-
-function formatMeasurement(range: NumericRange | null): string {
-  return range ? formatRange(range, { showNote: false }) : '';
-}
 
 /**
  * Target-pharmacology collection on a bio entity's monograph: the inverse of
@@ -128,8 +125,10 @@ export function EntityTargetLigands({ entityId }: EntityTargetLigandsProps) {
     ligand.drugMonographSlug
       ? `/wiki/${ligand.drugMonographSlug}`
       : `/wiki/drug/${ligand.drugId}`;
+  // The stored interaction type is data: shown as recorded (separators
+  // turned into spaces), never re-labelled or translated.
   const activityLabel = (ligand: EntityTargetLigand) =>
-    formatInteractionLabel(ligand.interactionType.trim(), t);
+    normalizeInteractionType(ligand.interactionType).label || '—';
   const speciesLabel = (ligand: EntityTargetLigand) =>
     ligand.assaySpecies?.trim() || t('bioEntity.speciesUnstated');
   const metricLabel = (key: MeasurementKey): string => {

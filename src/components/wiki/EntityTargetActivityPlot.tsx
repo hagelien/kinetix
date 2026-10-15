@@ -1,12 +1,12 @@
 import { useId } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { formatPdNumber } from '@/lib/pdComparison';
 import { formatWithMaxDecimals } from '@/lib/rangeUtils';
-import type {
-  ActivityGroup,
-  ActivityPlot,
-  ActivityPlotPoint,
+import {
+  formatPlotPointValue,
+  type ActivityGroup,
+  type ActivityPlot,
+  type ActivityPlotPoint,
 } from '@/lib/entityTargetLigands';
 import type { EntityTargetLigand } from '@/lib/receptorTargets';
 
@@ -117,10 +117,7 @@ export function EntityTargetActivityPlot({
       : unit
         ? t('bioEntity.plotAxisLinear', { metric: metricLabel, unit })
         : t('bioEntity.plotAxisLinearUnitless', { metric: metricLabel });
-  const formatValue = (p: ActivityPlotPoint) =>
-    p.low !== null && p.high !== null && p.low !== p.high
-      ? `${formatPdNumber(p.value, unit)} (${formatWithMaxDecimals(p.low, 3)}–${formatPdNumber(p.high, unit)})`
-      : formatPdNumber(p.value, unit);
+  const formatValue = (p: ActivityPlotPoint) => formatPlotPointValue(p, unit);
   const formatTick = (value: number) => formatWithMaxDecimals(value, 3);
 
   const rowGrid =

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   buildActivityPlot,
   classifyAssaySpecies,
+  formatMeasurement,
+  formatPlotPointValue,
   countLigandsBySpecies,
   filterLigandsBySpecies,
   normalizeInteractionType,
@@ -135,6 +137,7 @@ describe('rangeScalar', () => {
       exact: true,
       low: 1,
       high: 12,
+      fromBounds: false,
     });
   });
 
@@ -148,6 +151,7 @@ describe('rangeScalar', () => {
       exact: true,
       low: 3,
       high: 12,
+      fromBounds: true,
     });
   });
 
@@ -157,6 +161,7 @@ describe('rangeScalar', () => {
       exact: false,
       low: null,
       high: null,
+      fromBounds: true,
     });
     expect(rangeScalar({ max: 10 })?.exact).toBe(false);
     expect(rangeScalar({ median: 10, qualifier: '<' })?.exact).toBe(false);
@@ -240,6 +245,22 @@ describe('buildActivityPlot', () => {
       [6, 'one_sided'],
     ]);
     expect(plot.pointCount).toBe(4);
+  });
+
+  it('omits a range reaching zero or below from the log axis instead of plotting its midpoint', () => {
+    const plot = buildActivityPlot(
+      [
+        ligand({ relationshipId: 1, ki: { min: 0, max: 10, unit: 'nM' } }),
+        ligand({ relationshipId: 2, ki: { median: 4, min: -1, max: 9, unit: 'nM' } }),
+        ligand({ relationshipId: 3, ki: { median: 2, unit: 'nM' } }),
+      ],
+      'ki',
+    );
+    expect(plot.groups.flatMap((g) => g.points).map((p) => p.ligand.relationshipId)).toEqual([3]);
+    expect(plot.omitted.map((o) => [o.ligand.relationshipId, o.reason])).toEqual([
+      [1, 'non_positive_bound'],
+      [2, 'non_positive_bound'],
+    ]);
   });
 
   it('never mixes metrics: EC50 plots only rows that carry an EC50', () => {
@@ -336,6 +357,44 @@ describe('buildActivityPlot', () => {
     );
     expect(pKi.scale).toBe('linear');
     expect(pKi.unit).toBe('pKi');
+  });
+});
+
+describe('formatPlotPointValue', () => {
+  const [point] = buildActivityPlot(
+    [ligand({ relationshipId: 1, ki: { min: 3, max: 12, unit: 'nM' } })],
+    'ki',
+  ).groups[0]!.points;
+  const [central] = buildActivityPlot(
+    [ligand({ relationshipId: 1, ki: { median: 0.4, min: 0.1, max: 0.9, unit: 'µM' } })],
+    'ki',
+  ).groups[0]!.points;
+
+  it('shows a midpoint-only value as its range, never as a single number', () => {
+    expect(point!.fromBounds).toBe(true);
+    expect(formatPlotPointValue(point!, 'nM')).toBe('3–12 nM');
+  });
+
+  it('leads with a stored median, range alongside, in the plot unit', () => {
+    expect(formatPlotPointValue(central!, 'nM')).toBe('400 nM (100–900 nM)');
+  });
+});
+
+describe('formatMeasurement', () => {
+  it('keeps a range a range', () => {
+    expect(formatMeasurement({ min: 3, max: 12, unit: 'nM' })).toBe('3–12 nM');
+  });
+
+  it('keeps a strict qualifier on a bound-only value', () => {
+    expect(formatMeasurement({ max: 10, qualifier: '<', unit: 'nM' })).toBe('< 10 nM');
+    expect(formatMeasurement({ min: 10, qualifier: '>', unit: 'nM' })).toBe('> 10 nM');
+    expect(formatMeasurement({ min: 3, max: 12, qualifier: '>', unit: 'nM' })).toBe('> 3–12 nM');
+    expect(formatMeasurement({ median: 5, qualifier: '<', unit: 'nM' })).toBe('< 5 nM');
+  });
+
+  it('writes an unqualified one-sided value as a bound, not a point', () => {
+    expect(formatMeasurement({ max: 10, unit: 'nM' })).toBe('≤10 nM');
+    expect(formatMeasurement(null)).toBe('');
   });
 });
 

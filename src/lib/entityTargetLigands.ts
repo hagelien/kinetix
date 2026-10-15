@@ -1,5 +1,10 @@
 import { isQualifierOperator, type NumericRange } from '@/types';
-import { MOLAR_DISPLAY_UNIT, normalizePdUnit } from '@/lib/pdComparison';
+import {
+  formatPdNumber,
+  MOLAR_DISPLAY_UNIT,
+  normalizePdUnit,
+} from '@/lib/pdComparison';
+import { formatRange } from '@/lib/rangeUtils';
 import type { EntityTargetLigand } from '@/lib/receptorTargets';
 
 /**
@@ -149,6 +154,12 @@ export interface RangeScalar {
   /** The two-sided span, when both bounds are stored. */
   low: number | null;
   high: number | null;
+  /**
+   * True when `value` is the min/max midpoint rather than a stored median or
+   * mean. It positions a point but was never reported, so it must not be
+   * displayed as if it were the measurement — show the range instead.
+   */
+  fromBounds: boolean;
 }
 
 const finite = (n: unknown): n is number =>
@@ -168,10 +179,10 @@ export function rangeScalar(
   const low = hasMin && hasMax ? range.min! : null;
   const high = hasMin && hasMax ? range.max! : null;
   if (finite(range.median)) {
-    return { value: range.median, exact: !qualified, low, high };
+    return { value: range.median, exact: !qualified, low, high, fromBounds: false };
   }
   if (finite(range.mean)) {
-    return { value: range.mean, exact: !qualified, low, high };
+    return { value: range.mean, exact: !qualified, low, high, fromBounds: false };
   }
   if (hasMin && hasMax) {
     return {
@@ -179,11 +190,40 @@ export function rangeScalar(
       exact: !qualified,
       low,
       high,
+      fromBounds: true,
     };
   }
-  if (hasMin) return { value: range.min!, exact: false, low: null, high: null };
-  if (hasMax) return { value: range.max!, exact: false, low: null, high: null };
+  const oneSided = { exact: false, low: null, high: null, fromBounds: true };
+  if (hasMin) return { value: range.min!, ...oneSided };
+  if (hasMax) return { value: range.max!, ...oneSided };
   return null;
+}
+
+// ─── Display ─────────────────────────────────────────────────────────────────
+
+/**
+ * A stored measurement as the table shows it: in its own unit, with a range
+ * kept as a range. Unlike the shared `formatRange`, a comparison qualifier is
+ * kept even when the range has no central value — `{ max: 10, qualifier: '<' }`
+ * reads "< 10 nM", not "≤10 nM", and a qualified min–max span keeps its
+ * operator — so a strict bound is never shown as an inclusive one or dropped.
+ */
+export function formatMeasurement(range: NumericRange | null | undefined): string {
+  if (!range) return '';
+  const { qualifier, unit } = range;
+  const hasCentral = finite(range.median) || finite(range.mean);
+  if (isQualifierOperator(qualifier) && !hasCentral) {
+    const hasMin = finite(range.min);
+    const hasMax = finite(range.max);
+    if (hasMin && hasMax && range.min !== range.max) {
+      return `${qualifier} ${formatRange({ min: range.min, max: range.max, unit }, { showNote: false })}`;
+    }
+    const bound = hasMin ? range.min : hasMax ? range.max : undefined;
+    if (bound !== undefined) {
+      return formatRange({ median: bound, qualifier, unit }, { showNote: false });
+    }
+  }
+  return formatRange(range, { showNote: false });
 }
 
 // ─── Units ───────────────────────────────────────────────────────────────────
@@ -257,6 +297,7 @@ export type PlotOmissionReason =
   | 'one_sided'
   | 'unsupported_unit'
   | 'non_positive'
+  | 'non_positive_bound'
   | 'heterogeneous_units';
 
 export interface ActivityPlotPoint {
@@ -267,6 +308,24 @@ export interface ActivityPlotPoint {
   /** Two-sided span in the plot's unit, drawn as an error bar. */
   low: number | null;
   high: number | null;
+  /** `value` is the midpoint of `low`–`high`, not a reported figure. */
+  fromBounds: boolean;
+}
+
+/**
+ * A plotted point's value in the plot's unit, as text. A stored median or mean
+ * leads, with its range alongside; a value that is only the midpoint of a
+ * range is shown as the range itself, never as a single number nobody
+ * reported.
+ */
+export function formatPlotPointValue(point: ActivityPlotPoint, unit: string): string {
+  const span =
+    point.low !== null && point.high !== null && point.low !== point.high
+      ? `${formatPdNumber(point.low, '')}–${formatPdNumber(point.high, unit)}`
+      : null;
+  if (point.fromBounds && span) return span;
+  const central = formatPdNumber(point.value, unit);
+  return span ? `${central} (${span})` : central;
 }
 
 export interface ActivityPlotGroup {
@@ -301,8 +360,8 @@ function groupPoints(
  * Derive the activity-grouped plot for one metric.
  *
  * Concentration metrics are converted to nM on a log axis; a value in any
- * other unit, a one-sided bound, or a non-positive value stays in the table
- * but is listed as omitted. Non-concentration metrics (Emax, efficacy, and
+ * other unit, a one-sided bound, a non-positive value, or a range reaching
+ * zero or below stays in the table but is listed as omitted. Non-concentration metrics (Emax, efficacy, and
  * affinity/potency recorded without a molar unit) use a linear axis on one
  * common scale (see {@link comparableUnit}; values and bounds are scaled onto
  * it) — and only when every exact value folds onto that scale; mixed units
@@ -339,15 +398,22 @@ export function buildActivityPlot(
         omitted.push({ ligand, reason: 'one_sided' });
       } else if (scalar.value <= 0) {
         omitted.push({ ligand, reason: 'non_positive' });
+      } else if (
+        (scalar.low !== null && scalar.low <= 0) ||
+        (scalar.high !== null && scalar.high <= 0)
+      ) {
+        // A log axis cannot show a range that reaches zero or below. Dropping
+        // just the bounds would draw the midpoint as an exact value, so the
+        // whole measurement stays in the table instead.
+        omitted.push({ ligand, reason: 'non_positive_bound' });
       } else {
-        const low = scalar.low !== null && scalar.low > 0 ? scalar.low * factor : null;
-        const high = scalar.high !== null && low !== null ? scalar.high * factor : null;
         points.push({
           ligand,
           group: normalizeInteractionType(ligand.interactionType).group,
           value: scalar.value * factor,
-          low,
-          high,
+          low: scalar.low === null ? null : scalar.low * factor,
+          high: scalar.high === null ? null : scalar.high * factor,
+          fromBounds: scalar.fromBounds,
         });
       }
     }
@@ -392,6 +458,7 @@ export function buildActivityPlot(
       value: scalar.value * factor,
       low: scalar.low === null ? null : scalar.low * factor,
       high: scalar.high === null ? null : scalar.high * factor,
+      fromBounds: scalar.fromBounds,
     });
   }
   return {
