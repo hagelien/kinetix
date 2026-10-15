@@ -146,9 +146,27 @@ const SECRET_PATTERNS: ReadonlyArray<readonly [RegExp, string]> = [
   // requires Secure + no Domain attribute). Redact the full name=value pair so
   // auth session cookies don't leak into GitHub issue bodies.
   [/__Host-[^=\s;]+=\S+/g, '__Host-<cookie-redacted>'],
+
+  // Request values. The repository is public, so an issue body is published
+  // to anyone — and error text carries what visitors sent: Drizzle appends a
+  // failed query's bind parameters (`params: …`), and Postgres echoes the
+  // offending value. Those can be personal data (an email from a sign-in),
+  // and are attacker-chosen text the fix agent reads. Keep the query shape,
+  // drop the values; the full logs stay in Vercel for whoever needs them.
+  // A newline may arrive literal or JSON-escaped (`cause: {...}`).
+  [/(^|\n|\\n)params: [^\n"\\]*/g, '$1params: <redacted>'],
+  [/\bKey \(([^)]*)\)=\((?:[^()]|\([^)]*\))*\)/g, 'Key ($1)=(<redacted>)'],
+  [
+    /(invalid input (?:syntax|value) for (?:type|enum) [\w ]+: )\\?"[^"\\]*\\?"/gi,
+    '$1"<redacted>"',
+  ],
+  [/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g, '<email>'],
 ];
 
-/** Strip credentials that can surface in stack traces / driver errors. */
+/**
+ * Strip credentials, and the request values driver errors echo, from text
+ * bound for a (public) GitHub issue.
+ */
 export function scrubSecrets(text: string): string {
   let out = text;
   for (const [re, repl] of SECRET_PATTERNS) out = out.replace(re, repl);
