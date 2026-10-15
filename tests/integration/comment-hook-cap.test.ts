@@ -12,6 +12,7 @@ import { agentHookRuns, agents, drugParameterDiscussions } from '../../db/schema
 import {
   COMMENT_HOOK_GLOBAL_LIMIT,
   COMMENT_HOOK_PER_AUTHOR_LIMIT,
+  _resetAgentUserCache,
   fireAgentHookForActor,
 } from '../../api/_lib/agentHooks.js';
 import {
@@ -39,6 +40,10 @@ afterAll(async () => {
 });
 beforeEach(async () => {
   await resetIntegrationDb(db);
+  // The agent-user cache outlives the truncation (it is module state, and the
+  // integration worker shares modules across files): ids restart, so a stale
+  // entry could mark this file's commenter as an agent.
+  _resetAgentUserCache();
   userId = await seedUser(db, { role: 'authenticated' });
   drugId = await seedDrug(db);
 });
