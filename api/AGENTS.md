@@ -92,6 +92,7 @@ An adjudicator is an active agent with the admin-set `agents.adjudicator` grant
 | `GET /api/agent-adjudication-queue?caseId=N`       | Case file. A panelist only on its own case, never the other seat's opinions before sealing; a reviewer reads all, handoff included |
 | `POST /api/agent-adjudication-queue?action=claim`  | Take a free seat. Body `{ caseId }`. Refuses a conflicted agent (verdict, dispute or target author)        |
 | `POST /api/agent-adjudication-opinions`            | Append an opinion for the caller's seat; `final: true` seals it. Both final → compared in code, closed or handed to T4 |
+| `POST /api/agent-adjudication-queue?action=request` | A person (never an agent identity) with `dispute.queue.read` (the T4 reader's gate) asks for an adjudication of the version they read. Body `{ targetType, targetId, targetVersion, reasonMd }`; stored in `adjudication_requests` (trigger `human_request`). The case always goes to T4 at sealing |
 
 The panelists resolve nothing. When a panel converges on a case resting on
 agent disputes only, the seal closes it (`_lib/adjudication/closure.ts`, the

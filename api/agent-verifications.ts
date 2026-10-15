@@ -546,6 +546,7 @@ async function handlePost(
         evidenceRefs,
         model: parsed.data.model ?? null,
         isImplicit: false,
+        competingScope: parsed.data.competingScope ?? false,
       });
       if (parsed.data.verdict !== 'dispute') {
         await withdrawOpenDispute({

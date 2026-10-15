@@ -1365,3 +1365,109 @@ describe('T3 automatic closure of converged agent-only cases', () => {
     expect(disputeRows.every((d) => d.status === 'open')).toBe(true);
   });
 });
+
+describe('T3 trigger: a person’s request for an adjudication (issue 17)', () => {
+  const request = (userId: number, role: string, body: Record<string, unknown>) =>
+    call(queueHandler, {
+      userId,
+      role,
+      method: 'POST',
+      url: '/api/agent-adjudication-queue?action=request',
+      body,
+    });
+  const REASON = 'Kildene spriker; ønsker en T3-vurdering før jeg avgjør.';
+
+  it('refuses an agent identity, a person who may not resolve disputes, a stale version and a bare reason', async () => {
+    const s = await seedCase({ agentDispute: true });
+    const editor = await seedUser(db, { email: 'ed@example.com', username: 'ed', role: 'editor' });
+    const contributor = await seedUser(db, { email: 'c@example.com', username: 'c', role: 'contributor' });
+    const body = { targetType: 'pending_edit', targetId: s.editId, targetVersion: s.version, reasonMd: REASON };
+
+    // An agent is never a person here, whatever role backs it.
+    const agent = await request(s.t1.userId, 'editor', body);
+    expect([agent.status, agent.body.code]).toEqual([403, 'adjudication_request_forbidden']);
+    const person = await request(contributor, 'contributor', body);
+    expect([person.status, person.body.code]).toEqual([403, 'adjudication_request_forbidden']);
+    const stale = await request(editor, 'editor', {
+      ...body,
+      targetVersion: '2020-01-01T00:00:00.000Z|pending',
+    });
+    expect([stale.status, stale.body.code]).toEqual([409, 'adjudication_request_target_version_stale']);
+    expect((await request(editor, 'editor', { ...body, reasonMd: 'Se på denne.' })).status).toBe(400);
+
+    const [kase] = await db.select().from(adjudicationCases).where(eq(adjudicationCases.id, s.caseId));
+    expect(kase!.triggers).toEqual(['t1_t2_disagreement']);
+  });
+
+  it('joins the live case, and the case then goes to the person instead of closing', async () => {
+    const s = await seedCase({ agentDispute: true });
+    const editor = await seedUser(db, { email: 'ed@example.com', username: 'ed', role: 'editor' });
+    const body = { targetType: 'pending_edit', targetId: s.editId, targetVersion: s.version, reasonMd: REASON };
+
+    const first = await request(editor, 'editor', body);
+    expect(first.status).toBe(201);
+    expect(first.body).toMatchObject({ inserted: true, caseId: s.caseId, detection: 'joined' });
+    // Asking again is the same request.
+    const again = await request(editor, 'editor', body);
+    expect(again.status).toBe(200);
+    expect(again.body).toMatchObject({ id: first.body.id, inserted: false });
+
+    // Both seats approve the proposal's own value: on an agent-only case this
+    // overrules the dispute (see the closure tests). Here a person asked, so
+    // the panel only recommends.
+    await claim(s.a.userId, s.caseId);
+    await claim(s.b.userId, s.caseId);
+    await opinion(s.a.userId, { caseId: s.caseId, targetVersion: s.version, resolvedValue: 60, resolvedUnit: 'L/h' });
+    await opinion(s.b.userId, { caseId: s.caseId, targetVersion: s.version, resolvedValue: 60, resolvedUnit: 'L/h' });
+    const [kase] = await db.select().from(adjudicationCases).where(eq(adjudicationCases.id, s.caseId));
+    expect(kase).toMatchObject({
+      state: 'converged',
+      t4Required: true,
+      triggers: ['t1_t2_disagreement', 'human_request'],
+      closure: null,
+    });
+    expect(kase!.handoff!.reasons).toEqual(['adjudication_requested']);
+    expect(kase!.handoff!.recommendation).not.toBeNull();
+    const [dispute] = await db.select().from(disputes).where(eq(disputes.targetId, s.editId));
+    expect(dispute!.status).toBe('open');
+    expect((await listHandoffs()).map((h) => h.caseId)).toEqual([s.caseId]);
+  });
+
+  it('keeps a request made before T2 has spoken, and opens the case on it alone once T2 does', async () => {
+    const author = await seedAgent('author', { tier: 'mid' });
+    const t2 = await seedAgent('t2', { tier: 'flagship' });
+    const editor = await seedUser(db, { email: 'ed@example.com', username: 'ed', role: 'editor' });
+    const [edit] = await db
+      .insert(pendingEdits)
+      .values({
+        editType: 'param_entry',
+        targetId: 1,
+        parameter: 'clearance',
+        proposedValue: { op: 'create', input: { value: 60, unit: 'L/h', quote: 'The paper reports it.' } },
+        submittedBy: author.userId,
+        status: 'pending',
+      })
+      .returning({ id: pendingEdits.id, submittedAt: pendingEdits.submittedAt });
+    const version = `${edit!.submittedAt.toISOString()}|pending`;
+
+    const asked = await request(editor, 'editor', {
+      targetType: 'pending_edit',
+      targetId: edit!.id,
+      targetVersion: version,
+      reasonMd: REASON,
+    });
+    expect(asked.status).toBe(201);
+    expect(asked.body).toMatchObject({ caseId: null, detection: 'none' });
+
+    // T2 approves; nobody disputes. The request alone opens the case.
+    await verdictOn(t2.agentId, edit!.id, 'approve', 'flagship', 'Stemmer med kilden.');
+    const outcome = await detectAdjudicationCase({ targetType: 'pending_edit', targetId: edit!.id });
+    expect(outcome.result).toBe('opened');
+    const [kase] = await db.select().from(adjudicationCases).where(eq(adjudicationCases.id, outcome.caseId!));
+    expect(kase).toMatchObject({
+      triggers: ['human_request'],
+      triggerDetail: { human_request: { requestIds: [asked.body.id], requestedBy: [editor] } },
+      disputeOrigin: 'agent',
+    });
+  });
+});

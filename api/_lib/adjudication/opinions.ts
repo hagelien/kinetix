@@ -517,6 +517,13 @@ function handoffSummary(
       'Both panelists abstained: the decisive evidence is missing or out of reach, so nothing was resolved.',
     );
   }
+  if (reasons.includes('adjudication_requested')) {
+    parts.push(
+      result.recommendation
+        ? 'A person asked for this adjudication and keeps the final authority; the panel’s recommendation is attached.'
+        : 'A person asked for this adjudication and keeps the final authority.',
+    );
+  }
   if (reasons.includes('human_dispute')) {
     parts.push(
       result.recommendation
@@ -593,6 +600,9 @@ async function sealIfComplete(
   // so a person takes it.
   if (converged && a.resolution === 'abstain') reasons.push('panel_abstained');
   if (disputeOrigin !== 'agent') reasons.push('human_dispute');
+  // A person asked for this adjudication (contract §2 item 5) "while retaining
+  // the final human authority": the panel recommends, the person closes.
+  if ((kase.triggers ?? []).includes('human_request')) reasons.push('adjudication_requested');
   // A seat that finalized and then took a part in the case (a verdict, a
   // dispute): its opinion cannot stand for an independent panel, so nothing
   // is recommended and a person takes the case.

@@ -153,6 +153,8 @@ export async function recordVerification(args: {
   evidenceRefs: AgentVerificationEvidenceRef[];
   model?: string | null;
   isImplicit?: boolean;
+  /** T3 trigger 2 (schema `competingScope`); false when omitted. */
+  competingScope?: boolean;
   /**
    * The target version the caller validated, re-checked inside this write.
    *
@@ -231,6 +233,7 @@ async function upsertVerification(
     evidenceRefs: AgentVerificationEvidenceRef[];
     model?: string | null;
     isImplicit?: boolean;
+    competingScope?: boolean;
   },
 ): Promise<{ id: number; inserted: boolean }> {
   const now = new Date();
@@ -262,6 +265,7 @@ async function upsertVerification(
       verifierTier: verifierTierSql,
       recordedVerifierTier: verifierTierSql,
       isImplicit: args.isImplicit ?? false,
+      competingScope: args.competingScope ?? false,
       createdAt: now,
       updatedAt: now,
     })
@@ -279,6 +283,9 @@ async function upsertVerification(
         verifierTier: verifierTierSql,
         recordedVerifierTier: verifierTierSql,
         isImplicit: args.isImplicit ?? false,
+        // Rewritten with the verdict: a re-verdict that no longer finds
+        // competing scope clears it.
+        competingScope: args.competingScope ?? false,
         runSessionId: currentRunSessionId(),
         updatedAt: now,
       },

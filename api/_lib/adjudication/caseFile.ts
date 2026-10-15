@@ -333,6 +333,9 @@ export async function listHandoffs(limit = 50) {
     capturedByCase,
   );
   const awaitsPerson = or(
+    // A person asked for this adjudication: the case is theirs to close for
+    // as long as the target stays at the version the panel adjudicated.
+    sql`${kase.triggers} ? 'human_request'`,
     exists(
       db
         .select({ one: sql`1` })

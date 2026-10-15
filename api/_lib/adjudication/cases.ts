@@ -21,6 +21,7 @@ import {
   adjudicationCases,
   adjudicationDetectorChecks,
   adjudicationOpinions,
+  adjudicationRequests,
   agentVerifications,
   agents,
   disputes,
@@ -192,6 +193,8 @@ export async function detectAdjudicationCase(args: {
         (select max(updated_at) from agent_verifications
           where target_type = ${args.targetType} and target_id = ${args.targetId}),
         (select max(updated_at) from disputes
+          where target_type = ${args.targetType} and target_id = ${args.targetId}),
+        (select max(created_at) from adjudication_requests
           where target_type = ${args.targetType} and target_id = ${args.targetId})
       ) as at
     `);
@@ -221,6 +224,7 @@ export async function detectAdjudicationCase(args: {
         verifierTier: agentVerifications.verifierTier,
         model: agentVerifications.model,
         isImplicit: agentVerifications.isImplicit,
+        competingScope: agentVerifications.competingScope,
         recordedAt: agentVerifications.updatedAt,
       })
       .from(agentVerifications)
@@ -250,6 +254,24 @@ export async function detectAdjudicationCase(args: {
         ),
       );
 
+    // A person's request for an adjudication speaks only to the version they
+    // read, like their dispute: a revision leaves it behind.
+    const humanRequests = await tx
+      .select({
+        id: adjudicationRequests.id,
+        requestedBy: adjudicationRequests.requestedBy,
+        createdAt: adjudicationRequests.createdAt,
+      })
+      .from(adjudicationRequests)
+      .where(
+        and(
+          eq(adjudicationRequests.targetType, args.targetType),
+          eq(adjudicationRequests.targetId, args.targetId),
+          eq(adjudicationRequests.targetVersion, version),
+        ),
+      )
+      .orderBy(asc(adjudicationRequests.id));
+
     const detected = classifyAdjudicationCase({
       verdicts: verdicts.map((v) => ({
         ...v,
@@ -257,6 +279,7 @@ export async function detectAdjudicationCase(args: {
       })),
       openDisputes,
       decidedDisputeCount: Number(decided?.n ?? 0),
+      humanRequests,
     });
 
     const [existing] = await tx
@@ -404,6 +427,86 @@ async function caseHasOpinions(caseId: number): Promise<boolean> {
   return row !== undefined;
 }
 
+export type AdjudicationRequestResult =
+  | { ok: true; requestId: number; inserted: boolean; detection: DetectOutcome | null }
+  | { ok: false; reason: 'target_not_found' | 'target_version_stale' };
+
+/**
+ * Record a person's request for an agent adjudication of one version of a
+ * target (T3 trigger 5, agents/drug-db-adjudication.md §2), then run the
+ * detector on it.
+ *
+ * The version is re-read under the target's source-row lock — the lock every
+ * T3 reader takes — so a request is never bound to a payload the person did
+ * not read. One request per person per version: asking again returns the
+ * first. The detector runs after the request commits, in its own transaction,
+ * as it does after a verdict; a fault there never loses the request, and the
+ * sweep picks the target up. A request made before blind T2 has spoken is
+ * kept and opens the case when the flagship verdict lands.
+ */
+export async function requestAdjudication(args: {
+  targetType: AgentVerificationTargetType;
+  targetId: number;
+  targetVersion: string;
+  requestedBy: number;
+  reasonMd: string;
+}): Promise<AdjudicationRequestResult> {
+  const written = await inTransaction(async () => {
+    const tx = getDb();
+    await lockVerificationSourceRow(tx, args.targetType, args.targetId);
+    const version = await verificationTargetVersion(args, tx);
+    if (version === null) return { ok: false as const, reason: 'target_not_found' as const };
+    if (version !== args.targetVersion) {
+      return { ok: false as const, reason: 'target_version_stale' as const };
+    }
+    const [inserted] = await tx
+      .insert(adjudicationRequests)
+      .values({
+        targetType: args.targetType,
+        targetId: args.targetId,
+        targetVersion: args.targetVersion,
+        requestedBy: args.requestedBy,
+        reasonMd: args.reasonMd,
+      })
+      .onConflictDoNothing({
+        target: [
+          adjudicationRequests.targetType,
+          adjudicationRequests.targetId,
+          adjudicationRequests.targetVersion,
+          adjudicationRequests.requestedBy,
+        ],
+      })
+      .returning({ id: adjudicationRequests.id });
+    if (inserted) return { ok: true as const, requestId: inserted.id, inserted: true };
+    const [existing] = await tx
+      .select({ id: adjudicationRequests.id })
+      .from(adjudicationRequests)
+      .where(
+        and(
+          eq(adjudicationRequests.targetType, args.targetType),
+          eq(adjudicationRequests.targetId, args.targetId),
+          eq(adjudicationRequests.targetVersion, args.targetVersion),
+          eq(adjudicationRequests.requestedBy, args.requestedBy),
+        ),
+      );
+    return { ok: true as const, requestId: existing!.id, inserted: false };
+  });
+  if (!written.ok) return written;
+
+  let detection: DetectOutcome | null = null;
+  try {
+    detection = await detectAdjudicationCase({
+      targetType: args.targetType,
+      targetId: args.targetId,
+    });
+  } catch (err) {
+    console.error(
+      `[adjudication] detection failed for ${args.targetType}:${args.targetId}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  return { ...written, detection };
+}
+
 export interface AdjudicationSweepResult {
   checked: number;
   opened: number[];
@@ -418,9 +521,11 @@ export interface AdjudicationSweepResult {
  *
  * - live cases, least recently checked first — so a target that moved is
  *   eventually reached even when nobody verdicts it again;
- * - targets where blind T2 has spoken and a disagreement is on record, whose
- *   verdict/dispute activity is newer than the detector last saw (or that it
- *   never checked), oldest first.
+ * - targets where blind T2 has spoken and a disagreement is on record — a
+ *   dispute verdict, an open dispute, a flagship verdict finding competing
+ *   scope, or a person's request for an adjudication — whose
+ *   verdict/dispute/request activity is newer than the detector last saw (or
+ *   that it never checked), oldest first.
  *
  * Idempotent: the permanent case key makes a re-read a no-op.
  */
@@ -445,7 +550,9 @@ export async function sweepAdjudicationCases(
           greatest(
             max(av.updated_at),
             (select max(d.updated_at) from disputes d
-              where d.target_type = av.target_type and d.target_id = av.target_id)
+              where d.target_type = av.target_type and d.target_id = av.target_id),
+            (select max(r.created_at) from adjudication_requests r
+              where r.target_type = av.target_type and r.target_id = av.target_id)
           ) as activity_at
         from agent_verifications av
         where exists (
@@ -463,6 +570,16 @@ export async function sweepAdjudicationCases(
               select 1 from disputes od
               where od.target_type = av.target_type and od.target_id = av.target_id
                 and od.status = 'open'
+            )
+            or exists (
+              select 1 from agent_verifications cv
+              where cv.target_type = av.target_type and cv.target_id = av.target_id
+                and cv.is_implicit = false and cv.verifier_tier = ${FLAGSHIP_TIER}
+                and cv.competing_scope = true
+            )
+            or exists (
+              select 1 from adjudication_requests rq
+              where rq.target_type = av.target_type and rq.target_id = av.target_id
             )
           )
         group by av.target_type, av.target_id

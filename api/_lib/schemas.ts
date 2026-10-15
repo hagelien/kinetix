@@ -1791,6 +1791,31 @@ export const adjudicationClaimSchema = z
   .strict();
 
 /**
+ * T3 trigger 5: a person asks for an agent adjudication of one version of a
+ * target (POST /api/agent-adjudication-queue?action=request). `targetVersion`
+ * is the opaque token the dispute and verdict writes carry, so the request is
+ * bound to the payload the person read; `reasonMd` says what the panel should
+ * look at (≥20 chars, like a dispute).
+ */
+export const adjudicationRequestSchema = z
+  .object({
+    targetType: agentVerificationTargetTypeSchema,
+    targetId: z.number().int().positive(),
+    targetVersion: z.string().min(1).max(80),
+    reasonMd: z.string().max(5000),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.reasonMd.trim().length < 20) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['reasonMd'],
+        message: 'reasonMd ≥20 chars is required to request an adjudication',
+      });
+    }
+  });
+
+/**
  * T3 adjudication: one opinion for the caller's seat (POST
  * /api/agent-adjudication-opinions; agents/drug-db-adjudication.md §6).
  *
@@ -1845,6 +1870,11 @@ export const createAgentVerificationSchema = z
     // says is wrong. The route checks it actually occurs in the target
     // (api/_lib/disputed-claim.ts, issue #1357).
     disputedClaim: z.string().max(DISPUTED_CLAIM_MAX_CHARS).optional(),
+    // T3 trigger 2 (agents/drug-db-adjudication.md §2): the disagreement turns
+    // on materially different scope that cannot be collapsed into one answer.
+    // Stored with the verdict and rewritten by every re-verdict; the T3
+    // detector reads it only from a flagship (blind T2) verifier.
+    competingScope: z.boolean().optional(),
   })
   .strict()
   .superRefine((value, ctx) => {

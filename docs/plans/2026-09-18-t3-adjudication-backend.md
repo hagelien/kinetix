@@ -46,8 +46,12 @@ person). The work lands in three pull requests:
    - `repeated_correction_loop` counts disputes decided upheld or rejected on
      the target (withdrawn ones excluded), with a disagreement still live, and
      records the count as a lower bound;
-   - `competing_scope` and `human_request` are typed but never produced: they
-     still have no persisted input (issue 1280);
+   - `competing_scope` and `human_request` were typed but never produced
+     until migration `0151_t3_trigger_inputs.sql` gave them persisted inputs
+     (issue 1280, kinetix #17): `agent_verifications.competing_scope`, set by
+     a flagship verdict, and `adjudication_requests`, written by
+     `POST /api/agent-adjudication-queue?action=request`. A human-requested
+     case is always handed to a person at sealing;
    - no agent with a part in the case takes a seat: neither one whose verdict
      it rests on, nor the identity behind a dispute it rests on (a dispute
      can be raised without a verdict), nor the target's author;
@@ -353,11 +357,13 @@ webhook nor a quiet cycle can strand a case:
 2. **a sweep** (`GET`-triggered, same shape as the escalation feed) that
    re-evaluates triggers 4–5 and backfills anything the write path missed.
 
-Triggers 2 (`competing_scope`) and 5 (`human_request`) have **no persisted input
-today** — the T2 verdict is `approve | dispute | abstain` plus prose, and nothing
-records an editor asking for an adjudication. Both need a structured signal and
-its write path before they can fire; tracked in
-issue 1280, to land with steps 1–2.
+Triggers 2 (`competing_scope`) and 5 (`human_request`) read persisted inputs
+(migration `0151`): the T2 verdict write carries an optional `competingScope`
+flag beside `approve | dispute | abstain`, stored on `agent_verifications`; and
+a person who may read the dispute queue records a request for one version of a target
+in `adjudication_requests` through
+`POST /api/agent-adjudication-queue?action=request`. Like every trigger, both
+wait for the blind flagship verdict (issue 1280, kinetix #17).
 
 Trigger 4 (`repeated_correction_loop`) needs history the legacy tables do not
 retain. Until governance history covers these targets, implement it from
