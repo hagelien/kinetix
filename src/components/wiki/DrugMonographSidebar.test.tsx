@@ -913,7 +913,7 @@ describe('DrugMonographSidebar', () => {
     ).toBeInTheDocument();
   });
 
-  it('cites metabolism routes and metabolites with [n] markers like parameter values', async () => {
+  it('cites metabolism routes and metabolites through their text, like parameter values', async () => {
     vi.mocked(fetchDrugReferences).mockResolvedValue([
       {
         id: 3,
@@ -929,14 +929,16 @@ describe('DrugMonographSidebar', () => {
     setUser([], 'authenticated');
     renderSidebar(undefined, 'metabolism');
 
-    // One marker on the route and one on the metabolite, both the same
-    // shared-bibliography entry.
-    const links = await screen.findAllByRole('link', { name: /reference 1/i });
-    expect(links).toHaveLength(2);
-    for (const link of links) {
-      expect(link).toHaveAttribute('href', '#param-ref-1');
-    }
+    // One trigger on the route's share and one on the metabolite, both opening
+    // the same shared-bibliography entry.
+    const triggers = await screen.findAllByTestId('reference-hover');
+    expect(triggers).toHaveLength(2);
+    expect(triggers[0]).toHaveTextContent('20');
+    fireEvent.mouseEnter(triggers[1]!);
+    const link = await screen.findByRole('link', { name: /^\[1\]/ });
+    expect(link).toHaveAttribute('href', '/references/3');
   });
+
 
   it('offers contributors a metabolism editor even when no data exists', () => {
     mockDrugState.metabolism = null;

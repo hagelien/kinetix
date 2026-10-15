@@ -3046,6 +3046,7 @@
     "metabolismActive": "active",
     "metabolismInactive": "inactive",
     "metabolismUnknownActivity": "activity unknown",
+    "metabolismSourcesOnly": "sources",
     "metabolismCreateMonograph": "Create a monograph for {{name}}",
     "metabolismEdit": "Edit metabolism",
     "metabolismAdd": "Add metabolism data",

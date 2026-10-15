@@ -31,6 +31,7 @@ import {
 } from '../../api/_lib/parameter-entries-store.js';
 import type { ParameterEntryInput } from '../../src/lib/parameterEntries.js';
 import handler from '../../api/drug-parameter-history.js';
+import { mergeDrugs } from '../../api/_lib/drug-merge.js';
 import {
   resetIntegrationDb,
   setupIntegrationDb,
@@ -176,6 +177,65 @@ describe('drug block revisions', () => {
     });
     expect(revisions[1]!.oldValue).toEqual(revisions[0]!.newValue);
     expect(revisions[1]!.newValue).toEqual({ declarations: [] });
+  });
+
+  // Codex review on #303: a merge repointed the loser's block revisions onto
+  // the survivor without recording the merged block, so the next
+  // model-structure edit took one side's snapshot as the prior state.
+  it('records the merged blocks against the survivor, so later history chains from them', async () => {
+    const actorId = await seedUser(db, { email: 'admin@example.com', username: 'admin' });
+    const userId = await seedUser(db);
+    const citationId = await seedAdmissibleCitation(db);
+    const winnerId = await seedDrug(db, { slug: 'vinner', names: { nb: 'Vinner' } });
+    const loserId = await seedDrug(db, { slug: 'taper', names: { nb: 'Taper' } });
+    const declare = async (drugId: number, parameter: string, categoricalValue: string) => {
+      await insertParameterEntry(
+        { drugId, citationId, parameter, categoricalValue, unit: '' } as ParameterEntryInput,
+        userId,
+      );
+      await recomputeParameterAndDependents(drugId, parameter as never, userId);
+    };
+    await declare(winnerId, 'dispositionModel', 'two-compartment');
+    await declare(loserId, 'eliminationModel', 'first-order');
+    await runInPoolTransaction(() =>
+      replaceDrugMetabolism(getDb(), loserId, metabolismInput(0.4), userId),
+    );
+    const winnerBefore = (await revisionsFor(winnerId, 'modelStructure')).at(-1)!.newValue;
+
+    await runInPoolTransaction(() =>
+      mergeDrugs(getDb(), {
+        winnerId,
+        loserId,
+        resolutions: {},
+        actorUserId: actorId,
+        approvedPlanFingerprint: null,
+      }),
+    );
+
+    const model = await revisionsFor(winnerId, 'modelStructure');
+    const merged = model.at(-1)!;
+    expect(merged.createdBy).toBe(actorId);
+    expect(merged.oldValue).toEqual(winnerBefore);
+    const parameters = (v: unknown) =>
+      (v as { declarations: Array<{ parameter: string }> }).declarations
+        .map((d) => d.parameter)
+        .sort();
+    expect(parameters(merged.newValue)).toEqual(['dispositionModel', 'eliminationModel']);
+
+    const metabolism = (await revisionsFor(winnerId, 'metabolism')).at(-1)!;
+    expect(metabolism.createdBy).toBe(actorId);
+    expect(metabolism.oldValue).toEqual({
+      evidenceNote: null,
+      routes: [],
+      metabolites: [],
+      precursors: [],
+    });
+    expect((metabolism.newValue as { routes: unknown[] }).routes).toHaveLength(1);
+
+    // The next edit's "before" is the merged block, not either side's stream.
+    await declare(winnerId, 'absorptionModel', 'first-order');
+    const next = (await revisionsFor(winnerId, 'modelStructure')).at(-1)!;
+    expect(next.oldValue).toEqual(merged.newValue);
   });
 
   it('serves a block history from the history endpoint, and refuses an unknown block', async () => {

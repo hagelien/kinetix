@@ -73,6 +73,14 @@ import {
   NESTED_DRUG_REF_KEYS,
 } from './param-entry-payload-locks.js';
 import { lockDrugForEntryApplicability } from './parameterApplicabilityStore.js';
+import {
+  metabolismBlockSnapshot,
+  modelStructureBlockSnapshot,
+  pharmacodynamicsBlockSnapshot,
+  recordDrugBlockRevision,
+} from './drugBlockRevisions.js';
+import { getDrugMetabolism } from './metabolismStore.js';
+import { getDrugReceptorTargets } from './receptorTargetStore.js';
 import { parameterAppliesToSubstanceClass } from '../../src/lib/parameterApplicability.js';
 import { normalizeAliases, resolveDrugName } from '../../src/lib/drugNames.js';
 import {
@@ -2795,6 +2803,13 @@ export async function mergeDrugs(
   if (!winner) throw new Error(`mergeDrugs: drug ${winnerId} does not exist`);
   if (!loser) throw new Error(`mergeDrugs: drug ${loserId} does not exist`);
 
+  // The survivor's whole-block state before anything is folded onto it, so the
+  // merge itself is recorded in each block's history (#37). Without that, the
+  // loser's repointed revisions would sit on the survivor's stream and the
+  // next model-structure edit would take one side's snapshot as the merged
+  // block's prior state.
+  const winnerBlocksBefore = await drugBlockSnapshots(db, winnerId);
+
   // Lock the monograph pages so a concurrent editor cannot change their
   // content between the fingerprint compute below and step 9's page delete.
   // `wiki_pages` has no FK to `drugs`, so the drug row lock above does not
@@ -3822,6 +3837,21 @@ export async function mergeDrugs(
   //     not move goes with it; everything RESTRICT-bound was repointed above.
   await db.delete(drugs).where(eq(drugs.id, loserId));
 
+  // The merged blocks, recorded against the survivor by the acting admin.
+  // Recorded after the loser's revisions were repointed, so each merge
+  // revision is the newest of its block's stream; an unchanged block (nothing
+  // folded in) records nothing.
+  const winnerBlocksAfter = await drugBlockSnapshots(db, winnerId);
+  for (const block of ['metabolism', 'pharmacodynamics', 'modelStructure'] as const) {
+    await recordDrugBlockRevision(db, {
+      drugId: winnerId,
+      block,
+      oldValue: winnerBlocksBefore[block],
+      newValue: winnerBlocksAfter[block],
+      createdBy: actorUserId,
+    });
+  }
+
   // 13. The winner now holds the loser's source entries, so its cached
   //     parameter summaries (weighted medians/IQRs over parameter_entries) are
   //     stale. Recompute them, attributing the revisions to the acting admin.
@@ -3833,6 +3863,17 @@ export async function mergeDrugs(
     counts,
     conflictsResolved: conflicts.length,
     loserMonographDeleted,
+  };
+}
+
+/** One drug's whole-block snapshots, as `drug_block_revisions` stores them. */
+async function drugBlockSnapshots(db: Db, drugId: number) {
+  return {
+    metabolism: metabolismBlockSnapshot(await getDrugMetabolism(db, drugId)),
+    pharmacodynamics: pharmacodynamicsBlockSnapshot(
+      await getDrugReceptorTargets(db, drugId),
+    ),
+    modelStructure: await modelStructureBlockSnapshot(db, drugId),
   };
 }
 

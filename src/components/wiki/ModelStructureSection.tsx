@@ -50,12 +50,12 @@ interface Props {
    */
   actions?: ReactNode;
   /**
-   * Render a declaration's citation the way parameter values are cited (a
-   * `[n]` marker into the page's shared bibliography). Returns null while the
-   * citation is not in that ordering, and the section then falls back to its
-   * plain `#id` link to the reference.
+   * Make a declaration's value its own citation trigger, the way parameter
+   * values are cited (a hover panel into the page's shared bibliography).
+   * Returns null while the citation is not in that ordering, and the section
+   * then falls back to its plain `#id` link to the reference.
    */
-  renderReferences?: (citationId: number) => ReactNode;
+  withReferences?: (citationId: number, children: ReactNode) => ReactNode;
 }
 
 export function ModelStructureSection({
@@ -64,7 +64,7 @@ export function ModelStructureSection({
   isAdmin = false,
   onMutated,
   actions,
-  renderReferences,
+  withReferences,
 }: Props) {
   const { t } = useTranslation();
   const [entries, setEntries] = useState<ParameterEntryRow[]>([]);
@@ -144,10 +144,6 @@ export function ModelStructureSection({
       setActionFailed(true);
     }
   }
-
-  // The shared-bibliography marker for a citation, or null to fall back.
-  const citationMarker = (citationId: number): ReactNode | null =>
-    renderReferences?.(citationId) ?? null;
 
   const valueLabel = (value: string) =>
     t(`parameters.modelStructure.value.${value}`, { defaultValue: value });
@@ -248,9 +244,33 @@ export function ModelStructureSection({
                     key={e.id}
                     className="inline-flex items-center gap-1 rounded border border-border bg-muted/30 px-1.5 py-0.5 text-xs"
                   >
-                    <span className="font-medium">
-                      {valueLabel(e.categoricalValue ?? '')}
-                    </span>
+                    {(() => {
+                      const value = (
+                        <span className="font-medium">
+                          {valueLabel(e.categoricalValue ?? '')}
+                        </span>
+                      );
+                      // The value is the citation trigger when the citation is
+                      // in the shared bibliography; otherwise the #id link below.
+                      const cited =
+                        e.citationId != null
+                          ? (withReferences?.(e.citationId, value) ?? null)
+                          : null;
+                      return (
+                        <>
+                          {cited ?? value}
+                          {e.citationId != null && cited == null && (
+                            <a
+                              href={referenceModulePath(e.citationId)}
+                              className="text-primary hover:underline"
+                              title={t('modelStructure.source')}
+                            >
+                              #{e.citationId}
+                            </a>
+                          )}
+                        </>
+                      );
+                    })()}
                     {e.route && (
                       // Per-route declaration (CV-2c-4): show which administration route it is scoped
                       // to, so a curator sees the route they authored (a route-less one shows nothing).
@@ -260,16 +280,6 @@ export function ModelStructureSection({
                           : e.route}
                       </span>
                     )}
-                    {e.citationId != null &&
-                      (citationMarker(e.citationId) ?? (
-                        <a
-                          href={referenceModulePath(e.citationId)}
-                          className="text-primary hover:underline"
-                          title={t('modelStructure.source')}
-                        >
-                          #{e.citationId}
-                        </a>
-                      ))}
                     {canEdit && (
                       <button
                         type="button"
@@ -332,10 +342,7 @@ export function ModelStructureSection({
                                 : e.route
                             }`
                           : ''}
-                        {e.citationId != null
-                          ? (citationMarker(e.citationId) ?? ` · #${e.citationId}`)
-                          : ''}
-                        :
+                        {e.citationId != null ? ` · #${e.citationId}` : ''}:
                       </span>{' '}
                       {e.sourceQuote}
                     </p>

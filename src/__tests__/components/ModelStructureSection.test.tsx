@@ -104,26 +104,29 @@ describe('ModelStructureSection', () => {
 
   // #37: the model structure is one block per drug — its history/discussion
   // actions sit by the heading, and its citations read like parameter values'.
-  it('shows the block actions by the heading and cites through the shared markers', async () => {
+  it('shows the block actions by the heading and cites through the value', async () => {
     store.push(entry({ id: 10, categoricalValue: 'two-compartment', citationId: 7 }));
     render(
       <ModelStructureSection
         drugId={42}
         actions={<button type="button">block-actions</button>}
-        renderReferences={(citationId) => <sup>[ref-{citationId}]</sup>}
+        withReferences={(citationId, children) => (
+          <span data-testid={`cited-${citationId}`}>{children}</span>
+        )}
       />,
     );
     await waitFor(() =>
       expect(screen.getByText('two-compartment')).toBeInTheDocument(),
     );
     expect(screen.getByRole('button', { name: 'block-actions' })).toBeInTheDocument();
-    expect(screen.getByText('[ref-7]')).toBeInTheDocument();
+    // The value itself is the citation trigger; no separate #id link.
+    expect(screen.getByTestId('cited-7')).toHaveTextContent('two-compartment');
     expect(screen.queryByText('#7')).toBeNull();
   });
 
   it('falls back to the #id link while a citation is not in the shared ordering', async () => {
     store.push(entry({ id: 10, categoricalValue: 'two-compartment', citationId: 7 }));
-    render(<ModelStructureSection drugId={42} renderReferences={() => null} />);
+    render(<ModelStructureSection drugId={42} withReferences={() => null} />);
     await waitFor(() =>
       expect(screen.getByText('#7').closest('a')).toHaveAttribute(
         'href',

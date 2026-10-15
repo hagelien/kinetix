@@ -1049,19 +1049,18 @@ export function DrugMonographSidebar({
       );
   }
 
-  function renderReferenceBadges(ids: readonly number[] | null | undefined) {
+  /**
+   * Make a block entry's own text its citation trigger, the way parameter
+   * values and mechanisms are (`ReferenceHover`). Null when none of the ids
+   * is in the shared ordering, so the caller renders the text plainly.
+   */
+  function withReferences(
+    ids: readonly number[] | null | undefined,
+    children: ReactNode,
+  ): ReactNode | null {
     const items = referenceItemsFor(ids);
     if (items.length === 0) return null;
-    return (
-      <span className="ml-0.5 align-middle">
-        <ParameterBadges
-          refCount={items.length}
-          refIndices={items.map((item) => item.index)}
-          references={items}
-          showRefWarning={false}
-        />
-      </span>
-    );
+    return <ReferenceHover references={items}>{children}</ReferenceHover>;
   }
 
   function renderMetaboliteLink(link: DrugMetaboliteLink) {
@@ -1085,26 +1084,27 @@ export function DrugMonographSidebar({
       </>
     );
 
+    const linked = link.drug ? (
+      <Link to={`/wiki/drug/${link.drug.id}`} className="hover:underline">
+        {content}
+      </Link>
+    ) : (
+      // The named metabolite/precursor has no monograph in the
+      // database yet. Keep it clickable so it leads to the
+      // new-monograph flow with its name pre-filled, rather than
+      // dead-ending on plain text.
+      <Link
+        to={`/wiki/new?type=drug_monograph&q=${encodeURIComponent(label)}`}
+        className="hover:underline"
+        title={t('sidebar.metabolismCreateMonograph', { name: label })}
+      >
+        {content}
+      </Link>
+    );
+
     return (
       <li key={link.id}>
-        {link.drug ? (
-          <Link to={`/wiki/drug/${link.drug.id}`} className="hover:underline">
-            {content}
-          </Link>
-        ) : (
-          // The named metabolite/precursor has no monograph in the
-          // database yet. Keep it clickable so it leads to the
-          // new-monograph flow with its name pre-filled, rather than
-          // dead-ending on plain text.
-          <Link
-            to={`/wiki/new?type=drug_monograph&q=${encodeURIComponent(label)}`}
-            className="hover:underline"
-            title={t('sidebar.metabolismCreateMonograph', { name: label })}
-          >
-            {content}
-          </Link>
-        )}
-        {renderReferenceBadges(link.referenceIds)}
+        {withReferences(link.referenceIds, linked) ?? linked}
       </li>
     );
   }
@@ -1229,8 +1229,11 @@ export function DrugMonographSidebar({
                       )}
                     </dt>
                     <dd className="font-medium">
-                      {formatFractionRangePercent(route.fraction) ?? ''}
-                      {renderReferenceBadges(route.referenceIds)}
+                      {withReferences(
+                        route.referenceIds,
+                        formatFractionRangePercent(route.fraction) ??
+                          t('sidebar.metabolismSourcesOnly'),
+                      ) ?? formatFractionRangePercent(route.fraction) ?? ''}
                     </dd>
                   </div>
                 ))}
@@ -1539,7 +1542,9 @@ export function DrugMonographSidebar({
             actions={
               <DrugBlockActions drugId={drugRow.id} block="modelStructure" />
             }
-            renderReferences={(citationId) => renderReferenceBadges([citationId])}
+            withReferences={(citationId, children) =>
+              withReferences([citationId], children)
+            }
           />
         ) : null}
         {/* Cmax has no drug-level row above (a peak concentration means

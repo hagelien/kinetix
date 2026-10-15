@@ -3046,6 +3046,7 @@
     "metabolismActive": "aktiv",
     "metabolismInactive": "inaktiv",
     "metabolismUnknownActivity": "aktivitet ukjent",
+    "metabolismSourcesOnly": "kilder",
     "metabolismCreateMonograph": "Opprett en monografi for {{name}}",
     "metabolismEdit": "Rediger metabolisme",
     "metabolismAdd": "Legg til metabolismedata",
