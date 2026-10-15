@@ -355,10 +355,10 @@ export async function listHandoffs(limit = 50) {
             // seal takes (POST /api/agent-verifications, #268): a verdict on
             // record by the seal had its dispute captured with it.
             lte(agentVerifications.updatedAt, kase.sealedAt),
-            // …and committed when it sealed, by id: the seal records the
-            // verdicts it read, so this holds even if the app server that
-            // stamped the verdict and the one that stamped the seal disagree
-            // on the time. A case sealed before the ids were recorded has only
+            // …and read by the seal, by id. Both checks apply: the id list
+            // drops a verdict stamped before the seal by a server whose clock
+            // runs behind the sealing server's, which the timestamp alone
+            // would keep. A case sealed before the ids were recorded has only
             // the timestamp to go by.
             or(
               sql`not (${kase.t1Snapshot} ? 'disputeVerdictIds')`,

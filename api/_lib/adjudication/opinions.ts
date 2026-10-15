@@ -568,8 +568,8 @@ async function sealIfComplete(
   // The dispute verdicts committed now, by id. A verdict and the dispute that
   // mirrors it commit together under the source-row lock this seal holds
   // (#268), so each id here had its dispute captured above. The T4 queue
-  // matches on these ids rather than on timestamps alone, which come from
-  // separate app servers' clocks.
+  // requires a verdict's id to be here as well as its timestamp to predate
+  // the seal, since the two stamps can come from different servers' clocks.
   const disputeVerdictIds = (
     await getDb()
       .select({ id: agentVerifications.id })
