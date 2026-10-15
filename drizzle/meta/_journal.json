@@ -1065,6 +1065,13 @@
       "when": 1791417600000,
       "tag": "0152_magic_link_failures_since_auth",
       "breakpoints": true
+    },
+    {
+      "idx": 153,
+      "version": "7",
+      "when": 1791504000000,
+      "tag": "0153_users_sessions_valid_after",
+      "breakpoints": true
     }
   ]
 }

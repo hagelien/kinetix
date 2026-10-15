@@ -23,6 +23,7 @@ type UserRow = {
   role: string;
   lastAuthAt: Date | null;
   sessionMaxDays: number;
+  sessionsValidAfter?: Date | null;
 };
 
 function requestWithToken(
@@ -166,6 +167,53 @@ describe("getUserFromRequest", () => {
         sessionMaxDays: 30,
       },
     ]);
+
+    await expect(
+      getUserFromRequest(requestWithToken("signed-token")),
+    ).resolves.toBeNull();
+  });
+
+  // Server-side revocation (users.sessions_valid_after): allowlist removal and
+  // the admin force-logout end sessions issued before it.
+  function withIssuedAt(iat: number | undefined) {
+    vi.mocked(jwtVerify).mockResolvedValue({
+      payload: { sub: "7", role: "contributor", ...(iat === undefined ? {} : { iat }) },
+      protectedHeader: { alg: "HS256" },
+      key: new Uint8Array(),
+    } as Awaited<ReturnType<typeof jwtVerify>>);
+  }
+  const revokedAt = new Date("2026-10-15T07:00:00.000Z");
+  const revokedUser = () => [
+    {
+      id: 7,
+      role: "contributor",
+      lastAuthAt: new Date(),
+      sessionMaxDays: 30,
+      sessionsValidAfter: revokedAt,
+    },
+  ];
+
+  it("rejects a session token issued before its user's sessions were revoked", async () => {
+    withIssuedAt(revokedAt.getTime() / 1000 - 60);
+    mockUserLookup(async () => revokedUser());
+
+    await expect(
+      getUserFromRequest(requestWithToken("signed-token")),
+    ).resolves.toBeNull();
+  });
+
+  it("accepts a session token issued after the revocation", async () => {
+    withIssuedAt(revokedAt.getTime() / 1000 + 60);
+    mockUserLookup(async () => revokedUser());
+
+    await expect(
+      getUserFromRequest(requestWithToken("signed-token")),
+    ).resolves.toMatchObject({ userId: 7 });
+  });
+
+  it("fails closed on an undated token once sessions were revoked", async () => {
+    withIssuedAt(undefined);
+    mockUserLookup(async () => revokedUser());
 
     await expect(
       getUserFromRequest(requestWithToken("signed-token")),

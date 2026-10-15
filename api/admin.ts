@@ -14,7 +14,7 @@
  *                                hidden header nav links (#1240, #1307)
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { desc, eq, inArray, sql } from 'drizzle-orm';
+import { desc, eq, inArray, ne, sql, type SQL } from 'drizzle-orm';
 import {
   json,
   error,
@@ -350,6 +350,31 @@ async function handleNavVisibility(
   error(res, 405, 'Method not allowed');
 }
 
+/**
+ * End the sessions of the people an allowlist removal just locked out:
+ * those matching `match` whose email no longer passes the allowlist (neither
+ * listed itself nor under a listed domain — `isEmailAllowed` in
+ * api/auth-request.ts). Without this a removed person kept a working session
+ * for up to `session_max_days`. The acting admin is left alone, so removing
+ * one's own entry cannot end the session making the change.
+ */
+async function revokeSessionsNoLongerAllowed(
+  match: SQL,
+  actingUserId: number,
+): Promise<void> {
+  await getDb()
+    .update(users)
+    .set({ sessionsValidAfter: new Date() })
+    .where(
+      and(
+        match,
+        ne(users.id, actingUserId),
+        sql`NOT EXISTS (SELECT 1 FROM ${allowedEmails} WHERE ${allowedEmails.email} = lower(${users.email}))`,
+        sql`NOT EXISTS (SELECT 1 FROM ${allowedEmailDomains} WHERE ${allowedEmailDomains.domain} = substr(lower(${users.email}), strpos(${users.email}, '@') + 1))`,
+      ),
+    );
+}
+
 async function handleUsers(
   req: IncomingMessage,
   res: ServerResponse,
@@ -391,6 +416,42 @@ async function handleUsers(
     } catch {
       error(res, 500, 'Failed to list users');
     }
+    return;
+  }
+
+  // POST ?action=revoke-sessions&id=N — force-logout: every session token
+  // the user holds now stops working (api/_lib/auth.ts), including one copied
+  // by an attacker, and stays dead after the person signs in again. Agent
+  // tokens are revoked per token under resource=agents instead.
+  if (req.method === 'POST') {
+    if (!canManageUsers) {
+      error(res, 403, 'Admin role required');
+      return;
+    }
+    assertSameOrigin(req);
+    const url = new URL(
+      req.url ?? '/',
+      `http://${req.headers.host ?? 'localhost'}`,
+    );
+    const userId = Number(url.searchParams.get('id'));
+    if (url.searchParams.get('action') !== 'revoke-sessions') {
+      error(res, 400, 'Unknown action');
+      return;
+    }
+    if (!Number.isInteger(userId) || userId <= 0) {
+      error(res, 400, 'A positive integer ?id is required');
+      return;
+    }
+    const [revoked] = await db
+      .update(users)
+      .set({ sessionsValidAfter: new Date(), updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning({ id: users.id });
+    if (!revoked) {
+      error(res, 404, 'User not found');
+      return;
+    }
+    json(res, 200, { revoked: true }, { headers: noStoreHeaders() });
     return;
   }
 
@@ -596,7 +657,16 @@ async function handleAllowedDomains(
       error(res, 400, 'Missing id parameter');
       return;
     }
-    await db.delete(allowedEmailDomains).where(eq(allowedEmailDomains.id, id));
+    const [removed] = await db
+      .delete(allowedEmailDomains)
+      .where(eq(allowedEmailDomains.id, id))
+      .returning({ domain: allowedEmailDomains.domain });
+    if (removed) {
+      await revokeSessionsNoLongerAllowed(
+        sql`substr(lower(${users.email}), strpos(${users.email}, '@') + 1) = ${removed.domain.toLowerCase()}`,
+        auth.userId,
+      );
+    }
     json(res, 200, { deleted: true });
     return;
   }
@@ -1163,7 +1233,16 @@ async function handleAllowedEmails(
       error(res, 400, 'Missing id parameter');
       return;
     }
-    await db.delete(allowedEmails).where(eq(allowedEmails.id, id));
+    const [removed] = await db
+      .delete(allowedEmails)
+      .where(eq(allowedEmails.id, id))
+      .returning({ email: allowedEmails.email });
+    if (removed) {
+      await revokeSessionsNoLongerAllowed(
+        sql`lower(${users.email}) = ${removed.email.toLowerCase()}`,
+        auth.userId,
+      );
+    }
     json(res, 200, { deleted: true });
     return;
   }

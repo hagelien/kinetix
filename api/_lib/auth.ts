@@ -93,13 +93,17 @@ export async function signToken(
 
 export async function verifyToken(
   token: string,
-): Promise<{ userId: number; role: string } | null> {
+): Promise<{ userId: number; role: string; issuedAt: number | null } | null> {
   try {
     const { payload } = await jwtVerify(token, getSecret());
     const userId = Number(payload.sub);
     const role = payload.role as string;
     if (isNaN(userId) || !role) return null;
-    return { userId, role };
+    const issuedAt =
+      typeof payload.iat === 'number' && Number.isFinite(payload.iat)
+        ? payload.iat
+        : null;
+    return { userId, role, issuedAt };
   } catch {
     return null;
   }
@@ -187,6 +191,7 @@ export async function getUserFromRequest(
         role: users.role,
         lastAuthAt: users.lastAuthAt,
         sessionMaxDays: users.sessionMaxDays,
+        sessionsValidAfter: users.sessionsValidAfter,
       })
       .from(users)
       .where(eq(users.id, verified.userId))
@@ -223,6 +228,18 @@ export async function getUserFromRequest(
   const maxMs = row.sessionMaxDays * 24 * 60 * 60 * 1000;
   const age = Date.now() - row.lastAuthAt.getTime();
   if (age > maxMs) return null;
+
+  // Server-side revocation: a token issued before the user's sessions were
+  // revoked (allowlist removal, admin force-logout) is dead, even after the
+  // person signs in again and moves `lastAuthAt` forward. A token without an
+  // `iat` cannot be dated, so it fails closed once anything was revoked.
+  if (
+    row.sessionsValidAfter &&
+    (verified.issuedAt === null ||
+      verified.issuedAt * 1000 < row.sessionsValidAfter.getTime())
+  ) {
+    return null;
+  }
 
   // Always trust the latest role and group membership from the DB and fail
   // closed if the lookup cannot complete, rather than authorizing from stale

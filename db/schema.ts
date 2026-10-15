@@ -66,6 +66,9 @@ export const users = pgTable('users', {
   role: varchar('role', { length: 20 }).notNull().default('authenticated'),
   emailVerifiedAt: timestamp('email_verified_at'),
   lastAuthAt: timestamp('last_auth_at'),
+  // Session tokens issued before this are rejected (api/_lib/auth.ts): set
+  // when a person leaves the allowlist or an admin revokes their sessions.
+  sessionsValidAfter: timestamp('sessions_valid_after'),
   sessionMaxDays: integer('session_max_days').notNull().default(30),
   magicLinkHash: varchar('magic_link_hash', { length: 128 }),
   magicLinkExpires: timestamp('magic_link_expires'),
