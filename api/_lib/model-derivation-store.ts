@@ -36,6 +36,7 @@ import { getDb, runInPoolTransaction } from './db.js';
 import {
   getRangeSpec,
   isDrugParameterId,
+  parameterIsMatrixRelevant,
   parameterIsRouteScoped,
   type DrugParameterId,
 } from '../../src/lib/drugParameters.js';
@@ -51,7 +52,11 @@ import {
   dropSupersededGrandfathered,
   formulationKey,
   isAggregateCacheValue,
-  selectSharedFormulation,
+  poolableFormulationKeys,
+  selectPooledFormulation,
+  sharedFormulationKeys,
+  UNSTATED_FORMULATION_KEY,
+  type AggregationContext,
   type ParameterEntryValue,
   type ParameterSummary,
 } from '../../src/lib/parameterEntryAggregation.js';
@@ -317,7 +322,10 @@ function rowFormulation(row: { releaseProfile: string | null; doseIntervalHours:
  * read (`readDrugRouteAssemblyInputs`) each call this on the same rows, so they cannot disagree.
  *
  * A route whose rows state no formulation gets the unstated key, which every one of its rows
- * carries: it derives exactly as it did before formulations were recorded.
+ * carries: it derives exactly as it did before formulations were recorded. A route with nothing to
+ * choose from — no reading that could pool and no declaration — is absent from the map: nothing
+ * constrains it, so its rows are kept as they are and the drug-level values it falls back on choose
+ * their formulation among themselves (`readDrugRouteAssemblyInputs`).
  */
 function selectRouteFormulations(
   groups: Map<string, RouteEntryGroup>,
@@ -338,7 +346,8 @@ function selectRouteFormulations(
   }
   const chosen = new Map<RouteId, string | null>();
   for (const route of new Set<RouteId>([...pools.keys(), ...declarations.keys()])) {
-    chosen.set(route, selectSharedFormulation(pools.get(route) ?? [], declarations.get(route) ?? []));
+    const keys = sharedFormulationKeys(pools.get(route) ?? [], declarations.get(route) ?? []);
+    if (keys.length > 0) chosen.set(route, selectPooledFormulation(keys));
   }
   return chosen;
 }
@@ -440,12 +449,14 @@ function mapRouteKeyedInputs({
   // the route — a curator named it — but supplies it nothing, and where the formulations are
   // ambiguous nothing is supplied at all: the shape takes the disclosed default.
   const routeFormulation = selectRouteFormulations(groupRouteEntries(routeParamRows), routeAxisRows);
+  const inRouteFormulation = (route: RouteId, row: Parameters<typeof rowFormulation>[0]): boolean =>
+    !routeFormulation.has(route) || rowFormulation(row) === routeFormulation.get(route);
   const declaredRoutes = new Set<RouteId>();
   const routeAbsorption = new Map<RouteId, Set<string>>();
   for (const row of routeAxisRows) {
     if (!isRouteId(row.route) || !row.categoricalValue) continue;
     declaredRoutes.add(row.route);
-    if (rowFormulation(row) !== routeFormulation.get(row.route)) continue;
+    if (!inRouteFormulation(row.route, row)) continue;
     addTo(routeAbsorption, row.route, row.categoricalValue);
   }
   const routeParameters = new Map<RouteId, Set<DrugParameterId>>();
@@ -457,7 +468,7 @@ function mapRouteKeyedInputs({
       !isRouteAssemblyParameter(row.parameter)
     ) continue;
     declaredRoutes.add(row.route);
-    if (rowFormulation(row) !== routeFormulation.get(row.route)) continue;
+    if (!inRouteFormulation(row.route, row)) continue;
     addTo(routeParameters, row.route, row.parameter);
   }
 
@@ -606,8 +617,13 @@ function sameValue(a: number, b: number): boolean {
 async function readDrugLevelSources(
   drugId: number,
   rows: readonly { parameter: string; value: unknown }[],
-): Promise<Map<DrugParameterId, InputSource>> {
+): Promise<{
+  sources: Map<DrugParameterId, InputSource>;
+  /** The route-null entries behind each marked aggregate, as read for its source. */
+  aggregateEntries: Map<DrugParameterId, ParameterEntryValue[]>;
+}> {
   const sources = new Map<DrugParameterId, InputSource>();
+  const entriesByParameter = new Map<DrugParameterId, ParameterEntryValue[]>();
   const aggregates: { parameter: DrugParameterId; cached: number | null }[] = [];
   for (const row of rows) {
     const p = row.parameter;
@@ -622,10 +638,11 @@ async function readDrugLevelSources(
     }
     aggregates.push({ parameter: p, cached: meanRange(range) });
   }
-  if (aggregates.length === 0) return sources;
+  if (aggregates.length === 0) return { sources, aggregateEntries: entriesByParameter };
   const paramMap = await getDrugParameterMap(getDb(), drugId);
   for (const { parameter, cached } of aggregates) {
     const entries = await loadEntryValuesForParameter(drugId, parameter);
+    entriesByParameter.set(parameter, entries);
     const summary = await computeParameterSummary(drugId, parameter, paramMap, entries);
     const current = summary?.representative ?? null;
     sources.set(
@@ -635,7 +652,7 @@ async function readDrugLevelSources(
         : { basis: 'uncited', reason: 'stale-cache' },
     );
   }
-  return sources;
+  return { sources, aggregateEntries: entriesByParameter };
 }
 
 /** The first value `tmaxHoursFrom` would read from `values`, so its source can be recorded. */
@@ -742,7 +759,8 @@ export async function readDrugRouteAssemblyInputs(
   ]);
 
   // Where each drug-level cached value came from, recorded beside the value for the grade.
-  const drugLevelSources = await readDrugLevelSources(drugId, drugLevelRows);
+  const { sources: drugLevelSources, aggregateEntries: drugLevelEntries } =
+    await readDrugLevelSources(drugId, drugLevelRows);
   const drugLevelSource = (p: DrugParameterId): InputSource =>
     drugLevelSources.get(p) ?? AUTHORED_VALUE;
 
@@ -873,7 +891,8 @@ export async function readDrugRouteAssemblyInputs(
     const targetUnit = ctx.targetUnit;
     const summary = aggregateEntries(entries, {
       ...ctx,
-      pooledFormulationKey: routeFormulation.get(route) ?? null,
+      // Absent: nothing on the route could choose, so the pool chooses (and has nothing to pool).
+      ...(routeFormulation.has(route) ? { pooledFormulationKey: routeFormulation.get(route)! } : {}),
     });
     if (
       parameter === 'tmax' &&
@@ -914,8 +933,88 @@ export async function readDrugRouteAssemblyInputs(
   // is `routeOptional`, so the drug editor's route selector already authors it): an oral time to
   // peak is not an insufflated one, and guessing between them is exactly the manufactured
   // attribution the plan's "missing stays missing" rules out.
-  const soleRouteTmax = derivations.length === 1 ? tmaxHoursFrom(drugLevelTmax) : undefined;
-  const soleRouteTmaxValue = derivations.length === 1 ? firstTmax(drugLevelTmax) : undefined;
+  const isSoleRoute = derivations.length === 1;
+
+  // The drug-level values a route FALLS BACK on — the drug-level F (an attributed or oral route
+  // without its own F) and the drug-level Tmax (a sole route without its own) — are pooled from the
+  // route-null entries, each parameter choosing its formulation on its own. A route must not run on
+  // two products' figures (#12): a modified-release F beside an immediate-release Tmax solves a ka
+  // no product has. So each fallback is HELD to the one formulation the route uses:
+  //
+  //   - a route whose own rows chose a formulation (`routeFormulation`) takes a drug-level value only
+  //     as that formulation's: the pool is recomputed from that formulation's entries alone, and
+  //     where it has none the value is not used. Restricting rather than dropping every fallback:
+  //     a drug-level figure of the route's own formulation is the same product's evidence, so
+  //     withholding it would only take a curve away without making it safer; one of any other
+  //     formulation is never admitted, which is the whole of the risk.
+  //   - a route with nothing of its own to choose from — the ATTRIBUTED route, which by definition
+  //     has no route-scoped row — chooses one formulation JOINTLY over the drug-level F and Tmax
+  //     readings it would use (`selectPooledFormulation` over all of them, the rule every pool
+  //     uses), and holds both to it. Route-null `absorptionModel` rows play no part: they declare no
+  //     route, so no route takes its shape from them, and route-null `ka` does not exist (`ka` is
+  //     route-scoped).
+  //
+  // A hand-authored cache value has no entries behind it and so states no formulation: it is the
+  // unstated pool, as every value was before formulations were recorded. Where nothing states a
+  // formulation, every fallback is admitted exactly as before. A fallback held out this way leaves
+  // the role empty, and a held-out F also blocks the cautious F (curated F evidence exists — it is
+  // another product's), so the route stays incomplete rather than running on a guess.
+  type FallbackParameter = 'tmax' | 'bioavailability';
+  interface FallbackPool {
+    cached: SourcedValue[];
+    /** The route-null entries behind a marked aggregate; null for a hand-authored value. */
+    entries: ParameterEntryValue[] | null;
+    ctx: AggregationContext;
+    /** The formulations its readings could pool in — what a joint choice is made among. */
+    keys: string[];
+    /** The formulation the cached value was pooled from; null when that choice was ambiguous. */
+    own: string | null;
+  }
+  const fallbackPool = (parameter: FallbackParameter, cached: SourcedValue[]): FallbackPool => {
+    const ctx: AggregationContext = {
+      targetUnit: getRangeSpec(parameter).canonicalUnit,
+      matrixRelevant: parameterIsMatrixRelevant(parameter),
+      molecularWeight,
+      valueBounds: getRangeSpec(parameter).bounds,
+    };
+    const entries = drugLevelEntries.get(parameter) ?? null;
+    const keys = entries ? poolableFormulationKeys(entries, ctx) : [];
+    // No entry that could pool (a hand-authored value, or a cache whose entries no longer pool):
+    // nothing about the value states a formulation, so it is the unstated pool.
+    if (keys.length === 0) {
+      return { cached, entries, ctx, keys: [UNSTATED_FORMULATION_KEY], own: UNSTATED_FORMULATION_KEY };
+    }
+    return { cached, entries, ctx, keys, own: selectPooledFormulation(keys) };
+  };
+  const fallbackPools: Record<FallbackParameter, FallbackPool> = {
+    tmax: fallbackPool('tmax', drugLevelTmax),
+    bioavailability: fallbackPool('bioavailability', drugLevelBioavailability),
+  };
+  /** A fallback held to `formulation`: its value when it is that formulation's, else nothing. */
+  const heldFallback = (
+    parameter: FallbackParameter,
+    formulation: string | null,
+  ): { values: SourcedValue[]; heldOut: boolean } => {
+    const pool = fallbackPools[parameter];
+    if (pool.cached.length === 0) return { values: [], heldOut: false };
+    // Pooled from this formulation already: the cached value, exactly as before.
+    if (formulation !== null && pool.own === formulation) return { values: pool.cached, heldOut: false };
+    if (formulation === null || pool.entries === null) return { values: [], heldOut: true };
+    const summary = aggregateEntries(pool.entries, { ...pool.ctx, pooledFormulationKey: formulation });
+    if (!summary || summary.representative === null) return { values: [], heldOut: true };
+    return {
+      values: [
+        {
+          parameter,
+          value: summary.representative,
+          unit: pool.ctx.targetUnit,
+          ...(summary.min !== null && summary.max !== null ? { low: summary.min, high: summary.max } : {}),
+          source: sourceOfEntries(pool.entries, summary),
+        },
+      ],
+      heldOut: false,
+    };
+  };
 
   // Assemble one route from a derivation: pick the values it may use, run the `ka` inference, and
   // carry the provenance the grade needs. Called for the declared derivation and, when that does not
@@ -940,18 +1039,34 @@ export async function readDrugRouteAssemblyInputs(
     // F that pools to no representative (a censored or single-bound entry) is still the route's
     // own curation, and substituting the drug-level figure for it would draw a curve on an F the
     // route-specific evidence may contradict. Such a route stays incomplete — missing stays missing.
-    const attributedValues =
-      admitsDrugLevelF && !routesWithScopedF.has(derived.route) ? drugLevelBioavailability : [];
+    const fallsBackOnF = admitsDrugLevelF && !routesWithScopedF.has(derived.route);
+    // A route-scoped Tmax always wins over the drug-level figure: it is the one actually measured
+    // for this route. Nor does the drug-level figure stand in where the route's own Tmax readings
+    // are another formulation's (#12).
+    const routeTmaxHours = tmaxHoursFrom(routeCatalogValues);
+    const fallsBackOnTmax =
+      isSoleRoute &&
+      routeTmaxHours === undefined &&
+      !routesWithFormulationExcludedTmax.has(derived.route);
+    // The one formulation every fallback this route uses is held to (see `heldFallback`).
+    const fallbackParameters: FallbackParameter[] = [
+      ...(fallsBackOnF ? (['bioavailability'] as const) : []),
+      ...(fallsBackOnTmax ? (['tmax'] as const) : []),
+    ];
+    const fallbackFormulation = routeFormulation.has(derived.route)
+      ? routeFormulation.get(derived.route)!
+      : selectPooledFormulation(fallbackParameters.flatMap((p) => fallbackPools[p].keys));
+    const fallbackF = fallsBackOnF
+      ? heldFallback('bioavailability', fallbackFormulation)
+      : { values: [], heldOut: false };
+    const fallbackTmax = fallsBackOnTmax
+      ? heldFallback('tmax', fallbackFormulation)
+      : { values: [], heldOut: false };
+    const attributedValues = fallbackF.values;
     const catalogValues = [...drugLevelValues, ...attributedValues, ...routeCatalogValues];
     const values = toAssemblyValues(catalogValues);
-    // A route-scoped Tmax always wins over the drug-level figure: it is the one actually measured
-    // for this route.
-    // Nor where the route's own Tmax readings are another formulation's (#12).
-    const admitsDrugLevelTmax = !routesWithFormulationExcludedTmax.has(derived.route);
-    const tmaxHours =
-      tmaxHoursFrom(routeCatalogValues) ?? (admitsDrugLevelTmax ? soleRouteTmax : undefined);
-    const tmaxValue =
-      firstTmax(routeCatalogValues) ?? (admitsDrugLevelTmax ? soleRouteTmaxValue : undefined);
+    const tmaxHours = routeTmaxHours ?? tmaxHoursFrom(fallbackTmax.values);
+    const tmaxValue = firstTmax(routeCatalogValues) ?? firstTmax(fallbackTmax.values);
     const tmaxSource = tmaxValue?.source;
     const {
       values: withKa,
@@ -960,10 +1075,11 @@ export async function readDrugRouteAssemblyInputs(
     } = applyKaInference(derived, values, tmaxHours);
     // A missing F runs on the labelled cautious default F = 1 (owner decision 2026-09-29,
     // `applyCautiousDefaults`) — unless the route holds curated F evidence that could not be used
-    // (a route-scoped entry that pools to nothing), or the substance is not administered at all:
+    // (a route-scoped entry that pools to nothing, or a drug-level F held out as another
+    // formulation's — #12), or the substance is not administered at all:
     // F describes a dose of this substance, and a metabolite or endogenous marker has none.
     const blocked = new Set<CautiousDefaultRole>(administered ? [] : CAUTIOUS_DEFAULT_ROLES);
-    if (routesWithScopedF.has(derived.route)) blocked.add('bioavailability');
+    if (routesWithScopedF.has(derived.route) || fallbackF.heldOut) blocked.add('bioavailability');
     const { values: withDefaults, defaultedParameters } = applyCautiousDefaults(
       derived,
       withKa,

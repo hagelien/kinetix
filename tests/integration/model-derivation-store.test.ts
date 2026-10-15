@@ -1922,6 +1922,98 @@ describe('#12 — one formulation per route, for the absorption declaration and 
   });
 });
 
+describe('#12 — the drug-level values a route falls back on are held to its formulation', () => {
+  const IR: FormulationScope = { releaseProfile: 'immediate' };
+  const MODIFIED: FormulationScope = { releaseProfile: 'modified' };
+  const WEEKLY_DEPOT: FormulationScope = {
+    releaseProfile: 'modified',
+    doseRegimen: 'multiple',
+    doseIntervalHours: '168',
+  };
+
+  async function seedMolecule(slug: string): Promise<{ drugId: number; userId: number }> {
+    const drugId = await seedDrug(db, { slug, names: { en: slug } });
+    const userId = await seedUser(db);
+    await insertAxis(drugId, userId, 'dispositionModel', 'one-compartment');
+    await insertAxis(drugId, userId, 'eliminationModel', 'first-order');
+    await setDrugLevelParameter(drugId, userId, 'halfLife', { median: 4, unit: 'h' });
+    await setDrugLevelParameter(drugId, userId, 'volumeOfDistribution', { median: 0.7, unit: 'L/kg' });
+    return { drugId, userId };
+  }
+
+  /** Publish a drug-level aggregate from its route-null entries, as the entry write path does. */
+  async function recompute(drugId: number, userId: number, parameter: 'tmax' | 'bioavailability') {
+    await runInPoolTransaction(() => recomputeAndCacheParameterSummary(drugId, parameter, userId));
+  }
+
+  it('does not run an attributed oral route on a modified-release F and an immediate-release Tmax', async () => {
+    const { drugId, userId } = await seedMolecule('attributed-two-products');
+    // No route anywhere: the oral route is attributed from these two drug-level figures, which
+    // each pool on their own — but they are two products'.
+    await insertNumeric(drugId, userId, 'bioavailability', null, { low: 0.2, high: 0.4, median: 0.3, unit: 'fraction', scope: MODIFIED });
+    await insertNumeric(drugId, userId, 'tmax', null, { low: 0.5, high: 1.5, median: 1, unit: 'h', scope: IR });
+    await recompute(drugId, userId, 'bioavailability');
+    await recompute(drugId, userId, 'tmax');
+
+    const [oral] = await readDrugRouteAssemblyInputs(drugId);
+    expect(oral!.routeProvenance).toBe('attributed');
+    // One formulation for the route (immediate release, rule 3): the modified-release F is not
+    // used, and no cautious F takes its place over that curated reading.
+    expect(oral!.values.bioavailability).toBeUndefined();
+    expect(oral!.defaultedParameters ?? []).not.toContain('bioavailability');
+
+    // No curve combining the two, in the live read or the catalogue scan.
+    const live = await readLiveDerivedModel('attributed-two-products');
+    expect(live.status).toBe('not-modelable');
+    const build = await readDerivedRegistrySnapshot();
+    expect(build.snapshot.definitions.some((d) => d.analyte === 'attributed-two-products')).toBe(false);
+  });
+
+  it('does not give an immediate-release route a depot-only drug-level F', async () => {
+    const { drugId, userId } = await seedMolecule('ir-route-depot-f');
+    await insertAxis(drugId, userId, 'absorptionModel', 'first-order', 'oral', IR);
+    await insertNumeric(drugId, userId, 'ka', 'oral', { low: 1, high: 1.4, median: 1.2, unit: '1/h', scope: IR });
+    // The route has no F of its own; the only drug-level F is a weekly depot's.
+    await insertNumeric(drugId, userId, 'bioavailability', null, { low: 0.8, high: 1, median: 0.9, unit: 'fraction', scope: WEEKLY_DEPOT });
+    await recompute(drugId, userId, 'bioavailability');
+
+    const [oral] = await readDrugRouteAssemblyInputs(drugId);
+    expect(oral!.values.ka).toBeCloseTo(1.2, 6);
+    expect(oral!.values.bioavailability).toBeUndefined();
+    expect(oral!.defaultedParameters ?? []).not.toContain('bioavailability');
+    const live = await readLiveDerivedModel('ir-route-depot-f');
+    expect(live.status).toBe('not-modelable');
+  });
+
+  it('gives a route the drug-level readings of its own formulation, not the unstated pool', async () => {
+    const { drugId, userId } = await seedMolecule('ir-route-mixed-drug-f');
+    await insertAxis(drugId, userId, 'absorptionModel', 'first-order', 'oral', IR);
+    await insertNumeric(drugId, userId, 'ka', 'oral', { low: 1, high: 1.4, median: 1.2, unit: '1/h', scope: IR });
+    // The drug-level F pools the unstated reading (0.5); the route is immediate release, so it
+    // takes the immediate-release reading (0.7) instead.
+    await insertNumeric(drugId, userId, 'bioavailability', null, { low: 0.5, high: 0.5, median: 0.5, unit: 'fraction' });
+    await insertNumeric(drugId, userId, 'bioavailability', null, { low: 0.7, high: 0.7, median: 0.7, unit: 'fraction', scope: IR });
+    await recompute(drugId, userId, 'bioavailability');
+
+    const [oral] = await readDrugRouteAssemblyInputs(drugId);
+    expect(oral!.values.bioavailability).toBe(0.7);
+    expect((await readLiveDerivedModel('ir-route-mixed-drug-f')).status).toBe('assembled');
+  });
+
+  it('still runs an attributed route whose drug-level readings state no formulation, as before', async () => {
+    const { drugId, userId } = await seedMolecule('attributed-unstated');
+    await insertNumeric(drugId, userId, 'bioavailability', null, { low: 0.6, high: 0.8, median: 0.7, unit: 'fraction' });
+    await insertNumeric(drugId, userId, 'tmax', null, { low: 0.5, high: 1.5, median: 1, unit: 'h' });
+    await recompute(drugId, userId, 'bioavailability');
+    await recompute(drugId, userId, 'tmax');
+
+    const [oral] = await readDrugRouteAssemblyInputs(drugId);
+    expect(oral!.values.bioavailability).toBe(0.7);
+    expect(oral!.inferredParameters).toEqual(['ka']);
+    expect((await readLiveDerivedModel('attributed-unstated')).status).toBe('assembled');
+  });
+});
+
 async function drugIdFor(slug: string): Promise<number> {
   const [row] = await db.select({ id: drugs.id }).from(drugs).where(eq(drugs.slug, slug));
   if (!row) throw new Error(`no drug ${slug}`);

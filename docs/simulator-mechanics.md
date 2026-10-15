@@ -368,9 +368,18 @@ The two tiers are treated differently, and deliberately so:
   supplied **no value** from them. An example is a weekly and a monthly depot with nothing
   else: there is no absorption model, so the disclosed default applies, and no F,
   absorption rate or Tmax. Neither the cautious F nor the drug-level Tmax stands in for
-  them, so such a route normally gets no curve. Drug-level values follow the same rule
-  within their own pool. A route where no reading states a formulation is built exactly as
-  before. Readings left out this way are still listed with the drug's sources and counted:
+  them, so such a route normally gets no curve. **The drug-level values a route falls back
+  on are held to the same formulation.** These are the drug-level F, used for an attributed
+  route or an oral route with no F of its own, and the drug-level Tmax, used for a drug's
+  only route when that route has no Tmax of its own. A route whose own readings chose a
+  formulation takes a drug-level value only from readings of that formulation, and
+  otherwise takes none. An attributed route has no readings of its own, so it chooses one
+  formulation by the same rule over all the drug-level F and Tmax readings it would use
+  together, and uses both only in that formulation. A modified-release F and an
+  immediate-release Tmax therefore never meet in one curve. A hand-authored drug-level
+  value states no formulation, so it counts as the unstated readings. Where a drug-level F
+  is held out this way, the cautious F does not take its place either. A route where no
+  reading states a formulation is built exactly as before. Readings left out this way are still listed with the drug's sources and counted:
   the per-parameter summaries served with the drug report them as
   `formulationExcludedCount`. That count is per parameter, so where a route's parameters
   state different formulations it can differ from what the route's curve left out. The

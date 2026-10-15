@@ -604,6 +604,26 @@ describe('mechanics document — one formulation per route (§5)', () => {
     ).toEqual(aggregateEntries(unstated, ctx));
   });
 
+  it('holds the drug-level values a route falls back on to the same formulation, as §5 states', () => {
+    expect(doc).toContain('**The drug-level values a route falls back\n  on are held to the same formulation.**');
+    expect(flat).toContain('A modified-release F and an immediate-release Tmax therefore never meet in one curve.');
+    expect(flat).toContain('the cautious F does not take its place either');
+    expect(flat).not.toContain('within their own pool');
+    // An attributed route: one choice over the drug-level F and Tmax readings together.
+    const tmaxCtx = { targetUnit: 'h', matrixRelevant: false };
+    const fCtx = { targetUnit: 'fraction', matrixRelevant: false };
+    const modifiedF = [{ ...reading(0.3, 'modified'), unit: 'fraction' }];
+    const irTmax = [{ ...reading(1, 'immediate'), unit: 'h' }];
+    const key = selectSharedFormulation([
+      { entries: modifiedF, ctx: fCtx },
+      { entries: irTmax, ctx: tmaxCtx },
+    ]);
+    expect(key).toBe('immediate|');
+    // Held to it, the modified-release F has no value to give.
+    expect(aggregateEntries(modifiedF, { ...fCtx, pooledFormulationKey: key })?.representative).toBeNull();
+    expect(aggregateEntries(irTmax, { ...tmaxCtx, pooledFormulationKey: key })?.representative).toBe(1);
+  });
+
   it('supplies no value for ambiguous formulations, and counts what it leaves out, as §5 states', () => {
     expect(flat).toContain('the route is supplied **no value** from them');
     expect(flat).toContain('`formulationExcludedCount`');

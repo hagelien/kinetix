@@ -526,10 +526,22 @@ export function selectSharedFormulation(
   pools: readonly { entries: readonly ParameterEntryValue[]; ctx: AggregationContext }[],
   declarations: readonly { releaseProfile?: string | null; doseIntervalHours?: number | null }[] = [],
 ): string | null {
-  return selectPooledFormulation([
+  return selectPooledFormulation(sharedFormulationKeys(pools, declarations));
+}
+
+/**
+ * The keys `selectSharedFormulation` chooses among. Empty when nothing could
+ * pool and nothing is declared — a caller can then tell "nothing to choose
+ * from" (no constraint) apart from "an ambiguous choice" (null).
+ */
+export function sharedFormulationKeys(
+  pools: readonly { entries: readonly ParameterEntryValue[]; ctx: AggregationContext }[],
+  declarations: readonly { releaseProfile?: string | null; doseIntervalHours?: number | null }[] = [],
+): string[] {
+  return [
     ...pools.flatMap(({ entries, ctx }) => poolableFormulationKeys(entries, ctx)),
     ...declarations.map((declaration) => formulationKey(declaration)),
-  ]);
+  ];
 }
 
 /**
