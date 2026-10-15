@@ -1332,7 +1332,14 @@
     },
     "routes": {
       "oral": "Oralt",
-      "other": "Annet"
+      "other": "Annet",
+      "im": "IM",
+      "subcutaneous": "SC",
+      "sublingual": "SL",
+      "buccal": "Bukkal",
+      "rectal": "Rektal",
+      "transdermal": "Transdermal",
+      "notModeled": "Denne administrasjonsveien er ikke modellert for dette legemiddelet. Velg en av de modellerte."
     }
   },
   "unitConverter": {
@@ -2982,8 +2989,11 @@
       "intranasal": "Intranasal",
       "iv": "Intravenøs",
       "im": "Intramuskulær",
+      "subcutaneous": "Subkutan",
       "sublingual": "Sublingval",
+      "buccal": "Bukkal",
       "rectal": "Rektal",
+      "transdermal": "Transdermal",
       "inhalation": "Inhalasjon",
       "other": "Annen"
     }

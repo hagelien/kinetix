@@ -1,6 +1,6 @@
 # kinetics-core validation suite 1.0.0
 
-Core: `1.10.0` · Registry: `0.9.0` (`adcc1cec`)
+Core: `1.11.0` · Registry: `0.9.0` (`adcc1cec`)
 
 | Model | Fixture | Scientific endpoint | Result | Evidence status | Change | Detail |
 |---|---|---|---|---|---|---|

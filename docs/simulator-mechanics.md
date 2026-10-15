@@ -132,7 +132,16 @@ name-derived id (`ethanol`, `ghb`). The first id the build resolves is the one t
 here is terminal for the run. If the
 model exists, the scenario's route must be one the model declares — a model reviewed only
 for sublingual dosing refuses an oral scenario rather than reusing the sublingual
-parameters. The dose basis (parent drug, active moiety, salt, free base) must likewise be
+parameters. **The dose-route picker offers exactly the routes the resolved model declares.**
+For a Monte Carlo component the panel resolves the model under the same id the run will use
+and lists its routes — intramuscular, subcutaneous, sublingual, buccal, rectal, transdermal
+and the rest included — so a route the model lacks is never offered, and a new dose starts
+on one the model has. A dose already on an undeclared route (a saved case, or a drug or
+engine changed underneath it) is shown struck through, not as a choice, and the run refuses
+it as above until the route is replaced. Intranasal is offered under the simulator's name
+for it, *insufflation*. The KineLab and ethanol engines, which run no registry model, and a
+drug with no resolved model keep the fixed list (IV, oral, insufflation, inhalation,
+other). The dose basis (parent drug, active moiety, salt, free base) must likewise be
 one the model declares; an unsupported basis is refused rather than silently mis-scaled.
 
 ### Step 2 — Scale the volume of distribution to the subject
