@@ -3966,6 +3966,7 @@
     "dialogTitle": "{{parameter}} — kildeverdier",
     "dialogAriaLabel": "Kildeverdier for {{parameter}} i {{drug}}",
     "dialogEmpty": "Ingen kildeverdier er registrert for denne parameteren ennå.",
+    "previewHint": "Klikk på verdien for å åpne kildelisten og diskusjonen.",
     "routeSection": "Kilder for administrasjon: {{route}}",
     "discussionHeading": "Diskusjon",
     "editor": {
