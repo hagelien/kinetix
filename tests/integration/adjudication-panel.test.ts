@@ -680,6 +680,24 @@ describe('T3 sealing, convergence and the T4 handoff', () => {
       ]);
     });
 
+    it('does not revive a completed handoff for a verdict that committed after the seal read (#268)', async () => {
+      const s = await handedOff();
+      const [sealed] = await db.select().from(adjudicationCases).where(eq(adjudicationCases.id, s.caseId));
+      // The seal recorded the dispute verdict it saw.
+      expect(sealed!.t1Snapshot.disputeVerdictIds).toHaveLength(1);
+      await resolveDisputeById({ id: s.capturedId, resolution: 'rejected', resolvedBy: s.reviewer });
+      expect(await listed()).toEqual([]);
+      // A verdict stamped before the seal but committed after it: its timestamp
+      // predates sealedAt, yet the case never saw it (and nor does its snapshot).
+      const racer = await seedAgent('racer-agent', { tier: 'mid' });
+      await verdictOn(racer.agentId, s.editId, 'dispute', 'mid', 'Kilden oppgir en annen verdi.');
+      await db
+        .update(agentVerifications)
+        .set({ updatedAt: new Date(sealed!.sealedAt!.getTime() - 1000) })
+        .where(eq(agentVerifications.agentId, racer.agentId));
+      expect(await listed()).toEqual([]);
+    });
+
     it('keeps listing a handoff while a dispute it captured is still open', async () => {
       const s = await handedOff();
       expect(await listed()).toEqual([s.caseId]);
