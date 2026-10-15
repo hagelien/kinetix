@@ -931,10 +931,21 @@ export async function summariseVerificationsForTargets(args: {
    * the old resolution, so it counts again.
    */
   excludeAnsweredDisputes?: boolean;
+  /**
+   * {@link excludeAgentUserId} per target, for a batch whose targets have
+   * different authors (issue #33: the /review queue's read-only consensus
+   * status). A verdict on target `t` is left out when its agent is backed by
+   * `excludeAgentUserIdByTarget.get(t)`. Applied in memory from the verdict's
+   * own agent's user id — the same set the single-author `NOT IN` excludes,
+   * since `agents.user_id` is unique and `agent_verifications.agent_id` is a
+   * non-null FK. Do not combine with `excludeAgentUserId`.
+   */
+  excludeAgentUserIdByTarget?: ReadonlyMap<number, number>;
 }): Promise<Map<number, VerificationSummary>> {
   const ids = args.targetIds.filter(Number.isInteger);
   if (ids.length === 0) return new Map();
   const db = getDb();
+  const perTargetExclusion = args.excludeAgentUserIdByTarget;
   const rows = await db
     .select({
       targetId: agentVerifications.targetId,
@@ -946,6 +957,9 @@ export async function summariseVerificationsForTargets(args: {
       answered: args.excludeAnsweredDisputes
         ? answeredDisputeVerdictSql()
         : sql<boolean>`false`,
+      agentUserId: perTargetExclusion
+        ? sql<number | null>`(select ${agents.userId} from ${agents} where ${agents.id} = ${agentVerifications.agentId})`
+        : sql<number | null>`null`,
     })
     .from(agentVerifications)
     .where(
@@ -981,6 +995,18 @@ export async function summariseVerificationsForTargets(args: {
 
   const out = new Map<number, VerificationSummary>();
   for (const row of rows) {
+    if (perTargetExclusion) {
+      const excluded = perTargetExclusion.get(row.targetId);
+      // A raw `sql` column is not decoded through the schema, so compare
+      // numerically rather than trust the driver's integer type.
+      if (
+        excluded !== undefined &&
+        row.agentUserId != null &&
+        Number(row.agentUserId) === excluded
+      ) {
+        continue;
+      }
+    }
     let summary = out.get(row.targetId);
     if (!summary) {
       summary = { ...ZERO_SUMMARY };
@@ -1408,6 +1434,42 @@ export async function isSelfReviewAgentUser(userId: number): Promise<boolean> {
 }
 
 /**
+ * {@link isActiveAgentUser} and {@link isSelfReviewAgentUser} for many users
+ * in one read (issue #33). A user absent from the map backs no currently
+ * eligible agent (`isActiveAgentUser` false, so `isSelfReviewAgentUser` false
+ * too); a present one is active, and `selfReviews` is the grant. Same filter
+ * as both single-user reads: status `active`, contributor+ backing role.
+ *
+ * Read-only consumers only — the /review queue's consensus annotation. The
+ * apply gate keeps its own per-edit reads.
+ */
+export async function activeAgentStandingsForUsers(
+  userIds: readonly number[],
+): Promise<Map<number, { selfReviews: boolean }>> {
+  const ids = [...new Set(userIds.filter(Number.isInteger))];
+  if (ids.length === 0) return new Map();
+  const rows = await getDb()
+    .select({ userId: agents.userId, selfReviewEnabled: agents.selfReviewEnabled })
+    .from(agents)
+    .innerJoin(users, eq(users.id, agents.userId))
+    .where(
+      and(
+        inArray(agents.userId, ids),
+        eq(agents.status, 'active'),
+        inArray(users.role, ACTIVE_AGENT_ROLES),
+      ),
+    );
+  const out = new Map<number, { selfReviews: boolean }>();
+  for (const row of rows) {
+    const prior = out.get(row.userId);
+    out.set(row.userId, {
+      selfReviews: (prior?.selfReviews ?? false) || row.selfReviewEnabled === true,
+    });
+  }
+  return out;
+}
+
+/**
  * Wipe every verification attached to a target. Used by submission paths
  * that replace a pending-edit row in place (e.g. paper-reviews upsert): the
  * proposedValue is overwritten, so prior verdicts — including the previous
@@ -1792,6 +1854,53 @@ export async function pendingEditTargetOpenToAgents(pending: {
   return page?.status === 'published';
 }
 
+/**
+ * {@link pendingEditTargetOpenToAgents} for many pending edits in one read
+ * (issue #33): the ids of `pendings` whose target agent consensus may act on.
+ * The same rule — `wiki_new` never, a wiki page/fact/section edit only
+ * against a published page, anything else always.
+ *
+ * Read-only consumers only; the apply gate keeps the single-edit form and its
+ * under-lock re-check.
+ */
+export async function pendingEditTargetsOpenToAgents(
+  pendings: readonly { id: number; editType: string; targetId: number | null }[],
+): Promise<Set<number>> {
+  const open = new Set<number>();
+  const pageIds = new Set<number>();
+  for (const p of pendings) {
+    if (
+      p.editType === 'wiki_page' ||
+      p.editType === 'wiki_fact' ||
+      p.editType === 'wiki_section'
+    ) {
+      if (p.targetId != null) pageIds.add(p.targetId);
+    } else if (p.editType !== 'wiki_new') {
+      open.add(p.id);
+    }
+  }
+  if (pageIds.size === 0) return open;
+  const pages = await getDb()
+    .select({ id: wikiPages.id, status: wikiPages.status })
+    .from(wikiPages)
+    .where(inArray(wikiPages.id, [...pageIds]));
+  const published = new Set(
+    pages.filter((page) => page.status === 'published').map((page) => page.id),
+  );
+  for (const p of pendings) {
+    if (
+      (p.editType === 'wiki_page' ||
+        p.editType === 'wiki_fact' ||
+        p.editType === 'wiki_section') &&
+      p.targetId != null &&
+      published.has(p.targetId)
+    ) {
+      open.add(p.id);
+    }
+  }
+  return open;
+}
+
 export interface SourceCheckedPendingEdit {
   proposedMeta: unknown;
   proposedValue: unknown;
@@ -1910,6 +2019,56 @@ export async function pendingEditCitesUnreadSources(
     if (row.targetId != null && pv?.readInFull === true) read.add(row.targetId);
   }
   return ids.some((id) => !read.has(id));
+}
+
+/**
+ * {@link pendingEditCitesUnreadSources} for many pending edits in two reads
+ * whatever their number (issue #33): the ids of `pendings` held for a paper
+ * nobody has read in full. Each edit is judged on its own source-check set
+ * (`sourceCheckSetOf`), against evidence read once for the union of them.
+ *
+ * Read-only consumers only; the apply gate keeps the single-edit form and its
+ * under-lock re-check (`lockPendingEditSourceReviews`).
+ */
+export async function pendingEditsCitingUnreadSources(
+  pendings: readonly (SourceCheckedPendingEdit & { id: number })[],
+): Promise<Set<number>> {
+  const checks: Array<{ id: number; sources: number[] }> = [];
+  const union = new Set<number>();
+  for (const p of pendings) {
+    const sources = sourceCheckSetOf(p);
+    if (!sources || sources.length === 0) continue;
+    checks.push({ id: p.id, sources });
+    for (const source of sources) union.add(source);
+  }
+  if (checks.length === 0) return new Set();
+
+  const ids = [...union];
+  const db = getDb();
+  const live = await db
+    .select({ citationId: paperReviews.citationId })
+    .from(paperReviews)
+    .where(and(inArray(paperReviews.citationId, ids), eq(paperReviews.readInFull, true)));
+  const pendingReviews = await db
+    .select({ targetId: pendingEdits.targetId, proposedValue: pendingEdits.proposedValue })
+    .from(pendingEdits)
+    .where(
+      and(
+        eq(pendingEdits.editType, 'paper_review'),
+        eq(pendingEdits.status, 'pending'),
+        inArray(pendingEdits.targetId, ids),
+      ),
+    );
+  const read = new Set<number>(live.map((r) => r.citationId));
+  for (const row of pendingReviews) {
+    const pv = row.proposedValue as { readInFull?: unknown } | null;
+    if (row.targetId != null && pv?.readInFull === true) read.add(row.targetId);
+  }
+  return new Set(
+    checks
+      .filter((check) => check.sources.some((id) => !read.has(id)))
+      .map((check) => check.id),
+  );
 }
 
 /**
