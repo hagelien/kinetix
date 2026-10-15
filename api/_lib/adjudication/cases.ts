@@ -363,11 +363,20 @@ export async function detectAdjudicationCase(args: {
       for (const t of added) {
         if (t in detected.triggerDetail) triggerDetail[t] = detected.triggerDetail[t];
       }
+      // A person's request is theirs, not only a trigger code: one made after
+      // the case already carried `human_request` is recorded on it too, so
+      // every requester can find their request on the case it joined.
+      const newRequests =
+        known.has('human_request') &&
+        requestIdsOf(detected.triggerDetail).some(
+          (id) => !requestIdsOf(existing.triggerDetail).includes(id),
+        );
+      if (newRequests) triggerDetail.human_request = detected.triggerDetail.human_request;
       await tx
         .update(adjudicationCases)
         .set({
           lastCheckedAt: now,
-          ...(added.length > 0
+          ...(added.length > 0 || newRequests
             ? { triggers: [...(existing.triggers ?? []), ...added], triggerDetail }
             : {}),
           ...(newDisputes
@@ -381,7 +390,7 @@ export async function detectAdjudicationCase(args: {
       outcome = {
         invalidated,
         caseId: existing.id,
-        result: added.length > 0 || newDisputes ? 'joined' : 'unchanged',
+        result: added.length > 0 || newDisputes || newRequests ? 'joined' : 'unchanged',
       };
     } else if (
       existing.state === 'invalidated' &&
@@ -418,6 +427,12 @@ export async function detectAdjudicationCase(args: {
   });
 }
 
+/** The `adjudication_requests` ids a case's trigger detail records. */
+function requestIdsOf(triggerDetail: Record<string, unknown> | null | undefined): number[] {
+  const detail = triggerDetail?.human_request as { requestIds?: unknown } | undefined;
+  return Array.isArray(detail?.requestIds) ? (detail.requestIds as number[]) : [];
+}
+
 async function caseHasOpinions(caseId: number): Promise<boolean> {
   const [row] = await getDb()
     .select({ id: adjudicationOpinions.id })
@@ -429,7 +444,16 @@ async function caseHasOpinions(caseId: number): Promise<boolean> {
 
 export type AdjudicationRequestResult =
   | { ok: true; requestId: number; inserted: boolean; detection: DetectOutcome }
-  | { ok: false; reason: 'target_not_found' | 'target_version_stale' };
+  | { ok: false; reason: 'target_not_found' | 'target_version_stale' }
+  | { ok: false; reason: 'case_closed'; caseId: number };
+
+/** Thrown inside the request transaction so a request that cannot be served is not kept. */
+class AdjudicationRequestRefused extends Error {
+  constructor(readonly caseId: number) {
+    super('the case for this version is closed');
+    this.name = 'AdjudicationRequestRefused';
+  }
+}
 
 /**
  * Record a person's request for an agent adjudication of one version of a
@@ -449,6 +473,13 @@ export type AdjudicationRequestResult =
  * triggers it had before, while the person was told their request stood. A
  * detector fault therefore fails the request as a whole, and the person asks
  * again.
+ *
+ * A request is kept only where it will reach a person: on the version's case
+ * (opened, joined or reopened by it, or already carrying it), or with no case
+ * yet because blind T2 has not spoken — the case then opens with it. A
+ * version whose case is closed without it (decided, or invalidated beyond
+ * reopening) is adjudicated at most once (plan §3.2), so the request is
+ * refused as `case_closed` and nothing is written.
  */
 export async function requestAdjudication(args: {
   targetType: AgentVerificationTargetType;
@@ -500,19 +531,49 @@ export async function requestAdjudication(args: {
       );
     return { ok: true as const, requestId: existing!.id, inserted: false };
   }
-  return inTransaction(async () => {
-    const tx = getDb();
-    await lockVerificationSourceRow(tx, args.targetType, args.targetId);
-    const written = await record(tx);
-    if (!written.ok) return written;
-    // Joins this transaction (`inTransaction` nests), so the source-row lock
-    // is held from the version check through the case update.
-    const detection = await detectAdjudicationCase({
-      targetType: args.targetType,
-      targetId: args.targetId,
+  try {
+    return await inTransaction(async () => {
+      const tx = getDb();
+      await lockVerificationSourceRow(tx, args.targetType, args.targetId);
+      const written = await record(tx);
+      if (!written.ok) return written;
+      // Joins this transaction (`inTransaction` nests), so the source-row lock
+      // is held from the version check through the case update.
+      const detection = await detectAdjudicationCase({
+        targetType: args.targetType,
+        targetId: args.targetId,
+      });
+      const [kase] = await tx
+        .select({
+          id: adjudicationCases.id,
+          state: adjudicationCases.state,
+          invalidatedReason: adjudicationCases.invalidatedReason,
+          triggerDetail: adjudicationCases.triggerDetail,
+        })
+        .from(adjudicationCases)
+        .where(
+          and(
+            eq(adjudicationCases.targetType, args.targetType),
+            eq(adjudicationCases.targetId, args.targetId),
+            eq(adjudicationCases.targetVersion, args.targetVersion),
+          ),
+        );
+      const attached = !kase || requestIdsOf(kase.triggerDetail).includes(written.requestId);
+      // A case retired before any opinion reopens, request included, once the
+      // disagreement or the T2 verdict it lost returns on this version.
+      const reopenable =
+        kase?.state === 'invalidated' &&
+        kase.invalidatedReason === ('disagreement_withdrawn' satisfies InvalidatedReason) &&
+        !(await caseHasOpinions(kase.id));
+      if (!attached && !reopenable) throw new AdjudicationRequestRefused(kase!.id);
+      return { ...written, detection };
     });
-    return { ...written, detection };
-  });
+  } catch (err) {
+    if (err instanceof AdjudicationRequestRefused) {
+      return { ok: false, reason: 'case_closed', caseId: err.caseId };
+    }
+    throw err;
+  }
 }
 
 export interface AdjudicationSweepResult {

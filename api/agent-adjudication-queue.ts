@@ -213,6 +213,19 @@ async function handleRequest(
   if (!result.ok) {
     if (result.reason === 'target_not_found') {
       error(res, 404, 'Target not found', 'adjudication_request_target_not_found');
+    } else if (result.reason === 'case_closed') {
+      // A version is adjudicated at most once; its closed case can be read
+      // with ?caseId=N. Nothing was recorded.
+      json(
+        res,
+        409,
+        {
+          error: 'This version of the target has already been adjudicated; its case is closed',
+          code: 'adjudication_request_case_closed',
+          caseId: result.caseId,
+        },
+        { headers: noStoreHeaders() },
+      );
     } else {
       error(
         res,
@@ -229,8 +242,8 @@ async function handleRequest(
     {
       id: result.requestId,
       inserted: result.inserted,
-      // The case this request opened or joined, if blind T2 has spoken; null
-      // until then (the request opens it when the flagship verdict lands).
+      // The case carrying this request; null while blind T2 has not spoken
+      // (the request opens the case when the flagship verdict lands).
       caseId: result.detection.caseId,
       detection: result.detection.result,
     },

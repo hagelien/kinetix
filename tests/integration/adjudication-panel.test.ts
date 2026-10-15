@@ -1494,6 +1494,57 @@ describe('T3 trigger: a person’s request for an adjudication (issue 17)', () =
     expect(dispute!.status).toBe('open');
   });
 
+  it('refuses, and stores nothing, for a version whose case is already decided', async () => {
+    const s = await seedCase({ agentDispute: true });
+    const editor = await seedUser(db, { email: 'ed@example.com', username: 'ed', role: 'editor' });
+    await claim(s.a.userId, s.caseId);
+    await claim(s.b.userId, s.caseId);
+    await opinion(s.a.userId, { caseId: s.caseId, targetVersion: s.version, resolvedValue: 60, resolvedUnit: 'L/h' });
+    await opinion(s.b.userId, { caseId: s.caseId, targetVersion: s.version, resolvedValue: 60, resolvedUnit: 'L/h' });
+
+    const asked = await request(editor, 'editor', {
+      targetType: 'pending_edit',
+      targetId: s.editId,
+      targetVersion: s.version,
+      reasonMd: REASON,
+    });
+    expect(asked.status).toBe(409);
+    expect(asked.body).toMatchObject({ code: 'adjudication_request_case_closed', caseId: s.caseId });
+    expect(await db.select().from(adjudicationRequests)).toEqual([]);
+    const [kase] = await db.select().from(adjudicationCases).where(eq(adjudicationCases.id, s.caseId));
+    expect(kase!.triggers).toEqual(['t1_t2_disagreement']);
+  });
+
+  it('records every requester on the case, and answers a repeat once the case is decided', async () => {
+    const s = await seedCase({ agentDispute: true });
+    const first = await seedUser(db, { email: 'ed@example.com', username: 'ed', role: 'editor' });
+    const second = await seedUser(db, { email: 'ed2@example.com', username: 'ed2', role: 'editor' });
+    const body = { targetType: 'pending_edit', targetId: s.editId, targetVersion: s.version, reasonMd: REASON };
+
+    const a = await request(first, 'editor', body);
+    const b = await request(second, 'editor', body);
+    expect(b.status).toBe(201);
+    expect(b.body).toMatchObject({ caseId: s.caseId, detection: 'joined' });
+    let [kase] = await db.select().from(adjudicationCases).where(eq(adjudicationCases.id, s.caseId));
+    expect(kase!.triggers).toEqual(['t1_t2_disagreement', 'human_request']);
+    expect(kase!.triggerDetail.human_request).toEqual({
+      requestIds: [a.body.id, b.body.id],
+      requestedBy: [first, second],
+    });
+
+    await claim(s.a.userId, s.caseId);
+    await claim(s.b.userId, s.caseId);
+    await opinion(s.a.userId, { caseId: s.caseId, targetVersion: s.version, resolvedValue: 60, resolvedUnit: 'L/h' });
+    await opinion(s.b.userId, { caseId: s.caseId, targetVersion: s.version, resolvedValue: 60, resolvedUnit: 'L/h' });
+    [kase] = await db.select().from(adjudicationCases).where(eq(adjudicationCases.id, s.caseId));
+    expect(kase!.handoff!.reasons).toEqual(['adjudication_requested']);
+
+    // The case is decided, but it carries this request: the repeat is answered, not refused.
+    const again = await request(first, 'editor', body);
+    expect(again.status).toBe(200);
+    expect(again.body).toMatchObject({ id: a.body.id, inserted: false, caseId: s.caseId, detection: 'terminal' });
+  });
+
   it('keeps a request made before T2 has spoken, and opens the case on it alone once T2 does', async () => {
     const author = await seedAgent('author', { tier: 'mid' });
     const t2 = await seedAgent('t2', { tier: 'flagship' });
