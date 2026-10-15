@@ -7,18 +7,21 @@
  * dependency-free and Hermes-safe; validation is hand-rolled in `simulate.ts`.
  */
 
-/** Administration route of a single dose event. */
-/** Administration routes, as a runtime pick-list. The single source of truth for the route
- *  vocabulary — the `RouteId` type derives from it, and the DB's route CHECK (migration 0111,
- *  CV-2c) is held in step with it by `modelStructureVocabulary.test.ts`, exactly as the
- *  model-structure axes are. */
+/** Administration routes of a dose event, as a runtime pick-list. The single source of truth for
+ *  the route vocabulary — the `RouteId` type derives from it, and the DB's route CHECK (migration
+ *  0111, CV-2c; widened by 0151 for `subcutaneous`/`transdermal`/`buccal`) is held in step with it by
+ *  `modelStructureVocabulary.test.ts`, exactly as the model-structure axes are. Every route but `iv`
+ *  is extravascular (`absorptionCoherentWithRoute`), so a new route needs no engine rule of its own. */
 export const ROUTE_IDS = [
   'oral',
   'intranasal',
   'iv',
   'im',
+  'subcutaneous',
   'sublingual',
+  'buccal',
   'rectal',
+  'transdermal',
   'inhalation',
   'other',
 ] as const;

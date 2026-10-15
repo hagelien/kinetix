@@ -79,6 +79,8 @@ import { ParameterFlagDialog } from './ParameterFlagDialog';
 import { ParameterHistoryDialog } from './ParameterHistoryDialog';
 import { ParameterDiscussionPanel } from './ParameterDiscussionPanel';
 import { ParameterBadges } from './ParameterBadges';
+import { ReferenceHover } from './ReferenceHover';
+import { ParameterSourcesHover } from './ParameterSourcesHover';
 import { fetchParameterVerificationLevels } from '@/lib/verificationLevelsApi';
 import type { VerificationLevelInfo } from '@/lib/verificationLevel';
 import { buildDrugBibliography } from '@/lib/bibliography';
@@ -631,7 +633,6 @@ export function DrugMonographSidebar({
       .filter(
         (item): item is { index: number; row: CitationRow } => item !== null,
       );
-    const refIndices = refItems.map((item) => item.index);
     const hasValue = value != null;
     const activeFlag = activeFlagByParam.get(pid);
     // The pooled aggregate, when this parameter is entry-backed. Its presence
@@ -652,9 +653,11 @@ export function DrugMonographSidebar({
       ? t('parameterEntries.sources', { count: totalEntryCount })
       : t('parameterEntries.addSources');
     // A source-value parameter's figure is the pooled aggregate of its source
-    // values, so the figure itself opens the sources dialog (the same one as
-    // the hover action) instead of trailing `[n]` markers: the per-source
-    // citations are listed there, next to the values they back.
+    // values, so the figure itself is the way into them: resting the pointer on
+    // it previews the source values, and clicking it opens the sources dialog
+    // (the same one as the hover action), where the per-source citations are
+    // listed next to the values they back. Any other value cites through a
+    // reference panel on hover instead. Neither trails `[n]` markers.
     const opensSources =
       parameterIsSummarizable(pid) &&
       Boolean(summary || routeSummaryEntries.length > 0 || canSubmitParameterEntry);
@@ -845,24 +848,27 @@ export function DrugMonographSidebar({
             </span>
           ) : null}
           {opensSources && (hasValue || routeSummaryEntries.length > 0) ? (
-            <button
-              type="button"
-              onClick={openSources}
-              className="cursor-pointer text-left font-medium hover:underline focus-visible:underline focus-visible:outline-none"
-              title={sourcesActionLabel}
+            <ParameterSourcesHover
+              parameter={pid}
+              summary={summary}
+              routeSummaries={drugRow.parameterRouteSummaries?.[pid]}
+              entryCount={totalEntryCount}
+              molecularWeight={drugRow.molecularWeight ?? null}
+              bloodPlasmaRatio={drugRow.bloodPlasmaRatio ?? null}
+              onOpen={openSources}
               data-testid={`parameter-value-sources-${pid}`}
             >
               {renderValueContent(true)}
-            </button>
+            </ParameterSourcesHover>
+          ) : hasValue && refItems.length > 0 ? (
+            <ReferenceHover references={refItems}>
+              {renderValueContent(true)}
+            </ReferenceHover>
           ) : (
             renderValueContent(false)
           )}
           {hasValue ? (
-            <ParameterBadges
-              refCount={paramRefIds.length}
-              refIndices={opensSources ? undefined : refIndices}
-              references={opensSources ? undefined : refItems}
-            />
+            <ParameterBadges refCount={paramRefIds.length} />
           ) : null}
         </dd>
         {pendingCounts[pid] ? (
@@ -1277,9 +1283,8 @@ export function DrugMonographSidebar({
         ? `${t('sidebar.assaySpecies')} ${target.assaySpecies}`
         : null,
     ].filter((metric): metric is string => metric !== null);
-    // Render citations exactly like parameter values do (compacted, linked
-    // [n] markers with hover tooltips into the shared bibliography), via the
-    // same ParameterBadges component.
+    // Cite exactly like parameter values do: the phrase itself opens the
+    // reference panel on hover, numbered against the shared bibliography.
     const refItems = target.referenceIds
       .map((id) => {
         const index = refIndexById.get(id);
@@ -1289,22 +1294,11 @@ export function DrugMonographSidebar({
       .filter(
         (item): item is { index: number; row: CitationRow } => item !== null,
       );
-    const refIndices = refItems.map((item) => item.index);
 
     return (
       <li key={target.id} className="space-y-0.5">
         <div className="font-medium">
-          {phrase}
-          {refIndices.length > 0 ? (
-            <span className="ml-0.5 align-middle">
-              <ParameterBadges
-                refCount={target.referenceIds.length}
-                refIndices={refIndices}
-                references={refItems}
-                showRefWarning={false}
-              />
-            </span>
-          ) : null}
+          <ReferenceHover references={refItems}>{phrase}</ReferenceHover>
         </div>
         <div className="text-muted-foreground">{targetName}</div>
         {metrics.length > 0 ? (
