@@ -408,16 +408,21 @@ describe('agent-verifications GET: peer verdicts stay blind to other agents', ()
     expect(body.summary).toMatchObject({ approveCount: 0, disputeCount: 1 });
   });
 
-  // Only a self-review agent can read its own submission here at all; the
-  // verdicts on it are feedback on its own work.
-  it("shows every verdict on a self-review agent's own submission", async () => {
+  it("keeps a self-review author's peers hidden before and after its own vote", async () => {
     const author = await seedAgent('author-agent', true);
     const peer = await seedAgent('peer-agent-3');
     const editId = await seedOpenEditWithPeerApproval(author.userId, peer.agentId);
 
     const body = JSON.parse((await getVerdicts(author.userId, editId)).body) as Body;
 
-    expect(body.verifications.map((v) => v.agentId)).toEqual([peer.agentId]);
-    expect(body.summary.approveCount).toBe(1);
+    expect(body.verifications).toEqual([]);
+    expect(body.summary.approveCount).toBe(0);
+    await db.insert(agentVerifications).values({
+      agentId: author.agentId, targetType: 'pending_edit', targetId: editId,
+      verdict: 'dispute', rationaleMd: 'My own independent objection.', evidenceRefs: [], isImplicit: false,
+    });
+    const after = JSON.parse((await getVerdicts(author.userId, editId)).body) as Body;
+    expect(after.verifications.map((v) => v.agentId)).toEqual([author.agentId]);
+    expect(after.summary).toMatchObject({ approveCount: 0, disputeCount: 1 });
   });
 });

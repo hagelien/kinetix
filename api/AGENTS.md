@@ -86,7 +86,8 @@ shared/exclusive policy locks prevent an in-flight request from restoring a remo
 
 ## T3 adjudication endpoints
 
-Competing scope is reversible: before the first seat binds a case, changing that flag refreshes
+Competing scope is reversible: before the first seat binds a case, changing its flag,
+supporting verifiers or rationale refreshes
 the trigger and T2 snapshot. After binding, either direction invalidates the case as
 `competing_scope_changed`, preserving the packet and opinions without allowing a stale seal.
 

@@ -29,6 +29,7 @@ import {
   type AdjudicationDisputeSnapshot,
   type AdjudicationSeat,
   type AdjudicationTrigger,
+  type AdjudicationVerdictSnapshot,
   type AgentVerificationEvidenceRef,
   type AgentVerificationTargetType,
 } from '../../../db/schema.js';
@@ -39,7 +40,7 @@ import {
 import { ACTIVE_AGENT_ROLES, targetAuthorUserId } from '../agent-verifications.js';
 import { FLAGSHIP_TIER } from '../../../src/lib/modelTiers.js';
 import { classifyAdjudicationCase, disputeOriginOf } from './detector.js';
-import { bindPanelTarget, liveHydratedTarget } from './snapshot.js';
+import { bindPanelTarget, canonicalJson, liveHydratedTarget } from './snapshot.js';
 
 /**
  * The open disputes about one version of a target. A person's dispute
@@ -148,6 +149,25 @@ function mergeDisputes(
 ): AdjudicationDisputeSnapshot[] {
   const ids = new Set(kept.map((d) => d.disputeId));
   return [...kept, ...seen.filter((d) => !ids.has(d.disputeId))];
+}
+
+/** A reversible scope premise includes who raised it and what they said. */
+function competingScopePremise(record: {
+  triggers: readonly AdjudicationTrigger[] | null;
+  triggerDetail: Record<string, unknown> | null;
+  t2Snapshot: readonly AdjudicationVerdictSnapshot[];
+}): string {
+  const detail = record.triggerDetail?.competing_scope as { verificationIds?: unknown } | undefined;
+  const ids = Array.isArray(detail?.verificationIds)
+    ? detail.verificationIds.filter((id): id is number => typeof id === 'number').sort((a, b) => a - b)
+    : [];
+  return canonicalJson({
+    active: (record.triggers ?? []).includes('competing_scope'),
+    ids,
+    verdicts: record.t2Snapshot.filter((v) => ids.includes(v.verificationId))
+      .map(({ recordedAt: _recordedAt, ...premise }) => premise)
+      .sort((a, b) => a.verificationId - b.verificationId),
+  });
 }
 
 /**
@@ -291,6 +311,7 @@ export async function detectAdjudicationCase(args: {
         triggers: adjudicationCases.triggers,
         triggerDetail: adjudicationCases.triggerDetail,
         t1Snapshot: adjudicationCases.t1Snapshot,
+        t2Snapshot: adjudicationCases.t2Snapshot,
         adjudicatedTarget: adjudicationCases.adjudicatedTarget,
       })
       .from(adjudicationCases)
@@ -348,8 +369,7 @@ export async function detectAdjudicationCase(args: {
         ? { invalidated, caseId: opened.id, result: 'opened' }
         : { invalidated, caseId: null, result: 'none' };
     } else if ((LIVE_CASE_STATES as readonly string[]).includes(existing.state)) {
-      const scopeChanged = (existing.triggers ?? []).includes('competing_scope') !==
-        detected.triggers.includes('competing_scope');
+      const scopeChanged = competingScopePremise(existing) !== competingScopePremise(detected);
       if (scopeChanged && existing.adjudicatedTarget) {
         // Preserve the packet and opinions as evidence of what these seats read.
         // As with target drift, a changed premise cannot inherit their decision.
@@ -380,6 +400,7 @@ export async function detectAdjudicationCase(args: {
         openDisputesSeen.length > existing.t1Snapshot.openDisputes.length;
       const triggerDetail = { ...(existing.triggerDetail ?? {}) };
       if (!detected.triggers.includes('competing_scope')) delete triggerDetail.competing_scope;
+      else triggerDetail.competing_scope = detected.triggerDetail.competing_scope;
       for (const t of added) {
         if (t in detected.triggerDetail) triggerDetail[t] = detected.triggerDetail[t];
       }

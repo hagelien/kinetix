@@ -1613,6 +1613,22 @@ describe('T3 trigger: a person’s request for an adjudication (issue 17)', () =
 });
 
 describe('T3 cases act only on triggers that still stand (PR #291 review)', () => {
+  it.each([false, true])('refreshes or retires a changed scope rationale (bound=%s)', async (bound) => {
+    const s = await seedCase({ agentDispute: true });
+    await db.update(agentVerifications).set({ competingScope: true })
+      .where(eq(agentVerifications.agentId, s.t2.agentId));
+    await detectAdjudicationCase({ targetType: 'pending_edit', targetId: s.editId });
+    if (bound) await claim(s.a.userId, s.caseId);
+    const rationaleMd = 'The competing interpretation now rests on a different population.';
+    await db.update(agentVerifications).set({ rationaleMd })
+      .where(eq(agentVerifications.agentId, s.t2.agentId));
+    await detectAdjudicationCase({ targetType: 'pending_edit', targetId: s.editId });
+    const [kase] = await db.select().from(adjudicationCases).where(eq(adjudicationCases.id, s.caseId));
+    expect(kase!.state).toBe(bound ? 'invalidated' : 'open');
+    if (bound) expect(kase!.invalidatedReason).toBe('competing_scope_changed');
+    else expect(kase!.t2Snapshot[0]!.rationaleMd).toBe(rationaleMd);
+  });
+
   it.each([false, true])('binds the refreshed packet when competing scope changes from %s just before the first claim', async (initialScope) => {
     const s = await seedCase({ agentDispute: true });
     if (initialScope) {
