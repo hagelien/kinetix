@@ -289,9 +289,9 @@ describe('GET /api/pending-edits — batched agent-consensus status (#1374)', ()
     });
   });
 
-  it('does attach consensusStatus for a self-review-enabled agent viewing its own submission', async () => {
+  it('withholds peer summaries across a self-review grant, including reviewer agents', async () => {
     const author = await seedAgent('author3', 'author3', {
-      selfReviewEnabled: true,
+      selfReviewEnabled: false,
     });
     const opus = await seedAgent('opus3', 'Claude Opus 5');
     const sol = await seedAgent('sol3', 'GPT-5.6 Sol');
@@ -299,25 +299,48 @@ describe('GET /api/pending-edits — batched agent-consensus status (#1374)', ()
     await approve(opus.agentId, editId, { model: 'claude-opus-5' });
     await approve(sol.agentId, editId, { model: 'gpt-5.6-sol' });
 
-    getUserFromRequestMock.mockResolvedValue({
-      userId: author.userId,
-      role: 'contributor',
-    });
+    for (const selfReviewEnabled of [false, true]) {
+      await db.update(agents).set({ selfReviewEnabled })
+        .where(eq(agents.id, author.agentId));
+      for (const role of ['contributor', 'editor']) {
+        getUserFromRequestMock.mockResolvedValue({ userId: author.userId, role });
+        const { res, state } = createResponse();
+        await pendingEditsHandler(getPendingEditsRequest(), res);
+        expect(state.statusCode).toBe(200);
+        const body = JSON.parse(state.body) as {
+          pendingEdits: Array<{ id: number; consensusStatus?: unknown; verifications: unknown }>;
+        };
+        const row = body.pendingEdits.find((e) => e.id === editId);
+        expect(row).toBeDefined();
+        expect(row?.consensusStatus).toBeUndefined();
+        expect(row?.verifications).toMatchObject({
+          approveCount: 0, disputeCount: 0, implicitApproveCount: 0,
+          unresolvedDisputeCount: 0,
+        });
+        expect(state.body).not.toContain('Claude Opus 5');
+        expect(state.body).not.toContain('GPT-5.6 Sol');
+      }
+    }
+  });
+
+  it('withholds peer tallies from an agent mutation receipt', async () => {
+    const author = await seedAgent('receipt-author');
+    const peer = await seedAgent('receipt-peer');
+    const editId = await seedHighRiskEdit(author.userId);
+    await approve(peer.agentId, editId);
+    getUserFromRequestMock.mockResolvedValue({ userId: author.userId, role: 'contributor' });
+    const req = Readable.from([JSON.stringify({ status: 'rejected', rejectionReason: 'other' })]) as IncomingMessage;
+    req.method = 'PATCH';
+    req.url = `/api/pending-edits?id=${editId}`;
+    req.headers = { host: 'localhost', 'content-type': 'application/json' };
     const { res, state } = createResponse();
-    await pendingEditsHandler(getPendingEditsRequest(), res);
-    const body = JSON.parse(state.body) as {
-      pendingEdits: Array<{ id: number; consensusStatus?: unknown }>;
-    };
-    expect(
-      body.pendingEdits.find((e) => e.id === editId)?.consensusStatus,
-    ).toEqual({
-      ready: false,
-      reason: 'high_risk_missing_flagship',
-      unrankedFlagshipApprovers: expect.arrayContaining([
-        'Claude Opus 5',
-        'GPT-5.6 Sol',
-      ]),
+    await pendingEditsHandler(req, res);
+    expect(state.statusCode).toBe(200);
+    expect(JSON.parse(state.body).pendingEdit.verifications).toMatchObject({
+      approveCount: 0, disputeCount: 0, implicitApproveCount: 0,
     });
+    // The real peer verdict remains stored; only the agent-facing receipt is filtered.
+    expect(await listVerifications({ targetType: 'pending_edit', targetId: editId })).toHaveLength(1);
   });
 });
 

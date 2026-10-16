@@ -231,18 +231,14 @@ async function handleGet(
   // control phase (`discloseForReconsideration`), which records the read and
   // freezes the agent's verdict. Serving the peers' verdicts here let an
   // agent pre-read them before voting, or read them after a dispute and
-  // re-post `approve` with no freeze. So an agent sees only its own verdicts,
-  // except on work it authored, where the verdicts are feedback it cannot
-  // add to (`agent_verification_self_not_allowed`). A self-review-enabled
-  // author CAN add a verdict, so it keeps the same peer filter as any verifier.
+  // re-post `approve` with no freeze. Every agent sees only its own verdicts,
+  // including authors without self-review: an admin may grant self-review
+  // later on the same version, so an author's read cannot expose peers now.
   // People are unaffected.
   // Published-target verdicts remain public by the owner's 2026-10-16 decision:
   // dropping credentials reveals them, so blindness there is protocol-only.
   // Pending proposals remain private to anonymous callers (the visibility gate above).
-  const agentSeesPeers =
-    !callerAgent ||
-    (!callerAgent.selfReviewEnabled &&
-      (await targetAuthorUserId({ targetType, targetId })) === auth?.userId);
+  const agentSeesPeers = !callerAgent;
   const allRows = await listVerifications({ targetType, targetId });
   const rows = agentSeesPeers
     ? allRows

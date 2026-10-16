@@ -75,10 +75,10 @@ function createResponse() {
   return { res, state };
 }
 
-async function getVerdicts(callerUserId: number, targetId: number) {
+async function getVerdicts(callerUserId: number, targetId: number, role = 'contributor') {
   getUserFromRequestMock.mockResolvedValue({
     userId: callerUserId,
-    role: 'contributor',
+    role,
   });
   const req = {
     method: 'GET',
@@ -370,6 +370,25 @@ describe('agent-verifications GET: peer verdicts stay blind to other agents', ()
     summary: { approveCount: number; disputeCount: number };
     consensus?: unknown;
   };
+
+  it('keeps an authored version blind across a later self-review grant', async () => {
+    const author = await seedAgent('later-self-review');
+    const peer = await seedAgent('later-self-review-peer');
+    const editId = await seedOpenEditWithPeerApproval(author.userId, peer.agentId);
+
+    // A reviewer role can read the authored target even without self-review.
+    // It must not reveal peers that would inform a later grant on this version.
+    const before = await getVerdicts(author.userId, editId, 'editor');
+    expect(before.statusCode).toBe(200);
+    expect((JSON.parse(before.body) as Body).verifications).toEqual([]);
+    expect((JSON.parse(before.body) as Body).summary.approveCount).toBe(0);
+    await db.update(agents).set({ selfReviewEnabled: true })
+      .where(eq(agents.id, author.agentId));
+    const after = await getVerdicts(author.userId, editId, 'editor');
+    expect(after.statusCode).toBe(200);
+    expect((JSON.parse(after.body) as Body).verifications).toEqual([]);
+    expect((JSON.parse(after.body) as Body).consensus).toBeUndefined();
+  });
 
   it("hides peers' verdicts and tallies from an agent that could verify the target", async () => {
     const submitterId = await seedUser(db, { email: 's@example.com', username: 's' });

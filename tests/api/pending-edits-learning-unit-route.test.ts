@@ -129,7 +129,9 @@ function mockDb() {
   );
   const innerWhereFn = vi.fn().mockReturnValue(whereResult);
   const leftJoinFn = vi.fn().mockReturnValue({ where: innerWhereFn });
-  const fromFn = vi.fn().mockReturnValue({ where: innerWhereFn, leftJoin: leftJoinFn });
+  const fromFn = vi.fn().mockReturnValue({
+    where: innerWhereFn, leftJoin: leftJoinFn, innerJoin: leftJoinFn,
+  });
   const selectFn = vi.fn().mockReturnValue({ from: fromFn });
 
   // clearVerificationsForTarget uses delete().where().returning().
