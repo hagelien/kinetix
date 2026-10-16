@@ -41,6 +41,11 @@ Multi-action routes such as `auth.ts` dispatch via `?action=` rather than separa
 
 ## Auth
 
+Code issuance holds `withAuthAllowlistReadLock` from its first eligibility read through the
+committed user/code write; email delivery follows commit. Email and domain removals acquire
+`lockAuthAllowlistRemoval` first in their deletion/revocation transaction. These matching
+shared/exclusive policy locks prevent an in-flight request from restoring a removed user's code.
+
 - JWT is stored in the `__Host-kinetix-auth` httpOnly cookie with SameSite=Lax and Secure. Older `kinetix-auth` and `fjelltox-auth` cookies are not accepted for authentication; they are only cleared on new login/logout.
 - `getUserFromRequest(req)` returns `{ userId, role } | null`.
 - Magic-link endpoints use best-effort in-memory throttles before DB/auth work. `/api/auth-request` limits repeated sends per email and per client IP, and `/api/auth-verify` limits repeated guesses per email and per client IP while still keeping invalid-code responses generic.

@@ -5,6 +5,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("../../api/_lib/db.js", () => ({
   getDb: vi.fn(),
 }));
+vi.mock("../../api/_lib/auth-allowlist-lock.js", () => ({
+  withAuthAllowlistReadLock: (fn: () => Promise<unknown>) => fn(),
+}));
 
 vi.mock("../../api/_lib/email.js", () => ({
   sendLoginCode: vi.fn(),

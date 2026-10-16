@@ -22,6 +22,7 @@ import {
   withErrorHandling,
 } from './_lib/response.js';
 import { getDb, getNeonClient, runInPoolTransaction } from './_lib/db.js';
+import { lockAuthAllowlistRemoval } from './_lib/auth-allowlist-lock.js';
 import { getUserFromRequest } from './_lib/auth.js';
 import { CAP } from '../src/lib/permissions.js';
 import { authCan, requireCapability } from './_lib/permissions-store.js';
@@ -672,6 +673,7 @@ async function handleAllowedDomains(
     // the entry would be gone with its sessions still live, and a retried
     // DELETE (no row left to return) could never revoke them.
     await runInPoolTransaction(async () => {
+      await lockAuthAllowlistRemoval();
       const [removed] = await getDb()
         .delete(allowedEmailDomains)
         .where(eq(allowedEmailDomains.id, id))
@@ -1251,6 +1253,7 @@ async function handleAllowedEmails(
     }
     // One transaction, as for a removed domain.
     await runInPoolTransaction(async () => {
+      await lockAuthAllowlistRemoval();
       const [removed] = await getDb()
         .delete(allowedEmails)
         .where(eq(allowedEmails.id, id))

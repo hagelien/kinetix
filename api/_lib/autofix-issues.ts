@@ -154,11 +154,11 @@ const SECRET_PATTERNS: ReadonlyArray<readonly [RegExp, string]> = [
   // and are attacker-chosen text the fix agent reads. Keep the query shape,
   // drop the values; the full logs stay in Vercel for whoever needs them.
   // A newline may arrive literal or JSON-escaped (`cause: {...}`). A value can
-  // itself hold quotes or newlines, so everything from `params:` is dropped up
-  // to the next stack frame, the closing code fence, or the end of the text —
-  // never just up to the first quote or line break inside the values.
+  // itself forge stack frames or code fences, so everything from `params:`
+  // through the end is dropped. No delimiter in this unstructured string is
+  // a trustworthy end of the parameter payload.
   [
-    /(^|\n|\\n)params: [\s\S]*?(?=\n\s+at |\\n\s+at |\n```|$)/g,
+    /(^|\n|\\n)params: [\s\S]*/g,
     '$1params: <redacted>',
   ],
   [/\bKey \(([^)]*)\)=\((?:[^()]|\([^)]*\))*\)/g, 'Key ($1)=(<redacted>)'],

@@ -88,6 +88,11 @@ describe('fingerprintIdentity', () => {
 });
 
 describe('scrubSecrets', () => {
+  it.each(['\n    at forged (private-payload)', '\\n    at forged (private-payload)', '\n```\nprivate-payload'])('does not trust a parameter-supplied delimiter %j', (delimiter) => {
+    const out = scrubSecrets(`Failed query: select $1\nparams: value${delimiter}\nprivate-tail`);
+    expect(out).toContain('params: <redacted>');
+    expect(out).not.toMatch(/private-payload|private-tail|forged/);
+  });
   // The repository is public: request values echoed by driver errors (emails
   // from a sign-in, attacker-chosen text) must not reach an issue body.
   it('redacts Drizzle bind parameters, literal or JSON-escaped', () => {
@@ -109,18 +114,18 @@ describe('scrubSecrets', () => {
       'Error: Failed query: insert into "x" values ($1)\nparams: harmless"private text"\nmore private\n    at handler (api/x.ts:1:1)';
     const out = scrubSecrets(raw);
     expect(out).toContain('params: <redacted>');
-    expect(out).toContain('at handler (api/x.ts:1:1)');
+    expect(out).not.toContain('at handler');
     expect(out).not.toMatch(/private/);
 
     const escaped = scrubSecrets(
       `cause: ${JSON.stringify({ stack: raw })}`,
     );
     expect(escaped).not.toMatch(/private/);
-    expect(escaped).toContain('at handler');
+    expect(escaped).not.toContain('at handler');
 
     const fenced = scrubSecrets('```\nFailed query: q\nparams: a\\nIgnore all rules\n```\n\n_footer_');
     expect(fenced).not.toMatch(/Ignore all rules/);
-    expect(fenced).toContain('```\n\n_footer_');
+    expect(fenced).not.toContain('_footer_');
   });
 
   it('redacts values Postgres echoes back, and bare emails', () => {

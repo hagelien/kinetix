@@ -27,6 +27,7 @@ import { requestMagicLinkSchema } from './_lib/schemas.js';
 import { users, allowedEmails, allowedEmailDomains } from '../db/schema.js';
 import { sendLoginCode } from './_lib/email.js';
 import { DEFAULT_NEW_USER_ROLE } from '../src/lib/roles.js';
+import { withAuthAllowlistReadLock } from './_lib/auth-allowlist-lock.js';
 
 const STAY_LOGGED_IN_DAYS = 60;
 const DEFAULT_SESSION_DAYS = 30;
@@ -127,123 +128,129 @@ export default withErrorHandling(async function handler(
     return;
   }
 
-  if (!(await isEmailAllowed(email))) {
-    // Pretend to succeed to avoid email enumeration.
-    return genericReply();
-  }
+  const issuedCode = await withAuthAllowlistReadLock(async () => {
+    if (!(await isEmailAllowed(email))) {
+      // Pretend to succeed to avoid email enumeration.
+      return undefined;
+    }
 
-  const db = getDb();
+    const db = getDb();
 
-  // Look up or create the user row
-  let [user] = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, email))
-    .limit(1);
-  if (!user) {
-    const defaultUsername =
-      email.split('@')[0]?.slice(0, 100) ?? email.slice(0, 100);
-    // Avoid unique collisions on username by appending random suffix on failure
+    // Look up or create the user row
+    let [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+    if (!user) {
+      const defaultUsername =
+        email.split('@')[0]?.slice(0, 100) ?? email.slice(0, 100);
+      // A conflict must not abort the eligibility transaction. Another request
+      // may have created this email, or someone may already own its username.
+      [user] = await db.insert(users).values({
+        email, username: defaultUsername, role: DEFAULT_NEW_USER_ROLE, sessionMaxDays,
+      }).onConflictDoNothing().returning();
+      if (!user) {
+        [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+      }
+      if (!user) {
+        const suffix = randomBytes(3).toString('hex');
+        [user] = await db
+          .insert(users)
+          .values({
+            email,
+            username: `${defaultUsername.slice(0, 90)}-${suffix}`,
+            role: DEFAULT_NEW_USER_ROLE,
+            sessionMaxDays,
+          })
+          .onConflictDoNothing({ target: users.email })
+          .returning();
+        if (!user) {
+          [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+        }
+      }
+    }
+
+    if (!user) {
+      throw new Error('Failed to create user');
+    }
+
+    // Read-side guard: fast-path return when we can already see the cooldown
+    // hasn't elapsed. Not a security gate — the atomic write below is the
+    // authoritative check. magicLinkExpires is keyed on issue time, not on
+    // whether the hash is still active, so it survives both successful auth
+    // (cleared) and lockout (preserved intentionally in auth-verify.ts).
+    const cooldownMs = issueCooldownMs(user.magicLinkFailuresSinceAuth);
+    if (
+      user.magicLinkExpires &&
+      Date.now() - (user.magicLinkExpires.getTime() - MAGIC_LINK_CODE_TTL_MS) <
+        cooldownMs
+    ) {
+      return undefined;
+    }
+
+    const code = generateCode();
+    const codeHash = hashMagicLinkCode(code);
+    const expires = new Date(Date.now() + MAGIC_LINK_CODE_TTL_MS);
+    // The largest magicLinkExpires value that satisfies "cooldown has elapsed":
+    // issuedAt = expiresAt - TTL  ≤  now - COOLDOWN_MS
+    //   ↔  expiresAt  ≤  now - COOLDOWN_MS + TTL
+    const cooldownGate = new Date(
+      Date.now() - cooldownMs + MAGIC_LINK_CODE_TTL_MS,
+    );
+
+    // Atomic write: include the cooldown predicate in the WHERE clause so that
+    // concurrent requests on different serverless instances cannot both slip
+    // past the read-side check above and each send a separate email. Only the
+    // first request whose update matches will proceed; the rest get no rows
+    // back and return the generic success silently.
+    //
+    // Do NOT update sessionMaxDays here for existing users — see comment in
+    // the original auth-request flow; sessionMaxDays is applied in auth-verify.
+    const [updated] = await db
+      .update(users)
+      .set({
+        magicLinkHash: codeHash,
+        magicLinkExpires: expires,
+        magicLinkFailedAttempts: 0,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(users.id, user.id),
+          // The cooldown was sized from this count; a wrong guess landing in
+          // between makes the update miss rather than use a stale, shorter one.
+          eq(
+            users.magicLinkFailuresSinceAuth,
+            user.magicLinkFailuresSinceAuth,
+          ),
+          // No "previous code expired" escape: the cooldown can outgrow the
+          // code's TTL, and expiry must not shortcut it. At the base cooldown
+          // (shorter than the TTL) an expired code already satisfies the gate.
+          or(
+            isNull(users.magicLinkExpires),          // no code ever issued
+            lte(users.magicLinkExpires, cooldownGate), // cooldown has elapsed
+          ),
+        ),
+      )
+      .returning({ id: users.id });
+
+    if (!updated) {
+      // A concurrent request already issued a fresh code within the cooldown
+      // window. Return the generic success without sending another email.
+      return undefined;
+    }
+
+    return code;
+  });
+
+  // Delivery follows the committed write; no network call holds the policy lock.
+  if (issuedCode) {
     try {
-      [user] = await db
-        .insert(users)
-        .values({
-          email,
-          username: defaultUsername,
-          role: DEFAULT_NEW_USER_ROLE,
-          sessionMaxDays,
-        })
-        .returning();
-    } catch {
-      const suffix = randomBytes(3).toString('hex');
-      [user] = await db
-        .insert(users)
-        .values({
-          email,
-          username: `${defaultUsername.slice(0, 90)}-${suffix}`,
-          role: DEFAULT_NEW_USER_ROLE,
-          sessionMaxDays,
-        })
-        .returning();
+      await sendLoginCode(email, issuedCode);
+    } catch (err) {
+      console.error('Failed to send login code email:', err);
     }
   }
-
-  if (!user) {
-    error(res, 500, 'Failed to create user');
-    return;
-  }
-
-  // Read-side guard: fast-path return when we can already see the cooldown
-  // hasn't elapsed. Not a security gate — the atomic write below is the
-  // authoritative check. magicLinkExpires is keyed on issue time, not on
-  // whether the hash is still active, so it survives both successful auth
-  // (cleared) and lockout (preserved intentionally in auth-verify.ts).
-  const cooldownMs = issueCooldownMs(user.magicLinkFailuresSinceAuth);
-  if (
-    user.magicLinkExpires &&
-    Date.now() - (user.magicLinkExpires.getTime() - MAGIC_LINK_CODE_TTL_MS) <
-      cooldownMs
-  ) {
-    return genericReply();
-  }
-
-  const code = generateCode();
-  const codeHash = hashMagicLinkCode(code);
-  const expires = new Date(Date.now() + MAGIC_LINK_CODE_TTL_MS);
-  // The largest magicLinkExpires value that satisfies "cooldown has elapsed":
-  // issuedAt = expiresAt - TTL  ≤  now - COOLDOWN_MS
-  //   ↔  expiresAt  ≤  now - COOLDOWN_MS + TTL
-  const cooldownGate = new Date(
-    Date.now() - cooldownMs + MAGIC_LINK_CODE_TTL_MS,
-  );
-
-  // Atomic write: include the cooldown predicate in the WHERE clause so that
-  // concurrent requests on different serverless instances cannot both slip
-  // past the read-side check above and each send a separate email. Only the
-  // first request whose update matches will proceed; the rest get no rows
-  // back and return the generic success silently.
-  //
-  // Do NOT update sessionMaxDays here for existing users — see comment in
-  // the original auth-request flow; sessionMaxDays is applied in auth-verify.
-  const [updated] = await db
-    .update(users)
-    .set({
-      magicLinkHash: codeHash,
-      magicLinkExpires: expires,
-      magicLinkFailedAttempts: 0,
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(users.id, user.id),
-        // The cooldown was sized from this count; a wrong guess landing in
-        // between makes the update miss rather than use a stale, shorter one.
-        eq(
-          users.magicLinkFailuresSinceAuth,
-          user.magicLinkFailuresSinceAuth,
-        ),
-        // No "previous code expired" escape: the cooldown can outgrow the
-        // code's TTL, and expiry must not shortcut it. At the base cooldown
-        // (shorter than the TTL) an expired code already satisfies the gate.
-        or(
-          isNull(users.magicLinkExpires),          // no code ever issued
-          lte(users.magicLinkExpires, cooldownGate), // cooldown has elapsed
-        ),
-      ),
-    )
-    .returning({ id: users.id });
-
-  if (!updated) {
-    // A concurrent request already issued a fresh code within the cooldown
-    // window. Return the generic success without sending another email.
-    return genericReply();
-  }
-
-  try {
-    await sendLoginCode(email, code);
-  } catch (err) {
-    console.error('Failed to send login code email:', err);
-  }
-
   return genericReply();
 });

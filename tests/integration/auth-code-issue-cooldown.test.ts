@@ -135,6 +135,11 @@ async function wrongGuesses(n: number) {
 }
 
 describe('sign-in code issue cooldown', () => {
+  it('creates an account even when its default username is already taken', async () => {
+    await db.insert(users).values({ email: 'other@example.com', username: 'victim' });
+    expect(await issues()).toBe(true);
+  });
+
   it('keeps the 60 s cooldown when there are no wrong guesses', async () => {
     expect(await issues()).toBe(true);
     await issuedAgo(30_000);

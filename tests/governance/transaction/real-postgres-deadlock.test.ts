@@ -47,6 +47,7 @@ import {
   lockDrugForEntryApplicability,
   withDrugApplicabilityLock,
 } from '../../../api/_lib/parameterApplicabilityStore.js';
+import { lockAuthAllowlistRemoval, withAuthAllowlistReadLock } from '../../../api/_lib/auth-allowlist-lock.js';
 import {
   LOCK_TIMEOUT_MS,
   REAL_PG_URL_ENV,
@@ -90,6 +91,31 @@ describe.skipIf(!hasRealPostgres)('real-Postgres advisory lock behaviour', () =>
   });
 
   describe('the target itself hands out separate backends', () => {
+    it('blocks allowlist removal until an in-flight code issuance commits', async () => {
+      await withAuthAllowlistReadLock(async () => {
+        const blocked = runInPoolTransaction(async () => {
+          await lockAuthAllowlistRemoval();
+        });
+        await expect(blocked).rejects.toMatchObject({ cause: { code: LOCK_NOT_AVAILABLE } });
+      });
+      // The policy lock ends with the issuance transaction.
+      await expect(runInPoolTransaction(async () => {
+        await lockAuthAllowlistRemoval();
+      })).resolves.toBeUndefined();
+    }, LOCK_TIMEOUT_MS * 3);
+
+    it('blocks new eligibility reads until allowlist removal commits', async () => {
+      await runInPoolTransaction(async () => {
+        await lockAuthAllowlistRemoval();
+        // A separate backend must not inherit the removal transaction.
+        const blocked = runInPoolTransaction(async () => {
+          await withAuthAllowlistReadLock(async () => undefined);
+        });
+        await expect(blocked).rejects.toMatchObject({ cause: { code: LOCK_NOT_AVAILABLE } });
+      });
+      await expect(withAuthAllowlistReadLock(async () => undefined)).resolves.toBeUndefined();
+    }, LOCK_TIMEOUT_MS * 3);
+
     /**
      * Non-vacuity for everything below. If this block does not hold, the
      * target has collapsed to PGlite's single-connection behaviour and the
