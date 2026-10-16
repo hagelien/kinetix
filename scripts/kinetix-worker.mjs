@@ -1,6 +1,6 @@
 /** Per-command credential selection for local scheduled workers. No shared env writes. */
 // Invoked with node. A hashbang here becomes invalid after Vite hoists imports.
-import { existsSync, lstatSync, readFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { homedir, devNull } from "node:os";
@@ -232,15 +232,12 @@ function command(kind, args) {
     ) {
       throw new Error("Usage: pdf POSITIVE_CITATION_ID OUTPUT_FILE");
     }
-    // The existing downloader handles binary bytes and strips auth before its
-    // allowlisted Blob redirect. Never run PDF bytes through UTF-8/redaction.
+    // Keep the destination in Node: Windows -> MSYS argument handling can
+    // remove braces from sandbox temp paths. The downloader emits binary stdout
+    // and still strips auth before its allowlisted Blob redirect.
     return [
       "bash",
-      [
-        path.join(root, "scripts", "download-citation-pdf.sh"),
-        args[0],
-        path.resolve(root, args[1]).replaceAll("\\", "/"),
-      ],
+      [path.join(root, "scripts", "download-citation-pdf.sh"), args[0]],
     ];
   }
   if (kind === "api") {
@@ -277,7 +274,7 @@ function execute(kind, args, env, input) {
     cwd: root,
     env,
     input,
-    encoding: "utf8",
+    encoding: kind === "pdf" ? null : "utf8",
     maxBuffer: 64 * 1024 * 1024,
     timeout: 120000,
     windowsHide: true,
@@ -370,12 +367,13 @@ export function main(argv = process.argv.slice(2)) {
     env.KINETIX_AGENT_DRY_RUN !== "1"
   ) {
     const output = path.resolve(root, args[1]);
-    const bytes = readFileSync(output);
+    const bytes = result.stdout;
     if (bytes.subarray(0, 5).toString("ascii") !== "%PDF-") {
       throw new Error(
         "Stored citation response is not a PDF; do not read or attest it.",
       );
     }
+    writeFileSync(output, bytes);
     console.log(
       JSON.stringify({
         path: output,
@@ -384,7 +382,10 @@ export function main(argv = process.argv.slice(2)) {
       }),
     );
   }
-  process.stdout.write(redact(result.stdout, profile.token));
+  // Binary output is written only to the requested file, never redacted or
+  // printed as text (including an unsuccessful download's partial stdout).
+  if (kind !== "pdf")
+    process.stdout.write(redact(result.stdout, profile.token));
   process.stderr.write(redact(result.stderr, profile.token));
   return result.status ?? 1;
 }
