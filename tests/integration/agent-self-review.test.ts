@@ -314,3 +314,42 @@ describe('agent self-review (agents.self_review_enabled)', () => {
     expect(rows.some((r) => r.verdict === 'dispute')).toBe(false);
   });
 });
+
+// The grant's carve-outs on the manual path: a model-structure entry (and a
+// clinical case) asks for a genuine second party, so a self-review agent may
+// not approve its own — consensus would count that approval toward quorum.
+describe('agent self-review carve-outs', () => {
+  async function seedOwnModelStructureEdit() {
+    const seeded = await seedSelfSubmittedEdit(true);
+    const [edit] = await db
+      .insert(pendingEdits)
+      .values({
+        editType: 'param_entry',
+        parameter: 'dispositionModel',
+        proposedValue: { op: 'create', input: { categoricalValue: 'two-compartment' } },
+        submittedBy: seeded.agentUserId,
+        status: 'pending',
+      })
+      .returning({ id: pendingEdits.id, submittedAt: pendingEdits.submittedAt });
+    return { ...seeded, editId: edit!.id, submittedAt: edit!.submittedAt };
+  }
+
+  it('refuses a self-review agent approving its own model-structure entry', async () => {
+    const seeded = await seedOwnModelStructureEdit();
+
+    const state = await postVerdict({
+      callerUserId: seeded.agentUserId,
+      targetId: seeded.editId,
+      targetVersion: `${seeded.submittedAt.toISOString()}|pending`,
+      verdict: 'approve',
+      rationaleMd: 'Kontrollert mot primærkilden på nytt.',
+    });
+
+    expect(state.statusCode).toBe(403);
+    expect(JSON.parse(state.body).code).toBe('agent_verification_self_review_excluded');
+    const explicit = (await db.select().from(agentVerifications)).filter(
+      (r) => r.targetId === seeded.editId && !r.isImplicit,
+    );
+    expect(explicit).toHaveLength(0);
+  });
+});

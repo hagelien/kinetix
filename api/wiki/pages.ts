@@ -331,13 +331,13 @@ async function fetchAndServePage(
     page.parentId != null
       ? db.execute(sql`
           WITH RECURSIVE anc AS (
-            SELECT id, slug, title, page_type, parent_id, 1 AS depth,
+            SELECT id, slug, title, page_type, status, parent_id, 1 AS depth,
                    ARRAY[id] AS visited
             FROM wiki_pages
             WHERE id = ${page.parentId}
               AND id <> ${page.id}
             UNION ALL
-            SELECT wp.id, wp.slug, wp.title, wp.page_type, wp.parent_id,
+            SELECT wp.id, wp.slug, wp.title, wp.page_type, wp.status, wp.parent_id,
                    anc.depth + 1,
                    anc.visited || wp.id
             FROM wiki_pages wp
@@ -346,7 +346,7 @@ async function fetchAndServePage(
               AND NOT (wp.id = ANY(anc.visited))
               AND wp.id <> ${page.id}
           )
-          SELECT id, slug, title, page_type
+          SELECT id, slug, title, page_type, status
           FROM anc
           ORDER BY depth DESC
         `)
@@ -365,17 +365,31 @@ async function fetchAndServePage(
       .orderBy(wikiPages.title),
   ]);
 
+  // A published page may sit under a draft or archived one (a parent need not
+  // be published), and the breadcrumbs must not name a page its reader could
+  // not open: an anonymous read is cached publicly at the edge. Children are
+  // already limited to published pages; ancestors the caller may not read are
+  // left out the same way.
+  const readableStatus = new Map<string, boolean>();
   const ancestors: Array<{
     id: number;
     slug: string;
     title: string;
     pageType: string;
-  }> = (ancestorsResult.rows as Array<Record<string, unknown>>).map((r) => ({
-    id: Number(r.id),
-    slug: String(r.slug),
-    title: String(r.title),
-    pageType: String(r.page_type),
-  }));
+  }> = [];
+  for (const r of ancestorsResult.rows as Array<Record<string, unknown>>) {
+    const status = String(r.status);
+    if (!readableStatus.has(status)) {
+      readableStatus.set(status, await canReadWikiPage(req, status));
+    }
+    if (!readableStatus.get(status)) continue;
+    ancestors.push({
+      id: Number(r.id),
+      slug: String(r.slug),
+      title: String(r.title),
+      pageType: String(r.page_type),
+    });
+  }
 
   // Published wiki pages are public-readable and only change when an edit is
   // approved, so let the CDN serve them. Draft/archived pages stay uncached.

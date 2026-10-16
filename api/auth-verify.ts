@@ -99,6 +99,7 @@ export default withErrorHandling(async function handler(
       lastAuthAt: users.lastAuthAt,
       updatedAt: users.updatedAt,
       sessionMaxDays: users.sessionMaxDays,
+      sessionGeneration: users.sessionGeneration,
       magicLinkHash: users.magicLinkHash,
       magicLinkExpires: users.magicLinkExpires,
       magicLinkFailedAttempts: users.magicLinkFailedAttempts,
@@ -131,6 +132,9 @@ export default withErrorHandling(async function handler(
       .set({
         magicLinkFailedAttempts: sql`CASE WHEN ${users.magicLinkFailedAttempts} + 1 >= ${MAX_MAGIC_LINK_FAILURES} THEN 0 ELSE ${users.magicLinkFailedAttempts} + 1 END`,
         magicLinkHash: sql`CASE WHEN ${users.magicLinkFailedAttempts} + 1 >= ${MAX_MAGIC_LINK_FAILURES} THEN NULL ELSE ${users.magicLinkHash} END`,
+        // Survives new codes; only a successful sign-in resets it. It is what
+        // lengthens auth-request's issue cooldown (`issueCooldownMs`).
+        magicLinkFailuresSinceAuth: sql`${users.magicLinkFailuresSinceAuth} + 1`,
         // magicLinkExpires is intentionally NOT cleared on lockout so that
         // auth-request's cooldown check survives: the timestamp records when
         // the last code was issued regardless of lockout state, preventing an
@@ -167,6 +171,7 @@ export default withErrorHandling(async function handler(
       magicLinkHash: null,
       magicLinkExpires: null,
       magicLinkFailedAttempts: 0,
+      magicLinkFailuresSinceAuth: 0,
       emailVerifiedAt: user.emailVerifiedAt ?? new Date(),
       lastAuthAt: new Date(),
       sessionMaxDays: nextSessionMaxDays,
@@ -175,7 +180,10 @@ export default withErrorHandling(async function handler(
     .where(
       and(eq(users.id, user.id), eq(users.magicLinkHash, user.magicLinkHash)),
     )
-    .returning({ id: users.id });
+    // The generation as of the consuming write, not the earlier read: a
+    // revocation landing in between bumps it, and a token signed with the
+    // stale value would be rejected the moment it was issued.
+    .returning({ id: users.id, sessionGeneration: users.sessionGeneration });
 
   if (!consumed) {
     error(res, 401, 'Invalid or expired code');
@@ -183,7 +191,12 @@ export default withErrorHandling(async function handler(
   }
 
   const maxAgeSeconds = nextSessionMaxDays * 24 * 60 * 60;
-  const jwt = await signToken(user.id, user.role, maxAgeSeconds);
+  const jwt = await signToken(
+    user.id,
+    user.role,
+    maxAgeSeconds,
+    consumed.sessionGeneration ?? user.sessionGeneration ?? 0,
+  );
   setAuthCookie(res, jwt, maxAgeSeconds);
 
   json(

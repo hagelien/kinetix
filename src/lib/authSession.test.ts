@@ -23,6 +23,7 @@ type UserRow = {
   role: string;
   lastAuthAt: Date | null;
   sessionMaxDays: number;
+  sessionGeneration?: number;
 };
 
 function requestWithToken(
@@ -167,6 +168,57 @@ describe("getUserFromRequest", () => {
       },
     ]);
 
+    await expect(
+      getUserFromRequest(requestWithToken("signed-token")),
+    ).resolves.toBeNull();
+  });
+
+  // Server-side revocation (users.session_generation): allowlist removal and
+  // the admin force-logout bump the counter; a token from an older generation
+  // is dead.
+  function withGeneration(gen: number | undefined) {
+    vi.mocked(jwtVerify).mockResolvedValue({
+      payload: { sub: "7", role: "contributor", ...(gen === undefined ? {} : { gen }) },
+      protectedHeader: { alg: "HS256" },
+      key: new Uint8Array(),
+    } as Awaited<ReturnType<typeof jwtVerify>>);
+  }
+  const userAtGeneration = (sessionGeneration: number) => [
+    {
+      id: 7,
+      role: "contributor",
+      lastAuthAt: new Date(),
+      sessionMaxDays: 30,
+      sessionGeneration,
+    },
+  ];
+
+  it("rejects a session token from before its user's sessions were revoked", async () => {
+    withGeneration(0);
+    mockUserLookup(async () => userAtGeneration(1));
+
+    await expect(
+      getUserFromRequest(requestWithToken("signed-token")),
+    ).resolves.toBeNull();
+  });
+
+  it("accepts a session token minted under the current generation", async () => {
+    withGeneration(1);
+    mockUserLookup(async () => userAtGeneration(1));
+
+    await expect(
+      getUserFromRequest(requestWithToken("signed-token")),
+    ).resolves.toMatchObject({ userId: 7 });
+  });
+
+  it("treats a token without a generation as generation 0", async () => {
+    withGeneration(undefined);
+    mockUserLookup(async () => userAtGeneration(0));
+    await expect(
+      getUserFromRequest(requestWithToken("signed-token")),
+    ).resolves.toMatchObject({ userId: 7 });
+
+    mockUserLookup(async () => userAtGeneration(1));
     await expect(
       getUserFromRequest(requestWithToken("signed-token")),
     ).resolves.toBeNull();

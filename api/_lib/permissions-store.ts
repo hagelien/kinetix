@@ -215,6 +215,31 @@ export async function callerCan(
 }
 
 /**
+ * {@link callerCan} for a resolved caller, refusing every `admin`-group
+ * capability to an agent token.
+ *
+ * An agent token is clamped to `editor` at authentication, so on role alone
+ * it holds whatever the matrix lowers to `editor` — and most admin
+ * capabilities may be lowered that far, to delegate them to human editors.
+ * Without this an admin delegating `admin.agents.manage` would also let every
+ * editor-tier agent mint tokens for other agents and grant itself adjudicator,
+ * flagship and self-review; `admin.allowlist.manage` would let one open
+ * sign-up to a new domain. Admin work stays with human sessions whatever the
+ * matrix says (docs/permissions.md).
+ */
+export async function authCan(
+  auth: Pick<AuthContext, 'role' | 'agentToken'> | null | undefined,
+  capability: string,
+): Promise<boolean> {
+  if (auth?.agentToken && isAdminCapability(capability)) return false;
+  return callerCan(auth?.role, capability);
+}
+
+function isAdminCapability(capability: string): boolean {
+  return getCapability(capability)?.group === 'admin';
+}
+
+/**
  * Whether the caller may see a wiki page in this state — the authorization
  * form of `canReadWikiPageStatus`.
  *
@@ -273,7 +298,10 @@ export async function requireCapability(
     }
     return null;
   }
-  if (!canWithOverrides(auth.role, capability, overrides)) {
+  if (
+    (auth.agentToken && isAdminCapability(capability)) ||
+    !canWithOverrides(auth.role, capability, overrides)
+  ) {
     const required = effectiveTier(capability, overrides);
     error(
       res,

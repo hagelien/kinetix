@@ -1095,6 +1095,27 @@
       "breakpoints": true
     },
     {
+      "idx": 159,
+      "version": "7",
+      "when": 1792022400000,
+      "tag": "0159_magic_link_failures_since_auth",
+      "breakpoints": true
+    },
+    {
+      "idx": 160,
+      "version": "7",
+      "when": 1792108800000,
+      "tag": "0160_users_session_generation",
+      "breakpoints": true
+    },
+    {
+      "idx": 161,
+      "version": "7",
+      "when": 1792195200000,
+      "tag": "0161_citation_metadata_history",
+      "breakpoints": true
+    },
+    {
       "idx": 162,
       "version": "7",
       "when": 1792281600000,

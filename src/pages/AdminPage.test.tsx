@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { AdminPage } from './AdminPage';
 import { useAuthStore } from '@/stores/authStore';
@@ -195,3 +195,58 @@ describe('AdminPage capability gating (#1233 / PR #1299 P1)', () => {
     expect(fetchOpenDisputesMock).not.toHaveBeenCalled();
   });
 });
+
+describe('AdminPage force-logout', () => {
+  const originalState = useAuthStore.getState();
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    useAuthStore.setState(originalState);
+    globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  it("revokes a user's sessions after confirmation", async () => {
+    setAuthState({
+      user: makeUser('admin'),
+      isAuthenticated: true,
+      isLoading: false,
+    });
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/admin?resource=users') {
+        return new Response(
+          JSON.stringify({
+            users: [
+              {
+                id: 42,
+                email: 'victim@example.org',
+                username: 'victim',
+                role: 'contributor',
+                createdAt: '2026-01-01T00:00:00Z',
+              },
+            ],
+          }),
+        );
+      }
+      return new Response(JSON.stringify({ revoked: true }));
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(
+      <MemoryRouter initialEntries={['/admin?pane=users']}>
+        <AdminPage />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'admin.revokeSessions' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/admin?resource=users&action=revoke-sessions&id=42',
+        { method: 'POST' },
+      );
+    });
+  });
+});
+

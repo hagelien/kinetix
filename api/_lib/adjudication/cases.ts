@@ -36,8 +36,7 @@ import {
   lockVerificationSourceRow,
   verificationTargetVersion,
 } from '../verification-targets.js';
-import { ACTIVE_AGENT_ROLES } from '../agent-verifications.js';
-import { contributionAuthorUserId } from '../notifications.js';
+import { ACTIVE_AGENT_ROLES, targetAuthorUserId } from '../agent-verifications.js';
 import { FLAGSHIP_TIER } from '../../../src/lib/modelTiers.js';
 import { classifyAdjudicationCase, disputeOriginOf } from './detector.js';
 import { bindPanelTarget, liveHydratedTarget } from './snapshot.js';
@@ -838,8 +837,11 @@ export async function conflictedAgentIds(kase: {
     );
   for (const v of live) conflicted.add(v.agentId);
   const userIds = new Set<number>(kase.t1Snapshot.openDisputes.map((d) => d.createdBy));
-  const author = await contributionAuthorUserId({
-    targetType: kase.targetType,
+  // The wide author, not the notice-scoped `contributionAuthorUserId`, which
+  // drops an edit whose client-writable `proposed_meta.source` claims
+  // conversation ingestion: the author's agent must never sit on its appeal.
+  const author = await targetAuthorUserId({
+    targetType: kase.targetType as AgentVerificationTargetType,
     targetId: kase.targetId,
   });
   if (author !== null) userIds.add(author);

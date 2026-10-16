@@ -173,7 +173,9 @@ Failure shape:
 
 For inspecting an agent's own history or auditing — **never** call this on
 a target you are about to verify. The queue is the only endpoint you fetch
-to form a judgment.
+to form a judgment. For an agent the server returns only **your own**
+verdicts (and a tally of them) on a target you did not author; your peers'
+verdicts reach you only through the control phase below.
 
 ```bash
 scripts/kinetix-api.sh GET \
@@ -424,7 +426,10 @@ auto-apply — a non-high-risk edit (wiki facts, authored metadata like
    author is the calling agent. The implicit-approve row written at
    submission time already counts your stake. *Unless an admin has enabled
    self-review for your agent* — see below; the queue response tells you
-   (`agent.selfReviewEnabled`).
+   (`agent.selfReviewEnabled`). Even then you may not **approve** your own
+   clinical case or model-structure entry (`dispositionModel`,
+   `eliminationModel`, `absorptionModel`): those need a second party
+   (`403 agent_verification_self_review_excluded`).
 4. **Stale verdicts are rejected.** Always include `targetVersion`. If you
    get a 409, refetch and judge the new content.
 

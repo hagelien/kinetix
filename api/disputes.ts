@@ -41,7 +41,10 @@
  *        documented disposition, carried out rather than only advised, under
  *        the same moderation guards as a manual return and in one transaction
  *        with the ruling. See `_lib/upheld-dispute-return.ts` for why the
- *        objection *is* the note.
+ *        objection *is* the note. `rejected`, and `withdrawn` by anyone but
+ *        the dispute's author, are refused to the contested work's author
+ *        (bar a human holding `review.edit.decideOwn`) and to an agent on a
+ *        human-raised dispute — see `releaseRefusal`.
  *
  * Auth is the same getUserFromRequest used everywhere (human JWT or kxat_
  * agent token). Untrusted: reasonMd / evidenceRefs are author-authored data.
@@ -58,6 +61,7 @@ import { assertSameOrigin, parseAndValidate } from './_lib/validate.js';
 import { createDisputeSchema, resolveDisputeSchema } from './_lib/schemas.js';
 import {
   disputeTargetUrl,
+  isActiveAgentUser,
   resolveActiveAgent,
   targetAuthorUserId,
   visibleVerificationTargetIds,
@@ -363,6 +367,83 @@ async function handlePost(
   );
 }
 
+/**
+ * Why this caller may not overrule or withdraw this open dispute, or null.
+ *
+ * Both rulings release what the objection holds: an overruled or withdrawn
+ * dispute stops blocking consensus, which this route retries at once, so a
+ * proposal can apply on the same request. That makes them moderation acts in
+ * favour of the contested work, and `dispute.resolve` alone (editor tier, and
+ * an agent can hold the editor role) must not carry what the manual decision
+ * path refuses:
+ *
+ *  - Withdrawing is the objector's own retraction, always theirs to make.
+ *    Anyone else withdrawing it releases the work exactly as an overrule
+ *    does, so it gets the same guards below.
+ *  - The contested work's author (whoever submitted or wrote it) may not
+ *    overrule the objection to it.
+ *    `PATCH /api/pending-edits` blocks even an author holding
+ *    `review.edit.decideOwn` from deciding their own edit over a standing
+ *    objection; overruling it first would make that block a single extra
+ *    click. The human `decideOwn` grant (with `review.edit.decide`, which
+ *    it waives on top of) is honoured here as on an uphold's return, and
+ *    never for an active agent (an agent token is clamped to
+ *    editor, so a lowered grant would otherwise reach every agent).
+ *  - An active agent never overrules a human-raised dispute: a human
+ *    objection stays human-controlled, as an agent never decides a human's
+ *    proposal on the manual path.
+ *
+ * A dispute that is missing or already closed is left to the resolve call,
+ * which answers `disputes_not_found`.
+ */
+async function releaseRefusal(args: {
+  id: number;
+  resolution: 'rejected' | 'withdrawn';
+  callerUserId: number;
+  mayDecide: boolean;
+  mayDecideOwn: boolean;
+}): Promise<{ message: string; code: string } | null> {
+  const dispute = await getDisputeById(args.id);
+  if (!dispute || dispute.status !== 'open') return null;
+
+  if (
+    args.resolution === 'withdrawn' &&
+    dispute.createdBy === args.callerUserId
+  ) {
+    return null;
+  }
+
+  const callerIsAgent = await isActiveAgentUser(args.callerUserId);
+  // The wide author (`submitted_by` / `created_by`), not the notice-scoped
+  // `contributionAuthorUserId`: that one drops an edit whose client-writable
+  // `proposed_meta.source` claims conversation ingestion, so a submitter
+  // could label their own edit and overrule the objection to it.
+  const authorUserId = await targetAuthorUserId({
+    targetType: dispute.targetType,
+    targetId: dispute.targetId,
+  });
+  // `review.edit.decideOwn` is a waiver on top of `review.edit.decide`, not a
+  // replacement for it: an author who may not decide edits at all gets
+  // nothing from it, as on the manual path.
+  if (
+    authorUserId === args.callerUserId &&
+    !(args.mayDecide && args.mayDecideOwn && !callerIsAgent)
+  ) {
+    return {
+      message:
+        'You cannot overrule or withdraw a dispute against your own contribution',
+      code: 'dispute_overrule_own_not_allowed',
+    };
+  }
+  if (callerIsAgent && dispute.source !== 'agent') {
+    return {
+      message: 'An agent cannot overrule or withdraw a dispute raised by a person',
+      code: 'agent_overrule_of_human_dispute_not_allowed',
+    };
+  }
+  return null;
+}
+
 async function handlePatch(
   req: IncomingMessage,
   res: ServerResponse,
@@ -421,6 +502,20 @@ async function handlePatch(
     auth.role,
     CAP['edit.modelStructure.decide'],
   );
+
+  if (resolution !== 'upheld') {
+    const refusal = await releaseRefusal({
+      id,
+      resolution,
+      callerUserId: auth.userId,
+      mayDecide,
+      mayDecideOwn,
+    });
+    if (refusal) {
+      error(res, 403, refusal.message, refusal.code);
+      return;
+    }
+  }
 
   const resolveAndReturn = async () => {
     const resolved = await resolveDisputeById({

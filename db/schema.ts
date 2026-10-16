@@ -66,10 +66,20 @@ export const users = pgTable('users', {
   role: varchar('role', { length: 20 }).notNull().default('authenticated'),
   emailVerifiedAt: timestamp('email_verified_at'),
   lastAuthAt: timestamp('last_auth_at'),
+  // Bumped to revoke every session the user holds: a session token carries the
+  // generation it was issued under (`gen`) and api/_lib/auth.ts rejects an
+  // older one. Bumped when a person leaves the allowlist or an admin revokes
+  // their sessions.
+  sessionGeneration: integer('session_generation').notNull().default(0),
   sessionMaxDays: integer('session_max_days').notNull().default(30),
   magicLinkHash: varchar('magic_link_hash', { length: 128 }),
   magicLinkExpires: timestamp('magic_link_expires'),
   magicLinkFailedAttempts: integer('magic_link_failed_attempts')
+    .notNull()
+    .default(0),
+  // Wrong code guesses since the last successful sign-in; not reset by a new
+  // code. Lengthens the issue cooldown (api/_lib/magic-link.ts).
+  magicLinkFailuresSinceAuth: integer('magic_link_failures_since_auth')
     .notNull()
     .default(0),
   // Multi-select unit preferences (#306). The first item is the user's
@@ -1196,6 +1206,32 @@ export const citations = pgTable(
     index('citations_drug_id_idx').on(t.drugId),
     uniqueIndex('citations_type_identifier_idx').on(t.type, t.identifier),
   ],
+);
+
+/**
+ * Every direct change to a citation's cached metadata through
+ * `PATCH /api/references` — the explicit override and the resolver refresh —
+ * with who made it and what it replaced. That route writes straight to the
+ * row with no review (contributor tier, agents included), so this is what
+ * lets a wrong or malicious change be found and reverted.
+ */
+export const citationMetadataHistory = pgTable(
+  'citation_metadata_history',
+  {
+    id: serial('id').primaryKey(),
+    citationId: integer('citation_id')
+      .references(() => citations.id, { onDelete: 'cascade' })
+      .notNull(),
+    oldMetadata: jsonb('old_metadata'),
+    newMetadata: jsonb('new_metadata'),
+    /** True when the change came from `refresh` (resolver), false for an override. */
+    refreshed: boolean('refreshed').notNull(),
+    changedBy: integer('changed_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    changedAt: timestamp('changed_at').defaultNow().notNull(),
+  },
+  (t) => [index('citation_metadata_history_citation_idx').on(t.citationId, t.changedAt)],
 );
 
 /**

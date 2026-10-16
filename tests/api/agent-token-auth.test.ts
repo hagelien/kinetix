@@ -80,6 +80,7 @@ describe('getUserFromRequest with a persistent agent token', () => {
       userId: 42,
       role: 'editor',
       groups: [{ id: 1, slug: 'curators', name: 'Curators' }],
+      agentToken: true,
     });
   });
 

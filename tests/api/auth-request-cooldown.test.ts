@@ -18,6 +18,9 @@ const { getDbMock, consumeRateLimitMock, sendLoginCodeMock } = vi.hoisted(
 );
 
 vi.mock('../../api/_lib/db.js', () => ({ getDb: getDbMock }));
+vi.mock('../../api/_lib/auth-allowlist-lock.js', () => ({
+  withAuthAllowlistReadLock: (fn: () => Promise<unknown>) => fn(),
+}));
 vi.mock('../../api/_lib/rate-limit.js', () => ({
   consumeRateLimit: consumeRateLimitMock,
   getClientAddressKey: vi.fn().mockReturnValue('ip:127.0.0.1'),
@@ -96,7 +99,9 @@ function mockDb(
 
   // Insert always returns a freshly-created user with no OTP state.
   const insertReturning = vi.fn().mockResolvedValue([NEW_USER_ROW]);
-  const insertValues = vi.fn().mockReturnValue({ returning: insertReturning });
+  const insertValues = vi.fn().mockReturnValue({
+    onConflictDoNothing: vi.fn().mockReturnValue({ returning: insertReturning }),
+  });
 
   // limit() is called once per select chain. Return results in call order:
   //   call 1: allowedEmails check → [{id:1}] (email is allowlisted)

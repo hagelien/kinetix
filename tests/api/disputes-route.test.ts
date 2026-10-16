@@ -7,6 +7,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   callerCanMock,
+  contributionAuthorUserIdMock,
+  isActiveAgentUserMock,
   disputeTargetUrlMock,
   fanOutDisputeNotificationMock,
   getDisputeByIdMock,
@@ -24,6 +26,8 @@ const {
   visibleVerificationTargetIdsMock,
 } = vi.hoisted(() => ({
   callerCanMock: vi.fn(),
+  contributionAuthorUserIdMock: vi.fn(async () => 42),
+  isActiveAgentUserMock: vi.fn(async () => false),
   disputeTargetUrlMock: vi.fn(),
   fanOutDisputeNotificationMock: vi.fn(),
   getDisputeByIdMock: vi.fn(),
@@ -57,6 +61,7 @@ vi.mock('../../api/_lib/agent-verifications.js', async (importOriginal) => {
     // The route builds a deep link for the notification; every target type but
     // `pending_edit` resolves it from the database, which no route test has.
     disputeTargetUrl: disputeTargetUrlMock,
+    isActiveAgentUser: isActiveAgentUserMock,
     resolveActiveAgent: resolveActiveAgentMock,
     targetAuthorUserId: targetAuthorUserIdMock,
     visibleVerificationTargetIds: visibleVerificationTargetIdsMock,
@@ -92,7 +97,7 @@ vi.mock('../../api/_lib/verification-targets.js', async (importOriginal) => {
 });
 
 vi.mock('../../api/_lib/notifications.js', () => ({
-  contributionAuthorUserId: async () => 42,
+  contributionAuthorUserId: contributionAuthorUserIdMock,
   fanOutDisputeNotification: fanOutDisputeNotificationMock,
 }));
 
@@ -856,5 +861,211 @@ describe('GET /api/disputes?id= (following a "dispute #N" reference)', () => {
     const bad = createResponse();
     await handler(createRequest('GET', '/api/disputes?id=abc'), bad.res);
     expect(bad.state.statusCode).toBe(400);
+  });
+});
+
+// Overruling or withdrawing a dispute releases what it holds — consensus is
+// retried on the same request — so `dispute.resolve` alone must not let the
+// contested work's author, or an agent over a person's objection, clear it.
+describe('PATCH /api/disputes release guards', () => {
+  const AUTHOR = 42;
+
+  function openDispute(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 12,
+      targetType: 'pending_edit',
+      targetId: 10,
+      source: 'human',
+      status: 'open',
+      createdBy: 7,
+      ...overrides,
+    };
+  }
+
+  function resolvedRow(resolution: string) {
+    return {
+      id: 12,
+      targetType: 'pending_edit',
+      targetId: 10,
+      createdBy: 7,
+      source: 'human',
+      reasonMd: 'Wrong value',
+      evidenceRefs: [],
+      createdAt: new Date('2026-09-21T11:00:00.000Z'),
+      resolution,
+    };
+  }
+
+  async function patch(resolution: string) {
+    parseAndValidateMock.mockResolvedValue({ data: { resolution } });
+    resolveDisputeByIdMock.mockResolvedValue(resolvedRow(resolution));
+    const { res, state } = createResponse();
+    await handler(createRequest('PATCH', '/api/disputes?id=12'), res);
+    return { status: state.statusCode, body: JSON.parse(state.body || '{}') };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Shipped default: deciding one's own edit is admin-tier.
+    callerCanMock.mockImplementation((role: string, capability: string) =>
+      capability === 'review.edit.decideOwn'
+        ? Promise.resolve(role === 'admin')
+        : shippedDefaults(role, capability),
+    );
+    fanOutDisputeNotificationMock.mockResolvedValue({ recipients: 1 });
+    retryAgentConsensusMock.mockResolvedValue({ outcome: 'applied' });
+    contributionAuthorUserIdMock.mockResolvedValue(AUTHOR);
+    targetAuthorUserIdMock.mockResolvedValue(AUTHOR);
+    isActiveAgentUserMock.mockResolvedValue(false);
+    getDisputeByIdMock.mockResolvedValue(openDispute());
+  });
+
+  it("refuses an editor overruling the dispute against their own edit", async () => {
+    getUserFromRequestMock.mockResolvedValue({ userId: AUTHOR, role: 'editor' });
+
+    const { status, body } = await patch('rejected');
+
+    expect(status).toBe(403);
+    expect(body.code).toBe('dispute_overrule_own_not_allowed');
+    expect(resolveDisputeByIdMock).not.toHaveBeenCalled();
+    expect(retryAgentConsensusMock).not.toHaveBeenCalled();
+  });
+
+  // `contributionAuthorUserId` drops an edit whose client-writable
+  // `proposed_meta.source` claims conversation ingestion; the guard must not.
+  it('refuses the submitter even when the edit claims to come from ingestion', async () => {
+    getUserFromRequestMock.mockResolvedValue({ userId: AUTHOR, role: 'editor' });
+    contributionAuthorUserIdMock.mockResolvedValue(null);
+
+    const { status, body } = await patch('rejected');
+
+    expect(status).toBe(403);
+    expect(body.code).toBe('dispute_overrule_own_not_allowed');
+    expect(retryAgentConsensusMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses an editor-tier agent overruling a dispute against its own edit', async () => {
+    getUserFromRequestMock.mockResolvedValue({ userId: AUTHOR, role: 'editor' });
+    isActiveAgentUserMock.mockResolvedValue(true);
+    getDisputeByIdMock.mockResolvedValue(openDispute({ source: 'agent' }));
+
+    const { status, body } = await patch('rejected');
+
+    expect(status).toBe(403);
+    expect(body.code).toBe('dispute_overrule_own_not_allowed');
+    expect(retryAgentConsensusMock).not.toHaveBeenCalled();
+  });
+
+  // An agent's token is clamped to editor, so if an admin lowered decideOwn
+  // to its editor floor the human grant must still not reach agents.
+  it('does not let a decideOwn grant reach an agent', async () => {
+    getUserFromRequestMock.mockResolvedValue({ userId: AUTHOR, role: 'editor' });
+    isActiveAgentUserMock.mockResolvedValue(true);
+    getDisputeByIdMock.mockResolvedValue(openDispute({ source: 'agent' }));
+    callerCanMock.mockResolvedValue(true);
+
+    const { status, body } = await patch('rejected');
+
+    expect(status).toBe(403);
+    expect(body.code).toBe('dispute_overrule_own_not_allowed');
+  });
+
+  it('lets a human holding review.edit.decideOwn overrule a dispute on their own edit', async () => {
+    getUserFromRequestMock.mockResolvedValue({ userId: AUTHOR, role: 'admin' });
+
+    const { status } = await patch('rejected');
+
+    expect(status).toBe(200);
+    expect(resolveDisputeByIdMock).toHaveBeenCalled();
+  });
+
+  // decideOwn waives the own-edit rule on top of review.edit.decide; an
+  // installation that raised decide above the author keeps them out.
+  it('requires review.edit.decide alongside decideOwn for a self-overrule', async () => {
+    getUserFromRequestMock.mockResolvedValue({ userId: AUTHOR, role: 'editor' });
+    callerCanMock.mockImplementation((role: string, capability: string) =>
+      capability === 'review.edit.decide'
+        ? Promise.resolve(role === 'admin')
+        : shippedDefaults(role, capability),
+    );
+
+    const { status, body } = await patch('rejected');
+
+    expect(status).toBe(403);
+    expect(body.code).toBe('dispute_overrule_own_not_allowed');
+  });
+
+  it("refuses an agent overruling a person's dispute on someone else's edit", async () => {
+    getUserFromRequestMock.mockResolvedValue({ userId: 99, role: 'editor' });
+    isActiveAgentUserMock.mockResolvedValue(true);
+
+    const { status, body } = await patch('rejected');
+
+    expect(status).toBe(403);
+    expect(body.code).toBe('agent_overrule_of_human_dispute_not_allowed');
+    expect(retryAgentConsensusMock).not.toHaveBeenCalled();
+  });
+
+  it("lets an agent overrule another agent's dispute on someone else's edit", async () => {
+    getUserFromRequestMock.mockResolvedValue({ userId: 99, role: 'editor' });
+    isActiveAgentUserMock.mockResolvedValue(true);
+    getDisputeByIdMock.mockResolvedValue(openDispute({ source: 'agent' }));
+
+    const { status } = await patch('rejected');
+
+    expect(status).toBe(200);
+  });
+
+  it("lets a human editor overrule a dispute on someone else's edit", async () => {
+    getUserFromRequestMock.mockResolvedValue({ userId: 99, role: 'editor' });
+
+    const { status, body } = await patch('rejected');
+
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ resolution: 'rejected', autoApplied: true });
+  });
+
+  // Withdrawing someone else's dispute releases the work like an overrule.
+  it('refuses the contested work\'s author withdrawing the dispute against it', async () => {
+    getUserFromRequestMock.mockResolvedValue({ userId: AUTHOR, role: 'editor' });
+
+    const { status, body } = await patch('withdrawn');
+
+    expect(status).toBe(403);
+    expect(body.code).toBe('dispute_overrule_own_not_allowed');
+    expect(resolveDisputeByIdMock).not.toHaveBeenCalled();
+    expect(retryAgentConsensusMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses an agent withdrawing a person's dispute", async () => {
+    getUserFromRequestMock.mockResolvedValue({ userId: 99, role: 'editor' });
+    isActiveAgentUserMock.mockResolvedValue(true);
+
+    const { status, body } = await patch('withdrawn');
+
+    expect(status).toBe(403);
+    expect(body.code).toBe('agent_overrule_of_human_dispute_not_allowed');
+  });
+
+  it('lets the dispute author withdraw it', async () => {
+    getUserFromRequestMock.mockResolvedValue({ userId: 7, role: 'editor' });
+
+    const { status } = await patch('withdrawn');
+
+    expect(status).toBe(200);
+  });
+
+  // Upholding sends the edit back; its guards live in the return itself.
+  it('leaves an uphold to the return guards', async () => {
+    getUserFromRequestMock.mockResolvedValue({ userId: AUTHOR, role: 'editor' });
+    runInPoolTransactionMock.mockImplementation(
+      (fn: (tx: unknown) => unknown) => fn(undefined),
+    );
+    returnPendingEditForUpheldDisputeMock.mockResolvedValue({ returned: true });
+
+    const { status } = await patch('upheld');
+
+    expect(status).toBe(200);
+    expect(getDisputeByIdMock).not.toHaveBeenCalled();
   });
 });
