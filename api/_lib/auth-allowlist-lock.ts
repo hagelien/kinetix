@@ -12,7 +12,7 @@ export function withAuthAllowlistReadLock<T>(fn: () => Promise<T>): Promise<T> {
   });
 }
 
-/** Acquire first inside the removal transaction, before deleting any allowlist row. */
+/** Acquire first inside allowlist-removal or force-logout transactions. */
 export async function lockAuthAllowlistRemoval(): Promise<void> {
   await getDb().execute(sql`SELECT pg_advisory_xact_lock(${AUTH_ALLOWLIST_NAMESPACE}::int, 1)`);
 }

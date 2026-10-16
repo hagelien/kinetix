@@ -448,17 +448,21 @@ async function handleUsers(
       error(res, 400, 'A positive integer ?id is required');
       return;
     }
-    const [revoked] = await db
-      .update(users)
-      .set({
-        sessionGeneration: sql`${users.sessionGeneration} + 1`,
-        // An outstanding sign-in code would let whoever holds the mailbox
-        // straight back in; a force-logout voids it too.
-        magicLinkHash: null,
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, userId))
-      .returning({ id: users.id });
+    const [revoked] = await runInPoolTransaction(async () => {
+      // Wait for any admitted code issuance to commit, then void that code.
+      // Resolve getDb() inside the transaction so the lock and UPDATE share
+      // the same backend; a captured pre-transaction client would bypass it.
+      await lockAuthAllowlistRemoval();
+      return getDb()
+        .update(users)
+        .set({
+          sessionGeneration: sql`${users.sessionGeneration} + 1`,
+          magicLinkHash: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, userId))
+        .returning({ id: users.id });
+    });
     if (!revoked) {
       error(res, 404, 'User not found');
       return;
