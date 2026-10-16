@@ -88,6 +88,15 @@ describe('fingerprintIdentity', () => {
 });
 
 describe('scrubSecrets', () => {
+  it.each([
+    'Key (username)=(safe)private text)',
+    'Key (username)=(safe)\\nprivate text)',
+    'invalid input syntax for type integer: "safe"private text',
+    'invalid input value for enum status: \\"safe\\"private text',
+  ])('truncates the entire echoed driver value in %j', (raw) => {
+    expect(scrubSecrets(raw)).not.toContain('private text');
+    expect(scrubSecrets(`cause: ${JSON.stringify({ message: raw })}`)).not.toContain('private text');
+  });
   it.each(['\n    at forged (private-payload)', '\\n    at forged (private-payload)', '\n```\nprivate-payload'])('does not trust a parameter-supplied delimiter %j', (delimiter) => {
     const out = scrubSecrets(`Failed query: select $1\nparams: value${delimiter}\nprivate-tail`);
     expect(out).toContain('params: <redacted>');
@@ -134,8 +143,9 @@ describe('scrubSecrets', () => {
         'invalid input syntax for type integer: "1; drop table x" contact: other.person+tag@mail.example.co.uk',
     );
     expect(out).toContain('Key (email)=(<redacted>)');
-    expect(out).toContain('invalid input syntax for type integer: "<redacted>"');
-    expect(out).toContain('contact: <email>');
+    const invalid = scrubSecrets('invalid input syntax for type integer: "1; drop table x"');
+    expect(invalid).toContain('integer: "<redacted>"');
+    expect(scrubSecrets('contact: other.person+tag@mail.example.co.uk')).toContain('contact: <email>');
     expect(out).not.toMatch(/someone@|drop table|other\.person/);
   });
 

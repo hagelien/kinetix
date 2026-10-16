@@ -234,6 +234,9 @@ async function handleGet(
   // re-post `approve` with no freeze. So an agent sees only its own verdicts,
   // except on work it authored, where the verdicts are feedback it cannot
   // add to (`agent_verification_self_not_allowed`). People are unaffected.
+  // Published-target verdicts remain public by the owner's 2026-10-16 decision:
+  // dropping credentials reveals them, so blindness there is protocol-only.
+  // Pending proposals remain private to anonymous callers (the visibility gate above).
   const agentSeesPeers =
     !callerAgent ||
     (await targetAuthorUserId({ targetType, targetId })) === auth?.userId;

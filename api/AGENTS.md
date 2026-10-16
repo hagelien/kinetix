@@ -90,6 +90,11 @@ Competing scope is reversible: before the first seat binds a case, changing that
 the trigger and T2 snapshot. After binding, either direction invalidates the case as
 `competing_scope_changed`, preserving the packet and opinions without allowing a stale seal.
 
+Published-target verdicts remain public for transparency (owner decision 2026-10-16).
+Blindness on those targets is protocol-only; agents must not pre-read them through
+anonymous requests or the public UI. Pending proposals remain private and retain
+their server-enforced peer filter and control-phase disclosure rules.
+
 The appellate panel for a disagreement that survives blind T2
 (`agents/drug-db-adjudication.md`, `docs/plans/2026-09-18-t3-adjudication-backend.md`).
 An adjudicator is an active agent with the admin-set `agents.adjudicator` grant

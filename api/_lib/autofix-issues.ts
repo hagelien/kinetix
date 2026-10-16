@@ -161,9 +161,9 @@ const SECRET_PATTERNS: ReadonlyArray<readonly [RegExp, string]> = [
     /(^|\n|\\n)params: [\s\S]*/g,
     '$1params: <redacted>',
   ],
-  [/\bKey \(([^)]*)\)=\((?:[^()]|\([^)]*\))*\)/g, 'Key ($1)=(<redacted>)'],
+  [/\bKey \(([^)]*)\)=\([\s\S]*/g, 'Key ($1)=(<redacted>)'],
   [
-    /(invalid input (?:syntax|value) for (?:type|enum) [\w ]+: )\\?"[^"\\]*\\?"/gi,
+    /(invalid input (?:syntax|value) for (?:type|enum) [\w ]+: )[\s\S]*/gi,
     '$1"<redacted>"',
   ],
   [/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g, '<email>'],
