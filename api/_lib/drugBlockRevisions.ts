@@ -85,8 +85,7 @@ export interface ModelStructureBlockSnapshot {
     } & EntryScope
   >;
   /**
-   * The section's per-route values (`ka`). Not categorical, but curated in the
-   * same section, and ka has no aggregate whose revisions would record it.
+   * The section's per-route numeric values. They have no aggregate revision.
    */
   routeValues: Array<{
     parameter: string;
@@ -123,11 +122,14 @@ type EntryScope = {
 
 /**
  * Parameters whose entries make up the model-structure block: the categorical
- * axes and the per-route `ka` values the section also curates.
+ * axes and the per-route numeric values the section also curates.
  */
 export const MODEL_STRUCTURE_BLOCK_PARAMETERS: readonly string[] = [
   ...MODEL_STRUCTURE_PARAMETER_IDS,
   'ka',
+  'firstOrderFraction',
+  'zeroOrderDuration',
+  'absorptionLag',
 ];
 
 export function isModelStructureBlockParameter(parameter: string): boolean {

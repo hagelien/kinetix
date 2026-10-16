@@ -557,28 +557,39 @@ describe('drug block revisions', () => {
     expect(decl(revisions[1]!.newValue).releaseProfile).toBe('modified');
   });
 
-  it('records a per-route ka value in the model-structure block', async () => {
+  it.each([
+    ['ka', '1/h'], ['firstOrderFraction', 'fraction'], ['zeroOrderDuration', 'h'], ['absorptionLag', 'h'],
+  ])('records %s creation, edits and deletion in model-structure history', async (parameter, unit) => {
     const drugId = await seedDrug(db);
     const userId = await seedUser(db);
     const citationId = await seedAdmissibleCitation(db);
-    await db.insert(parameterEntries).values({
+    const [entry] = await db.insert(parameterEntries).values({
       drugId,
       citationId,
-      parameter: 'ka',
+      parameter: parameter!,
       route: 'oral',
-      median: '1.2',
-      unit: '1/h',
+      median: '0.2',
+      unit: unit!,
       origin: 'contributor',
-    });
-    await recomputeInTransaction(drugId, 'ka', userId);
+    }).returning({ id: parameterEntries.id });
+    await recomputeInTransaction(drugId, parameter!, userId);
 
     const [revision] = await revisionsFor(drugId, 'modelStructure');
     const { routeValues } = revision!.newValue as {
       routeValues: Array<{ parameter: string; route: string; median: string; citationId: number }>;
     };
     expect(routeValues).toHaveLength(1);
-    expect(routeValues[0]).toMatchObject({ parameter: 'ka', route: 'oral', citationId });
-    expect(Number(routeValues[0]!.median)).toBe(1.2);
+    expect(routeValues[0]).toMatchObject({ parameter, route: 'oral', citationId });
+    expect(Number(routeValues[0]!.median)).toBe(0.2);
+    await db.update(parameterEntries).set({ median: '0.4' }).where(eq(parameterEntries.id, entry!.id));
+    await recomputeInTransaction(drugId, parameter!, userId);
+    await deleteParameterEntryRow(entry!.id);
+    await recomputeInTransaction(drugId, parameter!, userId);
+    const revisions = await revisionsFor(drugId, 'modelStructure');
+    expect(revisions).toHaveLength(3);
+    expect(revisions[1]!.oldValue).toEqual(revisions[0]!.newValue);
+    expect(revisions[2]!.oldValue).toEqual(revisions[1]!.newValue);
+    expect(revisions[2]!.newValue).toMatchObject({ routeValues: [] });
   });
 
 
