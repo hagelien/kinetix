@@ -351,7 +351,8 @@ The two tiers are treated differently, and deliberately so:
   against the time after the lag. The two-compartment and saturable forms cannot carry a lag,
   so a drug with a stored lag on one of those is not drawn without it. A zero lag median
   with a reported range above zero still counts as a lag; fallback selection uses that range
-  too. Contradictory two-compartment rates prevent a curve even when a lag is also stored.
+  too. A known contradictory k21/half-life pair prevents a curve even when another
+  required input is missing or a lag is also stored.
   **A saturable elimination is built from its own two numbers.** Where a drug's elimination
   is cited as saturable and the catalogue holds its maximum elimination rate (Vmax) and its
   Michaelis constant (Km), measured in plasma or serum, the curve runs the saturable form, so concentrations climb faster

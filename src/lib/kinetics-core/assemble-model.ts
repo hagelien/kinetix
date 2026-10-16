@@ -224,12 +224,12 @@ export function assembleRouteParams(
   const unusableOptional = optional.filter(
     (role) => values[role] !== undefined && !isUsable(role, values[role]),
   );
-  if (missing.length > 0 || unusableOptional.length > 0) {
-    return { outcome: 'incomplete', family, missing: [...missing, ...unusableOptional] };
-  }
-  // A contradiction must survive an unsupported lag so the read adapter cannot choose a fallback.
+  // A known contradictory pair is not a gap, even if another role is missing
+  // or the lag is unsupported. Neither may enable a simpler fallback curve.
   if (
     family === 'two-compartment-first-order' &&
+    isUsable('k21', values.k21) &&
+    isUsable('eliminationHalfLife', values.eliminationHalfLife) &&
     !twoCompartmentCoherent(values.k21!, values.eliminationHalfLife!)
   ) {
     return {
@@ -237,6 +237,9 @@ export function assembleRouteParams(
       contradiction: true,
       reason: `the two-compartment rates contradict the terminal half-life: k21 (${values.k21} /h) must exceed the terminal rate ln2/t½ (${(Math.LN2 / values.eliminationHalfLife!).toPrecision(4)} /h)`,
     };
+  }
+  if (missing.length > 0 || unusableOptional.length > 0) {
+    return { outcome: 'incomplete', family, missing: [...missing, ...unusableOptional] };
   }
   // A lag the family has no place for is refused, not dropped: the engine routes of the
   // two-compartment, saturable and IV families carry no lag, and a curve that ignores a cited lag

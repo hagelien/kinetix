@@ -1831,14 +1831,14 @@ describe('#83 — structural parameters reach the assembled model', () => {
     expect(assembly.definition.routes.oral!.family).toBe('one-compartment-first-order');
   });
 
-  it('does not paper over rates that contradict the terminal half-life with the simpler curve', async () => {
+  it.each(['none', 'k12', 'centralVolume'])('does not hide contradictory rates when %s is missing', async (missing) => {
     const drugId = await seedDrug(db);
     const userId = await seedUser(db);
     await seedTwoCompartmentDrug(drugId, userId);
-    await setDrugLevelParameter(drugId, userId, 'k12', { median: 0.5, unit: '1/h' });
+    if (missing !== 'k12') await setDrugLevelParameter(drugId, userId, 'k12', { median: 0.5, unit: '1/h' });
     // ln2 / 10 h = 0.069 /h: a k21 below it has no two-compartment model with that terminal phase.
     await setDrugLevelParameter(drugId, userId, 'k21', { median: 0.05, unit: '1/h' });
-    await setDrugLevelParameter(drugId, userId, 'centralVolume', { median: 0.2, unit: 'L/kg' });
+    if (missing !== 'centralVolume') await setDrugLevelParameter(drugId, userId, 'centralVolume', { median: 0.2, unit: 'L/kg' });
     // An unsupported lag must not hide the rate contradiction and enable a simpler curve.
     await insertNumeric(drugId, userId, 'absorptionLag', 'oral', { median: 0.5, unit: 'h' });
 
