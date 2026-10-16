@@ -657,6 +657,15 @@ export async function reconsiderDispute(args: {
           updatedAt: now,
         })
         .where(eq(disputes.id, openDispute.id));
+      // The withdrawal changes what a T3 case on the target rests on:
+      // re-evaluate it in this transaction, under the source-row lock taken
+      // above, so no panelist can seal on the dispute just withdrawn. Loaded
+      // lazily: the adjudication module imports this one.
+      const { detectAdjudicationCaseWithin } = await import("./adjudication/cases.js");
+      await detectAdjudicationCaseWithin({
+        targetType: args.targetType,
+        targetId: args.targetId,
+      });
       return {
         ...recorded,
         outcome: "withdrawn" as const,

@@ -411,6 +411,100 @@ describe('T3 case detection', () => {
   });
 });
 
+/** POST /api/agent-verifications as `userId`; returns the status code. */
+async function postVerdict(userId: number, body: Record<string, unknown>): Promise<number> {
+  getUserFromRequestMock.mockResolvedValue({ userId, role: 'contributor' });
+  const raw = JSON.stringify(body);
+  const req = Readable.from([raw]) as IncomingMessage;
+  req.method = 'POST';
+  req.url = '/api/agent-verifications';
+  req.headers = {
+    host: 'localhost',
+    'content-type': 'application/json',
+    'content-length': String(Buffer.byteLength(raw)),
+  };
+  const state = { statusCode: 0 };
+  const res = {
+    headersSent: false,
+    writeHead: vi.fn((code: number) => {
+      state.statusCode = code;
+      return res;
+    }),
+    end: vi.fn(() => res),
+  } as unknown as ServerResponse;
+  await handler(req, res);
+  return state.statusCode;
+}
+
+describe('T3 trigger: competing scope (issue 17)', () => {
+  const approval = (editId: number, version: string, competingScope?: boolean) => ({
+    targetType: 'pending_edit',
+    targetId: editId,
+    targetVersion: version,
+    verdict: 'approve',
+    rationaleMd: 'Stemmer for voksne etter iv; barn etter oral dosering gir en annen verdi.',
+    ...(competingScope === undefined ? {} : { competingScope }),
+  });
+
+  it('opens a case when the blind T2 verdict records competing scope, and stores the flag', async () => {
+    const author = await seedAgent('author', { tier: 'mid' });
+    const t2 = await seedAgent('t2', { tier: 'flagship' });
+    const edit = await seedEdit(author.userId);
+
+    expect(await postVerdict(t2.userId, approval(edit.editId, edit.version, true))).toBeLessThan(300);
+
+    const [row] = await db
+      .select({ id: agentVerifications.id, competingScope: agentVerifications.competingScope })
+      .from(agentVerifications)
+      .where(eq(agentVerifications.agentId, t2.agentId));
+    expect(row!.competingScope).toBe(true);
+    const [kase] = await casesFor(edit.editId);
+    expect(kase).toMatchObject({
+      state: 'open',
+      triggers: ['competing_scope'],
+      triggerDetail: { competing_scope: { verificationIds: [row!.id] } },
+      t2VerificationId: row!.id,
+    });
+  });
+
+  it('retires the case when T2 re-verdicts without the flag on the same version', async () => {
+    const author = await seedAgent('author', { tier: 'mid' });
+    const t2 = await seedAgent('t2', { tier: 'flagship' });
+    const edit = await seedEdit(author.userId);
+    await postVerdict(t2.userId, approval(edit.editId, edit.version, true));
+    expect(await postVerdict(t2.userId, approval(edit.editId, edit.version))).toBeLessThan(300);
+
+    const [kase] = await casesFor(edit.editId);
+    expect([kase!.state, kase!.invalidatedReason]).toEqual(['invalidated', 'disagreement_withdrawn']);
+  });
+
+  it('opens nothing on a lower tier’s flag', async () => {
+    const author = await seedAgent('author', { tier: 'mid' });
+    const t1 = await seedAgent('t1', { tier: 'mid' });
+    const t2 = await seedAgent('t2', { tier: 'flagship' });
+    const edit = await seedEdit(author.userId);
+    await postVerdict(t1.userId, approval(edit.editId, edit.version, true));
+    await postVerdict(t2.userId, approval(edit.editId, edit.version));
+    expect(await casesFor(edit.editId)).toEqual([]);
+  });
+
+  it('is picked up by the sweep when the verdict path missed it', async () => {
+    const author = await seedAgent('author', { tier: 'mid' });
+    const t2 = await seedAgent('t2', { tier: 'flagship' });
+    const edit = await seedEdit(author.userId);
+    const id = await verdictOn(t2.agentId, edit.editId, 'approve', 'flagship');
+    await db
+      .update(agentVerifications)
+      .set({ competingScope: true })
+      .where(eq(agentVerifications.id, id));
+
+    const swept = await sweepAdjudicationCases();
+    expect(swept.opened).toHaveLength(1);
+    const [kase] = await casesFor(edit.editId);
+    expect(kase!.triggers).toEqual(['competing_scope']);
+  });
+});
+
 describe('T3 detector sweep', () => {
   it('rotates through live cases instead of re-reading the oldest ones', async () => {
     const author = await seedAgent('author', { tier: 'mid' });

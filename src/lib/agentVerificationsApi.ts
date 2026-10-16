@@ -62,6 +62,7 @@ export type AgentConsensusHold =
   | 'returned_unrevised'
   | 'target_unpublished'
   | 'unverified_sources'
+  | 'adjudication_pending'
   | 'apply_failed';
 
 export type AgentConsensusStatus =

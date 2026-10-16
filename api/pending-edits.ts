@@ -110,11 +110,15 @@ import {
   upheldDisputeStands,
   rebindOpenDisputesForUnrevisedResubmit,
 } from './_lib/disputes.js';
-import { verificationTargetVersion } from './_lib/verification-targets.js';
+import {
+  lockVerificationSourceRow,
+  verificationTargetVersion,
+} from './_lib/verification-targets.js';
 import {
   clearVerificationsForTarget,
   emptyVerificationSummary,
   isActiveAgentUser,
+  pendingEditAwaitsAdjudication,
   isSelfReviewAgentUser,
   recordImplicitAgentApproval,
   resolveActiveAgent,
@@ -280,6 +284,14 @@ const SAFE_FACT_LINK_PROTOCOLS = new Set([
   'mailto:',
   'tel:',
 ]);
+
+/** An agent's decision met the T3 adjudication hold under the row lock. */
+class AgentDecisionHeldError extends Error {
+  constructor() {
+    super('held for T3 adjudication');
+    this.name = 'AgentDecisionHeldError';
+  }
+}
 
 /**
  * A conditional revise/return update matched no row (status moved under it).
@@ -3914,6 +3926,34 @@ async function handlePatch(
     return;
   }
 
+  // Nor does a single agent decide a proposal held for T3 adjudication
+  // (pendingEditAdjudicationHoldSql): the panel has not spoken, or a person
+  // keeps the decision. Agent consensus holds it the same way
+  // (`adjudication_pending`); this closes the moderator path for an agent
+  // carrying an editor role, its own proposal included (a self-review agent
+  // approving or returning it acts as a reviewer). A person's decision is not
+  // held, nor is an author's withdrawal (`isOwnCancel`), which decides nothing.
+  //
+  // This read is the early answer only. Each decision write below re-checks
+  // it under the pending-edit row lock — the lock an adjudication request and
+  // the detector take — so a request committing in between is seen.
+  const agentDecisionHeld =
+    (requestedStatus === 'approved' ||
+      requestedStatus === 'returned' ||
+      (requestedStatus === 'rejected' && !isOwnCancel)) &&
+    (await isActiveAgentUser(auth.userId));
+  const refuseHeldAgentDecision = () =>
+    error(
+      res,
+      409,
+      'This proposal is held for a T3 adjudication; an agent cannot decide it while the case or a person\'s request stands',
+      'agent_moderation_held_for_adjudication',
+    );
+  if (agentDecisionHeld && (await pendingEditAwaitsAdjudication(edit.id))) {
+    refuseHeldAgentDecision();
+    return;
+  }
+
   if (
     requestedStatus === 'approved' ||
     requestedStatus === 'rejected' ||
@@ -4228,6 +4268,10 @@ async function handlePatch(
     let lockedUpdate: ParamEntryLockedResult<{ id: number }[]>;
     try {
       lockedUpdate = await inTransaction(async () => {
+        if (agentDecisionHeld) {
+          await lockVerificationSourceRow(getDb(), 'pending_edit', id);
+          if (await pendingEditAwaitsAdjudication(id)) throw new AgentDecisionHeldError();
+        }
             const result = await underParamEntryLocks(edit, nextProposedValue, () =>
           getDb()
             .update(pendingEdits)
@@ -4277,6 +4321,10 @@ async function handlePatch(
         return result;
       });
     } catch (err) {
+      if (err instanceof AgentDecisionHeldError) {
+        refuseHeldAgentDecision();
+        return;
+      }
       if (err instanceof SubmitterUpdateConflictError) {
         error(
           res,
@@ -4314,18 +4362,35 @@ async function handlePatch(
   }
 
   if (requestedStatus === 'rejected') {
-    const updated = await db
-      .update(pendingEdits)
-      .set({
-        status: 'rejected',
-        rejectionReason: parsed.data.rejectionReason!,
-        rejectionComment: parsed.data.rejectionComment ?? null,
-        reviewedBy: auth.userId,
-        reviewedAt: new Date(),
-      })
-      // Same optimistic lock as the return path above.
-      .where(pendingEditReviewerLock(edit))
-      .returning({ id: pendingEdits.id });
+    const reject = () =>
+      getDb()
+        .update(pendingEdits)
+        .set({
+          status: 'rejected',
+          rejectionReason: parsed.data.rejectionReason!,
+          rejectionComment: parsed.data.rejectionComment ?? null,
+          reviewedBy: auth.userId,
+          reviewedAt: new Date(),
+        })
+        // Same optimistic lock as the return path above.
+        .where(pendingEditReviewerLock(edit))
+        .returning({ id: pendingEdits.id });
+    let updated: { id: number }[];
+    if (agentDecisionHeld) {
+      // An agent's rejection re-checks the T3 hold under the row lock.
+      const locked = await inTransaction(async () => {
+        await lockVerificationSourceRow(getDb(), 'pending_edit', id);
+        if (await pendingEditAwaitsAdjudication(id)) return null;
+        return reject();
+      });
+      if (locked === null) {
+        refuseHeldAgentDecision();
+        return;
+      }
+      updated = locked;
+    } else {
+      updated = await reject();
+    }
     if (updated.length === 0) {
       error(
         res,
@@ -4362,8 +4427,25 @@ async function handlePatch(
   }
 
   try {
-    await applyApprovedEdit(id, auth.userId, parsed.data.reviewToken);
+    await applyApprovedEdit(
+      id,
+      auth.userId,
+      parsed.data.reviewToken,
+      agentDecisionHeld
+        ? {
+            // An agent's approval re-checks the T3 hold after the approval
+            // transaction's pending-edit row lock, as consensus does.
+            revalidate: async () => {
+              if (await pendingEditAwaitsAdjudication(id)) throw new AgentDecisionHeldError();
+            },
+          }
+        : undefined,
+    );
   } catch (err) {
+    if (err instanceof AgentDecisionHeldError) {
+      refuseHeldAgentDecision();
+      return;
+    }
     if (err instanceof PendingEditReviewTokenMismatchError) {
       error(res, err.statusHint, err.message, err.code);
       return;

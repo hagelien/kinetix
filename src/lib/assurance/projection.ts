@@ -190,6 +190,7 @@ export type GenericConsensusHoldReason =
   | 'returned_unrevised'
   | 'target_unpublished'
   | 'unverified_sources'
+  | 'adjudication_pending'
   | 'human_submitted'
   | 'high_risk_missing_flagship'
   | 'high_risk_degraded_quorum'
@@ -199,7 +200,7 @@ export type GenericConsensusHoldReason =
 /**
  * Why the generic policy's `noOpenDisputes` requirement is unmet. That
  * requirement is one boolean fact (`ConsensusFacts.hasOpenHumanDispute`) that
- * folds five legacy conditions together, so the decision alone cannot say which
+ * folds six legacy conditions together, so the decision alone cannot say which
  * one held the edit. The facts collector names the first that applies, in the
  * legacy gate's own order, and {@link genericConsensusHoldReason} reports it
  * instead of calling every one of them an `open_dispute` (issue 1404).
@@ -209,7 +210,8 @@ export type ConsensusDisputeHoldCause =
   | 'upheld_dispute'
   | 'returned_unrevised'
   | 'target_unpublished'
-  | 'unverified_sources';
+  | 'unverified_sources'
+  | 'adjudication_pending';
 
 export function genericConsensusHoldReason(
   decision: PolicyDecision,
@@ -255,6 +257,8 @@ export function genericConsensusHoldReason(
   if (disputeHoldCause === 'target_unpublished') return 'target_unpublished';
   // So does an ingested fact citing an unread paper, checked right after it.
   if (disputeHoldCause === 'unverified_sources') return 'unverified_sources';
+  // And a T3 case the agents' approvals cannot settle, checked right after.
+  if (disputeHoldCause === 'adjudication_pending') return 'adjudication_pending';
   if (
     unmet.some(
       (u) =>

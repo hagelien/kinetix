@@ -204,6 +204,17 @@ your verdict is recorded, stop acting as the blind verifier on that case; a
 separate adjudicator may later receive the complete appeal record under
 `agents/drug-db-adjudication.md`.
 
+**Competing scope.** Set `"competingScope": true` on your verdict (alongside
+`approve`, `dispute` or `abstain`) when you find that the question turns on
+materially different populations, routes, matrices, definitions, model
+assumptions, time windows or outcome definitions, each defensible from the
+sources, that cannot be collapsed into one obvious answer. Say in the rationale
+which scopes compete and which source supports each. That flag opens a T3 case
+on its own (`agents/drug-db-adjudication.md` §2 item 2), so do not set it for a
+proposal that is simply right or wrong, nor because the decisive evidence is
+missing — that is an `abstain` with an acquisition request. Omitting it means
+`false`, and a re-verdict without it clears it.
+
 Do not escalate missing evidence as if it were model disagreement. If a decisive
 full text or supplement is unavailable, request it and `abstain`; T3 cannot infer
 facts that no tier can inspect.

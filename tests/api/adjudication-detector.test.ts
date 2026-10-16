@@ -23,6 +23,7 @@ function verdict(
     verifierTier: tier,
     model: null,
     isImplicit: false,
+    competingScope: false,
     recordedAt: new Date('2026-10-01T00:00:00Z'),
     ...extra,
   };
@@ -130,23 +131,70 @@ describe('T3 detector', () => {
     ).toBeNull();
   });
 
-  it('never produces the triggers that have no persisted input yet', () => {
+  it('fires competing_scope on a flagship verdict that records it, without any dispute', () => {
+    const t2 = verdict('approve', 'flagship', { competingScope: true });
+    const r = classifyAdjudicationCase({ ...none, verdicts: [verdict('approve', 'mid'), t2] });
+    expect(r?.triggers).toEqual(['competing_scope']);
+    expect(r?.triggerDetail.competing_scope).toEqual({ verificationIds: [t2.id] });
+    expect(r?.t2VerificationId).toBe(t2.id);
+  });
+
+  it('reads competing_scope only from an explicit flagship verdict', () => {
+    // A lower tier's flag is not T2's finding.
+    expect(
+      classifyAdjudicationCase({
+        ...none,
+        verdicts: [
+          verdict('approve', 'mid', { competingScope: true }),
+          verdict('approve', 'flagship'),
+        ],
+      }),
+    ).toBeNull();
+    // An implicit flagship row is no T2 verdict at all.
+    expect(
+      classifyAdjudicationCase({
+        ...none,
+        verdicts: [verdict('approve', 'flagship', { isImplicit: true, competingScope: true })],
+      }),
+    ).toBeNull();
+  });
+
+  it('fires human_request on a person’s request once T2 has spoken, and not before', () => {
+    const request = { id: 7, requestedBy: 42, createdAt: new Date('2026-10-02T00:00:00Z') };
+    expect(
+      classifyAdjudicationCase({
+        ...none,
+        verdicts: [verdict('approve', 'mid')],
+        humanRequests: [request],
+      }),
+    ).toBeNull();
+    const r = classifyAdjudicationCase({
+      ...none,
+      verdicts: [verdict('approve', 'flagship')],
+      humanRequests: [request, { ...request, id: 8 }],
+    });
+    expect(r?.triggers).toEqual(['human_request']);
+    expect(r?.triggerDetail.human_request).toEqual({ requestIds: [7, 8], requestedBy: [42] });
+  });
+
+  it('produces all five triggers from their persisted inputs, in contract order', () => {
     const r = classifyAdjudicationCase({
       verdicts: [
         verdict('dispute', 'mid'),
         verdict('approve', 'flagship'),
-        verdict('dispute', 'flagship'),
+        verdict('dispute', 'flagship', { competingScope: true }),
       ],
       openDisputes: [dispute('agent')],
       decidedDisputeCount: 9,
+      humanRequests: [{ id: 1, requestedBy: 5, createdAt: new Date('2026-10-02T00:00:00Z') }],
     });
     expect(r?.triggers).toEqual([
       't1_t2_disagreement',
+      'competing_scope',
       'flagship_disagreement',
       'repeated_correction_loop',
+      'human_request',
     ]);
-    expect(r?.triggers).not.toContain('competing_scope');
-    expect(r?.triggers).not.toContain('human_request');
   });
 
   it('records who raised the open disputes the case rests on', () => {

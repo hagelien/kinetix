@@ -15,12 +15,13 @@
  */
 
 import { and, asc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
-import { getDb, inTransaction } from '../db.js';
+import { getDb, inTransaction, isInPoolTransaction } from '../db.js';
 import {
   adjudicationCaseSeats,
   adjudicationCases,
   adjudicationDetectorChecks,
   adjudicationOpinions,
+  adjudicationRequests,
   agentVerifications,
   agents,
   disputes,
@@ -28,6 +29,7 @@ import {
   type AdjudicationDisputeSnapshot,
   type AdjudicationSeat,
   type AdjudicationTrigger,
+  type AdjudicationVerdictSnapshot,
   type AgentVerificationEvidenceRef,
   type AgentVerificationTargetType,
 } from '../../../db/schema.js';
@@ -38,7 +40,7 @@ import {
 import { ACTIVE_AGENT_ROLES, targetAuthorUserId } from '../agent-verifications.js';
 import { FLAGSHIP_TIER } from '../../../src/lib/modelTiers.js';
 import { classifyAdjudicationCase, disputeOriginOf } from './detector.js';
-import { bindPanelTarget } from './snapshot.js';
+import { bindPanelTarget, canonicalJson, liveHydratedTarget } from './snapshot.js';
 
 /**
  * The open disputes about one version of a target. A person's dispute
@@ -121,7 +123,9 @@ export type InvalidatedReason =
   // The version is unchanged but what the target is compared against (a
   // current value, entry or content served beside it) moved under the panel,
   // so its seats may have read different packets (./snapshot.ts).
-  | 'target_drifted';
+  | 'target_drifted'
+  // A bound panel must not decide on a different competing-scope premise.
+  | 'competing_scope_changed';
 
 export type DetectOutcome = {
   /** Live cases on this target closed because the target moved under them. */
@@ -145,6 +149,25 @@ function mergeDisputes(
 ): AdjudicationDisputeSnapshot[] {
   const ids = new Set(kept.map((d) => d.disputeId));
   return [...kept, ...seen.filter((d) => !ids.has(d.disputeId))];
+}
+
+/** A reversible scope premise includes who raised it and what they said. */
+function competingScopePremise(record: {
+  triggers: readonly AdjudicationTrigger[] | null;
+  triggerDetail: Record<string, unknown> | null;
+  t2Snapshot: readonly AdjudicationVerdictSnapshot[];
+}): string {
+  const detail = record.triggerDetail?.competing_scope as { verificationIds?: unknown } | undefined;
+  const ids = Array.isArray(detail?.verificationIds)
+    ? detail.verificationIds.filter((id): id is number => typeof id === 'number').sort((a, b) => a - b)
+    : [];
+  return canonicalJson({
+    active: (record.triggers ?? []).includes('competing_scope'),
+    ids,
+    verdicts: record.t2Snapshot.filter((v) => ids.includes(v.verificationId))
+      .map(({ recordedAt: _recordedAt, ...premise }) => premise)
+      .sort((a, b) => a.verificationId - b.verificationId),
+  });
 }
 
 /**
@@ -191,6 +214,8 @@ export async function detectAdjudicationCase(args: {
         (select max(updated_at) from agent_verifications
           where target_type = ${args.targetType} and target_id = ${args.targetId}),
         (select max(updated_at) from disputes
+          where target_type = ${args.targetType} and target_id = ${args.targetId}),
+        (select max(created_at) from adjudication_requests
           where target_type = ${args.targetType} and target_id = ${args.targetId})
       ) as at
     `);
@@ -220,6 +245,7 @@ export async function detectAdjudicationCase(args: {
         verifierTier: agentVerifications.verifierTier,
         model: agentVerifications.model,
         isImplicit: agentVerifications.isImplicit,
+        competingScope: agentVerifications.competingScope,
         recordedAt: agentVerifications.updatedAt,
       })
       .from(agentVerifications)
@@ -249,6 +275,24 @@ export async function detectAdjudicationCase(args: {
         ),
       );
 
+    // A person's request for an adjudication speaks only to the version they
+    // read, like their dispute: a revision leaves it behind.
+    const humanRequests = await tx
+      .select({
+        id: adjudicationRequests.id,
+        requestedBy: adjudicationRequests.requestedBy,
+        createdAt: adjudicationRequests.createdAt,
+      })
+      .from(adjudicationRequests)
+      .where(
+        and(
+          eq(adjudicationRequests.targetType, args.targetType),
+          eq(adjudicationRequests.targetId, args.targetId),
+          eq(adjudicationRequests.targetVersion, version),
+        ),
+      )
+      .orderBy(asc(adjudicationRequests.id));
+
     const detected = classifyAdjudicationCase({
       verdicts: verdicts.map((v) => ({
         ...v,
@@ -256,6 +300,7 @@ export async function detectAdjudicationCase(args: {
       })),
       openDisputes,
       decidedDisputeCount: Number(decided?.n ?? 0),
+      humanRequests,
     });
 
     const [existing] = await tx
@@ -266,6 +311,8 @@ export async function detectAdjudicationCase(args: {
         triggers: adjudicationCases.triggers,
         triggerDetail: adjudicationCases.triggerDetail,
         t1Snapshot: adjudicationCases.t1Snapshot,
+        t2Snapshot: adjudicationCases.t2Snapshot,
+        adjudicatedTarget: adjudicationCases.adjudicatedTarget,
       })
       .from(adjudicationCases)
       .where(
@@ -322,13 +369,29 @@ export async function detectAdjudicationCase(args: {
         ? { invalidated, caseId: opened.id, result: 'opened' }
         : { invalidated, caseId: null, result: 'none' };
     } else if ((LIVE_CASE_STATES as readonly string[]).includes(existing.state)) {
+      const scopeChanged = competingScopePremise(existing) !== competingScopePremise(detected);
+      if (scopeChanged && existing.adjudicatedTarget) {
+        // Preserve the packet and opinions as evidence of what these seats read.
+        // As with target drift, a changed premise cannot inherit their decision.
+        await tx.update(adjudicationCases).set({
+          state: 'invalidated',
+          closedAt: now,
+          invalidatedReason: 'competing_scope_changed' satisfies InvalidatedReason,
+          lastCheckedAt: now,
+        }).where(eq(adjudicationCases.id, existing.id));
+        await recordCheck();
+        return { invalidated: invalidated + 1, caseId: existing.id, result: 'retired' };
+      }
       // A live case takes on what has appeared since: a new trigger code, and
       // any dispute raised on this version since it opened. The origin is
       // recomputed over every dispute the case has seen, so a person's later
       // dispute makes the case theirs to close — it never narrows back to
-      // `agent`. The verdict snapshots stay those the case opened on.
+      // `agent`. A scope change refreshes T2 only before any seat binds the packet.
       const known = new Set<AdjudicationTrigger>(existing.triggers ?? []);
       const added = detected.triggers.filter((t) => !known.has(t));
+      const currentTriggers = [...(existing.triggers ?? []), ...added].filter(
+        (t) => t !== 'competing_scope' || detected.triggers.includes(t),
+      );
       const openDisputesSeen = mergeDisputes(
         existing.t1Snapshot.openDisputes,
         detected.t1Snapshot.openDisputes,
@@ -336,16 +399,31 @@ export async function detectAdjudicationCase(args: {
       const newDisputes =
         openDisputesSeen.length > existing.t1Snapshot.openDisputes.length;
       const triggerDetail = { ...(existing.triggerDetail ?? {}) };
+      if (!detected.triggers.includes('competing_scope')) delete triggerDetail.competing_scope;
+      else triggerDetail.competing_scope = detected.triggerDetail.competing_scope;
       for (const t of added) {
         if (t in detected.triggerDetail) triggerDetail[t] = detected.triggerDetail[t];
       }
+      // A person's request is theirs, not only a trigger code: one made after
+      // the case already carried `human_request` is recorded on it too, so
+      // every requester can find their request on the case it joined.
+      const newRequests =
+        known.has('human_request') &&
+        requestIdsOf(detected.triggerDetail).some(
+          (id) => !requestIdsOf(existing.triggerDetail).includes(id),
+        );
+      if (newRequests) triggerDetail.human_request = detected.triggerDetail.human_request;
       await tx
         .update(adjudicationCases)
         .set({
           lastCheckedAt: now,
-          ...(added.length > 0
-            ? { triggers: [...(existing.triggers ?? []), ...added], triggerDetail }
+          ...(added.length > 0 || newRequests || scopeChanged
+            ? { triggers: currentTriggers, triggerDetail }
             : {}),
+          ...(scopeChanged ? {
+            t2VerificationId: detected.t2VerificationId,
+            t2Snapshot: detected.t2Snapshot,
+          } : {}),
           ...(newDisputes
             ? {
                 t1Snapshot: { ...existing.t1Snapshot, openDisputes: openDisputesSeen },
@@ -357,7 +435,7 @@ export async function detectAdjudicationCase(args: {
       outcome = {
         invalidated,
         caseId: existing.id,
-        result: added.length > 0 || newDisputes ? 'joined' : 'unchanged',
+        result: added.length > 0 || newDisputes || newRequests || scopeChanged ? 'joined' : 'unchanged',
       };
     } else if (
       existing.state === 'invalidated' &&
@@ -394,6 +472,67 @@ export async function detectAdjudicationCase(args: {
   });
 }
 
+/** The `adjudication_requests` ids a case's trigger detail records. */
+function requestIdsOf(triggerDetail: Record<string, unknown> | null | undefined): number[] {
+  const detail = triggerDetail?.human_request as { requestIds?: unknown } | undefined;
+  return Array.isArray(detail?.requestIds) ? (detail.requestIds as number[]) : [];
+}
+
+/**
+ * Re-evaluate the target inside the caller's transaction — the one that just
+ * changed a trigger input (a verdict, a withdrawal) under the target's
+ * source-row lock — so the case and its inputs commit together and no T3
+ * writer can act on the case between the two. Run under a savepoint: a
+ * detector fault is rolled back alone and logged (the sweep and the seal's
+ * own re-check are the backstop), never taking the caller's write with it.
+ * Returns null on a fault.
+ */
+export async function detectAdjudicationCaseWithin(args: {
+  targetType: AgentVerificationTargetType;
+  targetId: number;
+}): Promise<DetectOutcome | null> {
+  const atomic = isInPoolTransaction();
+  const db = getDb();
+  if (atomic) await db.execute(sql`SAVEPOINT adjudication_detect`);
+  try {
+    const outcome = await detectAdjudicationCase(args);
+    if (atomic) await db.execute(sql`RELEASE SAVEPOINT adjudication_detect`);
+    return outcome;
+  } catch (err) {
+    if (atomic) {
+      await db.execute(sql`ROLLBACK TO SAVEPOINT adjudication_detect`).catch(() => undefined);
+    }
+    console.error(
+      `[adjudication] detection failed for ${args.targetType}:${args.targetId}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return null;
+  }
+}
+
+/**
+ * Bring a case up to date with its target before a T3 writer acts on it (a
+ * seat claim, an opinion, the seal), under the source-row lock the caller
+ * already holds. A trigger input can change in any writer — a re-verdict, a
+ * withdrawal, a tier restamp — so the case is re-read through the detector
+ * here rather than trusted: a disagreement that no longer stands retires the
+ * case instead of letting the panel seal it. Returns the case's state now.
+ */
+export async function refreshCaseUnderLock(kase: {
+  id: number;
+  targetType: string;
+  targetId: number;
+}): Promise<string | null> {
+  await detectAdjudicationCase({
+    targetType: kase.targetType as AgentVerificationTargetType,
+    targetId: kase.targetId,
+  });
+  const [now] = await getDb()
+    .select({ state: adjudicationCases.state })
+    .from(adjudicationCases)
+    .where(eq(adjudicationCases.id, kase.id));
+  return now?.state ?? null;
+}
+
 async function caseHasOpinions(caseId: number): Promise<boolean> {
   const [row] = await getDb()
     .select({ id: adjudicationOpinions.id })
@@ -401,6 +540,151 @@ async function caseHasOpinions(caseId: number): Promise<boolean> {
     .where(eq(adjudicationOpinions.caseId, caseId))
     .limit(1);
   return row !== undefined;
+}
+
+export type AdjudicationRequestResult =
+  | { ok: true; requestId: number; inserted: boolean; detection: DetectOutcome }
+  | { ok: false; reason: 'target_not_found' | 'target_version_stale' | 'target_unavailable' }
+  | { ok: false; reason: 'case_closed'; caseId: number };
+
+/** Thrown inside the request transaction so a request that cannot be served is not kept. */
+class AdjudicationRequestRefused extends Error {
+  constructor(readonly caseId: number) {
+    super('the case for this version is closed');
+    this.name = 'AdjudicationRequestRefused';
+  }
+}
+
+/**
+ * Record a person's request for an agent adjudication of one version of a
+ * target (T3 trigger 5, agents/drug-db-adjudication.md §2), then run the
+ * detector on it.
+ *
+ * The version is re-read under the target's source-row lock — the lock every
+ * T3 reader takes — so a request is never bound to a payload the person did
+ * not read. One request per person per version: asking again returns the
+ * first. A request made before blind T2 has spoken is kept and opens the case
+ * when the flagship verdict lands.
+ *
+ * The detector runs inside the same transaction, under the same lock, so the
+ * request is on the live case before any other T3 writer can act on it. Run
+ * after the commit, the second seat's final opinion could take the lock in
+ * between and seal — and close an agent-only case automatically — on the
+ * triggers it had before, while the person was told their request stood. A
+ * detector fault therefore fails the request as a whole, and the person asks
+ * again.
+ *
+ * A target a panel could not be served (a decided proposal, an unpublished
+ * page) is refused as `target_unavailable` before anything is written.
+ *
+ * A request is kept only where it will reach a person: on the version's case
+ * (opened, joined or reopened by it, or already carrying it), or with no case
+ * yet because blind T2 has not spoken — the case then opens with it. A
+ * version whose case is closed without it (decided, or invalidated beyond
+ * reopening) is adjudicated at most once (plan §3.2), so the request is
+ * refused as `case_closed` and nothing is written.
+ */
+export async function requestAdjudication(args: {
+  targetType: AgentVerificationTargetType;
+  targetId: number;
+  targetVersion: string;
+  requestedBy: number;
+  reasonMd: string;
+}): Promise<AdjudicationRequestResult> {
+  async function record(
+    tx: ReturnType<typeof getDb>,
+  ): Promise<
+    | { ok: true; requestId: number; inserted: boolean }
+    | { ok: false; reason: 'target_not_found' | 'target_version_stale' | 'target_unavailable' }
+  > {
+    const version = await verificationTargetVersion(args, tx);
+    if (version === null) return { ok: false as const, reason: 'target_not_found' as const };
+    if (version !== args.targetVersion) {
+      return { ok: false as const, reason: 'target_version_stale' as const };
+    }
+    // A panel can only adjudicate what it can be served: a decided proposal
+    // (approved, rejected, returned, withdrawn) or an unpublished wiki page
+    // would close the case at the first seat claim (./snapshot.ts). Read as
+    // a panelist with no part in the case would read it.
+    const served = await liveHydratedTarget(args, { agentId: 0, agentUserId: 0 });
+    if (!served || served.targetVersion !== version) {
+      return { ok: false as const, reason: 'target_unavailable' as const };
+    }
+    const [inserted] = await tx
+      .insert(adjudicationRequests)
+      .values({
+        targetType: args.targetType,
+        targetId: args.targetId,
+        targetVersion: args.targetVersion,
+        requestedBy: args.requestedBy,
+        reasonMd: args.reasonMd,
+      })
+      .onConflictDoNothing({
+        target: [
+          adjudicationRequests.targetType,
+          adjudicationRequests.targetId,
+          adjudicationRequests.targetVersion,
+          adjudicationRequests.requestedBy,
+        ],
+      })
+      .returning({ id: adjudicationRequests.id });
+    if (inserted) return { ok: true as const, requestId: inserted.id, inserted: true };
+    const [existing] = await tx
+      .select({ id: adjudicationRequests.id })
+      .from(adjudicationRequests)
+      .where(
+        and(
+          eq(adjudicationRequests.targetType, args.targetType),
+          eq(adjudicationRequests.targetId, args.targetId),
+          eq(adjudicationRequests.targetVersion, args.targetVersion),
+          eq(adjudicationRequests.requestedBy, args.requestedBy),
+        ),
+      );
+    return { ok: true as const, requestId: existing!.id, inserted: false };
+  }
+  try {
+    return await inTransaction(async () => {
+      const tx = getDb();
+      await lockVerificationSourceRow(tx, args.targetType, args.targetId);
+      const written = await record(tx);
+      if (!written.ok) return written;
+      // Joins this transaction (`inTransaction` nests), so the source-row lock
+      // is held from the version check through the case update.
+      const detection = await detectAdjudicationCase({
+        targetType: args.targetType,
+        targetId: args.targetId,
+      });
+      const [kase] = await tx
+        .select({
+          id: adjudicationCases.id,
+          state: adjudicationCases.state,
+          invalidatedReason: adjudicationCases.invalidatedReason,
+          triggerDetail: adjudicationCases.triggerDetail,
+        })
+        .from(adjudicationCases)
+        .where(
+          and(
+            eq(adjudicationCases.targetType, args.targetType),
+            eq(adjudicationCases.targetId, args.targetId),
+            eq(adjudicationCases.targetVersion, args.targetVersion),
+          ),
+        );
+      const attached = !kase || requestIdsOf(kase.triggerDetail).includes(written.requestId);
+      // A case retired before any opinion reopens, request included, once the
+      // disagreement or the T2 verdict it lost returns on this version.
+      const reopenable =
+        kase?.state === 'invalidated' &&
+        kase.invalidatedReason === ('disagreement_withdrawn' satisfies InvalidatedReason) &&
+        !(await caseHasOpinions(kase.id));
+      if (!attached && !reopenable) throw new AdjudicationRequestRefused(kase!.id);
+      return { ...written, detection };
+    });
+  } catch (err) {
+    if (err instanceof AdjudicationRequestRefused) {
+      return { ok: false, reason: 'case_closed', caseId: err.caseId };
+    }
+    throw err;
+  }
 }
 
 export interface AdjudicationSweepResult {
@@ -417,9 +701,11 @@ export interface AdjudicationSweepResult {
  *
  * - live cases, least recently checked first — so a target that moved is
  *   eventually reached even when nobody verdicts it again;
- * - targets where blind T2 has spoken and a disagreement is on record, whose
- *   verdict/dispute activity is newer than the detector last saw (or that it
- *   never checked), oldest first.
+ * - targets where blind T2 has spoken and a disagreement is on record — a
+ *   dispute verdict, an open dispute, a flagship verdict finding competing
+ *   scope, or a person's request for an adjudication — whose
+ *   verdict/dispute/request activity is newer than the detector last saw (or
+ *   that it never checked), oldest first.
  *
  * Idempotent: the permanent case key makes a re-read a no-op.
  */
@@ -444,7 +730,9 @@ export async function sweepAdjudicationCases(
           greatest(
             max(av.updated_at),
             (select max(d.updated_at) from disputes d
-              where d.target_type = av.target_type and d.target_id = av.target_id)
+              where d.target_type = av.target_type and d.target_id = av.target_id),
+            (select max(r.created_at) from adjudication_requests r
+              where r.target_type = av.target_type and r.target_id = av.target_id)
           ) as activity_at
         from agent_verifications av
         where exists (
@@ -462,6 +750,16 @@ export async function sweepAdjudicationCases(
               select 1 from disputes od
               where od.target_type = av.target_type and od.target_id = av.target_id
                 and od.status = 'open'
+            )
+            or exists (
+              select 1 from agent_verifications cv
+              where cv.target_type = av.target_type and cv.target_id = av.target_id
+                and cv.is_implicit = false and cv.verifier_tier = ${FLAGSHIP_TIER}
+                and cv.competing_scope = true
+            )
+            or exists (
+              select 1 from adjudication_requests rq
+              where rq.target_type = av.target_type and rq.target_id = av.target_id
             )
           )
         group by av.target_type, av.target_id
@@ -679,6 +977,15 @@ export async function claimAdjudicationSeat(args: {
       );
     if (mine) return { ok: true, seat: mine.seat, alreadySeated: true };
     if (kase.state !== 'open') return { ok: false, reason: 'case_not_open' };
+    // The disagreement the case rests on may have gone since it was last
+    // refreshed (a re-verdict, a withdrawal): nobody takes a seat on it then.
+    if ((await refreshCaseUnderLock(kase)) !== 'open') return { ok: false, reason: 'case_not_open' };
+
+    // Detection can refresh an unbound case's triggers and T2 record. Bind the
+    // first seat to that refreshed packet, not the pre-detection local object.
+    const [refreshed] = await tx.select().from(adjudicationCases)
+      .where(eq(adjudicationCases.id, kase.id));
+    if (refreshed) Object.assign(kase, refreshed);
 
     if ((await liveConflictedAgentIds(kase)).has(args.agentId)) {
       return { ok: false, reason: 'conflicted' };

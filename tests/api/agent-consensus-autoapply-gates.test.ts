@@ -68,6 +68,8 @@ vi.mock('../../api/_lib/agent-verifications.js', async (importActual) => {
     isSelfReviewAgentUser: isSelfReviewAgentUserMock,
     // Page visibility has its own integration test; these fixtures target published pages.
     pendingEditTargetOpenToAgents: vi.fn(async () => true),
+    // The T3 hold has its own integration test (agent-consensus-retry).
+    pendingEditAwaitsAdjudication: vi.fn(async () => false),
   };
 });
 

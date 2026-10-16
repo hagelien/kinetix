@@ -82,7 +82,8 @@ Create a T3 case only when at least one of these is true after T2 has completed:
    maintained is, and its addendum belongs in the case file) and
    the blind T2 verifier independently `approve`s the disputed proposition, or
    vice versa in any future symmetric representation.
-2. **Competing defensible interpretations** — T2 finds that the disagreement
+2. **Competing defensible interpretations** — T2 finds (and records as
+   `competingScope` on its verdict) that the disagreement
    turns on materially different populations, routes, matrices, definitions,
    model assumptions, time windows, outcome definitions, or other scope that
    cannot be collapsed into a single obvious answer.
@@ -91,7 +92,9 @@ Create a T3 case only when at least one of these is true after T2 has completed:
 4. **Repeated correction loop** — the same material proposition has completed
    at least two correction/return/dispute cycles without settling.
 5. **Explicit human request for agent adjudication** — an editor asks for a T3
-   analysis while retaining the final human authority.
+   analysis while retaining the final human authority
+   (`POST /api/agent-adjudication-queue?action=request`). Such a case is always
+   handed to a person when it seals; the panel only recommends.
 
 Do **not** escalate merely because evidence is missing. If the decisive full
 text, supplement, or other source is unavailable, request/acquire it and

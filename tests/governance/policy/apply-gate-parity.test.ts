@@ -288,6 +288,7 @@ describe('required parity matrix', () => {
       'returned_unrevised',
       'target_unpublished',
       'unverified_sources',
+      'adjudication_pending',
     ] as const) {
       const { evaluation } = compare(
         facts({
@@ -761,6 +762,7 @@ describe('batched read-only status matches the frozen gate (issue #33)', () => {
       authorSelfReviewGrant: f.submitterIsAgent && f.authorSelfReviews,
       targetOpenToAgents: true,
       citesUnreadSources: false,
+      awaitsAdjudication: false,
       activeAgents: f.activeAgents,
       summary: f.summary,
       hasOpenDispute: f.hasOpenHumanDispute,
@@ -883,6 +885,7 @@ describe('batched read-only status matches the frozen gate (issue #33)', () => {
     expect(batched(ready, { lacksSourceQuote: true })).toBe('source_quote_missing');
     expect(batched(ready, { targetOpenToAgents: false })).toBe('target_unpublished');
     expect(batched(ready, { citesUnreadSources: true })).toBe('unverified_sources');
+    expect(batched(ready, { awaitsAdjudication: true })).toBe('adjudication_pending');
     expect(batched(ready, { upheldRulingStands: true })).toBe('upheld_dispute');
     expect(
       batched(ready, { proposedMeta: { returnedAt: '2026-10-06T10:00:00.000Z' } }),
@@ -897,6 +900,7 @@ describe('batched read-only status matches the frozen gate (issue #33)', () => {
     const short = facts({ summary: summary({ approveCount: 0 }) });
     expect(batched(short, { targetOpenToAgents: false })).toBe('target_unpublished');
     expect(batched(short, { citesUnreadSources: true })).toBe('unverified_sources');
+    expect(batched(short, { awaitsAdjudication: true })).toBe('adjudication_pending');
     expect(batched(short, { upheldRulingStands: true })).toBe('quorum_unmet');
     expect(
       batched(short, { proposedMeta: { returnedAt: '2026-10-06T10:00:00.000Z' } }),

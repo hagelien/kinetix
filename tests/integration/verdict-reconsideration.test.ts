@@ -27,6 +27,7 @@ vi.mock('../../api/_lib/auth.js', () => ({
 
 import { and, eq } from 'drizzle-orm';
 import {
+  adjudicationCases,
   agentVerdictReconsiderations,
   agentVerifications,
   agents,
@@ -1109,5 +1110,43 @@ describe('dispute reconsideration', () => {
       .where(eq(agentVerdictReconsiderations.targetId, editId));
     // No duplicate round was created either.
     expect(reconsiderations).toEqual([{ outcome: 'maintained' }]);
+  });
+});
+
+describe('a withdrawal and the T3 case it rests on (PR #291 review)', () => {
+  it('retires the case in the withdrawal itself, so no panel can seal on the withdrawn dispute', async () => {
+    const author = await seedAgent('author');
+    const t2 = await seedAgent('t2');
+    const sol = await seedAgent('sol');
+    const editId = await seedWikiFactEdit(author.userId);
+    await approve(t2.agentId, editId);
+    await db
+      .update(agentVerifications)
+      .set({ verifierTier: 'flagship' })
+      .where(eq(agentVerifications.agentId, t2.agentId));
+    const version = await dispute(sol, editId);
+    await db
+      .update(agentVerifications)
+      .set({ verifierTier: 'mid' })
+      .where(eq(agentVerifications.agentId, sol.agentId));
+    const { detectAdjudicationCase } = await import('../../api/_lib/adjudication/cases.js');
+    const opened = await detectAdjudicationCase({ targetType: 'pending_edit', targetId: editId });
+    expect(opened.result).toBe('opened');
+
+    const posted = await call(reconsiderHandler, sol.userId, 'POST', RECONSIDER, {
+      targetType: 'pending_edit',
+      targetId: editId,
+      targetVersion: version,
+      outcome: 'withdraw',
+      model: 'gpt-5.7-sol',
+      peerDigest: await digestFor(sol.userId),
+      addendumMd: 'Jeg leste forslaget feil: det skiller eksplisitt mellom pKa1 og pKa2.',
+    });
+    expect(posted.statusCode).toBe(200);
+    const [kase] = await db
+      .select()
+      .from(adjudicationCases)
+      .where(eq(adjudicationCases.id, opened.caseId!));
+    expect(kase).toMatchObject({ state: 'invalidated', invalidatedReason: 'disagreement_withdrawn' });
   });
 });

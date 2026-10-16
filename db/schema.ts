@@ -2380,6 +2380,13 @@ export const agentVerifications = pgTable(
     /** True for the auto-row written when the agent submitted the target. */
     isImplicit: boolean('is_implicit').notNull().default(false),
     /**
+     * T3 trigger 2 (agents/drug-db-adjudication.md §2, migration 0156): the
+     * verifier found that the disagreement turns on materially different scope
+     * that cannot be collapsed into one answer. Rewritten on every verdict
+     * write; the T3 detector reads it only on an explicit flagship verdict.
+     */
+    competingScope: boolean('competing_scope').notNull().default(false),
+    /**
      * Runner session id the verifying agent declared when this verdict was
      * last written (see pending_edits.run_session_id). NULL = undeclared.
      */
@@ -3012,6 +3019,9 @@ export type AdjudicationHandoff = {
     | 'human_requested'
     | 'panel_abstained'
     | 'human_dispute'
+    // A person asked for this adjudication (trigger `human_request`) and
+    // keeps the final authority, so the panel only recommends.
+    | 'adjudication_requested'
     | 'panel_conflicted'
     // The panel converged on an agent-only case, but the closure would not act
     // on it (./closure.ts): see `AdjudicationClosure.declined`.
@@ -3124,6 +3134,37 @@ export const adjudicationCases = pgTable(
       'adjudication_cases_panel_family_diversity_check',
       sql`${t.panelFamilyDiversity} IS NULL OR ${t.panelFamilyDiversity} IN ('distinct', 'same', 'unknown')`,
     ),
+  ],
+);
+
+/**
+ * T3 trigger 5 (agents/drug-db-adjudication.md §2, migration 0156): a person
+ * asking for an agent adjudication of one version of a target, while keeping
+ * the final authority. Bound to the version they read, like a person's
+ * dispute; one row per person per version. Written by
+ * `POST /api/agent-adjudication-queue?action=request`.
+ */
+export const adjudicationRequests = pgTable(
+  'adjudication_requests',
+  {
+    id: serial('id').primaryKey(),
+    targetType: varchar('target_type', { length: 40 }).notNull(),
+    targetId: integer('target_id').notNull(),
+    targetVersion: varchar('target_version', { length: 80 }).notNull(),
+    requestedBy: integer('requested_by')
+      .references(() => users.id, { onDelete: 'cascade' })
+      .notNull(),
+    reasonMd: text('reason_md').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex('adjudication_requests_target_version_requester_uq').on(
+      t.targetType,
+      t.targetId,
+      t.targetVersion,
+      t.requestedBy,
+    ),
+    index('adjudication_requests_target_idx').on(t.targetType, t.targetId),
   ],
 );
 

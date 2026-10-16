@@ -12,6 +12,11 @@
  *                             the T4 handoff included.
  *   POST ?action=claim        take a free seat on an open case, before any of
  *                             its content is served. Body: { caseId }.
+ *   POST ?action=request      a person who may read the T4 handoffs asks for an
+ *                             agent adjudication of the version of a target
+ *                             they read (contract §2 item 5), keeping the
+ *                             final authority. Body: { targetType, targetId,
+ *                             targetVersion, reasonMd }.
  *
  * Adjudicator: an active agent with the server-owned `adjudicator` grant AND
  * the flagship tier. A blind T2 verifier has neither the grant nor a seat, so
@@ -21,15 +26,18 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { error, json, noStoreHeaders, withErrorHandling } from './_lib/response.js';
-import { getUserFromRequest } from './_lib/auth.js';
+import { getUserFromRequest, type AuthContext } from './_lib/auth.js';
 import { assertSameOrigin, parseAndValidate } from './_lib/validate.js';
 import { callerCan } from './_lib/permissions-store.js';
 import { CAP } from '../src/lib/permissions.js';
-import { adjudicationClaimSchema } from './_lib/schemas.js';
+import { adjudicationClaimSchema, adjudicationRequestSchema } from './_lib/schemas.js';
 import {
   claimAdjudicationSeat,
+  requestAdjudication,
   resolveAdjudicator,
 } from './_lib/adjudication/cases.js';
+import { visibleVerificationTargetIds } from './_lib/agent-verifications.js';
+import type { AgentVerificationTargetType } from '../db/schema.js';
 import {
   buildCaseFile,
   listAdjudicatorCases,
@@ -67,6 +75,12 @@ export default withErrorHandling(async function handler(
   }
   const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
   const adjudicator = await resolveAdjudicator(auth.userId);
+
+  if (req.method === 'POST' && url.searchParams.get('action') === 'request') {
+    assertSameOrigin(req);
+    await handleRequest(req, res, auth, adjudicator);
+    return;
+  }
 
   if (req.method === 'POST') {
     assertSameOrigin(req);
@@ -148,3 +162,98 @@ export default withErrorHandling(async function handler(
   }
   json(res, 200, { handoffs: await listHandoffs() }, { headers: noStoreHeaders() });
 });
+
+/**
+ * T3 trigger 5: a person asks for an agent adjudication. Only a person — an
+ * identity backing any agent row is never one here, whatever its role — and
+ * only one who may read the dispute queue: the same gate as the T4 handoffs
+ * below, since the case comes back to a person there. Asking resolves
+ * nothing and grants nothing. The target must be visible to them and still at
+ * the version they read.
+ */
+async function handleRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  auth: AuthContext,
+  adjudicator: Awaited<ReturnType<typeof resolveAdjudicator>>,
+): Promise<void> {
+  if (adjudicator !== null || !(await callerCan(auth.role, CAP['dispute.queue.read']))) {
+    error(
+      res,
+      403,
+      'A person who may read the dispute queue is required to request an adjudication',
+      'adjudication_request_forbidden',
+    );
+    return;
+  }
+  const parsed = await parseAndValidate(req, adjudicationRequestSchema);
+  if ('error' in parsed) {
+    error(res, 400, parsed.error);
+    return;
+  }
+  const targetType = parsed.data.targetType as AgentVerificationTargetType;
+  const visible = await visibleVerificationTargetIds({
+    targetType,
+    targetIds: [parsed.data.targetId],
+    callerUserId: auth.userId,
+    callerRole: auth.role,
+    callerAgentId: null,
+  });
+  if (visible.length === 0) {
+    error(res, 404, 'Target not found', 'adjudication_request_target_not_found');
+    return;
+  }
+  const result = await requestAdjudication({
+    targetType,
+    targetId: parsed.data.targetId,
+    targetVersion: parsed.data.targetVersion,
+    requestedBy: auth.userId,
+    reasonMd: parsed.data.reasonMd,
+  });
+  if (!result.ok) {
+    if (result.reason === 'target_not_found') {
+      error(res, 404, 'Target not found', 'adjudication_request_target_not_found');
+    } else if (result.reason === 'target_unavailable') {
+      error(
+        res,
+        409,
+        'This target can no longer be adjudicated (the proposal is decided, or its page is not published)',
+        'adjudication_request_target_unavailable',
+      );
+    } else if (result.reason === 'case_closed') {
+      // A version is adjudicated at most once; its closed case can be read
+      // with ?caseId=N. Nothing was recorded.
+      json(
+        res,
+        409,
+        {
+          error: 'This version of the target has already been adjudicated; its case is closed',
+          code: 'adjudication_request_case_closed',
+          caseId: result.caseId,
+        },
+        { headers: noStoreHeaders() },
+      );
+    } else {
+      error(
+        res,
+        409,
+        'Target changed since it was read',
+        'adjudication_request_target_version_stale',
+      );
+    }
+    return;
+  }
+  json(
+    res,
+    result.inserted ? 201 : 200,
+    {
+      id: result.requestId,
+      inserted: result.inserted,
+      // The case carrying this request; null while blind T2 has not spoken
+      // (the request opens the case when the flagship verdict lands).
+      caseId: result.detection.caseId,
+      detection: result.detection.result,
+    },
+    { headers: noStoreHeaders() },
+  );
+}

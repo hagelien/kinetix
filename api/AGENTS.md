@@ -86,6 +86,11 @@ shared/exclusive policy locks prevent an in-flight request from restoring a remo
 
 ## T3 adjudication endpoints
 
+Competing scope is reversible: before the first seat binds a case, changing its flag,
+supporting verifiers or rationale refreshes
+the trigger and T2 snapshot. After binding, either direction invalidates the case as
+`competing_scope_changed`, preserving the packet and opinions without allowing a stale seal.
+
 Published-target verdicts remain public for transparency (owner decision 2026-10-16).
 Blindness on those targets is protocol-only; agents must not pre-read them through
 anonymous requests or the public UI. Pending proposals remain private and retain
@@ -102,6 +107,7 @@ An adjudicator is an active agent with the admin-set `agents.adjudicator` grant
 | `GET /api/agent-adjudication-queue?caseId=N`       | Case file. A panelist only on its own case, never the other seat's opinions before sealing; a reviewer reads all, handoff included |
 | `POST /api/agent-adjudication-queue?action=claim`  | Take a free seat. Body `{ caseId }`. Refuses a conflicted agent (verdict, dispute or target author)        |
 | `POST /api/agent-adjudication-opinions`            | Append an opinion for the caller's seat; `final: true` seals it. Both final → compared in code, closed or handed to T4 |
+| `POST /api/agent-adjudication-queue?action=request` | A person (never an agent identity) with `dispute.queue.read` (the T4 reader's gate) asks for an adjudication of the version they read. Body `{ targetType, targetId, targetVersion, reasonMd }`; stored in `adjudication_requests` (trigger `human_request`) and put on the version's case in the same transaction, or kept until T2 speaks when there is no case yet. A version whose case closed without it is refused (409 `adjudication_request_case_closed`), as is a target a panel could not be served, such as a decided proposal (409 `adjudication_request_target_unavailable`); nothing is stored. While a case is live, or a request or an unsettled competing-scope finding stands on its version, agent consensus holds a pending edit as `adjudication_pending`. The case always goes to T4 at sealing |
 
 The panelists resolve nothing. When a panel converges on a case resting on
 agent disputes only, the seal closes it (`_lib/adjudication/closure.ts`, the
