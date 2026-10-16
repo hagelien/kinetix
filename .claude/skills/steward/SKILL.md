@@ -5,6 +5,18 @@ description: How to handle code review findings and drive a pull request to a me
 
 # Handling review findings
 
+## Execution budget for coding agents
+
+Follow [the bounded coding-agent workflow in AGENTS.md](../../../AGENTS.md#bounded-coding-agent-workflow).
+For "address review feedback", act on findings already present when the task
+starts. Make one coherent patch, verify with focused checks, commit/push once,
+reply to those findings, report CI/review as pending when applicable, **and
+stop**. Do not wait for checks, ask for repeated Codex reviews, or begin another
+cycle when a new bot finding appears. New P0/P1 findings still block merge;
+report them explicitly for a separate follow-up task. Only an explicit user
+request for extended review/merge ownership overrides this budget.
+
+
 This repository routes review findings by severity. The rationale is in
 [docs/REVIEW_POLICY.md](../../../docs/REVIEW_POLICY.md); this file is the procedure.
 
@@ -63,7 +75,7 @@ done.
 1. Fix it in the pull request that raised it. Do not defer, and do not open an
    issue instead. Take a P0 before anything else on the pull request.
 2. Add a regression test that fails without the fix.
-3. Run the verification commands below before pushing.
+3. Run the focused verification appropriate to the changed paths (see below) before pushing.
 4. Reply on the review thread naming the fixing commit and the regression test,
    then resolve the thread.
 
@@ -131,55 +143,36 @@ Title: [P2] <the finding's own heading>
 touch the escalation areas>
 ```
 
-## Ask for a fresh verdict before the gate can merge
+## Review verdicts and deferrals without a wait loop
 
-`.github/workflows/codex-gate.yml` merges only on a sign-off from the Codex
-reviewer against the **current head**: a formal approval, a comment its
-`CLEAN_RE` matches, or a 👍 reaction. A `CHANGES_REQUESTED` review on the
-current head keeps blocking until a newer verdict supersedes it.
+`.github/workflows/codex-gate.yml` merges only after a suitable Codex
+verdict and the required checks succeed **on the current head**.
 
-Replying on a review thread and resolving it is none of those, and a review
-comment raises no event the gate listens for. So after handling a finding, ask
-for a new verdict explicitly:
-
-- After a **fix**, the push is enough — `synchronize` wakes the gate and starts
-  a fresh review of the new head. (Only on a draft, which workers never open,
-  would you need to comment `@codex review` as well.)
-- After a **deferral**, nothing changed on the branch. Do **not** comment
-  `@codex review`: the reviewer has no memory of the deferral and re-raises the
-  same findings on the same head. Instead, once every P2/P3 finding on the
-  current head has its issue and its reply, add the `findings-deferred` label to
-  the pull request. That wakes the gate, which checks for itself that every
-  Codex finding on the head carries a P2 or P3 badge and a reply linking a
-  `review-debt` issue, and treats that review as a sign-off. One P0, P1 or
-  unbadged finding on the head, or one P2/P3 without a filed issue, and it does
-  not. The gate removes the label each time it evaluates, so add it again after
-  a later round of deferrals.
+- **After a fix:** pushing normally triggers Codex review and CI through
+  GitHub automatically. Do **not** post `@codex review`, wait for the
+  verdict, watch/poll status, or begin fixing fresh bot findings in the same
+  task. Record any known blockers at handoff. If a new P0/P1 appears later,
+  it remains a merge blocker and requires a separate user-requested run.
+- **After P2/P3 deferral on the current head:** do not request a new review.
+  Once every applicable comment has a linked, open `review-debt` issue and
+  a thread reply, add `findings-deferred` once to ask the gate to evaluate
+  that already-completed review. The gate validates severity and issue links
+  independently; the label is not approval by itself.
+- **Never bypass protections:** do not merge manually, deploy, discard P0/P1
+  findings, or mark failing tests as passing to accelerate completion.
 
 ## Pull requests open ready for review
 
-**Every pull request here opens ready for review, never as a draft** — see
-*Opening a pull request* in [AGENTS.md](../../../AGENTS.md). That one choice
-starts the Codex review, runs the full CI suite (`unit-tests`, and `migrations`
-where its `paths:` apply) on every push, and arms `codex-gate`, which merges on
-its own once Codex signs off on the current head and checks are green. No
-`@codex review` comment is needed, and you never merge yourself.
+Open non-draft PRs as described in [AGENTS.md](../../../AGENTS.md).
+Opening a PR triggers automatic review, tests and the merge gate. A PR becomes
+**merge-ready** only with successful CI, an acceptable current-head review and
+no conflicts; an agent's **coding task ends earlier**, after its bounded
+implementation pass and report. The gate enforces merge-readiness, and
+subsequent failures/findings are follow-up work rather than an unbounded
+extension of the first task.
 
-**A pull request is finished when CI is green on the current head**, the Codex
-review on that head is clean (or its only findings are P2/P3, each filed as
-above), and there is no merge conflict. Red or pending CI is work: diagnose and
-push a fix, per the drive-to-green rules.
-
-Because every push runs the expensive suites, run the local checklist in
-*Opening a pull request* ([AGENTS.md](../../../AGENTS.md)) **before** pushing. A
-branch touching any path in `.github/workflows/migrations.yml`'s `paths:` list —
-a wider set than the name suggests — owes **three extra commands** beyond
-typecheck/lint/vitest. None of them is reachable from the base three:
-`npm run typecheck` excludes `scripts/` and `tests/`, and `npx vitest run`
-excludes `tests/integration/**` and `tests/governance/**`.
-
-Never convert a pull request to draft, and never push an empty commit or
-relabel one to re-trigger CI or review.
+Never convert a PR to draft, push empty commits, or relabel a PR merely to
+retrigger CI/review. Do not manually request another review after pushing.
 
 ## Findings with no severity badge
 
@@ -194,9 +187,12 @@ Human reviewers and some tools do not label findings. Classify them:
 
 ## Before every push
 
-- `npm run typecheck`
-- `npm run lint`
-- `npx vitest run`
+Use the [focused verification policy](../../../AGENTS.md#verification-before-pushing):
+run changed-module regressions and affected typecheck/lint once for a coherent
+patch. Fix failed focused checks before pushing. Do **not** rerun the entire
+unit suite, integration suite, or migration matrix locally for each review
+round; CI does that after the push. Broader checks are reserved for an explicit
+user request, a CI outage, or a demonstrable cross-cutting failure.
 
-All of the above must pass locally. One validated push is worth more than three
-speculative ones.
+Do not run `gh pr checks --watch` or wait for bot reviews. Report any CI or
+review status still pending when the bounded task ends.
