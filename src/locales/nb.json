@@ -2889,6 +2889,30 @@
       "label": "Km",
       "longLabel": "Michaelis-konstant (metningsbar eliminasjon)"
     },
+    "k12": {
+      "label": "k12",
+      "longLabel": "Hastighetskonstant sentral → perifer (k12)"
+    },
+    "k21": {
+      "label": "k21",
+      "longLabel": "Hastighetskonstant perifer → sentral (k21)"
+    },
+    "centralVolume": {
+      "label": "V1",
+      "longLabel": "Sentralt kompartmentvolum (V1)"
+    },
+    "firstOrderFraction": {
+      "label": "Ffo",
+      "longLabel": "Førsteordensandel av blandet (parallell) absorpsjon"
+    },
+    "zeroOrderDuration": {
+      "label": "D0",
+      "longLabel": "Varighet av nullteordens tilførsel"
+    },
+    "absorptionLag": {
+      "label": "tlag",
+      "longLabel": "Absorpsjonsforsinkelse"
+    },
     "postmortemRedistribution": {
       "label": "C/P",
       "longLabel": "C/P (sentral-perifer konsentrasjonsratio)"
@@ -4706,7 +4730,8 @@
       "k12": "k12",
       "k21": "k21",
       "vmax": "Vmax",
-      "km": "Km"
+      "km": "Km",
+      "absorptionLag": "absorpsjonsforsinkelse (tlag)"
     },
     "caveat": {
       "defaultedAxes": "Standardantakelser: {{axes}}",
@@ -4770,7 +4795,7 @@
     "loadError": "Kunne ikke laste modellstruktur.",
     "actionError": "Kunne ikke lagre endringen. Prøv igjen.",
     "routeValuesHeading": "Rutespesifikke absorpsjonsverdier",
-    "routeValuesHint": "Legg til kildebelagte rutespesifikke ka-fordelinger her; rutespesifikk biotilgjengelighet bruker kildeverdiredigeringen.",
+    "routeValuesHint": "Legg til kildebelagte rutespesifikke verdier her: ka, varighet og førsteordensandel for nullteordens eller blandet tilførsel, og absorpsjonsforsinkelse. Rutespesifikk biotilgjengelighet bruker kildeverdiredigeringen.",
     "addRouteValue": "Legg til rutespesifikk verdi"
   },
   "doseContext": {

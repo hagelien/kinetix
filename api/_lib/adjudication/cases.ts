@@ -960,6 +960,12 @@ export async function claimAdjudicationSeat(args: {
     // refreshed (a re-verdict, a withdrawal): nobody takes a seat on it then.
     if ((await refreshCaseUnderLock(kase)) !== 'open') return { ok: false, reason: 'case_not_open' };
 
+    // Detection can refresh an unbound case's triggers and T2 record. Bind the
+    // first seat to that refreshed packet, not the pre-detection local object.
+    const [refreshed] = await tx.select().from(adjudicationCases)
+      .where(eq(adjudicationCases.id, kase.id));
+    if (refreshed) Object.assign(kase, refreshed);
+
     if ((await liveConflictedAgentIds(kase)).has(args.agentId)) {
       return { ok: false, reason: 'conflicted' };
     }

@@ -42,6 +42,14 @@ export const DRUG_PARAMETER_IDS = [
   // Saturable (Michaelis–Menten) elimination pair, molecule-level.
   'vmax',
   'km',
+  // Two-compartment micro-constants and central volume, molecule-level.
+  'k12',
+  'k21',
+  'centralVolume',
+  // Absorption-phase structure, stored per route like `ka`.
+  'firstOrderFraction',
+  'zeroOrderDuration',
+  'absorptionLag',
   'postmortemRedistribution',
   'pmAmRatio',
   // Model structure (CV-1b): categorical PK model-shape axes.

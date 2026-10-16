@@ -202,17 +202,19 @@ describe('CV-4b — assembleRouteParams (fixed(median))', () => {
   });
 
   it('is unsupported for a family whose inputs the catalog cannot yet supply', () => {
-    // Two-compartment disposition composes to a real family, but the catalog stores no k12/k21 or
-    // central volume, so this primitive does not map it.
+    // The CL/V form composes to a real family, but the catalog stores no identifiability basis for
+    // its clearance and central volume (nor an absolute-litre volume), so this primitive does not
+    // map it.
     const derived = deriveModel(
-      { disposition: 'two-compartment', absorption: 'first-order' },
-      ['ka', 'eliminationHalfLife', 'vd', 'bioavailability', 'k12', 'k21'],
+      { disposition: 'one-compartment', elimination: 'clv-structural', absorption: 'first-order' },
+      ['ka', 'clearance', 'centralVolume'],
+      { clvClearanceBasis: 'apparent-extravascular', clvVolumeBasis: 'apparent-extravascular' },
     );
     expect(derived.outcome).toBe('modelable');
-    expect(derived.family).toBe('two-compartment-first-order');
-    const result = assembleRouteParams(derived, {});
+    expect(derived.family).toBe('one-compartment-clv');
+    const result = assembleRouteParams(derived, { ka: 1, clearance: 5, centralVolume: 40 });
     expect(result.outcome).toBe('unsupported');
-    if (result.outcome === 'unsupported') expect(result.reason).toMatch(/two-compartment/);
+    if (result.outcome === 'unsupported') expect(result.reason).toMatch(/one-compartment-clv/);
   });
 });
 

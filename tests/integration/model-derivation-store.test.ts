@@ -1785,6 +1785,132 @@ async function drugIdFor(slug: string): Promise<number> {
   return row.id;
 }
 
+describe('#83 — structural parameters reach the assembled model', () => {
+  /** A drug declaring two-compartment disposition with a curated oral route (ka + F). */
+  async function seedTwoCompartmentDrug(drugId: number, userId: number): Promise<void> {
+    await insertAxis(drugId, userId, 'dispositionModel', 'two-compartment');
+    await insertAxis(drugId, userId, 'absorptionModel', 'first-order', 'oral');
+    await setDrugLevelParameter(drugId, userId, 'halfLife', { median: 10, unit: 'h' });
+    // The steady-state Vd the drug also carries: it must not become the central volume.
+    await setDrugLevelParameter(drugId, userId, 'volumeOfDistribution', { median: 3, unit: 'L/kg' });
+    await insertNumeric(drugId, userId, 'ka', 'oral', { median: 1.2, unit: '1/h' });
+    await insertNumeric(drugId, userId, 'bioavailability', 'oral', { median: 0.8, unit: 'fraction' });
+  }
+
+  it('runs the declared two-compartment model once k12, k21 and V1 are curated — no fallback', async () => {
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db);
+    await seedTwoCompartmentDrug(drugId, userId);
+    await setDrugLevelParameter(drugId, userId, 'k12', { median: 0.5, unit: '1/h' });
+    await setDrugLevelParameter(drugId, userId, 'k21', { median: 0.3, unit: '1/h' });
+    await setDrugLevelParameter(drugId, userId, 'centralVolume', { median: 0.2, unit: 'L/kg' });
+
+    const [oralInput] = await readDrugRouteAssemblyInputs(drugId);
+    expect(oralInput!.simplifiedFrom).toBeUndefined();
+    const assembly = await readDrugModelDefinition(drugId);
+    expect(assembly.outcome).toBe('assembled');
+    if (assembly.outcome !== 'assembled') throw new Error('expected assembled');
+    const oral = assembly.definition.routes.oral!;
+    expect(oral.family).toBe('two-compartment-first-order');
+    if (oral.family !== 'two-compartment-first-order') throw new Error('expected two-compartment');
+    expect(oral.k12PerHour).toEqual({ kind: 'fixed', value: 0.5 });
+    expect(oral.k21PerHour).toEqual({ kind: 'fixed', value: 0.3 });
+    expect(oral.vdLitersPerKg).toEqual({ kind: 'fixed', value: 0.2 });
+    expect(oral.eliminationHalfLifeHours).toEqual({ kind: 'fixed', value: 10 });
+  });
+
+  it('keeps the one-compartment fallback, disclosed, while the micro-constants are missing', async () => {
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db);
+    await seedTwoCompartmentDrug(drugId, userId);
+
+    const [oralInput] = await readDrugRouteAssemblyInputs(drugId);
+    expect(oralInput!.simplifiedFrom).toEqual({ disposition: 'two-compartment' });
+    const assembly = await readDrugModelDefinition(drugId);
+    if (assembly.outcome !== 'assembled') throw new Error('expected assembled');
+    expect(assembly.definition.routes.oral!.family).toBe('one-compartment-first-order');
+  });
+
+  it.each(['none', 'k12', 'centralVolume'])('does not hide contradictory rates when %s is missing', async (missing) => {
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db);
+    await seedTwoCompartmentDrug(drugId, userId);
+    if (missing !== 'k12') await setDrugLevelParameter(drugId, userId, 'k12', { median: 0.5, unit: '1/h' });
+    // ln2 / 10 h = 0.069 /h: a k21 below it has no two-compartment model with that terminal phase.
+    await setDrugLevelParameter(drugId, userId, 'k21', { median: 0.05, unit: '1/h' });
+    if (missing !== 'centralVolume') await setDrugLevelParameter(drugId, userId, 'centralVolume', { median: 0.2, unit: 'L/kg' });
+    // An unsupported lag must not hide the rate contradiction and enable a simpler curve.
+    await insertNumeric(drugId, userId, 'absorptionLag', 'oral', { median: 0.5, unit: 'h' });
+
+    const [oralInput] = await readDrugRouteAssemblyInputs(drugId);
+    expect(oralInput!.simplifiedFrom).toBeUndefined();
+    const assembly = await readDrugModelDefinition(drugId);
+    expect(assembly.outcome).toBe('not-modelable');
+    expect(assembly.routeOutcomes).toEqual([
+      expect.objectContaining({ route: 'oral', outcome: 'unsupported', reason: expect.stringMatching(/k21/) }),
+    ]);
+  });
+
+  it('uses the lag-capable fallback when a zero lag median has a positive spread', async () => {
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db);
+    await seedTwoCompartmentDrug(drugId, userId);
+    await setDrugLevelParameter(drugId, userId, 'k12', { median: 0.5, unit: '1/h' });
+    await setDrugLevelParameter(drugId, userId, 'k21', { median: 0.3, unit: '1/h' });
+    await setDrugLevelParameter(drugId, userId, 'centralVolume', { median: 0.2, unit: 'L/kg' });
+    await insertNumeric(drugId, userId, 'absorptionLag', 'oral', {
+      low: 0, median: 0, high: 0.5, unit: 'h',
+    });
+
+    const [oralInput] = await readDrugRouteAssemblyInputs(drugId);
+    expect(oralInput!.simplifiedFrom).toEqual({ disposition: 'two-compartment' });
+    const assembly = await readDrugModelDefinition(drugId);
+    if (assembly.outcome !== 'assembled') throw new Error('expected assembled');
+    const oral = assembly.definition.routes.oral!;
+    expect(oral.family).toBe('one-compartment-first-order');
+    if (oral.family !== 'one-compartment-first-order') throw new Error('expected fallback');
+    expect(oral.absorptionLagHours).toMatchObject({ kind: 'triangular', min: 0, mode: 0, max: 0.5 });
+  });
+
+  it('draws a declared mixed route from its own fraction, duration and lag, each with its source', async () => {
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db);
+    await insertAxis(drugId, userId, 'absorptionModel', 'mixed', 'oral');
+    await setDrugLevelParameter(drugId, userId, 'halfLife', { median: 6, unit: 'h' });
+    await setDrugLevelParameter(drugId, userId, 'volumeOfDistribution', { median: 1.5, unit: 'L/kg' });
+    await insertNumeric(drugId, userId, 'ka', 'oral', { median: 2, unit: '1/h' });
+    await insertNumeric(drugId, userId, 'bioavailability', 'oral', { median: 0.7, unit: 'fraction' });
+    await insertNumeric(drugId, userId, 'firstOrderFraction', 'oral', {
+      low: 0.2,
+      median: 0.3,
+      high: 0.4,
+      unit: 'fraction',
+    });
+    await insertNumeric(drugId, userId, 'zeroOrderDuration', 'oral', { low: 8, median: 8, unit: 'h' });
+    await insertNumeric(drugId, userId, 'absorptionLag', 'oral', { low: 0, median: 0.75, high: 1, unit: 'h' });
+
+    const [oralInput] = await readDrugRouteAssemblyInputs(drugId);
+    expect(oralInput!.values).toMatchObject({
+      firstOrderFraction: 0.3,
+      zeroOrderDuration: 8,
+      absorptionLag: 0.75,
+    });
+    // The lag is a value the curve runs on, so the grade record names its source too.
+    expect(Object.keys(oralInput!.inputSources ?? {})).toEqual(
+      expect.arrayContaining(['absorptionLag', 'firstOrderFraction', 'zeroOrderDuration']),
+    );
+
+    const assembly = await readDrugModelDefinition(drugId);
+    if (assembly.outcome !== 'assembled') throw new Error('expected assembled');
+    const oral = assembly.definition.routes.oral!;
+    expect(oral.family).toBe('one-compartment-mixed-order');
+    if (oral.family !== 'one-compartment-mixed-order') throw new Error('expected mixed');
+    expect(oral.firstOrderFraction).toMatchObject({ kind: 'triangular', min: 0.2, mode: 0.3, max: 0.4 });
+    expect(oral.zeroOrderDurationHours).toMatchObject({ kind: 'fixed', value: 8 });
+    expect(oral.absorptionLagHours).toMatchObject({ kind: 'triangular', min: 0, mode: 0.75, max: 1 });
+  });
+});
+
 /**
  * #12 — the generic route model is built from reference-scope evidence only, the same partition the
  * numeric pooling applies. A depot-only absorption shape or a modified-release / special-population

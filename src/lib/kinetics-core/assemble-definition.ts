@@ -69,7 +69,7 @@ export interface RouteAssemblyInput {
   /**
    * The ASSERTED structure axes this route runs in a simpler form than declared, keyed by axis with
    * the declared value (today: `{ disposition: 'two-compartment' }` run as one-compartment, because
-   * the catalog cannot yet supply the two-compartment micro-constants). `derived.structure` is what
+   * the drug has not yet curated all of its two-compartment micro-constants). `derived.structure` is what
    * runs; this is what the evidence describes. Carried through so the grade counts the gap and a
    * simplified curve is never indistinguishable from one that runs the declared model.
    */

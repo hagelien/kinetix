@@ -1613,6 +1613,22 @@ describe('T3 trigger: a person’s request for an adjudication (issue 17)', () =
 });
 
 describe('T3 cases act only on triggers that still stand (PR #291 review)', () => {
+  it.each([false, true])('binds the refreshed packet when competing scope changes from %s just before the first claim', async (initialScope) => {
+    const s = await seedCase({ agentDispute: true });
+    if (initialScope) {
+      await db.update(agentVerifications).set({ competingScope: true })
+        .where(eq(agentVerifications.agentId, s.t2.agentId));
+      await detectAdjudicationCase({ targetType: 'pending_edit', targetId: s.editId });
+    }
+    const rationaleMd = 'The latest scope is the record the first seat must read.';
+    await db.update(agentVerifications).set({ competingScope: !initialScope, rationaleMd })
+      .where(eq(agentVerifications.agentId, s.t2.agentId));
+    expect((await claim(s.a.userId, s.caseId)).status).toBeLessThan(300);
+    const [kase] = await db.select().from(adjudicationCases).where(eq(adjudicationCases.id, s.caseId));
+    expect(kase!.adjudicatedTarget!.context.triggers.includes('competing_scope')).toBe(!initialScope);
+    expect(kase!.adjudicatedTarget!.lowerTier.t2Verdicts[0]!.rationaleMd).toBe(rationaleMd);
+  });
+
   it('refreshes reversible scope and its T2 rationale before any panel is bound', async () => {
     const s = await seedCase({ agentDispute: true });
     for (const competingScope of [true, false]) {

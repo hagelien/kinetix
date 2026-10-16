@@ -19,9 +19,11 @@
  *      (see `kinetics-core/provenance.ts`) — the catalog's `tmax` is the time of peak, a different
  *      quantity that cannot yield `ka` without also knowing `ke` and solving an implicit,
  *      two-root equation. So `tmax` does NOT supply `ka`; `ka` stays missing and is graded down.
- *      The two-compartment micro-rates, central volume, saturable pair, input durations, and
- *      parent/metabolite roles are likewise absent — reported as `missingParameters`, never
- *      fabricated ("missing stays missing").
+ *      The structural roles each have a catalog parameter of their own (the two-compartment
+ *      micro-rates and central volume, the saturable pair, the zero-order duration, first-order
+ *      fraction and absorption lag); a drug that has not curated one reports it as
+ *      `missingParameters`, never fabricated ("missing stays missing"). The parent/metabolite roles
+ *      and the CL/V identifiability basis still have no catalog home.
  *
  *   2. **Per-shape resolution.** Disposition and elimination are molecule-level axes: every cited
  *      declaration for a drug should agree, and two DIFFERENT values are a curation conflict, not a
@@ -90,11 +92,16 @@ export const MODEL_STRUCTURE_AXIS_PARAMETERS = {
  * stored per route). `tmax` is still NOT a substitute: the time of peak is a joint function of `ka`
  * and `ke` (`tmax = ln(ka/ke)/(ka−ke)`), so recovering `ka` from it needs `ke` and an implicit
  * two-root solve — `tmax`→`ka` would manufacture a rate. So `ka` is present per route when a
- * reviewer has authored it, and otherwise stays in `missingParameters`. The two-compartment
- * micro-rates (`k12`/`k21`), central volume (`centralVolume`), input durations, and
- * parent/metabolite roles remain source-less: a family that requires any of them reports it as
- * `missingParameters`, the honest "incomplete, grade it down" signal. The saturable pair
- * (`vmax`/`km`) has its own molecule-level catalog parameters.
+ * reviewer has authored it, and otherwise stays in `missingParameters`.
+ *
+ * The structural roles map 1:1 from parameters of their own, never from a proxy: the saturable
+ * pair (`vmax`/`km`) and the two-compartment micro-constants and central volume
+ * (`k12`/`k21`/`centralVolume`) are molecule-level; the zero-order input duration, the first-order
+ * fraction of a mixed input and the absorption lag are route-scoped like `ka`. In particular the
+ * central volume V1 is NOT filled from `volumeOfDistribution` — the steady-state Vd also counts the
+ * tissue the drug distributes into, and reading it as V1 would scale a two-compartment curve wrongly.
+ * The parent/metabolite roles remain source-less: a family that requires any of them reports it as
+ * `missingParameters`, the honest "incomplete, grade it down" signal.
  */
 const PARAMETER_ROLES: Partial<Record<DrugParameterId, RequiredParam>> = {
   halfLife: 'eliminationHalfLife',
@@ -109,6 +116,17 @@ const PARAMETER_ROLES: Partial<Record<DrugParameterId, RequiredParam>> = {
   // both are curated (molecule-level, pooled like the half-life).
   vmax: 'vmax',
   km: 'km',
+  // The two-compartment micro-constant form: molecule-level, pooled like the half-life (which is
+  // the TERMINAL half-life the engine derives k10 from).
+  k12: 'k12',
+  k21: 'k21',
+  centralVolume: 'centralVolume',
+  // Absorption-phase structure, route-scoped like `ka`: a declared zero-order or mixed route runs
+  // once its duration (and, for mixed, its first-order fraction) is curated for that route; a lag is
+  // optional and runs on the families that carry one.
+  firstOrderFraction: 'firstOrderFraction',
+  zeroOrderDuration: 'zeroOrderDuration',
+  absorptionLag: 'absorptionLag',
 };
 
 /**
@@ -124,6 +142,9 @@ export const ROUTE_ASSEMBLY_PARAMETER_IDS = [
   'ka',
   'bioavailability',
   'tmax',
+  'firstOrderFraction',
+  'zeroOrderDuration',
+  'absorptionLag',
 ] as const satisfies readonly DrugParameterId[];
 
 export function isRouteAssemblyParameter(id: DrugParameterId): boolean {
@@ -270,8 +291,14 @@ export interface KaInferenceOutcome {
  *  3. an attributable `tmax` was supplied by the caller;
  *  4. elimination is first-order — under saturable (Michaelis–Menten) elimination the time of
  *     peak depends on the dose, so one stored `tmax` does not pin down an absorption rate;
- *  5. the route has an elimination half-life to solve against;
- *  6. the solve succeeds — i.e. the pair is not in the flip-flop regime, where the stored half-life
+ *  5. the disposition is one-compartment and the input purely first-order — the solve is the
+ *     one-compartment first-order relation `tmax = ln(ka/ke)/(ka−ke)`. A two-compartment peak also
+ *     depends on k12/k21, and a mixed input's peak on the zero-order share and duration, so solving
+ *     that relation for either would put a number on `ka` the model does not imply;
+ *  6. the route has an elimination half-life to solve against;
+ *  7. the stored Tmax is later than any stored absorption lag — the model's peak is `tlag` plus the
+ *     unlagged time of peak, so it is `tmax − tlag` that is solved;
+ *  8. the solve succeeds — i.e. the pair is not in the flip-flop regime, where the stored half-life
  *     cannot be read as an elimination half-life at all.
  *
  * Any condition failing leaves `values` untouched. Pure; the returned `values` is a copy, so the
@@ -296,13 +323,34 @@ export function applyKaInference(
         'saturable elimination makes the time of peak depend on the dose, so a stored Tmax cannot be solved for an absorption rate',
     };
   }
+  if (derived.structure.disposition === 'two-compartment') {
+    return {
+      ...unchanged,
+      declined:
+        'a two-compartment time of peak also depends on the distribution rates, so a stored Tmax cannot be solved for an absorption rate with the one-compartment relation',
+    };
+  }
+  if (derived.structure.absorption === 'mixed') {
+    return {
+      ...unchanged,
+      declined:
+        'a mixed input peaks where the first-order and zero-order pathways together put it, so a stored Tmax cannot be solved for the first-order rate alone',
+    };
+  }
 
   const halfLife = values.eliminationHalfLife;
   if (halfLife === undefined) {
     return { ...unchanged, declined: 'no elimination half-life to solve the absorption rate against' };
   }
+  const lagHours = values.absorptionLag ?? 0;
+  if (!(tmaxHours > lagHours)) {
+    return {
+      ...unchanged,
+      declined: 'the stored Tmax is not later than the stored absorption lag, so no absorption rate can produce it',
+    };
+  }
 
-  const inference = inferKaFromTmax(tmaxHours, halfLife);
+  const inference = inferKaFromTmax(tmaxHours - lagHours, halfLife);
   if (inference.status !== 'inferred') {
     return { ...unchanged, declined: inference.reason };
   }
@@ -417,19 +465,22 @@ function canonicalRange(value: CatalogParameterValue): AssemblyRange | undefined
 /**
  * The `ka` spread an inferred `ka` gets from the Tmax spread it was solved from. `ka` falls as Tmax
  * rises, so the shortest reported Tmax gives the highest `ka` and the longest the lowest; the
- * half-life is held at its median, so this is the spread Tmax alone accounts for. No range when
- * either end cannot be solved — the longest Tmax may fall in the flip-flop regime the central
- * inference avoided — because a one-sided spread would invent the missing bound.
+ * half-life (and any absorption lag, which is subtracted exactly as `applyKaInference` subtracts
+ * it) is held at its median, so this is the spread Tmax alone accounts for. No range when either end
+ * cannot be solved — the longest Tmax may fall in the flip-flop regime the central inference
+ * avoided, the shortest may not clear the lag — because a one-sided spread would invent the missing
+ * bound.
  */
 export function inferredKaRange(
   tmax: CatalogParameterValue | undefined,
   halfLifeHours: number | undefined,
+  lagHours = 0,
 ): AssemblyRange | undefined {
   if (!tmax || halfLifeHours === undefined || tmax.parameter !== 'tmax') return undefined;
   const range = canonicalRange(tmax);
-  if (!range || !(range.low > 0) || !(range.low < range.high)) return undefined;
-  const fastest = inferKaFromTmax(range.low, halfLifeHours);
-  const slowest = inferKaFromTmax(range.high, halfLifeHours);
+  if (!range || !(range.low > lagHours) || !(range.low < range.high)) return undefined;
+  const fastest = inferKaFromTmax(range.low - lagHours, halfLifeHours);
+  const slowest = inferKaFromTmax(range.high - lagHours, halfLifeHours);
   if (fastest.status !== 'inferred' || slowest.status !== 'inferred') return undefined;
   return { low: slowest.kaPerHour, high: fastest.kaPerHour };
 }
@@ -617,14 +668,15 @@ export interface RouteModelDerivation extends DerivedModel {
   routeProvenance: RouteProvenance;
   /**
    * The one-compartment form of this route, offered when the drug ASSERTS a richer disposition
-   * (two-compartment) than the catalog can yet run. The two-compartment family needs `k12`, `k21`
-   * and a central volume, none of which the catalog stores, so without this a drug that gained a
-   * cited "two-compartment" fact would stop being modelable at all — the catalog learning more
-   * would take a curve away. The read adapter falls back to this derivation only when the declared
-   * one does not assemble, and records the simplification so the grade counts it against
-   * completeness exactly as it counts a defaulted axis: the curve that runs is not the model the
-   * evidence describes. Once the declared family can be assembled, the primary derivation wins and
-   * the fallback is never used — capability grows with the data, it is never taken away by it.
+   * (two-compartment) than the catalog can yet run for it. The two-compartment family needs `k12`,
+   * `k21` and a central volume; a drug that gained a cited "two-compartment" fact before those were
+   * curated would otherwise stop being modelable at all — the catalog learning more would take a
+   * curve away. The read adapter falls back to this derivation only when the declared one does not
+   * assemble (and never over a contradiction among the declared form's own values), and records the
+   * simplification so the grade counts it against completeness exactly as it counts a defaulted
+   * axis: the curve that runs is not the model the evidence describes. Once the declared family can
+   * be assembled, the primary derivation wins and the fallback is never used — capability grows
+   * with the data, it is never taken away by it.
    *
    * Offered only for a single, agreed, recognized disposition with no conflict on the route; an
    * unrecognized value stays not-modelable (unknown science must not masquerade as a supported
@@ -806,6 +858,15 @@ function routeParamShapeConflict(
   }
   if (routeRoles.has('bioavailability') && isIvAbsorptionKind(shape)) {
     return `route ${route} declares a bioavailability (F) but its IV input shape "${shape}" fixes F = 1`;
+  }
+  if (routeRoles.has('firstOrderFraction') && shape !== 'mixed') {
+    return `route ${route} declares a first-order fraction but its input shape "${shape}" is not a mixed (parallel) input`;
+  }
+  if (routeRoles.has('zeroOrderDuration') && shape !== 'zero-order' && shape !== 'mixed') {
+    return `route ${route} declares a zero-order input duration but its input shape "${shape}" has no zero-order input`;
+  }
+  if (routeRoles.has('absorptionLag') && isIvAbsorptionKind(shape)) {
+    return `route ${route} declares an absorption lag but its IV input shape "${shape}" has no absorption phase`;
   }
   return null;
 }

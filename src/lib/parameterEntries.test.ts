@@ -344,6 +344,23 @@ describe('categorical model-structure entries (CV-1b)', () => {
     expect(validateEntryForParameter('bioavailability', {
       median: 0.8, route: 'iv', unit: 'fraction',
     })).toMatch(/fixes F = 1/);
+    // The rest of the absorption-phase structure (#83) has no IV meaning either.
+    expect(validateEntryForParameter('zeroOrderDuration', {
+      median: 6, route: 'iv', unit: 'h',
+    })).toMatch(/no absorption phase/);
+    expect(validateEntryForParameter('firstOrderFraction', {
+      median: 0.4, route: 'iv', unit: 'fraction',
+    })).toMatch(/no absorption phase/);
+    expect(validateEntryForParameter('absorptionLag', {
+      median: 0.5, route: 'iv', unit: 'h',
+    })).toMatch(/no absorption phase/);
+    // ...and, like ka, is stored per route only.
+    expect(validateEntryForParameter('absorptionLag', {
+      median: 0.5, unit: 'h',
+    })).toMatch(/route is required/);
+    expect(validateEntryForParameter('absorptionLag', {
+      median: 0.5, route: 'oral', unit: 'h',
+    })).toBeNull();
   });
 
   it('accepts a well-formed model-structure entry', () => {

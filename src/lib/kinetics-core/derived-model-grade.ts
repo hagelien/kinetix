@@ -49,7 +49,11 @@
  * Pure and portable: no DB, no engine change, no `CORE_VERSION` bump.
  */
 import type { DerivedRouteGrade, InputSource } from './derived-grade.js';
-import { requiredParametersFor, type RequiredParam } from './model-structure.js';
+import {
+  optionalParametersFor,
+  requiredParametersFor,
+  type RequiredParam,
+} from './model-structure.js';
 import type { DimensionAssessment, DimensionGrade } from './grade-policy.js';
 
 type LetterGrade = Exclude<DimensionGrade, 'hard-stop'>;
@@ -186,6 +190,11 @@ const ROLE_FIELDS: Partial<Record<RequiredParam, string>> = {
   firstOrderFraction: 'firstOrderFraction',
   vmax: 'vmaxMgPerLPerHour',
   km: 'kmMgPerL',
+  k12: 'k12PerHour',
+  k21: 'k21PerHour',
+  // The two-compartment family stores its CENTRAL volume V1 in the shared volume field.
+  centralVolume: 'vdLitersPerKg',
+  absorptionLag: 'absorptionLagHours',
 };
 
 /**
@@ -204,9 +213,17 @@ function assessUncertaintySemantics(
 ): DimensionAssessment {
   const params = model.routes[route.route] as unknown as Record<string, unknown> | undefined;
   const defaulted = new Set(route.defaultedParameters ?? []);
-  const judged = requiredParametersFor(route.family, {
-    ivInfusion: route.structure.absorption === 'iv-infusion',
-  }).filter(
+  // The required roles, plus any optional role (a lag) the route actually runs on: a stored lag
+  // moves the curve, so a lag fixed at one value narrows the band like any other fixed input.
+  const runsOn = [
+    ...requiredParametersFor(route.family, {
+      ivInfusion: route.structure.absorption === 'iv-infusion',
+    }),
+    ...optionalParametersFor(route.family).filter(
+      (role) => ROLE_FIELDS[role] !== undefined && params?.[ROLE_FIELDS[role]!] !== undefined,
+    ),
+  ];
+  const judged = runsOn.filter(
     (role) =>
       ROLE_FIELDS[role] !== undefined &&
       !defaulted.has(role) &&
@@ -276,7 +293,7 @@ export function assessDerivedModel(
             ? `. ${simplifiedAxes(route)
                 .map(
                   (axis) =>
-                    `The drug declares a ${route.simplifiedFrom![axis]} ${axis}, but this curve runs ${route.structure[axis]}: the catalog cannot yet supply the parameters the declared form needs`,
+                    `The drug declares a ${route.simplifiedFrom![axis]} ${axis}, but this curve runs ${route.structure[axis]}: the catalog's values could not build the declared form (a parameter it needs is missing, or a stored lag it cannot carry)`,
                 )
                 .join('. ')}`
             : ''
