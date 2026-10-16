@@ -187,6 +187,29 @@ describe("local worker credential separation", () => {
     expect(invalid.code).not.toBe(0);
     expect(invalid.stderr).toContain("Usage: pdf");
   });
+  it("preserves Windows sandbox paths when downloading PDFs for every worker", async () => {
+    const outputDir = path.join(
+      dir,
+      "sandbox.{test-guid}",
+      "AC",
+      "Temp",
+      "nested",
+    );
+    mkdirSync(outputDir, { recursive: true });
+    for (const [role, id] of [
+      ["producer", 4],
+      ["reviewer", 5],
+      ["adjudicator-a", 6],
+    ] as const) {
+      const output = path.join(outputDir, role + ".pdf");
+      const result = await run(["--profile", role, "pdf", "123", output]);
+      expect(result.code, result.stderr).toBe(0);
+      expect(readFileSync(output)).toEqual(
+        Buffer.from([37, 80, 68, 70, 45, id, 0, 255, 128]),
+      );
+      expect(JSON.parse(result.stdout).path).toBe(output);
+    }
+  });
   it("replaces inherited credentials, blocks dotenv and removes direct DB access", () => {
     const actual = workerEnvironment(reviewer, {
       KINETIX_TOKEN: token("p"),

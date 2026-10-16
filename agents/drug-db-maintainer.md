@@ -1237,6 +1237,14 @@ If `scripts/kinetix-log-verification.ts` cannot write through `/api/agent-verifi
 
 ## 9. End-of-cycle output
 
+Before closeout, check that every required cycle phase has an outcome. In
+particular, both the comment and approval queues in §7 must have been queried
+and handled within their caps, including an explicit logged empty result.
+An unreadable paper or a `no_change` research result does not complete or cancel
+the independent sweep. If a mandatory bootstrap or live-identity gate failed,
+stop as required and name the blocked phases; never describe a partial cycle as
+complete or silently defer an unattempted sweep to the next run.
+
 **First, record this run's token usage** — the last tool call of the cycle, so the count covers the whole run. This is the producer cycle's step; a routine with its own usage step (such as the escalation verifier) follows that one instead:
 
 ```bash

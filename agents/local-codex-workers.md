@@ -27,6 +27,11 @@ scanner and stored-PDF downloader; it cannot run arbitrary code with the token.
 directory for this run. The existing downloader handles binary bytes and only
 follows its allowlisted Blob redirect without the agent cookie. The wrapper
 checks the PDF signature and reports the file path, byte length and SHA-256.
+Create the unique output directory with a local-only tool before calling `pdf`,
+then pass the full literal file path as one quoted argument. The wrapper keeps
+that path in Node and writes the validated binary response itself; it must not
+pass Windows sandbox paths (which can contain braces) through MSYS/Bash. A
+missing parent directory is a local path failure, not unavailable literature.
 Read that file with native PDF tools, or run an already installed `pdftotext`
 on it without credentials. Do not retrieve binary PDFs with `api GET` (its
 stdout is text), or invoke the bare authenticated download/extraction scripts.
