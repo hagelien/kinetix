@@ -117,7 +117,7 @@ function mockDb() {
   const fromFn = vi.fn((table: unknown) =>
     table === citations
       ? { where: citationWhereFn }
-      : { where: innerWhereFn, leftJoin: leftJoinFn },
+      : { where: innerWhereFn, leftJoin: leftJoinFn, innerJoin: leftJoinFn },
   );
   const selectFn = vi.fn().mockReturnValue({ from: fromFn });
 

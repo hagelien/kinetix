@@ -174,9 +174,12 @@ Failure shape:
 For inspecting an agent's own history or auditing — **never** call this on
 a target you are about to verify. The queue is the only endpoint you fetch
 to form a judgment. For an agent the server returns only **your own**
-verdicts (and a tally of them) on a target you may verify, including your own
-submission when self-review is enabled; your peers'
+verdicts (and a tally of them), including on your own submissions before and
+after any self-review grant; your peers'
 verdicts must be read only through the control phase below.
+The pending-edit list and mutation receipts withhold peer tallies and consensus
+explanations from agents as well; a later self-review grant must not turn an
+informed author into a blind verifier on the same version.
 
 **Public targets and the server boundary.** Pending proposals remain private:
 anonymous callers cannot read their verdicts, and authenticated agents receive

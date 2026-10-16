@@ -1194,6 +1194,8 @@ export async function buildEnrichmentMaps(
      * forgets to pass it gets the safe answer.
      */
     canReadDrafts?: boolean;
+    /** False for agent-facing responses: peer tallies require disclosure. */
+    includeVerifications?: boolean;
   } = {},
 ): Promise<EnrichmentMaps> {
   const canReadDrafts = options.canReadDrafts ?? false;
@@ -1390,10 +1392,12 @@ export async function buildEnrichmentMaps(
     drugIds.size > 0
       ? getDrugParametersByDrugIds(db, [...drugIds])
       : new Map<number, Map<string, unknown>>(),
-    summariseVerificationsForTargets({
-      targetType: 'pending_edit',
-      targetIds: rows.map((r) => r.id),
-    }),
+    options.includeVerifications === false
+      ? new Map<number, VerificationSummary>()
+      : summariseVerificationsForTargets({
+          targetType: 'pending_edit',
+          targetIds: rows.map((r) => r.id),
+        }),
     // Open PDF requests for the paper_review target citations — signals the
     // full text was declared unavailable and never supplied.
     chunkedInLookup([...paperReviewCitationIds], (chunk) =>
@@ -1881,14 +1885,19 @@ export function enrichFromMaps(
 async function enrichPendingEdit(
   row: PendingEditRecord,
   canReadDrafts: boolean,
+  callerUserId: number,
 ): Promise<Record<string, unknown>> {
-  const maps = await buildEnrichmentMaps([row], { canReadDrafts });
+  const maps = await buildEnrichmentMaps([row], {
+    canReadDrafts,
+    includeVerifications: !(await isActiveAgentUser(callerUserId)),
+  });
   return enrichFromMaps(row, maps);
 }
 
 async function fetchAndEnrich(
   id: number,
   role: string,
+  callerUserId: number,
 ): Promise<Record<string, unknown>> {
   const db = getDb();
   const [row] = await db
@@ -1900,6 +1909,7 @@ async function fetchAndEnrich(
   return enrichPendingEdit(
     row,
     await callerCan(role, CAP['wiki.draft.read']),
+    callerUserId,
   );
 }
 
@@ -1976,7 +1986,11 @@ async function handleGet(
   // hides a dispute that lives on an older row, defeating the rank that
   // pushes disputes to the top. Pull the dispute ids in parallel with the
   // top-100 query and union the two id sets before fetching.
-  const isModeratorListView = !id && (!status || status === 'pending');
+  // Never expose peer verdicts through list tallies, consensus notes or their
+  // sort/selection order. This includes authors before a future self-review
+  // grant; mutation receipts use the same rule in enrichPendingEdit.
+  const callerIsAgent = await isActiveAgentUser(auth.userId);
+  const isModeratorListView = !callerIsAgent && !id && (!status || status === 'pending');
   let rows;
   // pending_edit ids carrying an OPEN dispute (human or bridged agent). Only
   // populated for the moderator list view, where it floats the edit to the top
@@ -2069,6 +2083,7 @@ async function handleGet(
   // 5 parallel queries rather than issuing per-row queries for each.
   const maps = await buildEnrichmentMaps(rows, {
     canReadDrafts: await callerCan(auth.role, CAP['wiki.draft.read']),
+    includeVerifications: !callerIsAgent,
   });
   const enriched = rows.map((row) => enrichFromMaps(row, maps));
   // Tag every row an open dispute contests. The moderator list view already
@@ -2110,7 +2125,7 @@ async function handleGet(
     const summary = e.verifications as VerificationSummary | undefined;
     if (summary) {
       (summary as VerificationSummary & { unresolvedDisputeCount: number })
-        .unresolvedDisputeCount = unresolvedDisputes.get(e.id as number) ?? 0;
+        .unresolvedDisputeCount = callerIsAgent ? 0 : unresolvedDisputes.get(e.id as number) ?? 0;
     }
   }
   // Why agent consensus has (not) published each edit (issue #1357's review
@@ -2128,15 +2143,9 @@ async function handleGet(
       return (summary.unresolvedDisputeCount ?? summary.disputeCount) === 0;
     })
     .map((e) => e.id as number);
-  if (consensusEligibleIds.length > 0) {
-    // An active agent does not review what it wrote (AGENTS.md "Self-review"):
-    // `GET /api/agent-verifications?targetId=` 404s a non-self-review agent's
-    // own submission rather than reveal peer verdicts on it. The consensus
-    // explanation is derived from those same verdicts (and, for a missing-
-    // flagship hold, names the peer approvers), so it needs the identical
-    // visibility check before this list response can attach it — a reviewer
-    // (review.queue.readAll) sees every row here regardless, same as the
-    // single-target endpoint.
+  if (!callerIsAgent && consensusEligibleIds.length > 0) {
+    // Only human readers reach this branch: consensus derives from peer
+    // verdicts and may name approvers. Retain the target visibility gate too.
     // Advisory only (issue #1421): a failure here must not turn the note this
     // decorates into a prerequisite for loading the queue at all.
     try {
@@ -2856,6 +2865,7 @@ async function handleCreate(
     pendingEdit: await enrichPendingEdit(
       row,
       await callerCan(auth.role, CAP['wiki.draft.read']),
+      auth.userId,
     ),
   });
 }
@@ -3718,7 +3728,7 @@ async function handlePatch(
       throw err;
     }
 
-    json(res, 200, { pendingEdit: await fetchAndEnrich(id, auth.role) });
+    json(res, 200, { pendingEdit: await fetchAndEnrich(id, auth.role, auth.userId) });
     return;
   }
 
@@ -3742,7 +3752,7 @@ async function handlePatch(
       return;
     }
 
-    json(res, 200, { pendingEdit: await fetchAndEnrich(id, auth.role) });
+    json(res, 200, { pendingEdit: await fetchAndEnrich(id, auth.role, auth.userId) });
     return;
   }
 
@@ -4299,7 +4309,7 @@ async function handlePatch(
       note: parsed.data.returnComment ?? null,
     });
 
-    json(res, 200, { pendingEdit: await fetchAndEnrich(id, auth.role) });
+    json(res, 200, { pendingEdit: await fetchAndEnrich(id, auth.role, auth.userId) });
     return;
   }
 
@@ -4332,7 +4342,7 @@ async function handlePatch(
       note: parsed.data.rejectionComment ?? null,
     });
 
-    json(res, 200, { pendingEdit: await fetchAndEnrich(id, auth.role) });
+    json(res, 200, { pendingEdit: await fetchAndEnrich(id, auth.role, auth.userId) });
     return;
   }
 
@@ -4396,7 +4406,7 @@ async function handlePatch(
     throw err;
   }
 
-  json(res, 200, { pendingEdit: await fetchAndEnrich(id, auth.role) });
+  json(res, 200, { pendingEdit: await fetchAndEnrich(id, auth.role, auth.userId) });
 }
 
 // ─── Helpers used by enrichPendingEdit for the wiki_fact card ──────────────
