@@ -1,5 +1,5 @@
-#!/usr/bin/env node
 /** Per-command credential selection for local scheduled workers. No shared env writes. */
+// Invoked with node. A hashbang here becomes invalid after Vite hoists imports.
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";

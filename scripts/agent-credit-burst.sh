@@ -40,6 +40,24 @@ deadline=$(( $(date +%s) + $(awk -v h="$HOURS" 'BEGIN { if (h > 5.5) h = 5.5; pr
 spent=0; cycle=0; failures=0; status=0
 errlog=$(mktemp)
 
+# Claude Code already requires Node. Use that installed runtime to inspect its
+# JSON result rather than requiring a separate jq binary on Windows workers.
+read_result() {
+  node -e '
+    try {
+      const result = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
+      const field = process.argv[1];
+      if (field === "cost") {
+        if (typeof result.total_cost_usd === "number") console.log(result.total_cost_usd);
+      } else if (field === "message") {
+        console.log(result.result ?? "(no final message)");
+      } else if (field === "success") {
+        console.log(result.is_error === false);
+      } else process.exit(1);
+    } catch { process.exit(1); }
+  ' "$1"
+}
+
 while :; do
   remaining=$(awk -v b="$BUDGET" -v s="$spent" 'BEGIN { printf "%.2f", b - s }')
   if awk -v r="$remaining" 'BEGIN { exit !(r < 1) }'; then echo "Budget reached."; break; fi
@@ -57,17 +75,17 @@ while :; do
 
   # A killed or crashed cycle reports no cost, but may already have spent up
   # to its cap. Count the whole cap so the total stays an upper bound.
-  cost=$(jq -r 'if (.total_cost_usd | type) == "number" then .total_cost_usd else empty end' <<<"$out" 2>/dev/null)
+  cost=$(read_result cost <<<"$out" 2>/dev/null)
   [ -n "$cost" ] || cost=$cap
   spent=$(awk -v s="$spent" -v c="$cost" 'BEGIN { printf "%.2f", s + c }')
 
   echo "::group::Cycle $cycle — \$$cost (total \$$spent of \$$BUDGET)"
-  jq -r '.result // "(no final message)"' <<<"$out" 2>/dev/null || echo "(cycle produced no result)"
+  read_result message <<<"$out" 2>/dev/null || echo "(cycle produced no result)"
   echo "::endgroup::"
 
   # Out of credits, a revoked token or an API outage fails every cycle the
   # same way; stop rather than retry it for six hours.
-  if [ "$(jq -r '.is_error == false' <<<"$out" 2>/dev/null)" = true ]; then
+  if [ "$(read_result success <<<"$out" 2>/dev/null)" = true ]; then
     failures=0
   else
     failures=$((failures + 1))

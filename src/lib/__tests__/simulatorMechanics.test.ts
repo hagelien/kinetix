@@ -69,7 +69,7 @@ import { aggregateEntries } from '@/lib/parameterEntryAggregation';
 import { parameterDoseContextMode } from '@/lib/drugParameters';
 
 const DOC_PATH = resolve(__dirname, '../../../docs/simulator-mechanics.md');
-const doc = readFileSync(DOC_PATH, 'utf8');
+const doc = readFileSync(DOC_PATH, 'utf8').replace(/\r\n/g, '\n');
 
 /** A minimal runnable scenario, so the prose claims can be checked against real behaviour. */
 function scenario(

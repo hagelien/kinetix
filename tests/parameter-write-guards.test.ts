@@ -177,7 +177,7 @@ function sourceFiles(): string[] {
       }
       if (!entry.name.endsWith('.ts') && !entry.name.endsWith('.tsx')) continue;
       if (/\.(test|spec)\.tsx?$/.test(entry.name)) continue;
-      out.push(path.relative(ROOT, full));
+      out.push(path.relative(ROOT, full).split(path.sep).join('/'));
     }
   };
   for (const dir of SEARCH_DIRS) {
