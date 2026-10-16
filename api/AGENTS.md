@@ -41,6 +41,11 @@ Multi-action routes such as `auth.ts` dispatch via `?action=` rather than separa
 
 ## Auth
 
+Code issuance holds `withAuthAllowlistReadLock` from its first eligibility read through the
+committed user/code write; email delivery follows commit. Email and domain removals acquire
+`lockAuthAllowlistRemoval` first in their deletion/revocation transaction. These matching
+shared/exclusive policy locks prevent an in-flight request from restoring a removed user's code.
+
 - JWT is stored in the `__Host-kinetix-auth` httpOnly cookie with SameSite=Lax and Secure. Older `kinetix-auth` and `fjelltox-auth` cookies are not accepted for authentication; they are only cleared on new login/logout.
 - `getUserFromRequest(req)` returns `{ userId, role } | null`.
 - Magic-link endpoints use best-effort in-memory throttles before DB/auth work. `/api/auth-request` limits repeated sends per email and per client IP, and `/api/auth-verify` limits repeated guesses per email and per client IP while still keeping invalid-code responses generic.
@@ -80,6 +85,11 @@ Multi-action routes such as `auth.ts` dispatch via `?action=` rather than separa
 | `GET /api/admin?resource=agent-hook-runs`                 | Recent `agent_hook_runs` rows; `?outcome=` and `?event=` filters, `?limit=` (default 50)   |
 
 ## T3 adjudication endpoints
+
+Published-target verdicts remain public for transparency (owner decision 2026-10-16).
+Blindness on those targets is protocol-only; agents must not pre-read them through
+anonymous requests or the public UI. Pending proposals remain private and retain
+their server-enforced peer filter and control-phase disclosure rules.
 
 The appellate panel for a disagreement that survives blind T2
 (`agents/drug-db-adjudication.md`, `docs/plans/2026-09-18-t3-adjudication-backend.md`).

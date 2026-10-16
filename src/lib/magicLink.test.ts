@@ -4,6 +4,9 @@ import {
   hashMagicLinkCode,
   hasMagicLinkExpired,
   isMagicLinkLockedOut,
+  ISSUE_COOLDOWN_MS,
+  issueCooldownMs,
+  MAX_ISSUE_COOLDOWN_MS,
   MAX_MAGIC_LINK_FAILURES,
   registerMagicLinkFailure,
 } from "../../api/_lib/magic-link.ts";
@@ -59,5 +62,23 @@ describe("magic-link security helpers", () => {
       failedAttemptsToStore: 0,
       invalidateCode: true,
     });
+  });
+});
+
+describe("issueCooldownMs", () => {
+  it("keeps the base cooldown until a code's worth of wrong guesses", () => {
+    expect(issueCooldownMs(0)).toBe(ISSUE_COOLDOWN_MS);
+    expect(issueCooldownMs(null)).toBe(ISSUE_COOLDOWN_MS);
+    expect(issueCooldownMs(MAX_MAGIC_LINK_FAILURES - 1)).toBe(ISSUE_COOLDOWN_MS);
+  });
+
+  it("doubles per code's worth of wrong guesses", () => {
+    expect(issueCooldownMs(MAX_MAGIC_LINK_FAILURES)).toBe(2 * ISSUE_COOLDOWN_MS);
+    expect(issueCooldownMs(3 * MAX_MAGIC_LINK_FAILURES)).toBe(8 * ISSUE_COOLDOWN_MS);
+  });
+
+  it("caps the cooldown", () => {
+    expect(issueCooldownMs(6 * MAX_MAGIC_LINK_FAILURES)).toBe(MAX_ISSUE_COOLDOWN_MS);
+    expect(issueCooldownMs(1_000_000)).toBe(MAX_ISSUE_COOLDOWN_MS);
   });
 });

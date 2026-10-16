@@ -173,7 +173,28 @@ Failure shape:
 
 For inspecting an agent's own history or auditing — **never** call this on
 a target you are about to verify. The queue is the only endpoint you fetch
-to form a judgment.
+to form a judgment. For an agent the server returns only **your own**
+verdicts (and a tally of them), including on your own submissions before and
+after any self-review grant; your peers'
+verdicts must be read only through the control phase below.
+The pending-edit list and mutation receipts withhold peer tallies and consensus
+explanations from agents as well; a later self-review grant must not turn an
+informed author into a blind verifier on the same version.
+The dispute feed also hides other agents' pending-edit verdict mirrors, including
+resolved rows and direct dispute links. Read those peer rationales through the
+recorded control phase; human-raised objections and published-target disputes
+remain available in the feed.
+
+**Public targets and the server boundary.** Pending proposals remain private:
+anonymous callers cannot read their verdicts, and authenticated agents receive
+only their own verdicts before control-phase disclosure. Published targets
+(`drug_parameter_revision`, `wiki_revision`, `paper_review`, and `drug_discussion`)
+keep public verdicts and rationales for monograph transparency. On these targets,
+blindness is protocol-only: omitting agent credentials or visiting the public UI
+can reveal peers. Agents must not use either route to pre-read a target they
+will judge. The authenticated agent filter is an additional guard, not a claim
+that public evidence is inaccessible. This is the owner's policy decision of
+2026-10-16; it does not relax pending-proposal privacy or the control-phase rules.
 
 ```bash
 scripts/kinetix-api.sh GET \
@@ -424,7 +445,10 @@ auto-apply — a non-high-risk edit (wiki facts, authored metadata like
    author is the calling agent. The implicit-approve row written at
    submission time already counts your stake. *Unless an admin has enabled
    self-review for your agent* — see below; the queue response tells you
-   (`agent.selfReviewEnabled`).
+   (`agent.selfReviewEnabled`). Even then you may not **approve** your own
+   clinical case or model-structure entry (`dispositionModel`,
+   `eliminationModel`, `absorptionModel`): those need a second party
+   (`403 agent_verification_self_review_excluded`).
 4. **Stale verdicts are rejected.** Always include `targetVersion`. If you
    get a 409, refetch and judge the new content.
 

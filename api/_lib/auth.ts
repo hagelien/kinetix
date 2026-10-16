@@ -65,6 +65,12 @@ export interface AuthContext {
   userId: number;
   role: string;
   groups?: AuthGroup[];
+  /**
+   * True when the caller authenticated with a `kxat_` agent token rather than
+   * a human session. `authCan` refuses every admin-group capability to such a
+   * caller, whatever tier the permission matrix lowers it to.
+   */
+  agentToken?: boolean;
 }
 
 function getSecret(): Uint8Array {
@@ -77,8 +83,9 @@ export async function signToken(
   userId: number,
   role: string,
   expiresInSeconds: number = DEFAULT_MAX_AGE_SECONDS,
+  sessionGeneration = 0,
 ): Promise<string> {
-  return new SignJWT({ sub: String(userId), role })
+  return new SignJWT({ sub: String(userId), role, gen: sessionGeneration })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(`${expiresInSeconds}s`)
@@ -87,13 +94,19 @@ export async function signToken(
 
 export async function verifyToken(
   token: string,
-): Promise<{ userId: number; role: string } | null> {
+): Promise<{ userId: number; role: string; generation: number } | null> {
   try {
     const { payload } = await jwtVerify(token, getSecret());
     const userId = Number(payload.sub);
     const role = payload.role as string;
     if (isNaN(userId) || !role) return null;
-    return { userId, role };
+    // A token minted before generations existed carries none: generation 0,
+    // which every user starts at, so it stays valid until a first revocation.
+    const generation =
+      typeof payload.gen === 'number' && Number.isInteger(payload.gen)
+        ? payload.gen
+        : 0;
+    return { userId, role, generation };
   } catch {
     return null;
   }
@@ -181,6 +194,7 @@ export async function getUserFromRequest(
         role: users.role,
         lastAuthAt: users.lastAuthAt,
         sessionMaxDays: users.sessionMaxDays,
+        sessionGeneration: users.sessionGeneration,
       })
       .from(users)
       .where(eq(users.id, verified.userId))
@@ -217,6 +231,12 @@ export async function getUserFromRequest(
   const maxMs = row.sessionMaxDays * 24 * 60 * 60 * 1000;
   const age = Date.now() - row.lastAuthAt.getTime();
   if (age > maxMs) return null;
+
+  // Server-side revocation: a token from a generation before the user's
+  // sessions were last revoked (allowlist removal, admin force-logout) is
+  // dead, even after the person signs in again and moves `lastAuthAt`
+  // forward. A counter, not a time cutoff, so no same-second ambiguity.
+  if (verified.generation < (row.sessionGeneration ?? 0)) return null;
 
   // Always trust the latest role and group membership from the DB and fail
   // closed if the lookup cannot complete, rather than authorizing from stale
@@ -278,7 +298,7 @@ async function resolveAgentTokenContext(
   // Agent tokens must never become admin credentials. Admin-only actions stay
   // reserved for human sessions even if an agent backing user is misconfigured.
   const role = row.role === "admin" ? "editor" : row.role;
-  return { userId: row.userId, role, groups };
+  return { userId: row.userId, role, groups, agentToken: true };
 }
 
 export function setAuthCookie(

@@ -83,6 +83,21 @@ function UserSection() {
     }
   }
 
+  // Force-logout: every session the user holds stops working, including one
+  // somebody else copied, and stays dead after they sign in again.
+  async function revokeSessions(user: AdminUser) {
+    if (!window.confirm(t('admin.revokeSessionsConfirm', { email: user.email }))) {
+      return;
+    }
+    const res = await fetch(
+      `/api/admin?resource=users&action=revoke-sessions&id=${user.id}`,
+      { method: 'POST' },
+    );
+    showToast(
+      t(res.ok ? 'admin.revokeSessionsDone' : 'admin.revokeSessionsFailed'),
+    );
+  }
+
   return (
     <section className="mb-10">
       <h2 className="text-xl font-semibold mb-4">{t('admin.users')}</h2>
@@ -104,6 +119,9 @@ function UserSection() {
                 </th>
                 <th className="text-left px-4 py-3 font-medium">
                   {t('admin.joined')}
+                </th>
+                <th className="text-left px-4 py-3 font-medium">
+                  {t('admin.sessions')}
                 </th>
               </tr>
             </thead>
@@ -132,6 +150,15 @@ function UserSection() {
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {new Date(user.createdAt).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-3">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void revokeSessions(user)}
+                    >
+                      {t('admin.revokeSessions')}
+                    </Button>
                   </td>
                 </tr>
               ))}

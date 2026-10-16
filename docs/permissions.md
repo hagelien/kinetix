@@ -266,7 +266,11 @@ link follows the capabilities of the route it opens.
 - **Agent tokens** are clamped to `editor` at authentication
   (`api/_lib/auth.ts`), whatever their backing user's role says. Capabilities
   apply on top of that clamp, so no matrix change can give an agent token
-  admin-tier access.
+  admin-tier access. Most `admin`-group capabilities can be lowered to
+  `editor` to delegate them, so those are also refused to agent tokens outright
+  (`authCan` in `api/_lib/permissions-store.ts`, used by `requireAdmin`,
+  `requireCapability` and `/api/admin`). Delegating one reaches human editors
+  only.
 - **Approval stamps** on your own content stay blocked for everyone, admins
   included (`isSelfApproval` in `api/approvals.ts`). A stamp is a voluntary
   signature saying someone else read this; a signature you give yourself says

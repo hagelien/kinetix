@@ -66,6 +66,26 @@ The session uses the Vercel MCP tools to pull full logs (see
 `agents/error-fixer.md` step 2), so the trigger's environment needs the Vercel
 MCP connection available.
 
+## Before going live: the injection path
+
+An issue body is built from error text, and error text carries request
+input: a Drizzle query error embeds the bind parameters, and some handlers log
+raw request values. So anyone, without signing in, can choose words that
+reach the fix agent, both in the issue and in the runtime logs it pulls
+through the Vercel MCP tools. Treat that text as hostile and keep a person
+between it and `main`:
+
+- **The fix agent opens drafts only** (`agents/error-fixer.md` step 6).
+  `codex-gate` never merges a draft. A person reviews the change and marks it
+  ready, and only then does the gate's usual review-and-CI path apply.
+- **Restrict the trigger environment's outbound network** to GitHub, Vercel and
+  the package registry. An agent that follows planted instructions should have
+  nowhere to send what it can read.
+- **Give the trigger nothing it doesn't need.** No production database
+  credentials, and no tokens beyond the repository access the PR needs.
+
+Do not enable the GitHub trigger in step 4 until all three hold.
+
 ## Kill switch
 
 - **Pause everything:** set `AUTOFIX_DISABLED=1` (receivers still 200, file

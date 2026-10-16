@@ -25,9 +25,14 @@
  * outcome `failed`, and swallowed. The hook must never block the
  * triggering write (a comment POST or a pending-edit approval).
  */
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
 import { getDb, afterTransactionCommit } from './db.js';
-import { agentHookRuns, agents, users } from '../../db/schema.js';
+import {
+  agentHookRuns,
+  agents,
+  drugParameterDiscussions,
+  users,
+} from '../../db/schema.js';
 import { ROLES } from '../../src/lib/roles.js';
 
 // Mirror the kill-switch defence in api/agents.ts: a contributor+ role
@@ -449,6 +454,60 @@ export async function isAgentUser(userId: number): Promise<boolean> {
   return value.has(userId);
 }
 
+/**
+ * How many `comment_posted` fires one commenter, and everyone together, may
+ * cause per window. Every other hook event is fired by an editor-tier act;
+ * a comment needs only the lowest signed-in tier, and each fire starts a
+ * full, billed routine session. Without a cap, a loop of one-character
+ * comments ran up unbounded spend and spent the routine's run quota out from
+ * under legitimate events. A comment over the cap is still saved, and the
+ * scheduled discussion sweep (agents/drug-db-maintainer.md §7) picks it up.
+ */
+export const COMMENT_HOOK_PER_AUTHOR_LIMIT = 5;
+export const COMMENT_HOOK_GLOBAL_LIMIT = 30;
+const COMMENT_HOOK_WINDOW_MS = 60 * 60 * 1000;
+
+/**
+ * Whether firing for this comment would exceed a cap. Both caps count
+ * drug-scoped comments by people in the window — the author's own, and
+ * everyone's — read from the database so they hold across serverless
+ * instances. A comment row is committed before its hook fires (the fire waits
+ * for the commit), so the count already includes every fire still in flight;
+ * counting recorded `agent_hook_runs` instead would let a concurrent burst
+ * from many authors all see room under the cap before any run was recorded.
+ */
+async function commentHookOverCap(authorUserId: number): Promise<boolean> {
+  const since = new Date(Date.now() - COMMENT_HOOK_WINDOW_MS);
+  const db = getDb();
+  const [[mine], [all]] = await Promise.all([
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(drugParameterDiscussions)
+      .where(
+        and(
+          eq(drugParameterDiscussions.createdBy, authorUserId),
+          isNotNull(drugParameterDiscussions.drugId),
+          gte(drugParameterDiscussions.createdAt, since),
+        ),
+      ),
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(drugParameterDiscussions)
+      .where(
+        and(
+          isNotNull(drugParameterDiscussions.drugId),
+          gte(drugParameterDiscussions.createdAt, since),
+          // Agents' comments never fire the hook (fireAgentHookForActor).
+          sql`NOT EXISTS (SELECT 1 FROM ${agents} WHERE ${agents.userId} = ${drugParameterDiscussions.createdBy})`,
+        ),
+      ),
+  ]);
+  return (
+    (mine?.n ?? 0) > COMMENT_HOOK_PER_AUTHOR_LIMIT ||
+    (all?.n ?? 0) > COMMENT_HOOK_GLOBAL_LIMIT
+  );
+}
+
 export async function fireAgentHookForActor(
   actorUserId: number,
   event: AgentHookEvent,
@@ -456,6 +515,13 @@ export async function fireAgentHookForActor(
   try {
     if (await isAgentUser(actorUserId)) {
       await recordRun({ event, outcome: 'skipped' });
+      return;
+    }
+    if (
+      event.kind === 'comment_posted' &&
+      (await commentHookOverCap(event.authorUserId))
+    ) {
+      await recordRun({ event, outcome: 'skipped', errorMessage: 'rate_limited' });
       return;
     }
   } catch (err) {

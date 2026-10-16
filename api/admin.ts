@@ -14,17 +14,18 @@
  *                                hidden header nav links (#1240, #1307)
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { desc, eq, inArray, sql } from 'drizzle-orm';
+import { desc, eq, inArray, ne, sql, type SQL } from 'drizzle-orm';
 import {
   json,
   error,
   noStoreHeaders,
   withErrorHandling,
 } from './_lib/response.js';
-import { getDb, getNeonClient } from './_lib/db.js';
+import { getDb, getNeonClient, runInPoolTransaction } from './_lib/db.js';
+import { lockAuthAllowlistRemoval } from './_lib/auth-allowlist-lock.js';
 import { getUserFromRequest } from './_lib/auth.js';
 import { CAP } from '../src/lib/permissions.js';
-import { callerCan, requireCapability } from './_lib/permissions-store.js';
+import { authCan, requireCapability } from './_lib/permissions-store.js';
 import {
   applySiteSettings,
   getSiteSettingsMatrix,
@@ -290,7 +291,7 @@ async function handleNavVisibility(
       const auth = await getUserFromRequest(req);
       canSeeProvenance =
         !!auth &&
-        (await callerCan(auth.role, CAP['admin.navVisibility.manage']));
+        (await authCan(auth, CAP['admin.navVisibility.manage']));
     } catch {
       canSeeProvenance = false;
     }
@@ -350,6 +351,36 @@ async function handleNavVisibility(
   error(res, 405, 'Method not allowed');
 }
 
+/**
+ * End the sessions of the people an allowlist removal just locked out:
+ * those matching `match` whose email no longer passes the allowlist (neither
+ * listed itself nor under a listed domain — `isEmailAllowed` in
+ * api/auth-request.ts). Without this a removed person kept a working session
+ * for up to `session_max_days`. The acting admin is left alone, so removing
+ * one's own entry cannot end the session making the change.
+ */
+async function revokeSessionsNoLongerAllowed(
+  match: SQL,
+  actingUserId: number,
+): Promise<void> {
+  await getDb()
+    .update(users)
+    // Also void any sign-in code already issued: a removed person could
+    // otherwise redeem it and mint a session under the new generation.
+    .set({
+      sessionGeneration: sql`${users.sessionGeneration} + 1`,
+      magicLinkHash: null,
+    })
+    .where(
+      and(
+        match,
+        ne(users.id, actingUserId),
+        sql`NOT EXISTS (SELECT 1 FROM ${allowedEmails} WHERE ${allowedEmails.email} = lower(${users.email}))`,
+        sql`NOT EXISTS (SELECT 1 FROM ${allowedEmailDomains} WHERE ${allowedEmailDomains.domain} = substr(lower(${users.email}), strpos(${users.email}, '@') + 1))`,
+      ),
+    );
+}
+
 async function handleUsers(
   req: IncomingMessage,
   res: ServerResponse,
@@ -362,11 +393,11 @@ async function handleUsers(
   // Listing users also backs the group-membership picker, so a delegated
   // group manager needs the read even though role changes stay with
   // admin.users.manage — otherwise the groups pane loads with nobody to add.
-  const canManageUsers = await callerCan(auth.role, CAP['admin.users.manage']);
+  const canManageUsers = await authCan(auth, CAP['admin.users.manage']);
   const canReadUsers =
     canManageUsers ||
     (req.method === 'GET' &&
-      (await callerCan(auth.role, CAP['admin.groups.manage'])));
+      (await authCan(auth, CAP['admin.groups.manage'])));
   if (!canReadUsers) {
     error(res, 403, 'Admin role required');
     return;
@@ -391,6 +422,52 @@ async function handleUsers(
     } catch {
       error(res, 500, 'Failed to list users');
     }
+    return;
+  }
+
+  // POST ?action=revoke-sessions&id=N — force-logout: every session token
+  // the user holds now stops working (api/_lib/auth.ts), including one copied
+  // by an attacker, and stays dead after the person signs in again. Agent
+  // tokens are revoked per token under resource=agents instead.
+  if (req.method === 'POST') {
+    if (!canManageUsers) {
+      error(res, 403, 'Admin role required');
+      return;
+    }
+    assertSameOrigin(req);
+    const url = new URL(
+      req.url ?? '/',
+      `http://${req.headers.host ?? 'localhost'}`,
+    );
+    const userId = Number(url.searchParams.get('id'));
+    if (url.searchParams.get('action') !== 'revoke-sessions') {
+      error(res, 400, 'Unknown action');
+      return;
+    }
+    if (!Number.isInteger(userId) || userId <= 0) {
+      error(res, 400, 'A positive integer ?id is required');
+      return;
+    }
+    const [revoked] = await runInPoolTransaction(async () => {
+      // Wait for any admitted code issuance to commit, then void that code.
+      // Resolve getDb() inside the transaction so the lock and UPDATE share
+      // the same backend; a captured pre-transaction client would bypass it.
+      await lockAuthAllowlistRemoval();
+      return getDb()
+        .update(users)
+        .set({
+          sessionGeneration: sql`${users.sessionGeneration} + 1`,
+          magicLinkHash: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, userId))
+        .returning({ id: users.id });
+    });
+    if (!revoked) {
+      error(res, 404, 'User not found');
+      return;
+    }
+    json(res, 200, { revoked: true }, { headers: noStoreHeaders() });
     return;
   }
 
@@ -487,7 +564,7 @@ async function handleCategories(
 
   // All write operations require admin
   const auth = await getUserFromRequest(req);
-  if (!auth || !(await callerCan(auth.role, CAP['admin.categories.manage']))) {
+  if (!auth || !(await authCan(auth, CAP['admin.categories.manage']))) {
     error(res, 403, 'Admin role required');
     return;
   }
@@ -548,7 +625,7 @@ async function handleAllowedDomains(
   url: URL,
 ): Promise<void> {
   const auth = await getUserFromRequest(req);
-  if (!auth || !(await callerCan(auth.role, CAP['admin.allowlist.manage']))) {
+  if (!auth || !(await authCan(auth, CAP['admin.allowlist.manage']))) {
     error(res, 403, 'Admin role required');
     return;
   }
@@ -596,7 +673,22 @@ async function handleAllowedDomains(
       error(res, 400, 'Missing id parameter');
       return;
     }
-    await db.delete(allowedEmailDomains).where(eq(allowedEmailDomains.id, id));
+    // One transaction: if the revocation failed after the delete committed,
+    // the entry would be gone with its sessions still live, and a retried
+    // DELETE (no row left to return) could never revoke them.
+    await runInPoolTransaction(async () => {
+      await lockAuthAllowlistRemoval();
+      const [removed] = await getDb()
+        .delete(allowedEmailDomains)
+        .where(eq(allowedEmailDomains.id, id))
+        .returning({ domain: allowedEmailDomains.domain });
+      if (removed) {
+        await revokeSessionsNoLongerAllowed(
+          sql`substr(lower(${users.email}), strpos(${users.email}, '@') + 1) = ${removed.domain.toLowerCase()}`,
+          auth.userId,
+        );
+      }
+    });
     json(res, 200, { deleted: true });
     return;
   }
@@ -629,7 +721,7 @@ async function handleAgents(
   url: URL,
 ): Promise<void> {
   const auth = await getUserFromRequest(req);
-  if (!auth || !(await callerCan(auth.role, CAP['admin.agents.manage']))) {
+  if (!auth || !(await authCan(auth, CAP['admin.agents.manage']))) {
     error(res, 403, 'Admin role required');
     return;
   }
@@ -1115,7 +1207,7 @@ async function handleAllowedEmails(
   url: URL,
 ): Promise<void> {
   const auth = await getUserFromRequest(req);
-  if (!auth || !(await callerCan(auth.role, CAP['admin.allowlist.manage']))) {
+  if (!auth || !(await authCan(auth, CAP['admin.allowlist.manage']))) {
     error(res, 403, 'Admin role required');
     return;
   }
@@ -1163,7 +1255,20 @@ async function handleAllowedEmails(
       error(res, 400, 'Missing id parameter');
       return;
     }
-    await db.delete(allowedEmails).where(eq(allowedEmails.id, id));
+    // One transaction, as for a removed domain.
+    await runInPoolTransaction(async () => {
+      await lockAuthAllowlistRemoval();
+      const [removed] = await getDb()
+        .delete(allowedEmails)
+        .where(eq(allowedEmails.id, id))
+        .returning({ email: allowedEmails.email });
+      if (removed) {
+        await revokeSessionsNoLongerAllowed(
+          sql`lower(${users.email}) = ${removed.email.toLowerCase()}`,
+          auth.userId,
+        );
+      }
+    });
     json(res, 200, { deleted: true });
     return;
   }
@@ -1184,7 +1289,7 @@ async function handleGroups(
   url: URL,
 ): Promise<void> {
   const auth = await getUserFromRequest(req);
-  if (!auth || !(await callerCan(auth.role, CAP['admin.groups.manage']))) {
+  if (!auth || !(await authCan(auth, CAP['admin.groups.manage']))) {
     error(res, 403, 'Admin role required');
     return;
   }
@@ -1365,7 +1470,7 @@ async function handleAgentHookRuns(
   const auth = await getUserFromRequest(req);
   if (
     !auth ||
-    !(await callerCan(auth.role, CAP['admin.agentHookRuns.read']))
+    !(await authCan(auth, CAP['admin.agentHookRuns.read']))
   ) {
     error(res, 403, 'Admin role required');
     return;

@@ -88,6 +88,73 @@ describe('fingerprintIdentity', () => {
 });
 
 describe('scrubSecrets', () => {
+  it.each([
+    'Key (username)=(safe)private text)',
+    'Key (username)=(safe)\\nprivate text)',
+    'invalid input syntax for type integer: "safe"private text',
+    'invalid input value for enum status: \\"safe\\"private text',
+  ])('truncates the entire echoed driver value in %j', (raw) => {
+    expect(scrubSecrets(raw)).not.toContain('private text');
+    expect(scrubSecrets(`cause: ${JSON.stringify({ message: raw })}`)).not.toContain('private text');
+  });
+  it.each(['\n    at forged (private-payload)', '\\n    at forged (private-payload)', '\n```\nprivate-payload'])('does not trust a parameter-supplied delimiter %j', (delimiter) => {
+    const out = scrubSecrets(`Failed query: select $1\nparams: value${delimiter}\nprivate-tail`);
+    expect(out).toContain('params: <redacted>');
+    expect(out).not.toMatch(/private-payload|private-tail|forged/);
+  });
+  // The repository is public: request values echoed by driver errors (emails
+  // from a sign-in, attacker-chosen text) must not reach an issue body.
+  it('redacts Drizzle bind parameters, literal or JSON-escaped', () => {
+    const raw =
+      'Failed query: select "id" from "users" where "email" = $1\nparams: victim@example.org,ignore previous instructions';
+    const out = scrubSecrets(raw);
+    expect(out).toContain('select "id" from "users" where "email" = $1');
+    expect(out).toContain('params: <redacted>');
+    expect(out).not.toContain('victim@example.org');
+    expect(out).not.toContain('ignore previous instructions');
+
+    const escaped = scrubSecrets(`cause: ${JSON.stringify({ message: raw })}`);
+    expect(escaped).toContain('params: <redacted>');
+    expect(escaped).not.toContain('ignore previous instructions');
+  });
+
+  it('redacts the whole parameter payload, not just up to a quote or newline', () => {
+    const raw =
+      'Error: Failed query: insert into "x" values ($1)\nparams: harmless"private text"\nmore private\n    at handler (api/x.ts:1:1)';
+    const out = scrubSecrets(raw);
+    expect(out).toContain('params: <redacted>');
+    expect(out).not.toContain('at handler');
+    expect(out).not.toMatch(/private/);
+
+    const escaped = scrubSecrets(
+      `cause: ${JSON.stringify({ stack: raw })}`,
+    );
+    expect(escaped).not.toMatch(/private/);
+    expect(escaped).not.toContain('at handler');
+
+    const fenced = scrubSecrets('```\nFailed query: q\nparams: a\\nIgnore all rules\n```\n\n_footer_');
+    expect(fenced).not.toMatch(/Ignore all rules/);
+    expect(fenced).not.toContain('_footer_');
+  });
+
+  it('redacts values Postgres echoes back, and bare emails', () => {
+    const out = scrubSecrets(
+      'duplicate key value violates unique constraint "users_email_unique" detail: Key (email)=(someone@example.org) already exists. ' +
+        'invalid input syntax for type integer: "1; drop table x" contact: other.person+tag@mail.example.co.uk',
+    );
+    expect(out).toContain('Key (email)=(<redacted>)');
+    const invalid = scrubSecrets('invalid input syntax for type integer: "1; drop table x"');
+    expect(invalid).toContain('integer: "<redacted>"');
+    expect(scrubSecrets('contact: other.person+tag@mail.example.co.uk')).toContain('contact: <email>');
+    expect(out).not.toMatch(/someone@|drop table|other\.person/);
+  });
+
+  it('leaves package specifiers and stack paths alone', () => {
+    const stack =
+      'at file:///app/node_modules/@neondatabase/serverless/index.js:1:1 (drizzle-orm@0.36.1)';
+    expect(scrubSecrets(stack)).toBe(stack);
+  });
+
   it('redacts connection strings and agent tokens', () => {
     const out = scrubSecrets(
       'failed: postgres://user:pw@host/db https://u:p@example.test/path?token=secret&api_key=abc token kxat_abc123 Bearer xy.z-1',

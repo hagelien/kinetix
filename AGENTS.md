@@ -324,6 +324,9 @@ coding task.
 ## Opening a pull request
 
 **Open pull requests ready for review, never as drafts** (`draft: false`).
+The one exception is the auto-fix error-fixer (`agents/error-fixer.md`): its
+input is error text any anonymous visitor can shape, so it opens **drafts
+only** and never marks them ready; a person does, after reading the change.
 GitHub runs the Codex review and the full CI suite automatically on opening
 and on subsequent pushes. **Agents do not wait for those runs.** No explicit
 `@codex review` comment is needed. `codex-gate` may merge automatically

@@ -33,7 +33,14 @@
  * back to PGlite, because a green run against PGlite would be the exact false
  * reassurance the suite exists to remove.
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+
+vi.mock('../../../api/_lib/auth.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../api/_lib/auth.js')>()),
+  getUserFromRequest: vi.fn(async () => ({ userId: 0, role: 'admin' })),
+}));
+import adminHandler from '../../../api/admin.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { sql } from 'drizzle-orm';
@@ -47,6 +54,7 @@ import {
   lockDrugForEntryApplicability,
   withDrugApplicabilityLock,
 } from '../../../api/_lib/parameterApplicabilityStore.js';
+import { lockAuthAllowlistRemoval, withAuthAllowlistReadLock } from '../../../api/_lib/auth-allowlist-lock.js';
 import {
   LOCK_TIMEOUT_MS,
   REAL_PG_URL_ENV,
@@ -90,6 +98,60 @@ describe.skipIf(!hasRealPostgres)('real-Postgres advisory lock behaviour', () =>
   });
 
   describe('the target itself hands out separate backends', () => {
+    it('force-logout waits for an admitted code issuance before revoking', async () => {
+      const [victim] = await db.insert(users).values({
+        email: 'force-logout-race@example.com', username: 'force-logout-race',
+        magicLinkHash: 'v2:' + 'a'.repeat(64),
+        magicLinkExpires: new Date(Date.now() + 600_000),
+      }).returning({ id: users.id });
+      const logout = async () => {
+        let status = 0;
+        await adminHandler({ method: 'POST',
+          url: `/api/admin?resource=users&action=revoke-sessions&id=${victim!.id}`,
+          headers: { host: 'localhost' } } as IncomingMessage,
+        { writeHead: (code: number) => { status = code; }, end: () => undefined,
+          setHeader: () => undefined } as unknown as ServerResponse);
+        return status;
+      };
+      await withAuthAllowlistReadLock(async () => {
+        // Model another HTTP request on a separate backend, not the issuance
+        // transaction's AsyncLocalStorage context. lock_timeout ends the wait.
+        expect(await runInPoolTransaction(logout)).toBe(500);
+        const state = await getDb().select({ generation: users.sessionGeneration,
+          hash: users.magicLinkHash }).from(users).where(sql`${users.id} = ${victim!.id}`);
+        expect(state[0]).toMatchObject({ generation: 0, hash: 'v2:' + 'a'.repeat(64) });
+      });
+      expect(await logout()).toBe(200);
+      const state = await db.select({ generation: users.sessionGeneration,
+        hash: users.magicLinkHash }).from(users).where(sql`${users.id} = ${victim!.id}`);
+      expect(state[0]).toEqual({ generation: 1, hash: null });
+    }, LOCK_TIMEOUT_MS * 3);
+
+    it('blocks allowlist removal until an in-flight code issuance commits', async () => {
+      await withAuthAllowlistReadLock(async () => {
+        const blocked = runInPoolTransaction(async () => {
+          await lockAuthAllowlistRemoval();
+        });
+        await expect(blocked).rejects.toMatchObject({ cause: { code: LOCK_NOT_AVAILABLE } });
+      });
+      // The policy lock ends with the issuance transaction.
+      await expect(runInPoolTransaction(async () => {
+        await lockAuthAllowlistRemoval();
+      })).resolves.toBeUndefined();
+    }, LOCK_TIMEOUT_MS * 3);
+
+    it('blocks new eligibility reads until allowlist removal commits', async () => {
+      await runInPoolTransaction(async () => {
+        await lockAuthAllowlistRemoval();
+        // A separate backend must not inherit the removal transaction.
+        const blocked = runInPoolTransaction(async () => {
+          await withAuthAllowlistReadLock(async () => undefined);
+        });
+        await expect(blocked).rejects.toMatchObject({ cause: { code: LOCK_NOT_AVAILABLE } });
+      });
+      await expect(withAuthAllowlistReadLock(async () => undefined)).resolves.toBeUndefined();
+    }, LOCK_TIMEOUT_MS * 3);
+
     /**
      * Non-vacuity for everything below. If this block does not hold, the
      * target has collapsed to PGlite's single-connection behaviour and the

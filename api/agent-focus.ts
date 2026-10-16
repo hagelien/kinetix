@@ -24,7 +24,7 @@ import { getDb } from "./_lib/db.js";
 import { getUserFromRequest } from "./_lib/auth.js";
 import { requireAdmin } from "./_lib/require-admin.js";
 import { CAP } from "../src/lib/permissions.js";
-import { callerCan } from "./_lib/permissions-store.js";
+import { authCan } from "./_lib/permissions-store.js";
 import { assertSameOrigin, parseAndValidate } from "./_lib/validate.js";
 import { updateAgentFocusConfigSchema } from "./_lib/schemas.js";
 import { isAgentWorkTarget } from "./_lib/agent-work-targets.js";
@@ -596,7 +596,7 @@ export default withErrorHandling(async function handler(
       error(res, 401, "Authentication required");
       return;
     }
-    if (!(await callerCan(auth.role, CAP["admin.agents.manage"]))) {
+    if (!(await authCan(auth, CAP["admin.agents.manage"]))) {
       const agent = await resolveActiveAgent(auth.userId);
       if (!agent) {
         error(res, 403, "Admin or agent token required");

@@ -58,7 +58,10 @@ import {
   type ConsensusHoldReason,
   type VerificationSummary,
 } from './_lib/agent-verifications.js';
-import { DRUG_PARAMETER_IDS } from '../src/lib/drugParameters.js';
+import {
+  DRUG_PARAMETER_IDS,
+  isModelStructureParameter,
+} from '../src/lib/drugParameters.js';
 import { FLAGSHIP_TIER, isFlagshipTier } from '../src/lib/modelTiers.js';
 import {
   applyApprovedEdit,
@@ -173,8 +176,11 @@ async function handleGet(
       includeCallerVerdicts: true,
     });
     const visibleSet = new Set(visibleIds);
+    // An agent gets no peer tallies (see the single-target path below): the
+    // batch form is for the human /review screens, and its counts would tell
+    // an agent which way its peers voted before it votes.
     const map =
-      visibleIds.length > 0
+      visibleIds.length > 0 && !callerAgent
         ? await summariseVerificationsForTargets({
             targetType,
             targetIds: visibleIds,
@@ -217,7 +223,23 @@ async function handleGet(
     return;
   }
 
-  const rows = await listVerifications({ targetType, targetId });
+  // Peer verification is blind, and an agent that has seen its peers is no
+  // longer an independent measurement: the only sanctioned look is the
+  // control phase (`discloseForReconsideration`), which records the read and
+  // freezes the agent's verdict. Serving the peers' verdicts here let an
+  // agent pre-read them before voting, or read them after a dispute and
+  // re-post `approve` with no freeze. Every agent sees only its own verdicts,
+  // including authors without self-review: an admin may grant self-review
+  // later on the same version, so an author's read cannot expose peers now.
+  // People are unaffected.
+  // Published-target verdicts remain public by the owner's 2026-10-16 decision:
+  // dropping credentials reveals them, so blindness there is protocol-only.
+  // Pending proposals remain private to anonymous callers (the visibility gate above).
+  const agentSeesPeers = !callerAgent;
+  const allRows = await listVerifications({ targetType, targetId });
+  const rows = agentSeesPeers
+    ? allRows
+    : allRows.filter((r) => r.agentId === callerAgent.id);
   const filtered = filterVerificationsForAudience({
     rows,
     callerAgentId: callerAgent?.id ?? null,
@@ -235,7 +257,7 @@ async function handleGet(
       else if (r.verdict === 'abstain') s.abstainCount += 1;
       return s;
     }, emptyVerificationSummary()),
-    ...(targetType === 'pending_edit'
+    ...(targetType === 'pending_edit' && agentSeesPeers
       ? { consensus: await consensusExplanation(targetId, rows) }
       : {}),
   });
@@ -416,6 +438,40 @@ async function handlePost(
       'agent_verification_self_not_allowed',
     );
     return;
+  }
+
+  // The grant has two carve-outs on the manual path (PATCH /api/pending-edits):
+  // a clinical case, and a model-structure parameter entry — a categorical
+  // axis that selects the equations the engine runs — both ask for a genuine
+  // second party. Consensus counts a self-review author's explicit approval
+  // toward quorum, so an approval here would carry the agent's own
+  // model-structure proposal on one peer instead of two. Reconsidering its own
+  // row (dispute, abstain) stays open; only the approval is withheld.
+  if (
+    isSelfVerification &&
+    targetType === 'pending_edit' &&
+    parsed.data.verdict === 'approve'
+  ) {
+    const [own] = await getDb()
+      .select({ editType: pendingEdits.editType, parameter: pendingEdits.parameter })
+      .from(pendingEdits)
+      .where(eq(pendingEdits.id, parsed.data.targetId))
+      .limit(1);
+    if (
+      own &&
+      (own.editType === 'clinical_case' ||
+        (own.editType === 'param_entry' &&
+          typeof own.parameter === 'string' &&
+          isModelStructureParameter(own.parameter)))
+    ) {
+      error(
+        res,
+        403,
+        'Self-review does not extend to clinical cases or model-structure entries; a second agent or a moderator must approve',
+        'agent_verification_self_review_excluded',
+      );
+      return;
+    }
   }
 
   // A self-approval must say why. Everything the grant buys — satisfying
