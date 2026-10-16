@@ -29,7 +29,7 @@
  *                               presented as an authoritative curve — review first.
  *   2. simplified-family-curve — a curve renders, but on a SIMPLER family than the drug declares (an
  *                               asserted two-compartment disposition run one-compartment because the
- *                               catalog cannot yet supply the micro-constants). The curve is not the
+ *                               drug has not yet curated all its micro-constants). The curve is not the
  *                               model its evidence describes — review right after a guessed family.
  *   3. default-parameter-curve — a curve renders only because the bioavailability the catalog
  *                               lacks runs on a labelled cautious default (F = 1). The number
@@ -115,7 +115,7 @@ const BUCKET_BLURB: Record<Bucket, string> = {
   'default-family-curve':
     'A curve would render, but the **disposition or elimination family was guessed** (disclosed default, not a cited declaration). A guessed family is qualitatively wrong science shown as an authoritative curve — highest review priority.',
   'simplified-family-curve':
-    'A curve renders, but on a **simpler family than the drug declares** — e.g. a cited two-compartment disposition run as one-compartment because the catalog cannot yet supply the two-compartment parameters. The curve is not the model its evidence describes; the declaration’s citations back the declared family, not the one drawn.',
+    'A curve renders, but on a **simpler family than the drug declares** — e.g. a cited two-compartment disposition run as one-compartment because the drug has not yet curated all of k12, k21 and the central volume V1. The curve is not the model its evidence describes; the declaration’s citations back the declared family, not the one drawn.',
   'default-parameter-curve':
     'A curve renders only because the **bioavailability** the catalog lacks runs on a **labelled cautious default** — complete absorption, F = 1 — which pushes the whole curve toward higher concentrations. Authoring a cited value replaces the default.',
   'asserted-complex':

@@ -650,6 +650,16 @@ function validateRouteForParameter(
     if (parameter === 'ka' && route === 'iv') {
       return 'ka is not compatible with the intravenous route; IV bolus and infusion have no first-order absorption phase';
     }
+    // The other absorption-phase structure parameters describe how an
+    // EXTRAVASCULAR dose enters the body; an IV dose has no absorption phase.
+    if (
+      (parameter === 'firstOrderFraction' ||
+        parameter === 'zeroOrderDuration' ||
+        parameter === 'absorptionLag') &&
+      route === 'iv'
+    ) {
+      return `${parameter} is not compatible with the intravenous route; IV bolus and infusion have no absorption phase`;
+    }
     return null;
   }
   if (parameterIsRouteOptional(parameter)) {

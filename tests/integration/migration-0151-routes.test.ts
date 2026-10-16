@@ -168,14 +168,34 @@ describe('migration 0151 — re-tag queue', () => {
     expect(await flags()).toHaveLength(1);
   });
 
-  it('lists the route-capable parameters the registry declares', () => {
+  it('lists the route-capable parameters the registry declared when it shipped', () => {
     const lists = [...SQL.matchAll(/pe\."parameter" IN \(([^)]*)\)/g)].map((m) =>
       [...m[1]!.matchAll(/'([^']+)'/g)].map((q) => q[1]!).sort(),
     );
+    // A migration is frozen once it ships, so it can only list what existed then. A route-capable
+    // parameter registered AFTER 0151 had no entries for it to queue, and is named here instead of
+    // being added to the applied SQL — so a parameter that existed at 0151 and was left out of its
+    // list still fails this test.
+    const registeredAfter0151 = new Set<string>([
+      // #83: the absorption-phase structure parameters (route-scoped, new rows only).
+      'firstOrderFraction',
+      'zeroOrderDuration',
+      'absorptionLag',
+    ]);
     const registry = DRUG_PARAMETER_IDS.filter(
-      (id) => parameterIsRouteScoped(id) || parameterIsRouteOptional(id),
+      (id) =>
+        (parameterIsRouteScoped(id) || parameterIsRouteOptional(id)) &&
+        !registeredAfter0151.has(id),
     ).sort();
     expect(lists).toHaveLength(2);
     for (const list of lists) expect(list).toEqual(registry);
+    // Every exemption must still be a route-capable registry parameter, so the list cannot go stale.
+    for (const id of registeredAfter0151) {
+      expect(
+        DRUG_PARAMETER_IDS.some(
+          (p) => p === id && (parameterIsRouteScoped(p) || parameterIsRouteOptional(p)),
+        ),
+      ).toBe(true);
+    }
   });
 });

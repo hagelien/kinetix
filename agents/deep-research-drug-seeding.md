@@ -310,7 +310,7 @@ record, so do not reinterpret them:
 
 ## Parameter registry (exact IDs + canonical units)
 
-This is the **complete** set of drug parameters Kinetix stores — 34 IDs. Emit
+This is the **complete** set of drug parameters Kinetix stores — 37 IDs. Emit
 values already converted to the canonical unit where one exists.
 
 ### Identity & metadata — goes in `drugIdentity`, not `kinetixParameterValues[]`
@@ -333,7 +333,7 @@ At least one of `names.nb`, `names.en` or `preferredName` is required. Set
 identical or near-identical across the two languages) — leave it `null` rather
 than machine-translating.
 
-### The 28 measured parameters — go in `kinetixParameterValues[]`
+### The 31 measured parameters — go in `kinetixParameterValues[]`
 
 The "Sidebar group" column is only how the application groups these on screen;
 it has no effect on what you emit.
@@ -352,6 +352,8 @@ it has no effect on what you emit.
 | pharmacokinetics      | `clearance`                                                                                                  | range ³    | `L/h` (also `L/min`, `mL/min`, `L/h/kg`, `mL/min/kg`)                                 | 0 – 100 000   |
 | pharmacokinetics      | `vmax` (saturable elimination only)                                                                          | range ⁴    | `mg/L/h` (also `µg/mL/h`, `mg/dL/h`, `g/L/h`, `mg/L/min`)                             | 0.0001 – 100 000 |
 | pharmacokinetics      | `km` (saturable elimination only)                                                                            | range ⁴    | `mg/L` (also `µg/mL`, `ng/mL`, `µg/L`, `ng/L`, `mg/dL`, `mmol/L`, `µmol/L`, `nmol/L`) | 0.000001 – 1 000 000 |
+| pharmacokinetics      | `k12`, `k21` (two-compartment micro-constants only)                                                          | range      | `1/h`                                                                                 | 0.0001 – 1 000 |
+| pharmacokinetics      | `centralVolume` (two-compartment central volume V1, not Vd)                                                  | range      | `L/kg`                                                                                | 0.01 – 1 000 |
 | dose & exposure       | `therapeuticDose`, `maxRecommendedDose`, `nonMedicalDose`, `overdoseDose`, `fatalDose`                       | range ³    | `mg` (also `g`, `µg`, `mg/kg`, `mg/day`, `mg/kg/day`)                                 | 0 – 1 000 000 |
 | interpretive conc.    | `therapeuticConcentration`, `supratherapeuticConcentration`, `impairmentConcentration`, `toxicConcentration` | range ¹    | `mg/L` (also `µg/mL`, `ng/mL`, `µg/L`, `ng/L`, `mg/dL`, `mmol/L`, `µmol/L`, `nmol/L`) | 0 – 1 000 000 |
 | analytics & detection | `bloodDetectionWindow`, `oralFluidDetectionWindow`, `urineDetectionWindow`                                    | range      | `h`                                                                                   | 0 – 8 760     |

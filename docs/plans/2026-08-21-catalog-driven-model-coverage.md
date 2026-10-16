@@ -822,6 +822,24 @@ drugs). A DB edit changes the next snapshot, never a curve already pinned.
        an entry records its matrix; the read adapter pools them from the drug's plasma and serum
        entries only (`MATRIX_BASIS_ROLE_IDS`), because the derived model is a plasma model and the
        drug-level cache normalizes them to whole blood.
+    7. **Structural parameters for the remaining families (LANDED, 2026-10-15, part of #83).**
+       New catalog parameters give every structural role but the CL/V basis a home:
+       molecule-level `k12`, `k21` (1/h) and `centralVolume` (V1, L/kg — deliberately separate
+       from `volumeOfDistribution`, which is the steady-state volume), and route-scoped
+       `zeroOrderDuration` (h), `firstOrderFraction` (fraction) and `absorptionLag` (h, the one
+       OPTIONAL role, `optionalParametersFor`). `assembleRouteParams` now builds
+       `two-compartment-first-order` (the declared form wins and the one-compartment fallback is
+       used only while a micro-constant is missing), and a declared zero-order or mixed route is
+       drawn once its route numbers are curated. Rules that keep the curves honest:
+       `k21 ≤ ln2/t½` is a contradiction (the engine's `deriveK10` would silently run k10 = β), so
+       the route is `unsupported` with `contradiction: true` and the read adapter does NOT fall back
+       over it; a k21/t½ spread that could draw such a pair is dropped to fixed medians; a lag on a
+       family with no lag field (two-compartment, saturable, IV) is refused rather than dropped;
+       `ka` is not solved from Tmax under two-compartment disposition or a mixed input, and under a
+       lag `Tmax − tlag` is solved. A route-scoped fraction/duration/lag on a shape with no place for
+       it is a per-route contradiction (`routeParamShapeConflict`). Still open: the CL/V form
+       (`one-compartment-clv`, and two-compartment Q/V2), which needs an identifiability basis
+       (CL vs CL/F) and absolute-litre volumes the catalog cannot store yet.
 
 ## 8. Risks & non-goals
 

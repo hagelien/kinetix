@@ -98,6 +98,21 @@ export const DRUG_PARAMETER_IDS = [
   // saturable family only when a drug declares it AND both are present.
   'vmax',
   'km',
+  // Two-compartment disposition in its micro-constant form: the central →
+  // peripheral and peripheral → central transfer rates and the central volume
+  // V1. Molecule-level like the half-life (disposition is a property of the
+  // molecule, not of how it was given); the auto-built model runs the
+  // two-compartment family only when a drug declares it AND all three are present.
+  'k12',
+  'k21',
+  'centralVolume',
+  // Absorption-phase structure (route-specific, like `ka`): the share of a mixed
+  // (parallel first-order + zero-order) input that takes the first-order path,
+  // the duration of a zero-order (constant-rate) input, and the lag before
+  // absorption starts. Stored per administration route.
+  'firstOrderFraction',
+  'zeroOrderDuration',
+  'absorptionLag',
   'postmortemRedistribution',
   'pmAmRatio',
   // Model structure (CV-1b): the drug's PK model shape, as cited pick-from-a-list
@@ -978,6 +993,124 @@ export const DRUG_PARAMETERS: Record<DrugParameterId, ParameterSpec> = {
     matrixRelevant: true,
     summarizable: true,
     zod: rangeSchema({ min: 0.000001, max: 1_000_000, allowedUnits: CONCENTRATION_UNITS, requiresMinMax: false }),
+    format: rangeFormatter,
+  },
+  // Two-compartment micro-constants (molecule-level). The engine derives the
+  // central elimination rate k10 from these and the TERMINAL half-life
+  // (`halfLife`), so the three together with V1 fix the bi-exponential curve.
+  // Only the micro-constant form is stored; the clearance/volume form (CL, Q, V1,
+  // V2) that population models often report has no catalog home yet.
+  k12: {
+    id: 'k12',
+    label: 'k12',
+    longLabel: 'Central → peripheral rate constant (k12)',
+    symbol: 'k12',
+    kind: 'range',
+    group: 'pharmacokinetics',
+    allowedUnits: ['1/h'],
+    canonicalUnit: '1/h',
+    // THC's ~9 /h is near the fast end; the bounds only catch a unit slip.
+    bounds: { min: 0.0001, max: 1000 },
+    requiresMinMax: false,
+    forensic: false,
+    summarizable: true,
+    zod: rangeSchema({ min: 0.0001, max: 1000, allowedUnits: ['1/h'], requiresMinMax: false }),
+    format: rangeFormatter,
+  },
+  k21: {
+    id: 'k21',
+    label: 'k21',
+    longLabel: 'Peripheral → central rate constant (k21)',
+    symbol: 'k21',
+    kind: 'range',
+    group: 'pharmacokinetics',
+    allowedUnits: ['1/h'],
+    canonicalUnit: '1/h',
+    bounds: { min: 0.0001, max: 1000 },
+    requiresMinMax: false,
+    forensic: false,
+    summarizable: true,
+    zod: rangeSchema({ min: 0.0001, max: 1000, allowedUnits: ['1/h'], requiresMinMax: false }),
+    format: rangeFormatter,
+  },
+  // The CENTRAL volume V1 of a two-compartment model — not the larger
+  // steady-state/terminal Vd (`volumeOfDistribution`), which also counts the
+  // tissue the drug distributes into. Reading one for the other would scale the
+  // whole curve wrongly, so they are separate parameters.
+  centralVolume: {
+    id: 'centralVolume',
+    label: 'V1',
+    longLabel: 'Central compartment volume (V1)',
+    symbol: 'V1',
+    kind: 'range',
+    group: 'pharmacokinetics',
+    allowedUnits: ['L/kg'],
+    canonicalUnit: 'L/kg',
+    bounds: { min: 0.01, max: 1000 },
+    requiresMinMax: false,
+    forensic: false,
+    summarizable: true,
+    zod: rangeSchema({ min: 0.01, max: 1000, allowedUnits: ['L/kg'], requiresMinMax: false }),
+    format: rangeFormatter,
+  },
+  // Absorption-phase structure, route-scoped on the same terms as `ka`: each
+  // describes how a dose given BY A ROUTE enters the body, so it has no
+  // drug-level value and is undefined for a never-administered analyte.
+  firstOrderFraction: {
+    id: 'firstOrderFraction',
+    label: 'Ffo',
+    longLabel: 'First-order fraction of a mixed (parallel) input',
+    symbol: 'Ffo',
+    kind: 'fraction',
+    group: 'pharmacokinetics',
+    allowedUnits: ['fraction'],
+    canonicalUnit: 'fraction',
+    bounds: { min: 0, max: 1 },
+    requiresMinMax: false,
+    forensic: false,
+    summarizable: false,
+    routeScoped: true,
+    requiresAdministration: true,
+    zod: rangeSchema({ min: 0, max: 1, allowedUnits: ['fraction'], requiresMinMax: false }),
+    format: rangeFormatter,
+  },
+  zeroOrderDuration: {
+    id: 'zeroOrderDuration',
+    label: 'D0',
+    longLabel: 'Zero-order input duration',
+    symbol: 'D0',
+    kind: 'range',
+    group: 'pharmacokinetics',
+    allowedUnits: ['h'],
+    canonicalUnit: 'h',
+    // A constant-rate input over no time is a bolus, a different family, so the
+    // floor is above zero. A year covers monthly and longer depots.
+    bounds: { min: 0.01, max: 8760 },
+    requiresMinMax: false,
+    forensic: false,
+    summarizable: false,
+    routeScoped: true,
+    requiresAdministration: true,
+    zod: rangeSchema({ min: 0.01, max: 8760, allowedUnits: ['h'], requiresMinMax: false }),
+    format: rangeFormatter,
+  },
+  absorptionLag: {
+    id: 'absorptionLag',
+    label: 'tlag',
+    longLabel: 'Absorption lag time',
+    symbol: 'tlag',
+    kind: 'range',
+    group: 'pharmacokinetics',
+    allowedUnits: ['h'],
+    canonicalUnit: 'h',
+    // 0 is a real reading (no lag) and is kept.
+    bounds: { min: 0, max: 48 },
+    requiresMinMax: false,
+    forensic: false,
+    summarizable: false,
+    routeScoped: true,
+    requiresAdministration: true,
+    zod: rangeSchema({ min: 0, max: 48, allowedUnits: ['h'], requiresMinMax: false }),
     format: rangeFormatter,
   },
   postmortemRedistribution: {

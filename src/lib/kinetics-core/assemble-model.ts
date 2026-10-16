@@ -18,15 +18,17 @@
  * plausible range and never a confidence or prediction interval. A role with no usable spread stays
  * `fixed(median)`, and the grade says so.
  *
- * Scope: this pure primitive maps the ONE-COMPARTMENT families the catalog derivation actually
- * produces today — the linear `iv-one-compartment`, `one-compartment-first-order`,
- * `one-compartment-zero-order` and `one-compartment-mixed-order`, and the saturable
- * `michaelis-menten` family (its Vmax and Km have molecule-level catalog parameters, canonical
- * mg/L/h and mg/L). Families that need inputs the catalog cannot yet supply — the CL/V structural
- * identifiability basis, two-compartment micro-constants, or the parent→metabolite link and molar
- * masses — return `unsupported` until those inputs land, rather than assembling from data the
- * catalog does not have. "Missing stays missing" holds here too: an incomplete family is reported,
- * never filled with a guessed value.
+ * Scope: this pure primitive maps every family the catalog derivation can supply inputs for — the
+ * linear `iv-one-compartment`, `one-compartment-first-order`, `one-compartment-zero-order` and
+ * `one-compartment-mixed-order` (their zero-order duration and first-order fraction are route-scoped
+ * catalog parameters), the saturable `michaelis-menten` family (molecule-level Vmax and Km, canonical
+ * mg/L/h and mg/L), and `two-compartment-first-order` in its micro-constant form (molecule-level k12,
+ * k21 and central volume V1, with k10 derived by the engine from the terminal half-life). An optional
+ * absorption lag rides on the families whose engine route carries one. Families that need inputs the
+ * catalog cannot yet supply — the CL/V structural identifiability basis (and absolute-litre volumes)
+ * of `one-compartment-clv`, or the parent→metabolite link and molar masses — return `unsupported`
+ * until those inputs land, rather than assembling from data the catalog does not have. "Missing
+ * stays missing" holds here too: an incomplete family is reported, never filled with a guessed value.
  *
  * Pure and additive: engine vocabulary only, no DB read, no equation/solver/scenario change, so no
  * `CORE_VERSION` bump. It consumes CANONICAL engine units (hours, per-hour, L/kg, 0–1); the DB→
@@ -36,6 +38,7 @@
 import { fixed, triangular } from './param.js';
 import type { DerivedModel } from './derive-model.js';
 import {
+  optionalParametersFor,
   requiredParametersFor,
   type RequiredParam,
   type StructureRequirementOptions,
@@ -49,6 +52,7 @@ import type {
   OneCompartmentRouteParams,
   OneCompartmentZeroOrderRouteParams,
   RouteModelParams,
+  TwoCompartmentRouteParams,
   VdScaling,
 } from './types.js';
 
@@ -89,9 +93,12 @@ export type ModelAssembly =
   /** The family is supported but one or more required values are absent/non-finite (missing stays
    *  missing) — the caller grades it down (CV-3), it is not a curve. */
   | { outcome: 'incomplete'; family: ModelFamily; missing: RequiredParam[] }
-  /** No route can be assembled: the derivation is not-modelable, or its family needs inputs this
-   *  primitive does not yet map (see the module header). */
-  | { outcome: 'unsupported'; reason: string };
+  /** No route can be assembled: the derivation is not-modelable, its family needs inputs this
+   *  primitive does not yet map (see the module header), a supplied optional input (a lag) has no
+   *  place in the family, or — `contradiction: true` — the supplied values contradict the family's
+   *  own structure (two-compartment rates that cannot produce the stored terminal half-life). A
+   *  contradiction is a curation finding: a caller must not paper over it with a simpler model. */
+  | { outcome: 'unsupported'; reason: string; contradiction?: true };
 
 /** The families this primitive maps today (see the module header for what is deferred and why). */
 type AssembledFamily =
@@ -99,7 +106,8 @@ type AssembledFamily =
   | 'one-compartment-first-order'
   | 'one-compartment-zero-order'
   | 'one-compartment-mixed-order'
-  | 'michaelis-menten';
+  | 'michaelis-menten'
+  | 'two-compartment-first-order';
 
 const ASSEMBLED_FAMILIES: readonly AssembledFamily[] = [
   'iv-one-compartment',
@@ -107,6 +115,7 @@ const ASSEMBLED_FAMILIES: readonly AssembledFamily[] = [
   'one-compartment-zero-order',
   'one-compartment-mixed-order',
   'michaelis-menten',
+  'two-compartment-first-order',
 ];
 
 function isAssembledFamily(family: ModelFamily): family is AssembledFamily {
@@ -130,11 +139,16 @@ const POSITIVE_DURATION_ROLES: readonly RequiredParam[] = ['infusionDuration', '
 function isUsable(role: RequiredParam, value: number | undefined): value is number {
   if (value === undefined || !Number.isFinite(value)) return false;
   if (POSITIVE_DURATION_ROLES.includes(role) && value <= 0) return false;
+  if (NON_NEGATIVE_ROLES.includes(role) && value < 0) return false;
   return true;
 }
 
 /** Roles whose value is a fraction and must stay within [0, 1] at every draw. */
 const FRACTION_ROLES: readonly RequiredParam[] = ['bioavailability', 'firstOrderFraction'];
+
+/** Roles for which zero is a real value rather than a degenerate one: a lag of 0 h is "no lag". A
+ *  negative lag is not a time the input can start at, so it is unusable. */
+const NON_NEGATIVE_ROLES: readonly RequiredParam[] = ['absorptionLag'];
 
 /**
  * The spec for one role: `triangular(low, median, high)` when its reported spread is usable, else
@@ -156,7 +170,20 @@ export function rangeIsUsable(role: RequiredParam, median: number, range: Assemb
   if (!Number.isFinite(low) || !Number.isFinite(high) || !(low < high)) return false;
   if (median < low || median > high) return false;
   if (FRACTION_ROLES.includes(role)) return low >= 0 && high <= 1;
+  if (NON_NEGATIVE_ROLES.includes(role)) return low >= 0;
   return low > 0;
+}
+
+/**
+ * Whether a two-compartment route's micro-constants can produce its stored terminal half-life. The
+ * terminal rate β (= ln2 / t½) is the smaller root of `s² − (k10+k12+k21)·s + k10·k21`, and that
+ * root always lies strictly below k21; conversely any k21 > β gives a positive k10 =
+ * β(k12+k21−β)/(k21−β) whose smaller root is exactly β. So `k21 > β` is the whole coherence
+ * condition. The engine does not refuse the incoherent case — `deriveK10` silently falls back to
+ * k10 = β, a different curve from the one the cited numbers describe — so assembly must.
+ */
+function twoCompartmentCoherent(k21: number, halfLifeHours: number): boolean {
+  return k21 > Math.LN2 / halfLifeHours;
 }
 
 /**
@@ -191,9 +218,71 @@ export function assembleRouteParams(
   };
   const required = requiredParametersFor(family, effectiveOpts);
   const missing = required.filter((role) => !isUsable(role, values[role]));
-  if (missing.length > 0) return { outcome: 'incomplete', family, missing };
-
+  // An optional role that is PRESENT must be usable too: a stored lag that cannot be read as a time
+  // (negative, non-finite) is not "no lag", and running without it would misplace the peak.
+  const optional = optionalParametersFor(family);
+  const unusableOptional = optional.filter(
+    (role) => values[role] !== undefined && !isUsable(role, values[role]),
+  );
+  // A known contradictory pair is not a gap, even if another role is missing
+  // or the lag is unsupported. Neither may enable a simpler fallback curve.
+  if (
+    family === 'two-compartment-first-order' &&
+    isUsable('k21', values.k21) &&
+    isUsable('eliminationHalfLife', values.eliminationHalfLife) &&
+    !twoCompartmentCoherent(values.k21!, values.eliminationHalfLife!)
+  ) {
+    return {
+      outcome: 'unsupported',
+      contradiction: true,
+      reason: `the two-compartment rates contradict the terminal half-life: k21 (${values.k21} /h) must exceed the terminal rate ln2/t½ (${(Math.LN2 / values.eliminationHalfLife!).toPrecision(4)} /h)`,
+    };
+  }
+  if (missing.length > 0 || unusableOptional.length > 0) {
+    return { outcome: 'incomplete', family, missing: [...missing, ...unusableOptional] };
+  }
+  // A lag the family has no place for is refused, not dropped: the engine routes of the
+  // two-compartment, saturable and IV families carry no lag, and a curve that ignores a cited lag
+  // puts the peak too early. A cited lag of exactly zero with no spread IS "no lag", so it is the
+  // one lag such a family can honour by omitting it.
+  const lagIsNone =
+    values.absorptionLag === 0 &&
+    !(opts.ranges?.absorptionLag && rangeIsUsable('absorptionLag', 0, opts.ranges.absorptionLag));
+  if (values.absorptionLag !== undefined && !lagIsNone && !optional.includes('absorptionLag')) {
+    return {
+      outcome: 'unsupported',
+      reason: `the ${family} family does not model an absorption lag, so the stored lag cannot be run`,
+    };
+  }
   return { outcome: 'assembled', family, params: buildParams(family, derived, values, opts) };
+}
+
+/**
+ * The spreads a two-compartment route may be drawn across. Each Monte-Carlo draw takes k21 and the
+ * half-life independently, so a draw pairing the lowest k21 with the shortest half-life can fall
+ * outside the coherence condition the medians satisfy — and the engine would then run that draw on
+ * a different curve without saying so (see `twoCompartmentCoherent`). When the reported spreads
+ * admit such a pair, both are dropped to their medians rather than clipped: clipping would invent a
+ * bound no source reported, and the grade reports a fixed input as one without a spread.
+ */
+function coherentTwoCompartmentRanges(
+  values: AssemblyValues,
+  ranges: AssemblyRanges | undefined,
+): AssemblyRanges | undefined {
+  if (!ranges) return ranges;
+  const k21Range = ranges.k21;
+  const halfLifeRange = ranges.eliminationHalfLife;
+  const lowestK21 =
+    k21Range && rangeIsUsable('k21', values.k21!, k21Range) ? k21Range.low : values.k21!;
+  const shortestHalfLife =
+    halfLifeRange && rangeIsUsable('eliminationHalfLife', values.eliminationHalfLife!, halfLifeRange)
+      ? halfLifeRange.low
+      : values.eliminationHalfLife!;
+  if (twoCompartmentCoherent(lowestK21, shortestHalfLife)) return ranges;
+  const rest: AssemblyRanges = { ...ranges };
+  delete rest.k21;
+  delete rest.eliminationHalfLife;
+  return rest;
 }
 
 /** Build the family-specific route params. Every required role is guaranteed present and finite by
@@ -204,7 +293,14 @@ function buildParams(
   values: AssemblyValues,
   opts: AssembleOptions,
 ): RouteModelParams {
-  const spec = (role: RequiredParam): ParamSpec => rangedSpec(role, values[role]!, opts.ranges);
+  const ranges =
+    family === 'two-compartment-first-order'
+      ? coherentTwoCompartmentRanges(values, opts.ranges)
+      : opts.ranges;
+  const spec = (role: RequiredParam): ParamSpec => rangedSpec(role, values[role]!, ranges);
+  // The optional lag, when stored. The completeness gate has refused it for a family without a lag
+  // field, so only the cases below that carry one read it.
+  const lag = values.absorptionLag !== undefined ? spec('absorptionLag') : undefined;
   switch (family) {
     case 'iv-one-compartment': {
       const params: IvOneCompartmentRouteParams = {
@@ -229,6 +325,7 @@ function buildParams(
         bioavailability: spec('bioavailability'),
       };
       if (opts.vdScaling) params.vdScaling = opts.vdScaling;
+      if (lag) params.absorptionLagHours = lag;
       return params;
     }
     case 'one-compartment-zero-order': {
@@ -240,6 +337,7 @@ function buildParams(
         bioavailability: spec('bioavailability'),
       };
       if (opts.vdScaling) params.vdScaling = opts.vdScaling;
+      if (lag) params.absorptionLagHours = lag;
       return params;
     }
     case 'one-compartment-mixed-order': {
@@ -253,6 +351,7 @@ function buildParams(
         bioavailability: spec('bioavailability'),
       };
       if (opts.vdScaling) params.vdScaling = opts.vdScaling;
+      if (lag) params.absorptionLagHours = lag;
       return params;
     }
     case 'michaelis-menten': {
@@ -264,6 +363,23 @@ function buildParams(
         kmMgPerL: spec('km'),
         eliminationHalfLifeHours: spec('eliminationHalfLife'),
         vdLitersPerKg: spec('vd'),
+        bioavailability: spec('bioavailability'),
+      };
+      if (opts.vdScaling) params.vdScaling = opts.vdScaling;
+      return params;
+    }
+    case 'two-compartment-first-order': {
+      // The engine's `vdLitersPerKg` here is the CENTRAL volume V1, so it is filled from the
+      // `centralVolume` role — never from the generic (steady-state/terminal) Vd, which would scale
+      // the whole curve by the tissue volume. The half-life is the TERMINAL one; the engine derives
+      // k10 from it and the two micro-constants.
+      const params: TwoCompartmentRouteParams = {
+        family: 'two-compartment-first-order',
+        kaPerHour: spec('ka'),
+        eliminationHalfLifeHours: spec('eliminationHalfLife'),
+        k12PerHour: spec('k12'),
+        k21PerHour: spec('k21'),
+        vdLitersPerKg: spec('centralVolume'),
         bioavailability: spec('bioavailability'),
       };
       if (opts.vdScaling) params.vdScaling = opts.vdScaling;

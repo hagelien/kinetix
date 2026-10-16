@@ -355,6 +355,57 @@ describe('ModelStructureSection', () => {
     );
   });
 
+  describe('stored route values (#83 — they drive the PK curve, so they must be visible)', () => {
+    const lag = () =>
+      entry({
+        id: 31,
+        parameter: 'absorptionLag',
+        categoricalValue: null,
+        low: 0.25,
+        high: 1,
+        median: 0.5,
+        unit: 'h',
+        route: 'oral',
+        sourceQuote: 'Absorption began after a lag of about 30 minutes.',
+        citation: { id: 5, identifier: 'doi:10.1000/lag', metadata: { title: 'A lag study' } } as never,
+      });
+
+    it('shows a reader each stored value with its route, citation and source quote', async () => {
+      store.push(lag());
+      render(<ModelStructureSection drugId={42} />);
+      const block = await screen.findByTestId('model-structure-route-values');
+      await waitFor(() => expect(block).toHaveTextContent('0.25–1 h'));
+      expect(block).toHaveTextContent('parameters.route.oral');
+      expect(screen.getByRole('link', { name: 'A lag study' })).toBeInTheDocument();
+      expect(block).toHaveTextContent('Absorption began after a lag of about 30 minutes.');
+      // A reader gets no edit controls.
+      expect(screen.queryByText('parameterEntries.editor.delete')).not.toBeInTheDocument();
+    });
+
+    it.each(['ka', 'firstOrderFraction', 'zeroOrderDuration', 'absorptionLag'])(
+      'lists a stored %s route value, not only an add button',
+      async (parameter) => {
+        store.push({ ...lag(), parameter, sourceQuote: null });
+        render(<ModelStructureSection drugId={42} />);
+        const block = await screen.findByTestId('model-structure-route-values');
+        await waitFor(() => expect(block).toHaveTextContent('parameters.route.oral'));
+      },
+    );
+
+    it('lets an editor edit and delete a stored value', async () => {
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+      store.push(lag());
+      render(<ModelStructureSection drugId={42} canEdit isAdmin />);
+      const remove = await screen.findByText('parameterEntries.editor.delete');
+      expect(screen.getByText('parameterEntries.editor.edit')).toBeInTheDocument();
+      fireEvent.click(remove);
+      await waitFor(() =>
+        expect(deleteParameterEntry).toHaveBeenCalledWith(31, { submitForReview: false }),
+      );
+      confirmSpy.mockRestore();
+    });
+  });
+
   it('does not delete when the confirm is declined', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     store.push(entry({ id: 13, categoricalValue: 'first-order', parameter: 'eliminationModel' }));
