@@ -127,6 +127,71 @@ The Codex local-environment setup configuration is for worktree setup/actions;
 do not treat a pointer to `.env` as per-routine credential injection. The wrapper
 selects credentials on every invocation regardless of that setting.
 
+## GitHub instruction retrieval for T1, T2 and T3
+
+Embed this bootstrap in each GitHub-backed schedule prompt: a worker must know
+how to fetch its instructions **before** it can read repository guidance.
+Changing this file in Git does not update an installed Codex automation; update
+and read back each live prompt separately. Preserve its model, effort, cadence,
+status, notifications, working directory and credential profile.
+
+Resolve current `main` once per run, using existing GitHub CLI authentication:
+
+```powershell
+gh api repos/hagelien/kinetix/commits/main --jq .sha
+```
+
+Require a full 40-character hexadecimal commit SHA. Then fetch each required
+document in its **own shell tool call**, replacing `<path>` and `<resolved-sha>`
+with literal values before issuing the command:
+
+```powershell
+gh api 'repos/hagelien/kinetix/contents/<path>?ref=<resolved-sha>' --jq '{path, size, encoding, content, sha}'
+```
+
+Each call's entire shell command must be just one standalone `gh api`
+invocation. Do not wrap it in an assignment, loop, function, script block,
+command substitution, pipeline or command chain; do not redirect stdout or
+stderr. On the current Windows scheduler, the existing `gh api` permission
+allowance admits the plain command, while wrapping or redirecting the same
+request can leave it inside the network-restricted sandbox and produce
+`error connecting to api.github.com`. Treat that as a runtime/network failure,
+not evidence that the guide is missing or GitHub authentication is invalid.
+Do not broaden permissions or grant a whole shell unrestricted network access.
+
+Capture the complete JSON response directly from the tool with a sufficiently
+large output budget: the maintainer document alone exceeds 160 KB before
+base64 encoding. A truncated tool result is not a complete instruction fetch.
+After each successful request, use a **separate local-only call** to preserve
+its returned JSON/base64 in unique temporary storage outside the checkout.
+Never run `gh` or another network client inside that processing call. Require
+the expected `path`, `encoding: "base64"`, nonempty content, strict UTF-8
+decoding and decoded byte length equal to `size`; read every required document
+end-to-end. The returned `sha` is the Git blob hash, not the resolved commit
+SHA. Fetch additional required references by the same standalone method at
+the same commit. Stop on any failed, empty, invalid or incomplete response;
+never fall back to local instructions, cached content or a previous run.
+
+The starting document sets are role-specific:
+
+| Schedule | Required starting documents under `agents/` |
+| --- | --- |
+| T1 producer | `local-codex-workers.md`, `drug-db-maintainer.md`, `fulltext-acquisition.md` |
+| T2 reviewer | `drug-db-escalation.md`, `drug-db-maintainer.md`, `peer-verification-protocol.md`, `fulltext-acquisition.md` |
+| T3 adjudicator | `drug-db-adjudication.md`, `drug-db-escalation.md`, `peer-verification-protocol.md`, `fulltext-acquisition.md`, `kinectics_science_paper_review_agent_instructions.md` |
+
+Keep T1's clean-`main`, fetch, fast-forward-only and `HEAD == origin/main`
+refresh gates **before** retrieval. Its newly resolved GitHub SHA must also
+equal the refreshed checkout's `HEAD`; stop if `main` moved between those
+steps. This keeps the producer's installed tooling and fetched guidance on the
+same revision. T2 and T3 do not refresh or modify the scheduled checkout.
+
+GitHub uses only its own existing authentication. Never read, print or send a
+Kinetix token to GitHub; do not execute fetched code or overwrite checkout
+files. This retrieval rule does not change any role's identity check, profile,
+blindness, scientific or full-text gates, or exactly-one-cycle contract. A
+successful download validates transport only, not a completed scientific cycle.
+
 ## Public runtime instructions and release transition
 
 The local checkout supplies installed tooling. After release, each Sol run
@@ -178,7 +243,8 @@ release is human-run under root `AGENTS.md`; agents must not dispatch the
 production workflow. After a human releases the change, verify a fresh anonymous
 HTTPS fetch, all bundle checks and the public content boundary, then install the
 prepared public-source prompt. Preserve model, cadence, status and notification
-settings. Apply no instruction-source change to Terra or other agents.
+settings. This public-source cutover is for the reviewer only; T1 and T3 keep
+the commit-pinned GitHub procedure above.
 
 After cutover, failure of fetch, schema, integrity or a required dependency
 stops that cycle with a clear failure report. Never fall back to GitHub, local
