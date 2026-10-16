@@ -13,7 +13,7 @@
  * human disputes, and the trigger for notifications.
  */
 
-import { and, asc, desc, eq, inArray, isNull, lte, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm';
 import { getDb, inTransaction } from './db.js';
 import {
   agentVerdictReconsiderations,
@@ -403,12 +403,22 @@ export async function listOpenDisputes(args: {
   targetId?: number;
   limit: number;
   offset?: number;
+  /** Agents cannot pre-read another agent's private pending-edit verdict mirror. */
+  callerAgentUserId?: number;
 }): Promise<DisputeFeedItem[]> {
   const db = getDb();
   const clauses = [eq(disputes.status, args.status ?? 'open')];
   if (args.targetType) clauses.push(eq(disputes.targetType, args.targetType));
   if (args.targetId !== undefined) {
     clauses.push(eq(disputes.targetId, args.targetId));
+  }
+  if (args.callerAgentUserId !== undefined) {
+    // Before LIMIT/OFFSET: hidden mirrors must not consume an agent's page.
+    clauses.push(or(
+      ne(disputes.targetType, 'pending_edit'),
+      ne(disputes.source, 'agent'),
+      eq(disputes.createdBy, args.callerAgentUserId),
+    )!);
   }
   const where = clauses.length === 1 ? clauses[0] : and(...clauses);
   const rows = await db

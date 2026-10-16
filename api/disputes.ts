@@ -203,6 +203,7 @@ async function handleGet(
     targetId,
     limit,
     offset,
+    callerAgentUserId: agent ? auth.userId : undefined,
   });
   json(res, 200, { disputes: feed }, { headers: noStoreHeaders() });
 }
@@ -224,11 +225,14 @@ async function handleGetById(
     return;
   }
   const row = await getDisputeById(id);
+  const agent = row ? await resolveActiveAgent(auth.userId) : null;
+  const hiddenPeerMirror = Boolean(agent) && row?.targetType === 'pending_edit' &&
+    row.source === 'agent' && row.createdBy !== auth.userId;
   let allowed = false;
-  if (row) {
+  if (row && !hiddenPeerMirror) {
     allowed =
       row.createdBy === auth.userId ||
-      Boolean(await resolveActiveAgent(auth.userId)) ||
+      Boolean(agent) ||
       (await callerCan(auth.role, CAP['dispute.queue.read'])) ||
       (await targetAuthorUserId({
         targetType: row.targetType,
