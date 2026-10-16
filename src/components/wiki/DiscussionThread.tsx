@@ -8,6 +8,7 @@ import {
   type DrugDiscussionDTO,
 } from '@/lib/drugApi';
 import type { DrugParameterId } from '@/lib/drugParameters';
+import type { DrugBlockId } from '@/lib/drugBlocks';
 import type {
   DiscussionHost,
   FactDiscussionTargetKey,
@@ -19,7 +20,7 @@ interface DiscussionThreadProps {
   /** Drug monograph (`{ drugId }`) or topic page (`{ wikiPageId }`). */
   host: DiscussionHost;
   /** null => monograph-wide thread. */
-  parameter: DrugParameterId | FactDiscussionTargetKey | null;
+  parameter: DrugParameterId | DrugBlockId | FactDiscussionTargetKey | null;
   /** Optional heading rendered above the thread. */
   heading?: string;
   /** Comment to scroll to and highlight (a notification's deep link). */

@@ -227,6 +227,17 @@ export function assembleRouteParams(
   if (missing.length > 0 || unusableOptional.length > 0) {
     return { outcome: 'incomplete', family, missing: [...missing, ...unusableOptional] };
   }
+  // A contradiction must survive an unsupported lag so the read adapter cannot choose a fallback.
+  if (
+    family === 'two-compartment-first-order' &&
+    !twoCompartmentCoherent(values.k21!, values.eliminationHalfLife!)
+  ) {
+    return {
+      outcome: 'unsupported',
+      contradiction: true,
+      reason: `the two-compartment rates contradict the terminal half-life: k21 (${values.k21} /h) must exceed the terminal rate ln2/t½ (${(Math.LN2 / values.eliminationHalfLife!).toPrecision(4)} /h)`,
+    };
+  }
   // A lag the family has no place for is refused, not dropped: the engine routes of the
   // two-compartment, saturable and IV families carry no lag, and a curve that ignores a cited lag
   // puts the peak too early. A cited lag of exactly zero with no spread IS "no lag", so it is the
@@ -240,17 +251,6 @@ export function assembleRouteParams(
       reason: `the ${family} family does not model an absorption lag, so the stored lag cannot be run`,
     };
   }
-  if (
-    family === 'two-compartment-first-order' &&
-    !twoCompartmentCoherent(values.k21!, values.eliminationHalfLife!)
-  ) {
-    return {
-      outcome: 'unsupported',
-      contradiction: true,
-      reason: `the two-compartment rates contradict the terminal half-life: k21 (${values.k21} /h) must exceed the terminal rate ln2/t½ (${(Math.LN2 / values.eliminationHalfLife!).toPrecision(4)} /h)`,
-    };
-  }
-
   return { outcome: 'assembled', family, params: buildParams(family, derived, values, opts) };
 }
 

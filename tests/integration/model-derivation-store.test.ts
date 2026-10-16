@@ -1839,6 +1839,8 @@ describe('#83 — structural parameters reach the assembled model', () => {
     // ln2 / 10 h = 0.069 /h: a k21 below it has no two-compartment model with that terminal phase.
     await setDrugLevelParameter(drugId, userId, 'k21', { median: 0.05, unit: '1/h' });
     await setDrugLevelParameter(drugId, userId, 'centralVolume', { median: 0.2, unit: 'L/kg' });
+    // An unsupported lag must not hide the rate contradiction and enable a simpler curve.
+    await insertNumeric(drugId, userId, 'absorptionLag', 'oral', { median: 0.5, unit: 'h' });
 
     const [oralInput] = await readDrugRouteAssemblyInputs(drugId);
     expect(oralInput!.simplifiedFrom).toBeUndefined();
@@ -1847,6 +1849,27 @@ describe('#83 — structural parameters reach the assembled model', () => {
     expect(assembly.routeOutcomes).toEqual([
       expect.objectContaining({ route: 'oral', outcome: 'unsupported', reason: expect.stringMatching(/k21/) }),
     ]);
+  });
+
+  it('uses the lag-capable fallback when a zero lag median has a positive spread', async () => {
+    const drugId = await seedDrug(db);
+    const userId = await seedUser(db);
+    await seedTwoCompartmentDrug(drugId, userId);
+    await setDrugLevelParameter(drugId, userId, 'k12', { median: 0.5, unit: '1/h' });
+    await setDrugLevelParameter(drugId, userId, 'k21', { median: 0.3, unit: '1/h' });
+    await setDrugLevelParameter(drugId, userId, 'centralVolume', { median: 0.2, unit: 'L/kg' });
+    await insertNumeric(drugId, userId, 'absorptionLag', 'oral', {
+      low: 0, median: 0, high: 0.5, unit: 'h',
+    });
+
+    const [oralInput] = await readDrugRouteAssemblyInputs(drugId);
+    expect(oralInput!.simplifiedFrom).toEqual({ disposition: 'two-compartment' });
+    const assembly = await readDrugModelDefinition(drugId);
+    if (assembly.outcome !== 'assembled') throw new Error('expected assembled');
+    const oral = assembly.definition.routes.oral!;
+    expect(oral.family).toBe('one-compartment-first-order');
+    if (oral.family !== 'one-compartment-first-order') throw new Error('expected fallback');
+    expect(oral.absorptionLagHours).toMatchObject({ kind: 'triangular', min: 0, mode: 0, max: 0.5 });
   });
 
   it('draws a declared mixed route from its own fraction, duration and lag, each with its source', async () => {

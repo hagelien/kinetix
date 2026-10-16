@@ -912,7 +912,10 @@ export async function readDrugRouteAssemblyInputs(
     // A declared form whose OWN values contradict each other (two-compartment rates that cannot
     // produce the stored terminal half-life) is a curation finding, not a gap: it stays reported as
     // it is rather than being papered over with the simpler curve.
-    const declaredAssembly = assembleRouteParams(declared.derived, declared.values, { vdScaling });
+    const declaredAssembly = assembleRouteParams(declared.derived, declared.values, {
+      vdScaling,
+      ranges: declared.ranges,
+    });
     if (
       declaredAssembly.outcome === 'assembled' ||
       (declaredAssembly.outcome === 'unsupported' && declaredAssembly.contradiction)
@@ -927,7 +930,10 @@ export async function readDrugRouteAssemblyInputs(
     // Prefer the simplified form unless it cannot be assembled at all, so a drug keeps the curve it
     // had before its richer disposition was cited. The simplification is recorded below and graded
     // against completeness; the declared route's own gap (k12, k21, V1) is what closes it.
-    if (assembleRouteParams(simplified.derived, simplified.values, { vdScaling }).outcome === 'unsupported') {
+    if (assembleRouteParams(simplified.derived, simplified.values, {
+      vdScaling,
+      ranges: simplified.ranges,
+    }).outcome === 'unsupported') {
       return declared;
     }
     return { ...simplified, simplifiedFrom: { disposition: derived.structure.disposition } };

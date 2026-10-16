@@ -16,7 +16,7 @@ import {
   isComponentRunnable,
   getRunBlockReasonKey,
 } from '@/lib/modelingRun';
-import { isResultStale } from '@/lib/resultStaleness';
+import { useResultGrades, useStaleResultIds } from '@/lib/useResultStatus';
 import type {
   DrugSimConfig,
   DrugSimResult,
@@ -41,11 +41,9 @@ import {
   scenarioFromLocationHash,
 } from '@/lib/modelingMigration';
 import { buildSimulatorReferenceRangeFromParameters } from '@/lib/referenceConcentrationsOverlay';
-import { gradeResult, type ResultGrade } from '@/lib/reviewedModelGrade';
 import { useAuthStore } from '@/stores/authStore';
 import {
   acknowledgementKey,
-  hasAcknowledgement,
   useModelAcknowledgementStore,
 } from '@/stores/modelAcknowledgementStore';
 import {
@@ -518,22 +516,14 @@ export function SimulatorPage() {
   );
 
   // Evidence grade + rendering disposition per result, for this viewer and this
-  // display matrix (the matrix bridge is a property of the VIEW, so the grade is
-  // recomputed when the user changes matrix rather than cached with the run).
-  const resultGrades = useMemo<Record<string, ResultGrade | null>>(() => {
-    const out: Record<string, ResultGrade | null> = {};
-    for (const d of drugs) {
-      const modelId = displayResults[d.id]?.assumptions.modelId;
-      out[d.id] = gradeResult(displayResults[d.id], {
-        role: userRole,
-        displayMatrix,
-        isAcknowledged: (version) =>
-          modelId !== undefined &&
-          hasAcknowledgement(acknowledgements, modelId, version, userId),
-      });
-    }
-    return out;
-  }, [drugs, displayResults, userRole, displayMatrix, acknowledgements, userId]);
+  // display matrix — regraded when a live derived model changes underneath a
+  // result (`useResultGrades`).
+  const resultGrades = useResultGrades(drugs, displayResults, {
+    role: userRole,
+    displayMatrix,
+    acknowledgements,
+    userId,
+  });
 
   // Record a reviewer's acknowledgement for the model behind one result. Keyed by
   // the run's own `modelId` rather than by analyte, matching how `gradeResult`
@@ -629,13 +619,10 @@ export function SimulatorPage() {
     [updateDrugConfig],
   );
 
-  // Results whose component inputs changed since they were computed. The chart
-  // dims these curves and the summary badges them "out of date" until re-run.
-  const staleIds = useMemo(() => {
-    return new Set(
-      drugs.filter((d) => isResultStale(d, results[d.id])).map((d) => d.id),
-    );
-  }, [drugs, results]);
+  // Results whose component inputs changed since they were computed, or whose
+  // derived model a live refresh has since replaced. The chart dims these curves
+  // and the summary badges them "out of date" until re-run.
+  const staleIds = useStaleResultIds(drugs, results);
 
   const referenceRanges = useMemo(() => {
     const out: Record<string, ReferenceRange> = {};

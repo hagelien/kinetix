@@ -7,6 +7,7 @@ import {
   drugEnzymeInteractions,
   drugMetabolismProfiles,
   drugMetabolites,
+  drugBlockRevisions,
   drugParameterApplicability,
   drugParameterRevisions,
   drugParameters,
@@ -17,6 +18,9 @@ import {
   pendingEdits,
 } from '../../db/schema.js';
 import { parseResearchOutput } from '../../src/lib/deepResearchImport.js';
+import { getDb } from '../../api/_lib/db.js';
+import { getDrugMetabolism } from '../../api/_lib/metabolismStore.js';
+import { metabolismBlockSnapshot } from '../../api/_lib/drugBlockRevisions.js';
 import { runImport } from '../../api/_lib/researchImportStore.js';
 import {
   getIonizationConstantsForDrug,
@@ -33,6 +37,7 @@ import {
   type IntegrationDb,
 } from './setup/harness.js';
 import { seedDrug, seedUser } from './setup/seed.js';
+import { failBlockRevisionInserts } from './setup/block-history.js';
 
 let db: IntegrationDb;
 let userId: number;
@@ -156,6 +161,87 @@ function parse(doc: unknown) {
 }
 
 describe('deep-research importer — full DB path (PGlite)', () => {
+  // #37: the importer writes the mechanisms and the metabolism box directly,
+  // so it is recorded in the block history like any other write to them —
+  // once: an idempotent re-run changes nothing and records nothing.
+  // Codex review on #303: the import's block writes and their revision rows
+  // are one transaction — a failed history insert leaves no mechanisms or
+  // metabolism behind.
+  it('writes no block when its history cannot be recorded', async () => {
+    await failBlockRevisionInserts(async () => {
+      await expect(
+        runImport(db, parse(DOC), { userId, overwrite: false }),
+      ).rejects.toThrow();
+    });
+    const [drug] = await db.select({ id: drugs.id }).from(drugs).where(eq(drugs.pubchemCid, 446220));
+    if (drug) {
+      expect(
+        await db.select().from(drugReceptorTargets).where(eq(drugReceptorTargets.drugId, drug.id)),
+      ).toEqual([]);
+      expect(
+        await db.select().from(drugEliminationRoutes).where(eq(drugEliminationRoutes.drugId, drug.id)),
+      ).toEqual([]);
+      expect(
+        await db.select().from(drugBlockRevisions).where(eq(drugBlockRevisions.drugId, drug.id)),
+      ).toEqual([]);
+    }
+  });
+
+  it('records the blocks it writes in the block history', async () => {
+    const first = await runImport(db, parse(DOC), { userId, overwrite: false });
+    const rows = await db
+      .select({
+        block: drugBlockRevisions.block,
+        createdBy: drugBlockRevisions.createdBy,
+        newValue: drugBlockRevisions.newValue,
+      })
+      .from(drugBlockRevisions)
+      .where(eq(drugBlockRevisions.drugId, first.drugId));
+    expect(rows.map((r) => r.block).sort()).toEqual(['metabolism', 'pharmacodynamics']);
+    expect(rows.every((r) => r.createdBy === userId)).toBe(true);
+    const metabolism = rows.find((r) => r.block === 'metabolism')!.newValue as {
+      referenceIds: number[];
+      routes: unknown[];
+    };
+    expect(metabolism.routes).toHaveLength(2);
+    expect(metabolism.referenceIds).toHaveLength(1);
+
+    await runImport(db, parse(DOC), { userId, overwrite: false });
+    const after = await db
+      .select({ id: drugBlockRevisions.id })
+      .from(drugBlockRevisions)
+      .where(eq(drugBlockRevisions.drugId, first.drugId));
+    expect(after).toHaveLength(2);
+  });
+
+
+  it.each(['Benzoylecgonine', 'BE'])('snapshots an existing newly linked metabolite before importing %s', async (name) => {
+    const childId = await seedDrug(db, {
+      slug: 'benzoylecgonine', names: { en: 'Benzoylecgonine', nb: 'Benzoylecgonin' },
+      aliases: ['BE'], searchKey: 'benzoylecgonine\tbenzoylecgonin\tbe',
+    });
+    // Legacy live content, with no revision to fall back to.
+    await db.insert(drugMetabolismProfiles).values({ drugId: childId, evidenceNote: 'Eksisterende metabolisme.' });
+    await db.insert(drugEliminationRoutes).values({ drugId: childId, kind: 'renal_unchanged', fraction: '0.7' });
+    const before = metabolismBlockSnapshot(await getDrugMetabolism(getDb(), childId));
+    expect(await db.select().from(drugBlockRevisions)).toEqual([]);
+    const doc = structuredClone(DOC);
+    doc.metabolism.metabolites[0]!.metaboliteName = name;
+    const result = await runImport(db, parse(doc), { userId, overwrite: false });
+    const revisions = await db.select().from(drugBlockRevisions).where(eq(drugBlockRevisions.drugId, childId));
+    expect(revisions).toHaveLength(1);
+    expect(revisions[0]!.block).toBe('metabolism');
+    expect(revisions[0]!.oldValue).toEqual(before);
+    expect(revisions[0]!.newValue).toEqual(metabolismBlockSnapshot(await getDrugMetabolism(getDb(), childId)));
+    const after = revisions[0]!.newValue as { evidenceNote: string; routes: unknown[]; precursors: Array<{ drug: { id: number } }> };
+    expect(after.evidenceNote).toBe('Eksisterende metabolisme.');
+    expect(after.routes).toHaveLength(1);
+    expect(after.precursors).toHaveLength(1);
+    expect(after.precursors[0]!.drug.id).toBe(result.drugId);
+    await runImport(db, parse(doc), { userId, overwrite: false });
+    expect(await db.select().from(drugBlockRevisions).where(eq(drugBlockRevisions.drugId, childId))).toHaveLength(1);
+  });
+
   it('seeds a new drug with parameters, citations, revisions, PD targets and metabolism', async () => {
     const stats = await runImport(db, parse(DOC), { userId, overwrite: false });
 

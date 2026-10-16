@@ -1,16 +1,26 @@
 /**
  * Drug parameter revision history.
  *   GET ?drugId=&parameter=[&revision=]
+ *   GET ?drugId=&block=   — a whole block's history (metabolism,
+ *                           pharmacodynamics, modelStructure; #37)
  *
  * The newest 100 revisions. `revision` names one more to include even when it
  * is older than that — a notification links to the exact revision it is
  * about, and the dialog must be able to show it.
  */
-import { desc, eq, and, sql } from 'drizzle-orm';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import { desc, eq, and, inArray, sql } from 'drizzle-orm';
 import { json, error, withErrorHandling } from './_lib/response.js';
 import { getDb } from './_lib/db.js';
-import { drugParameterRevisions, users, agents } from '../db/schema.js';
+import {
+  drugBlockRevisions,
+  drugParameterRevisions,
+  pendingEdits,
+  users,
+  agents,
+} from '../db/schema.js';
 import { isDrugParameterId } from './_lib/drugParameterIds.js';
+import { isDrugBlockId, type DrugBlockId } from '../src/lib/drugBlocks.js';
 import { getUserFromRequest } from './_lib/auth.js';
 import { summariseApprovalsForTargets } from './_lib/approvals.js';
 import {
@@ -37,6 +47,14 @@ export default withErrorHandling(async function handler(req, res): Promise<void>
   if (!drugId || Number.isNaN(drugId)) {
     error(res, 400, 'Missing or invalid drugId');
     return;
+  }
+  const block = url.searchParams.get('block');
+  if (block !== null) {
+    if (parameter !== null || !isDrugBlockId(block)) {
+      error(res, 400, 'Missing or invalid block');
+      return;
+    }
+    return handleBlockHistory(req, res, drugId, block);
   }
   if (!parameter || !isDrugParameterId(parameter)) {
     error(res, 400, 'Missing or invalid parameter');
@@ -145,24 +163,6 @@ export default withErrorHandling(async function handler(req, res): Promise<void>
           .filter((id): id is number => id != null),
       ),
     ];
-    const visiblePendingEditIds =
-      pendingEditIds.length > 0
-        ? await visibleVerificationTargetIds({
-            targetType: 'pending_edit',
-            targetIds: pendingEditIds,
-            callerUserId: auth?.userId ?? null,
-            callerRole: auth?.role ?? null,
-            callerAgentId: callerAgent?.id ?? null,
-            callerSelfReviews: callerAgent?.selfReviewEnabled,
-            // An agent that cast an explicit verdict on the pending edit
-            // behind a revision keeps read access to it after the edit is
-            // decided — the open-queue rule alone only covers a still-pending
-            // target, so without this the agent that argued the debate could
-            // not revisit its own rationale once the edit resolved (review
-            // finding on #1361).
-            includeCallerVerdicts: true,
-          })
-        : [];
     const [approvalsMap, reviewVerdictsMap, disputesMap, pendingEditVerdictsMap] =
       await Promise.all([
         summariseApprovalsForTargets({
@@ -178,12 +178,7 @@ export default withErrorHandling(async function handler(req, res): Promise<void>
           targetType: 'drug_parameter_revision',
           targetIds: revisionIds,
         }),
-        visiblePendingEditIds.length > 0
-          ? summariseVerificationsForTargets({
-              targetType: 'pending_edit',
-              targetIds: visiblePendingEditIds,
-            })
-          : Promise.resolve(new Map()),
+        pendingEditVerdictSummaries(pendingEditIds, auth, callerAgent),
       ]);
     const enriched = rows.map((r) => ({
       ...r,
@@ -211,3 +206,108 @@ export default withErrorHandling(async function handler(req, res): Promise<void>
     error(res, 500, 'Failed to fetch parameter history');
   }
 });
+
+/** The same pending-edit verdict visibility for parameter and block history. */
+async function pendingEditVerdictSummaries(
+  pendingEditIds: number[],
+  auth: Awaited<ReturnType<typeof getUserFromRequest>>,
+  callerAgent: Awaited<ReturnType<typeof resolveActiveAgent>>,
+) {
+  const visibleIds = pendingEditIds.length > 0
+    ? await visibleVerificationTargetIds({
+        targetType: 'pending_edit',
+        targetIds: pendingEditIds,
+        callerUserId: auth?.userId ?? null,
+        callerRole: auth?.role ?? null,
+        callerAgentId: callerAgent?.id ?? null,
+        callerSelfReviews: callerAgent?.selfReviewEnabled,
+        // A verifier can revisit its own debate after the edit is decided.
+        includeCallerVerdicts: true,
+      })
+    : [];
+  return visibleIds.length > 0
+    ? summariseVerificationsForTargets({ targetType: 'pending_edit', targetIds: visibleIds })
+    : new Map();
+}
+
+/**
+ * A block's revisions with public publication provenance from its approved
+ * pending edit. Private verdict summaries use exactly the parameter-history
+ * visibility above; block revisions have no independent review target type.
+ */
+async function handleBlockHistory(
+  req: IncomingMessage,
+  res: ServerResponse,
+  drugId: number,
+  block: DrugBlockId,
+): Promise<void> {
+  try {
+    const db = getDb();
+    const [revisions, auth] = await Promise.all([
+      db
+        .select({
+          id: drugBlockRevisions.id,
+          editSummary: drugBlockRevisions.editSummary,
+          oldValue: drugBlockRevisions.oldValue,
+          newValue: drugBlockRevisions.newValue,
+          pendingEditId: drugBlockRevisions.pendingEditId,
+          createdAt: drugBlockRevisions.createdAt,
+          author: {
+            id: users.id,
+            username: users.username,
+            displayName: users.displayName,
+            role: users.role,
+            isAgent: sql<boolean>`${agents.id} is not null`,
+          },
+        })
+        .from(drugBlockRevisions)
+        .leftJoin(users, eq(drugBlockRevisions.createdBy, users.id))
+        .leftJoin(agents, eq(agents.userId, users.id))
+        .where(
+          and(
+            eq(drugBlockRevisions.drugId, drugId),
+            eq(drugBlockRevisions.block, block),
+          ),
+        )
+        .orderBy(desc(drugBlockRevisions.createdAt), desc(drugBlockRevisions.id))
+        .limit(100),
+      getUserFromRequest(req),
+    ]);
+    const pendingIds = [...new Set(revisions.flatMap((r) => r.pendingEditId == null ? [] : [r.pendingEditId]))];
+    const callerAgent = auth ? await resolveActiveAgent(auth.userId) : null;
+    const [decisions, verdicts] = await Promise.all([
+      pendingIds.length > 0
+        ? db.select({
+            id: pendingEdits.id,
+            reviewedAt: pendingEdits.reviewedAt,
+            reviewer: {
+              id: users.id,
+              username: users.username,
+              displayName: users.displayName,
+              role: users.role,
+              isAgent: sql<boolean>`${agents.id} is not null`,
+            },
+          })
+          .from(pendingEdits)
+          .leftJoin(users, eq(pendingEdits.reviewedBy, users.id))
+          .leftJoin(agents, eq(agents.userId, users.id))
+          .where(and(inArray(pendingEdits.id, pendingIds), eq(pendingEdits.status, 'approved')))
+        : Promise.resolve([]),
+      pendingEditVerdictSummaries(pendingIds, auth, callerAgent),
+    ]);
+    const decisionById = new Map(decisions.map((d) => [d.id, {
+      reviewedAt: d.reviewedAt,
+      reviewer: d.reviewer?.id == null ? null : d.reviewer,
+    }]));
+    json(res, 200, {
+      revisions: revisions.map((r) => ({
+        ...r,
+        author: r.author?.id == null ? null : r.author,
+        reviewDecision: r.pendingEditId == null ? undefined : decisionById.get(r.pendingEditId),
+        verifications: r.pendingEditId == null ? undefined : verdicts.get(r.pendingEditId),
+      })),
+    });
+  } catch {
+    error(res, 500, 'Failed to fetch block history');
+  }
+}

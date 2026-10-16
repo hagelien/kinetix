@@ -3070,6 +3070,7 @@
     "metabolismActive": "aktiv",
     "metabolismInactive": "inaktiv",
     "metabolismUnknownActivity": "aktivitet ukjent",
+    "metabolismSourcesOnly": "kilder",
     "metabolismCreateMonograph": "Opprett en monografi for {{name}}",
     "metabolismEdit": "Rediger metabolisme",
     "metabolismAdd": "Legg til metabolismedata",
@@ -3354,6 +3355,7 @@
     "unknownConcentrationUnit": "Én av de valgte enhetene gjenkjennes ikke. Velg fra listen og prøv igjen.",
     "invalidEnabledUnits": "Velg minst én konsentrasjonsenhet.",
     "primaryUnitNotSupported": "Primærenheten må være en per-liter-enhet. Per-desiliter-enheter er fortsatt tillatt som alternativer i tipsene og konverteren.",
+    "blockReferenceMissing": "En eller flere siterte referanser finnes ikke lenger. Last inn de nyeste dataene på nytt og prøv igjen.",
     "pubchemCidShadowsDrugId": "Denne PubChem-CID-en er lik den interne id-en til et annet legemiddel. Lagrede simulator-caser finner det legemidlet via dette nummeret og ville lastet feil stoff. CID-en kan ikke brukes før dette er løst."
   },
   "topicSections": {
@@ -4087,6 +4089,18 @@
   "pubchemSearch": {
     "searching": "Søker i PubChem …",
     "noResults": "Ingen forbindelser funnet i PubChem"
+  },
+  "drugBlocks": {
+    "metabolism": "Metabolisme",
+    "pharmacodynamics": "Farmakodynamikk",
+    "modelStructure": "Modellstruktur"
+  },
+  "blockHistory": {
+    "reviewerNotRecorded": "Godkjenner er ikke registrert",
+    "noRevisions": "Ingen endringer er registrert for denne delen ennå. Historikken føres fra den første endringen etter at den ble innført.",
+    "scriptAuthor": "Import eller driftsskript",
+    "notRecorded": "Ikke registrert",
+    "empty": "(tom)"
   },
   "paramHistory": {
     "title": "Historikk",

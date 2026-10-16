@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
+  existsSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -14,6 +15,13 @@ import path from "node:path";
 // Drives scripts/agent-credit-burst.sh against a stub `claude` that either
 // succeeds, reports an API error, or dies without printing its result JSON.
 const script = path.resolve(__dirname, "../scripts/agent-credit-burst.sh");
+const gitBin = path.join(
+  process.env.ProgramFiles ?? "C:/Program Files", "Git", "bin",
+);
+const bash =
+  process.platform === "win32" && existsSync(path.join(gitBin, "bash.exe"))
+    ? path.join(gitBin, "bash.exe")
+    : "bash";
 let dir: string;
 
 beforeAll(() => {
@@ -42,10 +50,14 @@ function run(mode: string, budget: number) {
   const summary = path.join(dir, `${mode}.md`);
   writeFileSync(log, "");
   writeFileSync(summary, "");
-  const result = spawnSync("bash", [script], {
+  const result = spawnSync(bash, [script.replaceAll("\\", "/")], {
     encoding: "utf8",
     env: {
-      PATH: `${dir}:${process.env.PATH}`,
+      PATH: [
+        dir,
+        process.env.PATH ?? process.env.Path,
+        ...(process.platform === "win32" ? [path.join(gitBin, "../usr/bin")] : []),
+      ].join(path.delimiter),
       STUB_MODE: mode,
       STUB_LOG: log,
       GITHUB_STEP_SUMMARY: summary,

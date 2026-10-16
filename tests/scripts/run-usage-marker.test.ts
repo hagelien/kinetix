@@ -57,7 +57,7 @@ describe('safeSessionId', () => {
     expect(safeSessionId('..')).toBeNull();
     expect(safeSessionId('  ')).toBeNull();
     expect(safeSessionId(42)).toBeNull();
-    expect(path.dirname(markerPath('../../x', { KINETIX_RUN_USAGE_MARKER_DIR: '/m' })!)).toBe('/m');
+    expect(path.dirname(markerPath('../../x', { KINETIX_RUN_USAGE_MARKER_DIR: '/m' })!)).toBe(path.normalize('/m'));
   });
 });
 

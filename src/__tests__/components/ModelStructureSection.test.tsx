@@ -102,6 +102,39 @@ describe('ModelStructureSection', () => {
     );
   });
 
+  // #37: the model structure is one block per drug — its history/discussion
+  // actions sit by the heading, and its citations read like parameter values'.
+  it('shows the block actions by the heading and cites through the value', async () => {
+    store.push(entry({ id: 10, categoricalValue: 'two-compartment', citationId: 7 }));
+    render(
+      <ModelStructureSection
+        drugId={42}
+        actions={<button type="button">block-actions</button>}
+        withReferences={(citationId, children) => (
+          <span data-testid={`cited-${citationId}`}>{children}</span>
+        )}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByText('two-compartment')).toBeInTheDocument(),
+    );
+    expect(screen.getByRole('button', { name: 'block-actions' })).toBeInTheDocument();
+    // The value itself is the citation trigger; no separate #id link.
+    expect(screen.getByTestId('cited-7')).toHaveTextContent('two-compartment');
+    expect(screen.queryByText('#7')).toBeNull();
+  });
+
+  it('falls back to the #id link while a citation is not in the shared ordering', async () => {
+    store.push(entry({ id: 10, categoricalValue: 'two-compartment', citationId: 7 }));
+    render(<ModelStructureSection drugId={42} withReferences={() => null} />);
+    await waitFor(() =>
+      expect(screen.getByText('#7').closest('a')).toHaveAttribute(
+        'href',
+        '/references/7',
+      ),
+    );
+  });
+
   // A model-structure axis is entry-backed, so it drives calculations and is
   // high-risk for auto-apply exactly like a numeric parameter. A quote that is
   // required to publish a declaration but invisible once published is

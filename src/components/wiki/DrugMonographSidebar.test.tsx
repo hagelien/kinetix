@@ -823,6 +823,166 @@ describe('DrugMonographSidebar', () => {
     expect(screen.getByText(/renal/i).closest('a')).toBeNull();
   });
 
+  // #37: metabolism, mechanisms and the model structure carry the same
+  // revision-history and discussion actions a parameter row does, for the
+  // whole block, and for every reader — not only for editors.
+  const METABOLISM_WITH_CITED_ROUTE = () => ({
+    routes: [
+      {
+        id: 1,
+        kind: 'renal_unchanged',
+        enzymeId: null,
+        enzyme: null,
+        label: null,
+        fraction: { min: null, median: 0.2, max: null },
+        note: null,
+        referenceIds: [3],
+        sortOrder: 0,
+      },
+    ],
+    evidenceNote: null,
+    metabolites: [
+      {
+        id: 4,
+        parentDrugId: 1,
+        metaboliteDrugId: null,
+        metaboliteName: 'NAPQI',
+        conversionFraction: null,
+        activity: 'active',
+        sortOrder: 0,
+        evidenceNote: null,
+        referenceIds: [3],
+        drug: null,
+      },
+    ],
+    precursors: [],
+  });
+
+  it('gives the metabolism block history and discussion actions for every reader', async () => {
+    mockDrugState.metabolism = METABOLISM_WITH_CITED_ROUTE();
+    setUser([], 'authenticated');
+    renderSidebar(undefined, 'metabolism');
+
+    expect(screen.getByTestId('block-history-metabolism')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('block-discussion-metabolism'));
+    expect(
+      await screen.findByRole('dialog', { name: /^metabolism — discussion$/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('opens the whole-block history dialog for the mechanisms', async () => {
+    mockDrugState.receptorTargets = [
+      {
+        id: 12,
+        drugId: 1,
+        receptorTargetId: 7,
+        interactionType: 'antagonist',
+        tier: 'primary',
+        affinity: null,
+        potency: null,
+        efficacy: null,
+        ki: null,
+        ic50: null,
+        ec50: null,
+        emax: null,
+        selectivityRatio: null,
+        referenceIds: [],
+        evidenceNote: null,
+        target: {
+          id: 7,
+          slug: 'sert',
+          symbol: 'SERT',
+          name: 'Serotonin transporter',
+          nameEn: 'Serotonin transporter',
+          targetClass: 'transporter',
+          organism: 'Homo sapiens',
+        },
+      },
+    ];
+    setUser([], 'authenticated');
+    renderSidebar(undefined, 'pharmacodynamics');
+
+    expect(screen.getByTestId('block-discussion-pharmacodynamics')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('block-history-pharmacodynamics'));
+    expect(
+      await screen.findByRole('dialog', { name: /^pharmacodynamics — history$/i }),
+    ).toBeInTheDocument();
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      '/api/drug-parameter-history?drugId=1&block=pharmacodynamics',
+      undefined,
+    );
+  });
+
+  it('opens a block discussion a notification link points at', async () => {
+    mockDrugState.metabolism = METABOLISM_WITH_CITED_ROUTE();
+    setUser([], 'authenticated');
+    render(
+      <MemoryRouter initialEntries={['/wiki/x?param=metabolism&view=discussion&comment=5']}>
+        <DrugMonographSidebar drugCid={mockDrugState.pubchemCid} section="metabolism" />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByRole('dialog', { name: /^metabolism — discussion$/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('cites metabolism routes and metabolites through their text, like parameter values', async () => {
+    vi.mocked(fetchDrugReferences).mockResolvedValue([
+      {
+        id: 3,
+        drugId: 1,
+        type: 'freetext',
+        identifier: 'Smith 2020',
+        metadata: null,
+        createdBy: null,
+        createdAt: new Date().toISOString(),
+      } as unknown as Awaited<ReturnType<typeof fetchDrugReferences>>[number],
+    ]);
+    mockDrugState.metabolism = METABOLISM_WITH_CITED_ROUTE();
+    setUser([], 'authenticated');
+    renderSidebar(undefined, 'metabolism');
+
+    // One trigger on the route's share and one on the metabolite, both opening
+    // the same shared-bibliography entry.
+    const triggers = await screen.findAllByTestId('reference-hover');
+    expect(triggers).toHaveLength(2);
+    expect(triggers[0]).toHaveTextContent('20');
+    fireEvent.mouseEnter(triggers[1]!);
+    const link = await screen.findByRole('link', { name: /^\[1\]/ });
+    expect(link).toHaveAttribute('href', '/references/3');
+  });
+
+
+  it("cites the box-level note's own sources, even when there is no note", async () => {
+    vi.mocked(fetchDrugReferences).mockResolvedValue([
+      {
+        id: 3,
+        drugId: 1,
+        type: 'freetext',
+        identifier: 'Smith 2020',
+        metadata: null,
+        createdBy: null,
+        createdAt: new Date().toISOString(),
+      } as unknown as Awaited<ReturnType<typeof fetchDrugReferences>>[number],
+    ]);
+    mockDrugState.metabolism = {
+      routes: [],
+      evidenceNote: null,
+      referenceIds: [3],
+      metabolites: [],
+      precursors: [],
+    };
+    setUser([], 'authenticated');
+    renderSidebar(undefined, 'metabolism');
+
+    const note = await screen.findByTestId('metabolism-note');
+    const trigger = within(note).getByTestId('reference-hover');
+    expect(trigger).toHaveTextContent('sources');
+    fireEvent.mouseEnter(trigger);
+    const link = await screen.findByRole('link', { name: /^\[1\]/ });
+    expect(link).toHaveAttribute('href', '/references/3');
+  });
+
   it('offers contributors a metabolism editor even when no data exists', () => {
     mockDrugState.metabolism = null;
     setUser(['halfLife'], 'contributor');

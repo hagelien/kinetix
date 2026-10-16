@@ -3070,6 +3070,7 @@
     "metabolismActive": "active",
     "metabolismInactive": "inactive",
     "metabolismUnknownActivity": "activity unknown",
+    "metabolismSourcesOnly": "sources",
     "metabolismCreateMonograph": "Create a monograph for {{name}}",
     "metabolismEdit": "Edit metabolism",
     "metabolismAdd": "Add metabolism data",
@@ -3354,6 +3355,7 @@
     "unknownConcentrationUnit": "One of the selected units isn't recognized. Pick from the list and try again.",
     "invalidEnabledUnits": "Pick at least one concentration unit.",
     "primaryUnitNotSupported": "The primary unit must be a per-litre unit. Per-decilitre units are still allowed as alternatives in tooltips and converters.",
+    "blockReferenceMissing": "One or more cited references no longer exist. Reload the latest data and try again.",
     "pubchemCidShadowsDrugId": "This PubChem CID equals another drug's internal id. Saved simulator cases look that drug up by this number and would load the wrong substance. The CID can't be used until that is resolved."
   },
   "topicSections": {
@@ -4087,6 +4089,18 @@
   "pubchemSearch": {
     "searching": "Searching PubChem…",
     "noResults": "No compounds found on PubChem"
+  },
+  "drugBlocks": {
+    "metabolism": "Metabolism",
+    "pharmacodynamics": "Pharmacodynamics",
+    "modelStructure": "Model structure"
+  },
+  "blockHistory": {
+    "reviewerNotRecorded": "Reviewer not recorded",
+    "noRevisions": "No changes recorded for this section yet. History is kept from the first change after it was introduced.",
+    "scriptAuthor": "Import or operator script",
+    "notRecorded": "Not recorded",
+    "empty": "(empty)"
   },
   "paramHistory": {
     "title": "History",

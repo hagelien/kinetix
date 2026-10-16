@@ -26,9 +26,11 @@
  * request in flight and then trusts its outcome — an answer OR a failure — for `LIVE_MODEL_TTL_MS`.
  * So a run inside that window resolves exactly the model the picker was built from: if the panel's
  * request failed, the run does not quietly retry and install a model whose routes the picker never
- * offered. Only once the window has passed does a request ask again, and an answer that changes the
- * installed model notifies the picker (`subscribeLiveDerivedModels`), which redraws from it before
- * the run that fetched it resolves anything. `awaitingLiveDerivedModel` says whether a slug is still
+ * offered. Only once the window has passed does a request ask again: an open panel asks as soon as
+ * it ends (`liveDerivedModelExpiresAt`), so the picker does not keep offering an expired model's
+ * routes until the next run, and an answer that changes the installed model — whichever caller
+ * fetched it — notifies the picker (`subscribeLiveDerivedModels`), which redraws from it before
+ * a run that fetched it resolves anything. `awaitingLiveDerivedModel` says whether a slug is still
  * waiting on its first outcome (`useLiveDerivedModel` wires both into React).
  */
 import {
@@ -170,6 +172,19 @@ export async function refreshLiveDerivedModel(
 export function awaitingLiveDerivedModel(slug: string | undefined): boolean {
   if (!slug || !derivedRegistryRolloutEnabled() || findModel(slug)) return false;
   return !settled.has(slug);
+}
+
+/**
+ * When the outcome trusted for `slug` ages out and the next request would ask again, or undefined
+ * when nothing is trusted for it (never fetched, still on its first request, or a slug that is never
+ * fetched — the derived tier is off or the reviewed tier claims it). An open panel uses
+ * it to ask again as soon as the window ends (`useLiveDerivedModel`), so its picker follows the
+ * catalogue rather than waiting for a run to fetch the new model.
+ */
+export function liveDerivedModelExpiresAt(slug: string | undefined): number | undefined {
+  if (!slug || !derivedRegistryRolloutEnabled() || findModel(slug)) return undefined;
+  const last = fetchedAt.get(slug);
+  return last === undefined ? undefined : last + LIVE_MODEL_TTL_MS;
 }
 
 /** Be told when a live answer settles for the first time or changes what is installed. */

@@ -10,6 +10,8 @@
  * the apply step (here for admins, in applyApprovedEdit for the review queue)
  * clears and re-inserts the rows. See api/_lib/metabolismStore.ts.
  */
+import { lockBlockCitationReferences } from './_lib/blockCitationLocks.js';
+import { ParameterApplyError } from './_lib/drugs-helpers.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { json, error, withErrorHandling } from './_lib/response.js';
 import { getDb, runInPoolTransaction } from './_lib/db.js';
@@ -21,6 +23,7 @@ import { callerCan } from './_lib/permissions-store.js';
 import { drugs, pendingEdits } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { recordImplicitAgentApproval } from './_lib/agent-verifications.js';
+import { withBlockHistory, metabolismInputLinkedDrugIds, lockMetabolismHistory } from './_lib/drugBlockHistory.js';
 import {
   getDrugMetabolism,
   MetabolismWriteError,
@@ -219,7 +222,9 @@ async function handlePut(
   let outcome: DirectOutcome;
   try {
     outcome = await runInPoolTransaction<DirectOutcome>(async () => {
+      await lockMetabolismHistory();
       await lockDrugForEntryApplicability(drugId);
+      await lockBlockCitationReferences(getDb(), input);
       const [drugInTx] = await getDb()
         .select({ updatedAt: drugs.updatedAt })
         .from(drugs)
@@ -229,12 +234,22 @@ async function handlePut(
       if (drugInTx.updatedAt.getTime() !== snapshot.getTime()) {
         return { kind: 'changed' };
       }
-      await replaceDrugMetabolism(getDb(), drugId, input, auth.userId);
+      // Recorded in the block history — this drug's box and every drug its
+      // metabolite and precursor links touch (#37).
+      await withBlockHistory(
+        {
+          drugIds: [drugId, ...metabolismInputLinkedDrugIds(input)],
+          blocks: ['metabolism'],
+          actorUserId: auth.userId,
+          editSummary,
+        },
+        () => replaceDrugMetabolism(getDb(), drugId, input, auth.userId),
+      );
       return { kind: 'ok' };
     });
   } catch (err) {
-    if (err instanceof MetabolismWriteError) {
-      error(res, err.statusHint, err.message);
+    if (err instanceof MetabolismWriteError || err instanceof ParameterApplyError) {
+      error(res, err.statusHint, err.message, err instanceof ParameterApplyError ? err.code : undefined);
       return;
     }
     throw err;

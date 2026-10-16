@@ -90,11 +90,13 @@ describe('assembleRouteParams — two-compartment from k12, k21 and V1', () => {
     // β = ln2/10 = 0.0693 /h; a k21 at or below it has no two-compartment model with that terminal
     // phase, and the engine would silently run k10 = β instead.
     for (const k21 of [0.05, Math.LN2 / 10]) {
-      const result = assembleRouteParams(derived, { ...TWO_COMP_VALUES, k21 });
-      expect(result.outcome).toBe('unsupported');
-      if (result.outcome === 'unsupported') {
-        expect(result.contradiction).toBe(true);
-        expect(result.reason).toMatch(/k21/);
+      for (const absorptionLag of [undefined, 0.5]) {
+        const result = assembleRouteParams(derived, { ...TWO_COMP_VALUES, k21, absorptionLag });
+        expect(result.outcome).toBe('unsupported');
+        if (result.outcome === 'unsupported') {
+          expect(result.contradiction).toBe(true);
+          expect(result.reason).toMatch(/k21/);
+        }
       }
     }
   });

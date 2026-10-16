@@ -29,7 +29,7 @@ vi.mock('../../api/_lib/auth.js', () => ({
 }));
 
 import handler from '../../api/drug-parameter-history.js';
-import { agents, agentVerifications, drugParameterRevisions, pendingEdits } from '../../db/schema.js';
+import { agents, agentVerifications, drugBlockRevisions, drugParameterRevisions, pendingEdits } from '../../db/schema.js';
 import {
   resetIntegrationDb,
   setupIntegrationDb,
@@ -68,10 +68,10 @@ function createResponse() {
   return { res, state };
 }
 
-async function getHistory(drugId: number, parameter: string) {
+async function getHistory(drugId: number, parameter: string, block = false) {
   const req = {
     method: 'GET',
-    url: `/api/drug-parameter-history?drugId=${drugId}&parameter=${parameter}`,
+    url: `/api/drug-parameter-history?drugId=${drugId}&${block ? 'block' : 'parameter'}=${parameter}`,
     headers: { host: 'localhost' },
   } as unknown as IncomingMessage;
   const { res, state } = createResponse();
@@ -80,6 +80,8 @@ async function getHistory(drugId: number, parameter: string) {
     revisions: Array<{
       id: number;
       pendingEditId: number | null;
+      author?: { id: number; email?: string };
+      reviewDecision?: { reviewedAt: string | null; reviewer: { id: number; email?: string } | null };
       verifications?: {
         approveCount: number;
         disputeCount: number;
@@ -91,9 +93,10 @@ async function getHistory(drugId: number, parameter: string) {
 
 /** A drug-parameter revision produced by an approved `param_entry` edit,
  * with one explicit dispute verdict recorded against that edit. */
-async function seedRevisionWithDisputedPendingEdit(): Promise<{
+async function seedRevisionWithDisputedPendingEdit(block?: 'metabolism' | 'pharmacodynamics' | 'modelStructure'): Promise<{
   drugId: number;
   submitterId: number;
+  reviewerId: number;
 }> {
   const submitterId = await seedUser(db, {
     email: 'submitter@example.com',
@@ -114,15 +117,19 @@ async function seedRevisionWithDisputedPendingEdit(): Promise<{
     .returning({ id: agents.id });
 
   const drugId = await seedDrug(db);
+  const reviewerId = block ? await seedUser(db, {
+    email: 'reviewer-private@example.com', username: 'moderator', role: 'editor',
+  }) : submitterId;
   const [edit] = await db
     .insert(pendingEdits)
     .values({
-      editType: 'param_entry',
+      editType: block === 'metabolism' ? 'metabolism' : block === 'pharmacodynamics' ? 'receptor_targets' : 'param_entry',
+      targetId: block ? drugId : null,
       parameter: 'therapeuticConcentration',
       proposedValue: { op: 'delete' },
       status: 'approved',
       submittedBy: submitterId,
-      reviewedBy: submitterId,
+      reviewedBy: reviewerId,
       reviewedAt: new Date(),
     })
     .returning({ id: pendingEdits.id });
@@ -148,7 +155,13 @@ async function seedRevisionWithDisputedPendingEdit(): Promise<{
     createdBy: submitterId,
   });
 
-  return { drugId, submitterId };
+  if (block) {
+    await db.insert(drugBlockRevisions).values({
+      drugId, block, oldValue: {}, newValue: {}, createdBy: submitterId,
+      pendingEditId: edit!.id,
+    });
+  }
+  return { drugId, submitterId, reviewerId };
 }
 
 describe('drug-parameter-history: pending-edit verdict surfacing', () => {
@@ -178,5 +191,47 @@ describe('drug-parameter-history: pending-edit verdict surfacing', () => {
     expect(revisions[0]!.verifications).toEqual(
       expect.objectContaining({ approveCount: 0, disputeCount: 1, abstainCount: 0 }),
     );
+  });
+});
+
+
+describe.each(['metabolism', 'pharmacodynamics', 'modelStructure'] as const)('block history %s: approval provenance', (block) => {
+  it('shows the publication reviewer publicly without emails or private verdicts', async () => {
+    const { drugId, submitterId, reviewerId } = await seedRevisionWithDisputedPendingEdit(block);
+    getUserFromRequestMock.mockResolvedValue(null);
+    const { revisions } = await getHistory(drugId, block, true);
+    expect(revisions).toHaveLength(1);
+    expect(revisions[0]!.author?.id).toBe(submitterId);
+    expect(revisions[0]!.reviewDecision?.reviewer?.id).toBe(reviewerId);
+    expect(revisions[0]!.reviewDecision?.reviewedAt).toEqual(expect.any(String));
+    expect(revisions[0]!.verifications).toBeUndefined();
+    expect(JSON.stringify(revisions)).not.toContain('@example.com');
+    expect(revisions[0]!.author?.email).toBeUndefined();
+    expect(revisions[0]!.reviewDecision?.reviewer?.email).toBeUndefined();
+  });
+
+  it('shows the linked verdict tally to an authorized reviewer', async () => {
+    const { drugId, reviewerId } = await seedRevisionWithDisputedPendingEdit(block);
+    getUserFromRequestMock.mockResolvedValue({ userId: reviewerId, role: 'editor' });
+    const { revisions } = await getHistory(drugId, block, true);
+    expect(revisions[0]!.verifications).toMatchObject({ approveCount: 0, disputeCount: 1, abstainCount: 0 });
+  });
+
+  it('withholds the tally from an unrelated contributor', async () => {
+    const { drugId } = await seedRevisionWithDisputedPendingEdit(block);
+    const outsiderId = await seedUser(db, { email: 'outsider@example.com', username: 'outsider', role: 'contributor' });
+    getUserFromRequestMock.mockResolvedValue({ userId: outsiderId, role: 'contributor' });
+    const { revisions } = await getHistory(drugId, block, true);
+    expect(revisions[0]!.reviewDecision).toBeDefined();
+    expect(revisions[0]!.verifications).toBeUndefined();
+  });
+
+  it('does not invent a decision for a direct write', async () => {
+    const drugId = await seedDrug(db);
+    await db.insert(drugBlockRevisions).values({ drugId, block, oldValue: {}, newValue: {} });
+    getUserFromRequestMock.mockResolvedValue(null);
+    const { revisions } = await getHistory(drugId, block, true);
+    expect(revisions[0]!.reviewDecision).toBeUndefined();
+    expect(revisions[0]!.verifications).toBeUndefined();
   });
 });
