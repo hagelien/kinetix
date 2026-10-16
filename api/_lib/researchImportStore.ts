@@ -14,6 +14,7 @@
  * non-destructive toward existing curated values. See the CLI header for the
  * operator-facing contract.
  */
+import { lockBlockCitationIds } from './blockCitationLocks.js';
 import { and, desc, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import {
   drugs,
@@ -37,7 +38,6 @@ import {
 } from '../../src/lib/citationHandles.js';
 import {
   doseContextValuesForWrite,
-  lockCitationMembershipsShared,
   recomputeSummariesForDrug,
 } from './parameter-entries-store.js';
 import { parameterDoseContextMode } from '../../src/lib/drugParameters.js';
@@ -59,7 +59,8 @@ import {
   blockedParametersFor,
   withDrugApplicabilityLock,
 } from './parameterApplicabilityStore.js';
-import { getDb, runInPoolTransaction } from './db.js';
+import { getDb, inTransaction, runInPoolTransaction } from './db.js';
+import { beginBlockHistory, lockMetabolismHistory } from './drugBlockHistory.js';
 import { assertPubchemCidShadowsNoDrug } from './drugs-helpers.js';
 import type {
   NormalizedResearchImport,
@@ -334,18 +335,32 @@ export async function runImport(
   // proposals it marked conflicted — and a wait there, for a fold that holds
   // the key and is queued on those rows, would be a cycle. Waiting while
   // holding only the drug lock cannot be.
-  await withDrugApplicabilityLock(drugId, async () => {
-    const tx = getDb();
-    await lockCitationMembershipsShared(
-      data.parameters.flatMap((p) =>
-        p.sourceValues.flatMap((sv) => {
-          const citationId = citationMap.get(sv.sourceId);
-          return citationId == null ? [] : [citationId];
-        }),
-      ),
-    );
-    await seedParameters(tx, drugId, data, citationMap, opts, stats);
-    await seedParameterEntries(tx, drugId, data, citationMap, opts, stats);
+  //
+  // The mechanisms and the metabolism box are written in the same transaction,
+  // bracketed by the block history (#37): every write to the three blocks —
+  // source entries (model-structure axes, route-scoped ka), mechanisms,
+  // metabolism — commits together with its revision rows, or not at all.
+  await inTransaction(async () => {
+    await lockMetabolismHistory();
+    await withDrugApplicabilityLock(drugId, async () => {
+      const tx = getDb();
+      // Resolve once, before snapshots, and use these exact endpoints for the
+      // inserts too. A newly linked drug may have live data but no history yet.
+      const metaboliteDrugs = await resolveImportMetabolites(tx, data);
+      // All incoming sources, including PD/metabolism-only references, before
+      // snapshots and before any child row can make a fold wait.
+      await lockBlockCitationIds(tx, citationMap.values());
+      const blockHistory = await beginBlockHistory({
+        drugIds: [drugId],
+        metabolismDrugIds: [...metaboliteDrugs.values()],
+        actorUserId: opts.userId,
+      });
+      await seedParameters(tx, drugId, data, citationMap, opts, stats);
+      await seedParameterEntries(tx, drugId, data, citationMap, opts, stats);
+      await seedPdTargets(tx, drugId, data, citationMap, opts.userId, stats);
+      await seedMetabolism(tx, drugId, data, citationMap, opts.userId, stats, metaboliteDrugs);
+      await blockHistory.record();
+    });
   });
   const ionStats = await seedIonizationConstants(
     db,
@@ -359,8 +374,6 @@ export async function runImport(
   stats.ionizationConstantsUpdated = ionStats.updated;
   stats.ionizationConstantsSkipped = ionStats.skipped;
   stats.ionizationConstantsKept = ionStats.kept;
-  await seedPdTargets(db, drugId, data, citationMap, opts.userId, stats);
-  await seedMetabolism(db, drugId, data, citationMap, opts.userId, stats);
   // seedParameters upserts summarizable drug_parameters values directly (incl.
   // the normalization input molecularWeight). For a drug that already has source
   // entries, those values are derived caches — reconcile them so an imported
@@ -1297,6 +1310,28 @@ async function seedPdTargets(
   }
 }
 
+/** The same name resolution supplies the history scope and the actual edges. */
+async function resolveImportMetabolites(
+  db: AnyDb,
+  data: NormalizedResearchImport,
+): Promise<Map<string, number>> {
+  const candidates = await findDrugNameCandidates(db, data.metabolism.metabolites.map((m) => m.name));
+  const byName = new Map<string, number>();
+  for (const drug of candidates) {
+    for (const name of Object.values(drug.names ?? {}))
+      byName.set(normalizeMetabolismName(String(name)), drug.id);
+    for (const alias of drug.aliases ?? [])
+      byName.set(normalizeMetabolismName(alias), drug.id);
+  }
+  const resolved = new Map<string, number>();
+  for (const metabolite of data.metabolism.metabolites) {
+    const name = normalizeMetabolismName(metabolite.name);
+    const id = byName.get(name);
+    if (id != null) resolved.set(name, id);
+  }
+  return resolved;
+}
+
 async function seedMetabolism(
   db: AnyDb,
   drugId: number,
@@ -1304,6 +1339,7 @@ async function seedMetabolism(
   citationMap: Map<string, number>,
   uid: number,
   stats: ImportStats,
+  metaboliteDrugs: ReadonlyMap<string, number>,
 ): Promise<void> {
   const m = data.metabolism;
 
@@ -1371,17 +1407,6 @@ async function seedMetabolism(
   }
 
   if (m.metabolites.length) {
-    const allDrugs = await findDrugNameCandidates(
-      db,
-      m.metabolites.map((mb) => mb.name),
-    );
-    const byName = new Map<string, number>();
-    for (const d of allDrugs) {
-      for (const n of Object.values(d.names ?? {}))
-        byName.set(normalizeMetabolismName(String(n)), d.id);
-      for (const a of (d.aliases ?? []) as string[])
-        byName.set(normalizeMetabolismName(a), d.id);
-    }
     // What the drug already links, so a skip can be explained rather than just
     // counted. The ON CONFLICT below is still the authority on whether a row
     // was written — this read only decides what to tell the operator.
@@ -1412,7 +1437,7 @@ async function seedMetabolism(
     for (const mb of m.metabolites) {
       const refIds = resolveRefIds(mb.sourceIds, citationMap);
       const normalized = normalizeMetabolismName(mb.name);
-      const linkedDrugId = byName.get(normalized) ?? null;
+      const linkedDrugId = metaboliteDrugs.get(normalized) ?? null;
       // Already there under another name: the substance index will refuse the
       // insert, and the document's range, note and citations go nowhere. Say
       // so. A row the drug already lists under the *same* name is an ordinary

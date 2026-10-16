@@ -68,6 +68,12 @@ describe('monograph tabs', () => {
     expect(tabForParameter('notAParameter')).toBeNull();
   });
 
+  it("opens a whole block's discussion on the tab that renders the block", () => {
+    expect(tabForParameter('metabolism')).toBe('metabolism');
+    expect(tabForParameter('pharmacodynamics')).toBe('pharmacodynamics');
+    expect(tabForParameter('modelStructure')).toBe('pharmacokinetics');
+  });
+
   it("opens a fact's discussion on the tab whose prose contains the fact", () => {
     const html =
       '<p data-fact-id="loose">intro</p>' +

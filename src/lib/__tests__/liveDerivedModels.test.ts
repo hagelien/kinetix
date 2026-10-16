@@ -231,6 +231,16 @@ describe('the picker’s view of the live answer (#292)', () => {
     const off = await load(false);
     expect(off.awaitingLiveDerivedModel('alprazolam')).toBe(false);
   });
+
+  it('says when the trusted outcome ages out, so an open panel can ask again then (#299)', async () => {
+    const { refreshLiveDerivedModel, liveDerivedModelExpiresAt, LIVE_MODEL_TTL_MS } = await load();
+    expect(liveDerivedModelExpiresAt('alprazolam')).toBeUndefined();
+    await refreshLiveDerivedModel('alprazolam', answer({ error: 'down' }, 503), 1_000);
+    expect(liveDerivedModelExpiresAt('alprazolam')).toBe(1_000 + LIVE_MODEL_TTL_MS);
+    // A slug that is never fetched has nothing to wait for, so a panel does not keep re-arming.
+    expect(liveDerivedModelExpiresAt('ethanol')).toBeUndefined();
+    expect(liveDerivedModelExpiresAt(undefined)).toBeUndefined();
+  });
 });
 
 /**

@@ -57,6 +57,7 @@ const MOCKED = [
   'tests/integration/citation-merge-route.test.ts',
   'tests/integration/cmax-authoring.test.ts',
   'tests/integration/conversation-ingestion-rollback.test.ts',
+  'tests/integration/drug-block-revisions.test.ts',
   'tests/integration/drug-delete-parameter-entries.test.ts',
   'tests/integration/drug-parameter-history-verifications.test.ts',
   'tests/integration/drug-parameter-history.test.ts',

@@ -81,6 +81,10 @@ Multi-action routes such as `auth.ts` dispatch via `?action=` rather than separa
 
 ## T3 adjudication endpoints
 
+Competing scope is reversible: before the first seat binds a case, changing that flag refreshes
+the trigger and T2 snapshot. After binding, either direction invalidates the case as
+`competing_scope_changed`, preserving the packet and opinions without allowing a stale seal.
+
 The appellate panel for a disagreement that survives blind T2
 (`agents/drug-db-adjudication.md`, `docs/plans/2026-09-18-t3-adjudication-backend.md`).
 An adjudicator is an active agent with the admin-set `agents.adjudicator` grant

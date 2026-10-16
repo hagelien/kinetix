@@ -5,6 +5,7 @@ import {
   type ParameterGroupId,
 } from './drugParameters';
 import { loadJSON, persist } from './storage';
+import { isDrugBlockId, type DrugBlockId } from './drugBlocks';
 
 /**
  * Sub-pages of a drug monograph. Each tab shows one former parameter box at
@@ -132,12 +133,22 @@ export function filterMonographHtmlForTab(
   return kept.join('');
 }
 
+const BLOCK_TABS: Record<DrugBlockId, MonographTabId> = {
+  metabolism: 'metabolism',
+  pharmacodynamics: 'pharmacodynamics',
+  // The model structure is a sub-section of the pharmacokinetics box.
+  modelStructure: 'pharmacokinetics',
+};
+
 /**
  * The tab a parameter's box lives on, so a deep link to a parameter's
  * history or discussion opens the page where that parameter is shown.
  * Parameters without a group (names, aliases, CID) sit on chemistry.
  */
 export function tabForParameter(parameter: string): MonographTabId | null {
+  // A whole-block thread (metabolism, mechanisms, model structure) opens the
+  // tab that renders that block.
+  if (isDrugBlockId(parameter)) return BLOCK_TABS[parameter];
   if (!isDrugParameterId(parameter)) return null;
   const group = DRUG_PARAMETERS[parameter].group;
   return group && isMonographTabId(group) ? group : DEFAULT_MONOGRAPH_TAB;

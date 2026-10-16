@@ -123,7 +123,9 @@ export type InvalidatedReason =
   // The version is unchanged but what the target is compared against (a
   // current value, entry or content served beside it) moved under the panel,
   // so its seats may have read different packets (./snapshot.ts).
-  | 'target_drifted';
+  | 'target_drifted'
+  // A bound panel must not decide on a different competing-scope premise.
+  | 'competing_scope_changed';
 
 export type DetectOutcome = {
   /** Live cases on this target closed because the target moved under them. */
@@ -290,6 +292,7 @@ export async function detectAdjudicationCase(args: {
         triggers: adjudicationCases.triggers,
         triggerDetail: adjudicationCases.triggerDetail,
         t1Snapshot: adjudicationCases.t1Snapshot,
+        adjudicatedTarget: adjudicationCases.adjudicatedTarget,
       })
       .from(adjudicationCases)
       .where(
@@ -346,13 +349,30 @@ export async function detectAdjudicationCase(args: {
         ? { invalidated, caseId: opened.id, result: 'opened' }
         : { invalidated, caseId: null, result: 'none' };
     } else if ((LIVE_CASE_STATES as readonly string[]).includes(existing.state)) {
+      const scopeChanged = (existing.triggers ?? []).includes('competing_scope') !==
+        detected.triggers.includes('competing_scope');
+      if (scopeChanged && existing.adjudicatedTarget) {
+        // Preserve the packet and opinions as evidence of what these seats read.
+        // As with target drift, a changed premise cannot inherit their decision.
+        await tx.update(adjudicationCases).set({
+          state: 'invalidated',
+          closedAt: now,
+          invalidatedReason: 'competing_scope_changed' satisfies InvalidatedReason,
+          lastCheckedAt: now,
+        }).where(eq(adjudicationCases.id, existing.id));
+        await recordCheck();
+        return { invalidated: invalidated + 1, caseId: existing.id, result: 'retired' };
+      }
       // A live case takes on what has appeared since: a new trigger code, and
       // any dispute raised on this version since it opened. The origin is
       // recomputed over every dispute the case has seen, so a person's later
       // dispute makes the case theirs to close — it never narrows back to
-      // `agent`. The verdict snapshots stay those the case opened on.
+      // `agent`. A scope change refreshes T2 only before any seat binds the packet.
       const known = new Set<AdjudicationTrigger>(existing.triggers ?? []);
       const added = detected.triggers.filter((t) => !known.has(t));
+      const currentTriggers = [...(existing.triggers ?? []), ...added].filter(
+        (t) => t !== 'competing_scope' || detected.triggers.includes(t),
+      );
       const openDisputesSeen = mergeDisputes(
         existing.t1Snapshot.openDisputes,
         detected.t1Snapshot.openDisputes,
@@ -360,6 +380,7 @@ export async function detectAdjudicationCase(args: {
       const newDisputes =
         openDisputesSeen.length > existing.t1Snapshot.openDisputes.length;
       const triggerDetail = { ...(existing.triggerDetail ?? {}) };
+      if (!detected.triggers.includes('competing_scope')) delete triggerDetail.competing_scope;
       for (const t of added) {
         if (t in detected.triggerDetail) triggerDetail[t] = detected.triggerDetail[t];
       }
@@ -376,9 +397,13 @@ export async function detectAdjudicationCase(args: {
         .update(adjudicationCases)
         .set({
           lastCheckedAt: now,
-          ...(added.length > 0 || newRequests
-            ? { triggers: [...(existing.triggers ?? []), ...added], triggerDetail }
+          ...(added.length > 0 || newRequests || scopeChanged
+            ? { triggers: currentTriggers, triggerDetail }
             : {}),
+          ...(scopeChanged ? {
+            t2VerificationId: detected.t2VerificationId,
+            t2Snapshot: detected.t2Snapshot,
+          } : {}),
           ...(newDisputes
             ? {
                 t1Snapshot: { ...existing.t1Snapshot, openDisputes: openDisputesSeen },
@@ -390,7 +415,7 @@ export async function detectAdjudicationCase(args: {
       outcome = {
         invalidated,
         caseId: existing.id,
-        result: added.length > 0 || newDisputes || newRequests ? 'joined' : 'unchanged',
+        result: added.length > 0 || newDisputes || newRequests || scopeChanged ? 'joined' : 'unchanged',
       };
     } else if (
       existing.state === 'invalidated' &&

@@ -3,6 +3,11 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { ReceptorTargetEditForm } from './ReceptorTargetEditForm';
 import type { DrugReceptorTargetSummary } from '@/lib/receptorTargets';
 
+import { ApiError } from '@/lib/drugApi';
+import en from '@/locales/en.json';
+import nb from '@/locales/nb.json';
+const errorLocale = vi.hoisted(() => ({ language: 'nb' as 'en' | 'nb' }));
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, opts?: Record<string, unknown>) => {
@@ -17,6 +22,7 @@ vi.mock('react-i18next', () => ({
           opts?.metric ?? '',
         )}: not a finite number`,
       };
+      if (key === 'errors.blockReferenceMissing') return (errorLocale.language === 'nb' ? nb : en).errors.blockReferenceMissing;
       return labels[key] ?? key;
     },
   }),
@@ -104,6 +110,7 @@ function renderForm(target: DrugReceptorTargetSummary) {
 
 describe('ReceptorTargetEditForm measurements', () => {
   beforeEach(() => {
+    errorLocale.language = 'nb';
     submitDrugReceptorTargets.mockClear();
     lastPayload = null;
   });
@@ -165,4 +172,14 @@ describe('ReceptorTargetEditForm measurements', () => {
     ).toBeInTheDocument();
     expect(submitDrugReceptorTargets).not.toHaveBeenCalled();
   });
+});
+
+it.each(['en', 'nb'] as const)('translates missing block references in %s', async (language) => {
+    errorLocale.language = language;
+    submitDrugReceptorTargets.mockRejectedValueOnce(Object.assign(new ApiError('Hardcoded English missing reference', 400), { code: 'block_reference_missing' }));
+    renderForm(medianOnlyTarget());
+    fireEvent.click(screen.getByText('paramEdit.savePublish'));
+    expect(await screen.findByText((language === 'nb' ? nb : en).errors.blockReferenceMissing)).toBeInTheDocument();
+    expect(screen.queryByText('Hardcoded English missing reference')).not.toBeInTheDocument();
+    expect(nb.errors.blockReferenceMissing).not.toBe(en.errors.blockReferenceMissing);
 });

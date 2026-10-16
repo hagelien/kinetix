@@ -58,7 +58,7 @@ describe('agent provisioning guides — model tier', () => {
     const text = readFileSync(
       resolve(process.cwd(), 'agents/adding-a-new-agent.md'),
       'utf8',
-    );
+    ).replace(/\r\n/g, '\n');
     // Every fenced SQL block that writes the agents row.
     const inserts = [...text.matchAll(/```sql\n([\s\S]*?)```/g)]
       .map(([, body]) => body ?? '')

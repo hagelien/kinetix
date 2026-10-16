@@ -115,6 +115,12 @@ on:
       # revision paths its real-Postgres suite races (Cmax release B).
       - 'api/_lib/param-entry-payload-locks.ts'
       - 'api/_lib/drug-merge.ts'
+      - 'api/_lib/drugBlockHistory.ts'
+      - 'api/_lib/blockCitationLocks.ts'
+      - 'api/_lib/drugBlockRevisions.ts'
+      - 'api/drug-parameter-history.ts'
+      - 'scripts/repair-hallucinated-citations.ts'
+      - 'api/drug-metabolism.ts'
       - 'api/drugs.ts'
       - 'api/pending-edits.ts'
       # The citation merge's fold lock and the extraction-queue writes its
@@ -173,6 +179,12 @@ on:
       # revision paths its real-Postgres suite races (Cmax release B).
       - 'api/_lib/param-entry-payload-locks.ts'
       - 'api/_lib/drug-merge.ts'
+      - 'api/_lib/drugBlockHistory.ts'
+      - 'api/_lib/blockCitationLocks.ts'
+      - 'api/_lib/drugBlockRevisions.ts'
+      - 'api/drug-parameter-history.ts'
+      - 'scripts/repair-hallucinated-citations.ts'
+      - 'api/drug-metabolism.ts'
       - 'api/drugs.ts'
       - 'api/pending-edits.ts'
       # The citation merge's fold lock and the extraction-queue writes its
@@ -350,3 +362,9 @@ jobs:
         run: |
           npx vitest run --config vitest.integration.config.ts \
             tests/governance/transaction/real-postgres-citation-membership-lock.test.ts
+      - name: Real-Postgres metabolism block history serialization
+        env:
+          KINETIX_TEST_PG_URL: postgres://postgres:postgres@localhost:5432/kinetix_test
+        run: |
+          npx vitest run --config vitest.integration.config.ts \
+            tests/governance/transaction/real-postgres-block-history.test.ts

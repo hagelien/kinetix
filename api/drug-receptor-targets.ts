@@ -10,9 +10,12 @@
  * set and the apply step (here for admins, in applyApprovedEdit for the review
  * queue) clears and re-inserts the rows. See api/_lib/receptorTargetStore.ts.
  */
+import { lockBlockCitationReferences } from './_lib/blockCitationLocks.js';
+import { ParameterApplyError } from './_lib/drugs-helpers.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { json, error, withErrorHandling } from './_lib/response.js';
 import { getDb, runInPoolTransaction } from './_lib/db.js';
+import { withBlockHistory } from './_lib/drugBlockHistory.js';
 import { getUserFromRequest } from './_lib/auth.js';
 import { assertSameOrigin, parseAndValidate } from './_lib/validate.js';
 import { receptorTargetsWriteSchema } from './_lib/schemas.js';
@@ -205,6 +208,7 @@ async function handlePut(
   try {
     outcome = await runInPoolTransaction<DirectOutcome>(async () => {
       await lockDrugForEntryApplicability(drugId);
+      await lockBlockCitationReferences(getDb(), mechanisms);
       const [drugInTx] = await getDb()
         .select({ updatedAt: drugs.updatedAt })
         .from(drugs)
@@ -214,11 +218,14 @@ async function handlePut(
       if (drugInTx.updatedAt.getTime() !== snapshot.getTime()) {
         return { kind: 'changed' };
       }
-      await replaceDrugReceptorTargets(getDb(), drugId, mechanisms, auth.userId);
+      await withBlockHistory(
+        { drugIds: [drugId], blocks: ['pharmacodynamics'], actorUserId: auth.userId, editSummary },
+        () => replaceDrugReceptorTargets(getDb(), drugId, mechanisms, auth.userId),
+      );
       return { kind: 'ok' };
     });
   } catch (err) {
-    if (err instanceof ReceptorTargetWriteError) {
+    if (err instanceof ReceptorTargetWriteError || err instanceof ParameterApplyError) {
       error(res, err.statusHint, err.message, err.code);
       return;
     }

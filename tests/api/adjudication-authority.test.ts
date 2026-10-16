@@ -16,7 +16,7 @@ function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);
     if (statSync(path).isDirectory()) return name === 'node_modules' ? [] : sources(path);
-    return /\.ts$/.test(name) ? [path] : [];
+    return /\.ts$/.test(name) ? [path.replaceAll('\\', '/')] : [];
   });
 }
 

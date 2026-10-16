@@ -80,6 +80,7 @@ interface ApiResult {
  * rule: server messages reaching the UI go through a code).
  */
 const IMPORT_ERROR_KEYS: Record<string, string> = {
+  block_reference_missing: 'errors.blockReferenceMissing',
   // The document's PubChem CID equals another drug's internal id.
   pubchem_cid_shadows_drug_id: 'errors.pubchemCidShadowsDrugId',
 };

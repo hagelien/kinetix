@@ -26,6 +26,8 @@ on:
       - 'src/lib/modelingRun.ts'
       - 'src/lib/liveDerivedModels.ts'
       - 'src/lib/useLiveDerivedModel.ts'
+      - 'src/lib/useResultStatus.ts'
+      - 'src/lib/resultStaleness.ts'
       - 'src/lib/ethanolEngine/**'
       - 'src/lib/compute/**'
       - 'src/stores/simulatorStore.ts'

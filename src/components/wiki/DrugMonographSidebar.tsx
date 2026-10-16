@@ -78,6 +78,7 @@ import { ReceptorTargetEditForm } from './ReceptorTargetEditForm';
 import { ParameterFlagDialog } from './ParameterFlagDialog';
 import { ParameterHistoryDialog } from './ParameterHistoryDialog';
 import { ParameterDiscussionPanel } from './ParameterDiscussionPanel';
+import { DrugBlockActions } from './DrugBlockActions';
 import { ParameterBadges } from './ParameterBadges';
 import { ReferenceHover } from './ReferenceHover';
 import { ParameterSourcesHover } from './ParameterSourcesHover';
@@ -1029,6 +1030,39 @@ export function DrugMonographSidebar({
     );
   }
 
+  /**
+   * `[n]` markers for a block entry's citations (a metabolism route or
+   * metabolite link, a model-structure declaration), resolved against the one
+   * shared ordering like parameter values and mechanisms are.
+   */
+  function referenceItemsFor(
+    ids: readonly number[] | null | undefined,
+  ): { index: number; row: CitationRow }[] {
+    return (ids ?? [])
+      .map((id) => {
+        const index = refIndexById.get(id);
+        const row = referencesById.get(id);
+        return index !== undefined && row ? { index, row } : null;
+      })
+      .filter(
+        (item): item is { index: number; row: CitationRow } => item !== null,
+      );
+  }
+
+  /**
+   * Make a block entry's own text its citation trigger, the way parameter
+   * values and mechanisms are (`ReferenceHover`). Null when none of the ids
+   * is in the shared ordering, so the caller renders the text plainly.
+   */
+  function withReferences(
+    ids: readonly number[] | null | undefined,
+    children: ReactNode,
+  ): ReactNode | null {
+    const items = referenceItemsFor(ids);
+    if (items.length === 0) return null;
+    return <ReferenceHover references={items}>{children}</ReferenceHover>;
+  }
+
   function renderMetaboliteLink(link: DrugMetaboliteLink) {
     const activity =
       link.activity === 'active'
@@ -1050,25 +1084,27 @@ export function DrugMonographSidebar({
       </>
     );
 
+    const linked = link.drug ? (
+      <Link to={`/wiki/drug/${link.drug.id}`} className="hover:underline">
+        {content}
+      </Link>
+    ) : (
+      // The named metabolite/precursor has no monograph in the
+      // database yet. Keep it clickable so it leads to the
+      // new-monograph flow with its name pre-filled, rather than
+      // dead-ending on plain text.
+      <Link
+        to={`/wiki/new?type=drug_monograph&q=${encodeURIComponent(label)}`}
+        className="hover:underline"
+        title={t('sidebar.metabolismCreateMonograph', { name: label })}
+      >
+        {content}
+      </Link>
+    );
+
     return (
       <li key={link.id}>
-        {link.drug ? (
-          <Link to={`/wiki/drug/${link.drug.id}`} className="hover:underline">
-            {content}
-          </Link>
-        ) : (
-          // The named metabolite/precursor has no monograph in the
-          // database yet. Keep it clickable so it leads to the
-          // new-monograph flow with its name pre-filled, rather than
-          // dead-ending on plain text.
-          <Link
-            to={`/wiki/new?type=drug_monograph&q=${encodeURIComponent(label)}`}
-            className="hover:underline"
-            title={t('sidebar.metabolismCreateMonograph', { name: label })}
-          >
-            {content}
-          </Link>
-        )}
+        {withReferences(link.referenceIds, linked) ?? linked}
       </li>
     );
   }
@@ -1079,24 +1115,25 @@ export function DrugMonographSidebar({
     );
     return (
       <div className="space-y-2">
-        {canEditMetabolism || canFlag ? (
-          <div className="flex items-center justify-end gap-1">
-            {canEditMetabolism ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="hover-actions h-6 gap-1 px-1.5 text-xs text-muted-foreground opacity-0 transition-opacity group-hover/section:opacity-100 focus-visible:opacity-100 motion-reduce:transition-none"
-                onClick={() => setShowMetabolismEditor(true)}
-              >
-                <Edit2 className="h-3 w-3" />
-                {hasMetabolismData(drugRow.metabolism)
-                  ? t('sidebar.metabolismEdit')
-                  : t('sidebar.metabolismAdd')}
-              </Button>
-            ) : null}
-            {renderCoverageFlagButton('metabolism')}
-          </div>
-        ) : null}
+        {/* History and discussion are for every reader, like a parameter
+            row's; editing and flagging stay permission-gated. */}
+        <div className="flex items-center justify-end gap-1">
+          {canEditMetabolism ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="hover-actions h-6 gap-1 px-1.5 text-xs text-muted-foreground opacity-0 transition-opacity group-hover/section:opacity-100 focus-visible:opacity-100 motion-reduce:transition-none"
+              onClick={() => setShowMetabolismEditor(true)}
+            >
+              <Edit2 className="h-3 w-3" />
+              {hasMetabolismData(drugRow.metabolism)
+                ? t('sidebar.metabolismEdit')
+                : t('sidebar.metabolismAdd')}
+            </Button>
+          ) : null}
+          {renderCoverageFlagButton('metabolism')}
+          <DrugBlockActions drugId={drugRow.id} block="metabolism" />
+        </div>
         {renderCoverageFlagNotice('metabolism')}
         {metabolismPendingEdits.length > 0 ? (
           canReview ? (
@@ -1192,7 +1229,11 @@ export function DrugMonographSidebar({
                       )}
                     </dt>
                     <dd className="font-medium">
-                      {formatFractionRangePercent(route.fraction) ?? ''}
+                      {withReferences(
+                        route.referenceIds,
+                        formatFractionRangePercent(route.fraction) ??
+                          t('sidebar.metabolismSourcesOnly'),
+                      ) ?? formatFractionRangePercent(route.fraction) ?? ''}
                     </dd>
                   </div>
                 ))}
@@ -1224,10 +1265,17 @@ export function DrugMonographSidebar({
         </div>
         ) : null}
 
-        {metabolism?.evidenceNote ? (
+        {/* The note opens its own sources, like any cited value. A box can
+            carry sources with no note; they are still shown and reachable. */}
+        {metabolism?.evidenceNote || metabolism?.referenceIds?.length ? (
           <div>
             <h4 className="mb-1 font-medium">{t('sidebar.metabolismNote')}</h4>
-            <p className="text-muted-foreground">{metabolism.evidenceNote}</p>
+            <p className="text-muted-foreground" data-testid="metabolism-note">
+              {withReferences(
+                metabolism.referenceIds,
+                metabolism.evidenceNote || t('sidebar.metabolismSourcesOnly'),
+              ) ?? (metabolism.evidenceNote || null)}
+            </p>
           </div>
         ) : null}
       </div>
@@ -1327,24 +1375,23 @@ export function DrugMonographSidebar({
     );
     return (
       <div className="space-y-2">
-        {canEditMechanisms || canFlag ? (
-          <div className="flex items-center justify-end gap-1">
-            {canEditMechanisms ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="hover-actions h-6 gap-1 px-1.5 text-xs text-muted-foreground opacity-0 transition-opacity group-hover/section:opacity-100 focus-visible:opacity-100 motion-reduce:transition-none"
-                onClick={() => setShowReceptorEditor(true)}
-              >
-                <Edit2 className="h-3 w-3" />
-                {(drugRow.receptorTargets ?? []).length > 0
-                  ? t('sidebar.mechanismsEdit')
-                  : t('sidebar.mechanismsAdd')}
-              </Button>
-            ) : null}
-            {renderCoverageFlagButton('pharmacodynamics')}
-          </div>
-        ) : null}
+        <div className="flex items-center justify-end gap-1">
+          {canEditMechanisms ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="hover-actions h-6 gap-1 px-1.5 text-xs text-muted-foreground opacity-0 transition-opacity group-hover/section:opacity-100 focus-visible:opacity-100 motion-reduce:transition-none"
+              onClick={() => setShowReceptorEditor(true)}
+            >
+              <Edit2 className="h-3 w-3" />
+              {(drugRow.receptorTargets ?? []).length > 0
+                ? t('sidebar.mechanismsEdit')
+                : t('sidebar.mechanismsAdd')}
+            </Button>
+          ) : null}
+          {renderCoverageFlagButton('pharmacodynamics')}
+          <DrugBlockActions drugId={drugRow.id} block="pharmacodynamics" />
+        </div>
         {renderCoverageFlagNotice('pharmacodynamics')}
         {receptorPendingEdits.length > 0 ? (
           canReview ? (
@@ -1499,6 +1546,12 @@ export function DrugMonographSidebar({
             canEdit={canSubmitParameterEntry}
             isAdmin={canDirectWrite}
             onMutated={loadDrug}
+            actions={
+              <DrugBlockActions drugId={drugRow.id} block="modelStructure" />
+            }
+            withReferences={(citationId, children) =>
+              withReferences([citationId], children)
+            }
           />
         ) : null}
         {/* Cmax has no drug-level row above (a peak concentration means

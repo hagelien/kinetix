@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hashRunInputs, isResultStale } from './resultStaleness';
+import { hashRunInputs, isResultModelSuperseded, isResultStale } from './resultStaleness';
 import type { DrugSimConfig, DrugSimResult } from '@/types/simulator';
 
 function baseConfig(overrides: Partial<DrugSimConfig> = {}): DrugSimConfig {
@@ -86,5 +86,19 @@ describe('isResultStale', () => {
 
   it('is false when there is no result', () => {
     expect(isResultStale(baseConfig(), undefined)).toBe(false);
+  });
+});
+
+describe('isResultModelSuperseded (#299)', () => {
+  const ran = (modelId?: string) => ({ assumptions: { modelId } }) as unknown as DrugSimResult;
+
+  it('flags a result on a derived build the registry no longer resolves', () => {
+    expect(isResultModelSuperseded(ran('no-such-drug-derived-v1+live.0123abcd'))).toBe(true);
+  });
+
+  it('never flags a reviewed model, a result without a model, or no result', () => {
+    expect(isResultModelSuperseded(ran('ethanol-widmark-v1'))).toBe(false);
+    expect(isResultModelSuperseded(ran(undefined))).toBe(false);
+    expect(isResultModelSuperseded(undefined)).toBe(false);
   });
 });

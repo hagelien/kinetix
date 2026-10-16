@@ -1613,6 +1613,43 @@ describe('T3 trigger: a person’s request for an adjudication (issue 17)', () =
 });
 
 describe('T3 cases act only on triggers that still stand (PR #291 review)', () => {
+  it('refreshes reversible scope and its T2 rationale before any panel is bound', async () => {
+    const s = await seedCase({ agentDispute: true });
+    for (const competingScope of [true, false]) {
+      const rationaleMd = competingScope ? 'Competing populations require distinct scope.' : 'Only the adult population is supported.';
+      await db.update(agentVerifications).set({ competingScope, rationaleMd })
+        .where(eq(agentVerifications.agentId, s.t2.agentId));
+      await detectAdjudicationCase({ targetType: 'pending_edit', targetId: s.editId });
+      const [kase] = await db.select().from(adjudicationCases).where(eq(adjudicationCases.id, s.caseId));
+      expect(kase!.state).toBe('open');
+      expect(kase!.triggers.includes('competing_scope')).toBe(competingScope);
+      expect(kase!.t2Snapshot[0]!.rationaleMd).toBe(rationaleMd);
+      expect(Boolean(kase!.triggerDetail.competing_scope)).toBe(competingScope);
+    }
+  });
+
+  it.each([false, true])('invalidates a bound panel when competing scope changes from %s', async (initialScope) => {
+    const s = await seedCase({ agentDispute: true });
+    if (initialScope) {
+      await db.update(agentVerifications).set({ competingScope: true })
+        .where(eq(agentVerifications.agentId, s.t2.agentId));
+      await detectAdjudicationCase({ targetType: 'pending_edit', targetId: s.editId });
+    }
+    await claim(s.a.userId, s.caseId);
+    await claim(s.b.userId, s.caseId);
+    await opinion(s.a.userId, { caseId: s.caseId, targetVersion: s.version, resolvedValue: 60, resolvedUnit: 'L/h' });
+    await db.update(agentVerifications).set({ competingScope: !initialScope })
+      .where(eq(agentVerifications.agentId, s.t2.agentId));
+    const late = await opinion(s.b.userId, { caseId: s.caseId, targetVersion: s.version, resolvedValue: 60, resolvedUnit: 'L/h' });
+    expect([late.status, late.body.code]).toEqual([409, 'adjudication_case_not_open']);
+    const [kase] = await db.select().from(adjudicationCases).where(eq(adjudicationCases.id, s.caseId));
+    expect(kase).toMatchObject({ state: 'invalidated', invalidatedReason: 'competing_scope_changed', sealedAt: null });
+    expect(kase!.adjudicatedTarget!.context.triggers.includes('competing_scope')).toBe(initialScope);
+    const [edit] = await db.select().from(pendingEdits).where(eq(pendingEdits.id, s.editId));
+    expect(edit!.status).toBe('pending');
+    expect((await db.select().from(disputes))[0]!.status).toBe('open');
+  });
+
   /** A case opened by blind T2's competing-scope finding alone, with both seats taken. */
   async function seedScopeCase() {
     const author = await seedAgent('scope-author', { tier: 'mid' });

@@ -13,6 +13,7 @@ import { parseLocaleNumber } from '@/lib/parseNumber';
 import { showToast } from '@/lib/toast';
 import { useCan } from '@/lib/usePermissions';
 import {
+  ApiError,
   submitDrugMetabolism,
   type MetabolismMetaboliteInput,
   type MetabolismPrecursorInput,
@@ -366,6 +367,10 @@ export function MetabolismEditForm({
       const result = await submitDrugMetabolism(drugId, {
         profile: {
           evidenceNote: profileNote.trim() || null,
+          // The profile's own citations are not edited here, but the save
+          // replaces the box wholesale: carry them through rather than
+          // silently dropping the note's sources.
+          referenceIds: metabolism?.referenceIds ?? null,
         },
         routes: routeInputs,
         metabolites: metaboliteInputs,
@@ -379,7 +384,9 @@ export function MetabolismEditForm({
       }
       onSaved();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('metabolismEdit.saveFailed'));
+      setError(err instanceof ApiError && err.code === 'block_reference_missing'
+        ? t('errors.blockReferenceMissing')
+        : err instanceof Error ? err.message : t('metabolismEdit.saveFailed'));
     } finally {
       setSaving(false);
     }

@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { neon, neonConfig, Pool } from '@neondatabase/serverless';
+import { neon, neonConfig, Pool, type PoolClient } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { sql as sqlTemplate, type SQL } from 'drizzle-orm';
 import { drizzle as drizzlePool } from 'drizzle-orm/neon-serverless';
@@ -282,6 +282,22 @@ export async function runInPoolTransaction<T>(
     neonConfig.webSocketConstructor = ws as unknown as typeof WebSocket;
   }
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  // A connection that drops while its client is checked out — between two
+  // statements of the transaction, when no query is in flight to reject —
+  // makes the client emit 'error'. pg-pool only listens on idle clients, so
+  // with no listener Node turns that into an uncaught exception and the whole
+  // function instance exits, taking every request it is serving with it
+  // (production: "Connection terminated unexpectedly", "server conn crashed?").
+  // Listening does not swallow the failure: the client is no longer queryable,
+  // so the transaction's next statement (at the latest its COMMIT) rejects and
+  // the unit of work fails and rolls back as it would for any query error.
+  const logConnectionError = (err: Error) => {
+    console.error(`[db] pool connection error: ${err.message}`);
+  };
+  pool.on('error', logConnectionError);
+  pool.on('connect', (client: PoolClient) => {
+    client.on('error', logConnectionError);
+  });
   const afterCommit: Array<() => void> = [];
   try {
     const poolDb = drizzlePool(pool, { schema });
