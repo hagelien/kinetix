@@ -73,7 +73,7 @@ export function resolveLocal(spec: string, importer: string): string | null {
     for (const ext of ['', '.ts', '.tsx', '.mts', '.cts', '/index.ts', '/index.tsx']) {
       const file = candidate + ext;
       if (fs.existsSync(file) && fs.statSync(file).isFile()) {
-        return path.relative(ROOT, file);
+        return path.relative(ROOT, file).split(path.sep).join('/');
       }
     }
   }
