@@ -31,10 +31,12 @@ vi.mock('../../api/_lib/auth.js', () => ({
 }));
 
 import handler from '../../api/agent-verifications.js';
+import disputesHandler from '../../api/disputes.js';
 import {
   agents,
   agentVerifications,
   pendingEdits,
+  disputes,
   wikiPages,
 } from '../../db/schema.js';
 import {
@@ -370,6 +372,57 @@ describe('agent-verifications GET: peer verdicts stay blind to other agents', ()
     summary: { approveCount: number; disputeCount: number };
     consensus?: unknown;
   };
+
+  it('hides private peer dispute mirrors in every feed form across a self-review grant', async () => {
+    const author = await seedAgent('mirror-author');
+    const peer = await seedAgent('mirror-peer');
+    const editId = await seedOpenEditWithPeerApproval(author.userId, peer.agentId);
+    const [hidden] = await db.insert(disputes).values({
+      targetType: 'pending_edit', targetId: editId, source: 'agent',
+      createdBy: peer.userId, reasonMd: 'Private peer rationale.',
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+    }).returning({ id: disputes.id });
+    const [own] = await db.insert(disputes).values({
+      targetType: 'pending_edit', targetId: editId, source: 'agent',
+      createdBy: author.userId, reasonMd: 'My own objection.',
+      createdAt: new Date('2026-01-02T00:00:00Z'),
+    }).returning({ id: disputes.id });
+    const read = async (query: string, userId = author.userId) => {
+      getUserFromRequestMock.mockResolvedValue({ userId, role: 'editor' });
+      const { res, state } = createResponse();
+      await disputesHandler({ method: 'GET', url: `/api/disputes?${query}`,
+        headers: { host: 'localhost' } } as IncomingMessage, res);
+      return state;
+    };
+    for (const selfReviewEnabled of [false, true]) {
+      await db.update(agents).set({ selfReviewEnabled }).where(eq(agents.id, author.agentId));
+      for (const query of ['limit=1', `targetType=pending_edit&targetId=${editId}`]) {
+        const state = await read(query);
+        expect(state.statusCode).toBe(200);
+        expect(JSON.parse(state.body).disputes.map((d: { id: number }) => d.id)).toEqual([own!.id]);
+        expect(state.body).not.toContain('Private peer rationale');
+      }
+      expect((await read(`id=${hidden!.id}`)).statusCode).toBe(404);
+      expect((await read(`id=${own!.id}`)).statusCode).toBe(200);
+    }
+    await db.update(disputes).set({ status: 'resolved', resolution: 'upheld' })
+      .where(eq(disputes.id, hidden!.id));
+    const resolved = await read(`status=resolved&targetType=pending_edit&targetId=${editId}`);
+    expect(JSON.parse(resolved.body).disputes).toEqual([]);
+    expect((await read(`id=${hidden!.id}`)).statusCode).toBe(404);
+    const human = await seedUser(db, { email: 'mirror-human@example.com', username: 'mirror-human', role: 'editor' });
+    expect((await read(`id=${hidden!.id}`, human)).statusCode).toBe(200);
+    const publicAndHuman = await db.insert(disputes).values([
+      { targetType: 'drug_discussion', targetId: 999, source: 'agent',
+        createdBy: peer.userId, reasonMd: 'Public discussion objection.' },
+      { targetType: 'pending_edit', targetId: editId, source: 'human',
+        createdBy: human, reasonMd: 'Human feedback on the proposal.' },
+    ]).returning({ id: disputes.id });
+    const visible = JSON.parse((await read('')).body).disputes as Array<{ id: number }>;
+    expect(visible.map((d) => d.id).sort()).toEqual(
+      [own!.id, ...publicAndHuman.map((d) => d.id)].sort(),
+    );
+  });
 
   it('keeps an authored version blind across a later self-review grant', async () => {
     const author = await seedAgent('later-self-review');
