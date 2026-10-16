@@ -10,6 +10,23 @@ import { getDb } from './db.js';
 type Db = ReturnType<typeof getDb>;
 
 /**
+ * Every citation id a `drug_block_revisions` row (aliased `b`) names, as jsonb
+ * values: a model-structure declaration's `citationId` and the `referenceIds`
+ * on routes, metabolite links and mechanisms, in both the before and the after
+ * snapshot (#37). Key-aware, like the stored-JSON rewrite a citation merge
+ * applies to the same rows. Callers keep the numeric values.
+ */
+export const BLOCK_REVISION_CITATION_VALUES = sql.raw(`
+  SELECT v FROM jsonb_path_query(b.new_value, '$.**.citationId') v
+  UNION ALL
+  SELECT v FROM jsonb_path_query(b.new_value, '$.**.referenceIds[*]') v
+  UNION ALL
+  SELECT v FROM jsonb_path_query(COALESCE(b.old_value, 'null'::jsonb), '$.**.citationId') v
+  UNION ALL
+  SELECT v FROM jsonb_path_query(COALESCE(b.old_value, 'null'::jsonb), '$.**.referenceIds[*]') v
+`);
+
+/**
  * Citation ids that are linked from at least one persistent surface for the
  * given drug. The references API filters its drug-scoped listing through
  * this set so citations created during a cancelled "add fact" flow stay
@@ -25,6 +42,9 @@ type Db = ReturnType<typeof getDb>;
  *     routes, metabolites, enzyme interactions). The sidebar renders these
  *     citations as numbered markers, so a citation anchored only there is
  *     cited content, not an orphan.
+ *   - Whole-block revision snapshots (`drug_block_revisions`, #37): the
+ *     metabolism, pharmacodynamics and model-structure history renders the
+ *     citations each past state carried.
  *   - Pending edits still in the review queue (status='pending') whose
  *     target is one of the drug's pages or the drug itself.
  *
@@ -76,6 +96,19 @@ export async function collectUsedCitationIdsForDrug(
       FROM drug_parameter_revisions
       WHERE drug_id = ${drugId}
         AND reference_ids IS NOT NULL
+    ),
+    block_revision_citations AS (
+      -- Whole-block revision snapshots (#37): a declaration's citationId and
+      -- the referenceIds on routes, metabolite links and mechanisms, before
+      -- and after each change. The block history renders them, so a citation
+      -- anchored only there is cited content, like a parameter revision's.
+      SELECT (t.v #>> '{}')::int AS citation_id
+      FROM drug_block_revisions b
+      CROSS JOIN LATERAL (
+        ${BLOCK_REVISION_CITATION_VALUES}
+      ) t(v)
+      WHERE b.drug_id = ${drugId}
+        AND jsonb_typeof(t.v) = 'number'
     ),
     concentration_citations AS (
       SELECT citation_id
@@ -166,6 +199,8 @@ export async function collectUsedCitationIdsForDrug(
       SELECT citation_id FROM revision_scalar_citations
       UNION ALL
       SELECT citation_id FROM revision_array_citations
+      UNION ALL
+      SELECT citation_id FROM block_revision_citations
       UNION ALL
       SELECT citation_id FROM concentration_citations
       UNION ALL
@@ -277,6 +312,16 @@ export async function filterUsedCitationIds(
       FROM drug_parameter_revisions
       WHERE reference_ids && ARRAY[${idList}]::int[]
     ),
+    block_revision_citations AS (
+      -- Whole-block revision snapshots (#37), as in
+      -- collectUsedCitationIdsForDrug().
+      SELECT (t.v #>> '{}')::int AS citation_id
+      FROM drug_block_revisions b
+      CROSS JOIN LATERAL (
+        ${BLOCK_REVISION_CITATION_VALUES}
+      ) t(v)
+      WHERE jsonb_typeof(t.v) = 'number'
+    ),
     concentration_citations AS (
       SELECT citation_id
       FROM parameter_entries
@@ -341,6 +386,8 @@ export async function filterUsedCitationIds(
       SELECT citation_id FROM revision_scalar_citations
       UNION ALL
       SELECT citation_id FROM revision_array_citations
+      UNION ALL
+      SELECT citation_id FROM block_revision_citations
       UNION ALL
       SELECT citation_id FROM concentration_citations
       UNION ALL
@@ -510,6 +557,19 @@ export async function collectReferenceUsage(
         FROM drug_metabolites
         WHERE reference_ids @> ARRAY[${citationId}]::int[]
           AND metabolite_drug_id IS NOT NULL
+        UNION ALL
+        -- Whole-block revision snapshots (#37): the bibliography counts a
+        -- citation held only in a block's history, so "cited in" names it.
+        SELECT b.drug_id
+        FROM drug_block_revisions b
+        WHERE EXISTS (
+          SELECT 1
+          FROM (
+            ${BLOCK_REVISION_CITATION_VALUES}
+          ) t(v)
+          WHERE jsonb_typeof(t.v) = 'number'
+            AND (t.v #>> '{}')::int = ${citationId}
+        )
       ) rel
       WHERE drug_id IS NOT NULL
     `),

@@ -11,6 +11,7 @@ import {
   type DiscussionHost,
   type FactDiscussionTargetKey,
 } from '@/lib/discussionTargets';
+import type { DrugBlockId } from '@/lib/drugBlocks';
 import type {
   DrugMetabolism,
   EliminationRouteKind,
@@ -205,6 +206,11 @@ export interface DrugParameterRevisionDTO {
   /** Set when this revision is the applied result of a reviewed `param_entry`
    * pending edit — also the id to fetch that edit's agent verdicts for (#1358). */
   pendingEditId?: number | null;
+  /** Publication decision on a block's linked approved edit; no private email. */
+  reviewDecision?: {
+    reviewedAt: string | null;
+    reviewer: ({ id: number } & UserBadgeData) | null;
+  };
   createdAt: string;
   author: ({ id: number } & UserBadgeData) | null;
   /** Server includes approval summary on the history endpoint (#344, #361). */
@@ -682,9 +688,23 @@ export async function fetchDrugParameterHistory(
   );
 }
 
+/**
+ * A whole block's revision history (#37) — metabolism, mechanisms or the model
+ * structure. Same row shape as a parameter's, with the before/after values
+ * being block snapshots, with the submitted rationale and linked review decision.
+ */
+export async function fetchDrugBlockHistory(
+  drugId: number,
+  block: DrugBlockId,
+): Promise<{ revisions: DrugParameterRevisionDTO[] }> {
+  return apiFetch<{ revisions: DrugParameterRevisionDTO[] }>(
+    `/api/drug-parameter-history?drugId=${drugId}&block=${encodeURIComponent(block)}`,
+  );
+}
+
 export async function fetchDiscussions(
   host: DiscussionHost,
-  parameter?: DrugParameterId | FactDiscussionTargetKey | null,
+  parameter?: DrugParameterId | DrugBlockId | FactDiscussionTargetKey | null,
 ): Promise<{ discussions: DrugDiscussionDTO[] }> {
   const sp = discussionHostParams(host);
   if (parameter) sp.set('parameter', parameter);
@@ -707,7 +727,7 @@ export async function fetchDiscussionById(id: number): Promise<{
 export async function postDiscussion(
   host: DiscussionHost,
   body: string,
-  parameter?: DrugParameterId | FactDiscussionTargetKey | null,
+  parameter?: DrugParameterId | DrugBlockId | FactDiscussionTargetKey | null,
   parentId?: number,
 ): Promise<{ discussion: DrugDiscussionDTO }> {
   const sp = discussionHostParams(host);

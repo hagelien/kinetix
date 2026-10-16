@@ -1,3 +1,4 @@
+import { lockBlockCitationReferences } from './blockCitationLocks.js';
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import {
   bioEntities,
@@ -341,7 +342,8 @@ async function resolveEntityId(
 /**
  * Replace a drug's entire set of receptor-target mechanisms with `mechanisms`.
  * Clears the existing rows and re-inserts, creating any catalog targets that
- * were supplied by symbol/name. Must run inside a transaction.
+ * were supplied by symbol/name. Must run inside a transaction, wrapped in
+ * `withBlockHistory` (api/_lib/drugBlockHistory.ts) so the change is recorded.
  */
 export async function replaceDrugReceptorTargets(
   db: Db,
@@ -349,6 +351,7 @@ export async function replaceDrugReceptorTargets(
   mechanisms: ReceptorMechanismInput[],
   userId: number,
 ): Promise<void> {
+  await lockBlockCitationReferences(db, mechanisms);
   await validateReceptorTargetsInput(db, drugId, mechanisms);
 
   // #785 Phase 7: resolve each mechanism to a unified bio_entities id and write
@@ -405,4 +408,5 @@ export async function replaceDrugReceptorTargets(
     userId,
     eventType: 'edit',
   });
+
 }

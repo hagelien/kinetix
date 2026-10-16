@@ -1918,6 +1918,48 @@ export const drugParameterRevisions = pgTable(
   ],
 );
 
+// ─── Drug block revisions (metabolism, mechanisms, model structure) ──────────
+//
+// The revision history of the monograph blocks that are stored as structured
+// lists rather than parameter rows (src/lib/drugBlocks.ts, #37). One row per
+// change to the WHOLE block of one drug, carrying a self-contained snapshot of
+// the block before and after, so the history reads without reconstructing
+// state. `oldValue` is NULL only when the state before the change was never
+// recorded (the first change after this table was introduced, for a block
+// whose writes are observed after the fact); an empty block is an empty
+// snapshot, never NULL. Kept apart from drug_parameter_revisions on purpose:
+// that table's readers (peer sweep, approvals, recent changes) all assume a
+// parameter-shaped value.
+export const drugBlockRevisions = pgTable(
+  'drug_block_revisions',
+  {
+    id: serial('id').primaryKey(),
+    drugId: integer('drug_id')
+      .references(() => drugs.id, { onDelete: 'cascade' })
+      .notNull(),
+    /** A DrugBlockId; constrained by drug_block_revisions_block_check. */
+    block: varchar('block', { length: 40 }).notNull(),
+    oldValue: jsonb('old_value'),
+    newValue: jsonb('new_value').notNull(),
+    /** The author's stated rationale, retained even if the linked proposal is deleted. */
+    editSummary: text('edit_summary'),
+    pendingEditId: integer('pending_edit_id').references(
+      () => pendingEdits.id,
+      { onDelete: 'set null' },
+    ),
+    /** NULL for an operator script that runs without a user (seeder, importer). */
+    createdBy: integer('created_by').references(() => users.id),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (t) => [
+    index('drug_block_rev_drug_block_idx').on(t.drugId, t.block, t.createdAt),
+    check(
+      'drug_block_revisions_block_check',
+      sql`${t.block} IN ('metabolism', 'pharmacodynamics', 'modelStructure')`,
+    ),
+  ],
+);
+
 // ─── Drug merge events (lineage of what a merge moved) ───────────────────────
 
 /**

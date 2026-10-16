@@ -379,9 +379,11 @@ export async function resolveCitation(
               : stats.deferredReason === 'loser_locked'
                 ? `#${duplicate.id} (its own lock was held: an extraction job being ` +
                   `queued for it, or another merge of it)`
+                : stats.deferredReason === 'block_history_in_flight'
+                  ? `#${duplicate.id} (a metabolism block write was in flight)`
                 : stats.deferredReason === 'drug_locked'
-                  ? `#${duplicate.id} (drug ${stats.lockedDrugId}, whose summaries the ` +
-                    `fold recomputes, was locked by another write)`
+                  ? `#${duplicate.id} (drug ${stats.lockedDrugId}, whose blocks or summaries the ` +
+                    `fold rewrites, was locked by another write)`
                   : stats.deferredReason === 'entry_in_flight'
                     ? `#${duplicate.id} (a source value citing it or the survivor was ` +
                       `being written, or one of them re-scored or folded elsewhere)`

@@ -90,7 +90,7 @@ describe("scheduled-agent HTTP transport", () => {
               "-NoProfile",
               "-NonInteractive",
               "-Command",
-              "$OutputEncoding = [System.Text.UTF8Encoding]::new($false); $env:TEST_JSON | & $env:TEST_BASH $env:TEST_API POST /echo -",
+              "[IO.File]::WriteAllText($env:TEST_BODY_FILE, $env:TEST_JSON, [Text.UTF8Encoding]::new($false)); & $env:TEST_BASH $env:TEST_API POST /echo ('@' + $env:TEST_BODY_BASH)",
             ]
           : args;
         const child = spawn(executable, commandArgs, {
@@ -116,6 +116,10 @@ describe("scheduled-agent HTTP transport", () => {
             TEST_BASH: bash,
             TEST_API: apiScript,
             TEST_JSON: sample,
+            TEST_BODY_FILE: path.join(directory, "powershell-body.json"),
+            TEST_BODY_BASH: path.join(directory, "powershell-body.json")
+              .replaceAll("\\", "/")
+              .replace(/^([A-Za-z]):/, (_, drive: string) => `/${drive.toLowerCase()}`),
           },
           stdio: "pipe",
           timeout: 10_000,
@@ -168,15 +172,15 @@ describe("scheduled-agent HTTP transport", () => {
   });
 
   it.runIf(process.platform === "win32")(
-    "preserves the documented PowerShell UTF-8 pipeline",
+    "preserves the documented PowerShell UTF-8/no-BOM file route",
     async () => {
       const result = await request("-", undefined, { powershell: true });
       expect(result.code, result.stderr).toBe(0);
-      // PowerShell Write-Output adds a line ending; the JSON text is unchanged.
       const body = Buffer.from(JSON.parse(result.stdout).hex, "hex").toString(
         "utf8",
       );
       expect(JSON.parse(body)).toEqual(JSON.parse(sample));
+      expect(body).toBe(sample);
     },
   );
 

@@ -129,6 +129,7 @@ interface MechanismRow {
 
 /** Maps stable API error codes to translation keys for the React boundary. */
 const RECEPTOR_TARGET_ERROR_KEYS: Record<string, string> = {
+  block_reference_missing: 'errors.blockReferenceMissing',
   receptor_target_drug_not_found: 'mechanismEdit.errorDrugNotFound',
   receptor_target_symbol_or_name_required: 'mechanismEdit.targetRequired',
   receptor_target_links_missing: 'mechanismEdit.errorLinksMissing',

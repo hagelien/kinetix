@@ -10,6 +10,11 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MetabolismEditForm } from './MetabolismEditForm';
 import type { DrugMetabolism, DrugMetaboliteLink } from '@/lib/metabolism';
 
+import { ApiError } from '@/lib/drugApi';
+import en from '@/locales/en.json';
+import nb from '@/locales/nb.json';
+const errorLocale = vi.hoisted(() => ({ language: 'nb' as 'en' | 'nb' }));
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, opts?: Record<string, unknown>) => {
@@ -20,9 +25,10 @@ vi.mock('react-i18next', () => ({
         )}`,
         'metabolismEdit.precursorDuplicate': 'duplikat forløper',
       };
+      if (key === 'errors.blockReferenceMissing') return (errorLocale.language === 'nb' ? nb : en).errors.blockReferenceMissing;
       return labels[key] ?? key;
     },
-    i18n: { language: 'nb' },
+    i18n: { language: errorLocale.language },
   }),
 }));
 
@@ -84,6 +90,7 @@ function renderForm(metabolites: DrugMetaboliteLink[]) {
 }
 
 beforeEach(() => {
+  errorLocale.language = 'nb';
   submitDrugMetabolism.mockClear();
 });
 
@@ -127,4 +134,14 @@ describe('MetabolismEditForm — one row per substance', () => {
 
     await waitFor(() => expect(submitDrugMetabolism).toHaveBeenCalledTimes(1));
   });
+});
+
+it.each(['en', 'nb'] as const)('translates missing block references in %s', async (language) => {
+    errorLocale.language = language;
+    submitDrugMetabolism.mockRejectedValueOnce(Object.assign(new ApiError('Hardcoded English missing reference', 400), { code: 'block_reference_missing' }));
+    renderForm([]);
+    fireEvent.click(screen.getByRole('button', { name: 'Lagre' }));
+    expect(await screen.findByText((language === 'nb' ? nb : en).errors.blockReferenceMissing)).toBeInTheDocument();
+    expect(screen.queryByText('Hardcoded English missing reference')).not.toBeInTheDocument();
+    expect(nb.errors.blockReferenceMissing).not.toBe(en.errors.blockReferenceMissing);
 });

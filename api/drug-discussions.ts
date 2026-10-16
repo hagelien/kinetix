@@ -2,8 +2,9 @@
  * Discussion threads.
  *
  * Two hosts share this table (drug XOR wiki page, see schema CHECK):
- *   - Drug monographs: ?drugId=&parameter=  — a drug-parameter or `fact:<id>`
- *     key. Every discussion is about a specific parameter or fact: the old
+ *   - Drug monographs: ?drugId=&parameter=  — a drug-parameter, a whole-block
+ *     id (`metabolism`, `pharmacodynamics`, `modelStructure`; #37) or a
+ *     `fact:<id>` key. Every discussion is about a specific parameter or fact: the old
  *     whole-monograph thread (no parameter) is retired. It can still be read
  *     (GET without `parameter`) so its comments can be moved to the parameter
  *     or fact they are about, but nothing new can be posted into it.
@@ -45,6 +46,7 @@ import {
 import { drugDiscussionUrl } from './_lib/discussion-urls.js';
 import { notifyCommentFeedback } from './_lib/commentNotifications.js';
 import { isFactDiscussionTargetKey } from '../src/lib/discussionTargets.js';
+import { isDrugBlockId } from '../src/lib/drugBlocks.js';
 import {
   callerCan,
   callerCanReadWikiPage,
@@ -98,9 +100,12 @@ export default withErrorHandling(
 
     // An empty `?parameter=` is malformed, not "no parameter": it would
     // otherwise be stored as '' and read back as the whole-monograph thread.
+    // A block id names a drug block, so it is only a target on a drug host;
+    // the wiki-page check below already requires a fact key there.
     if (
       parameterRaw !== null &&
       !isDrugParameterId(parameterRaw) &&
+      !isDrugBlockId(parameterRaw) &&
       !isFactDiscussionTargetKey(parameterRaw)
     ) {
       error(res, 400, 'Invalid parameter');

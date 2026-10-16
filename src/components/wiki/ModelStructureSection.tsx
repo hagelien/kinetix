@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Plus, Trash2 } from 'lucide-react';
@@ -38,6 +44,19 @@ interface Props {
   isAdmin?: boolean;
   /** Reload the parent after a direct write (admins) so derived surfaces refresh. */
   onMutated?: () => void;
+  /**
+   * The block's own actions (revision history, discussion), shown beside the
+   * heading. The model structure is one block per drug (#37), so these belong
+   * to the section, not to each declaration.
+   */
+  actions?: ReactNode;
+  /**
+   * Make a declaration's value its own citation trigger, the way parameter
+   * values are cited (a hover panel into the page's shared bibliography).
+   * Returns null while the citation is not in that ordering, and the section
+   * then falls back to its plain `#id` link to the reference.
+   */
+  withReferences?: (citationId: number, children: ReactNode) => ReactNode;
 }
 
 export function ModelStructureSection({
@@ -45,6 +64,8 @@ export function ModelStructureSection({
   canEdit = false,
   isAdmin = false,
   onMutated,
+  actions,
+  withReferences,
 }: Props) {
   const { t } = useTranslation();
   const [entries, setEntries] = useState<ParameterEntryRow[]>([]);
@@ -182,9 +203,14 @@ export function ModelStructureSection({
       className="mt-3 border-t border-border pt-3"
       data-testid="model-structure-section"
     >
-      <h4 className="mb-2 text-xs font-semibold text-muted-foreground">
-        {t('modelStructure.heading')}
-      </h4>
+      <div className="mb-2 flex items-center justify-between gap-1">
+        <h4 className="text-xs font-semibold text-muted-foreground">
+          {t('modelStructure.heading')}
+        </h4>
+        {actions ? (
+          <div className="flex items-center gap-0.5">{actions}</div>
+        ) : null}
+      </div>
       {actionFailed && (
         <p className="mb-2 text-xs text-destructive" role="alert">
           {t('modelStructure.actionError')}
@@ -222,9 +248,33 @@ export function ModelStructureSection({
                     key={e.id}
                     className="inline-flex items-center gap-1 rounded border border-border bg-muted/30 px-1.5 py-0.5 text-xs"
                   >
-                    <span className="font-medium">
-                      {valueLabel(e.categoricalValue ?? '')}
-                    </span>
+                    {(() => {
+                      const value = (
+                        <span className="font-medium">
+                          {valueLabel(e.categoricalValue ?? '')}
+                        </span>
+                      );
+                      // The value is the citation trigger when the citation is
+                      // in the shared bibliography; otherwise the #id link below.
+                      const cited =
+                        e.citationId != null
+                          ? (withReferences?.(e.citationId, value) ?? null)
+                          : null;
+                      return (
+                        <>
+                          {cited ?? value}
+                          {e.citationId != null && cited == null && (
+                            <a
+                              href={referenceModulePath(e.citationId)}
+                              className="text-primary hover:underline"
+                              title={t('modelStructure.source')}
+                            >
+                              #{e.citationId}
+                            </a>
+                          )}
+                        </>
+                      );
+                    })()}
                     {e.route && (
                       // Per-route declaration (CV-2c-4): show which administration route it is scoped
                       // to, so a curator sees the route they authored (a route-less one shows nothing).
@@ -241,15 +291,6 @@ export function ModelStructureSection({
                       <span className="text-[10px] text-muted-foreground">
                         {scopeLabel(e.doseContext)}
                       </span>
-                    )}
-                    {e.citationId != null && (
-                      <a
-                        href={referenceModulePath(e.citationId)}
-                        className="text-primary hover:underline"
-                        title={t('modelStructure.source')}
-                      >
-                        #{e.citationId}
-                      </a>
                     )}
                     {canEdit && (
                       <button

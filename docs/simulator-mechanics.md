@@ -100,7 +100,9 @@ curves:
   probe and final simulations always run on the same build;
 - each live build carries its own model id (`<id>+live.<hash>`), so a curve on screen is only ever
   graded by the build that produced it; once a newer build replaces it, the older curve is withheld
-  until it is rerun, rather than shown under evidence that did not produce it;
+  and marked out of date until it is rerun, rather than shown under evidence that did not produce
+  it. This happens as soon as the newer build arrives — including one an open panel fetched on its
+  own when the minute was up (§3), with no run and no change to the inputs;
 - reviewed models are untouched: they are never fetched, and a live answer can never displace one.
 
 The reviewed tier is therefore small on purpose. The set of analytes this build resolves, and each
@@ -145,9 +147,12 @@ of the model the run will resolve, not of the committed artifact that answer rep
 panel and the run share one request, and its outcome — an answer or a failure — is trusted
 for a minute: a run in that minute resolves the same model the picker shows, and after a
 failed request it falls back to the same model rather than retrying into one whose routes
-the picker never offered. Once the minute has passed the run asks again, and an answer that
-changes the model redraws the picker before the run resolves it, so a dose on a route the
-new model lacks is then marked as described next. A dose already on an undeclared route (a saved case,
+the picker never offered. **The picker asks again when the minute is up.** A panel left
+open does not keep offering the routes of an answer that has aged out until the next run: it
+asks again as soon as the minute has passed, and every minute after that while it stays open.
+An answer that changes the model — whether the panel or a run fetched it — redraws the picker
+before a run resolves it, so a route the catalogue has since dropped stops being offered, and
+a dose already on it is marked as described next. A dose already on an undeclared route (a saved case,
 or a drug or engine changed underneath it) is shown struck through, not as a choice, and the
 run refuses it as above until the route is replaced. Intranasal is offered under the simulator's name
 for it, *insufflation*. The KineLab and ethanol engines, which run no registry model, and a

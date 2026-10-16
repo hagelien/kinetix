@@ -12,7 +12,7 @@ import {
   AGENT_POOL_LOCK_NAMESPACE,
 } from '../src/lib/agentPoolLock';
 
-const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 
 describe('agent pool lock', () => {
   it('wraps every agents INSERT in the provisioning doc in the lock', () => {
