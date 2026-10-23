@@ -55,13 +55,23 @@ Introduce PWA installation only after the mobile shell and core journeys are sat
 
 **SCI-02 Provenance.** Citations, reference identifiers, data qualifiers and verification badges stay accessible via keyboard and touch. If a view initially collapses detail, an obvious labeled action reveals it.
 
-**SCI-03 Authorization.** Mobile discovery surfaces respect the same role/capability gates as desktop. Route/API permission enforcement remains authoritative; UI visibility is not a security boundary.
+**SCI-03 Authorization and public reading.** Anonymous users can use published, non-mutating scientific browsing and local computation without a login, on desktop and mobile. Auth is required for saving database changes, private user data, draft/moderation views and restricted datasets. API publication/permission enforcement remains authoritative; UI visibility is not a security boundary.
 
 **SCI-04 Deep links.** Existing `/wiki/:slug/:tab`, `?param=...`, `?fact=...`, `?view=...`, `/modeling?mode=...`, `/detection-times?drug=...` and legacy modeling redirects continue to resolve.
 
 **SCI-05 Desktop regression safety.** Desktop table, keyboard shortcuts, monograph tabs, graphs, comparison, floating tools and moderator workflows remain available and retain established behavior.
 
 **SCI-06 Browser refresh and viewport changes.** Switching portrait/landscape, resizing or rotating does not discard unsaved work, active selections or route parameters. A mobile user who opens a desktop-size viewport does not corrupt the persisted desktop table state.
+
+### 2.5 Public read-only access is a product requirement
+
+**Default:** anonymous users may browse all published/public scientific material and use tools that do not require a persistent database mutation. This includes drug search, monograph browsing, public citations, molecule/bioentity browsing, public detection windows, comparison and client-side unit conversion. Extend the same principle to simulation/calculation and published learning material after verifying each tool's API and persistence dependencies.
+
+**Sign-in boundary:** a user should be prompted to sign in only when they choose to create, save, edit, submit, annotate, moderate or administer persistent server data, or access data tied to an account. Do not block an entire mixed read/write page just because it also contains optional Save/Edit features. Where possible, show read-only actions normally and gate mutation controls individually.
+
+**Publication boundary:** public read-only is *not* permission to expose unpublished laboratory methods, restricted internal urine-detection guidance, unpublished postmortem cohort data, private case histories, draft scientific content or moderation/audit records. These need an explicit publication/data-owner review before their read capability is opened to anonymous users. A GET request is not evidence that its response is public-safe.
+
+**Implementation:** see [Public read-only access rollout](./2026-10-23-public-readonly-access.md). The first PR opens already-public published views at the frontend router and navigation layers; remaining tools require server/client contract audits. Desktop and mobile anonymous behavior must match. The no-account path is a core acceptance criterion, not a later PWA enhancement.
 
 ## 3. Audited starting point (as of 2026-10-23)
 
