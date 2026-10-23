@@ -1,11 +1,13 @@
 # Kinetix mobile UX: implementation specification
 
-**Status:** Proposed implementation design (documentation only)  
+**Status:** Implementation started — M00 audit and mobile test harness prepared for review; M01–M11 remain
 **Date:** 2026-10-23  
 **Target repository:** `hagelien/kinetix`, default branch `main`  
 **Primary delivery:** Responsive React web application followed by an installable Progressive Web App (PWA)  
 **Native Android:** Explicitly deferred unless future requirements justify a native bridge  
 **Scientific/API/database changes:** None required for the initial mobile UX rollout
+
+**Implementation evidence:** [M00 baseline, screenshots, accessibility findings and measured performance](../audits/2026-10-23-mobile-ux-baseline.md). M00 adds deterministic mobile/desktop characterization tests without changing the application UI. Continue with M01–M03 as separate PRs after its review, following §14.
 
 ## 1. Executive decision
 

@@ -1,0 +1,1257 @@
+{
+  "surface": "parameter-sources",
+  "route": "/wiki/mobile-a/pharmacokinetics?param=halfLife",
+  "project": "mobile-narrow",
+  "buildMode": "production-preview",
+  "browser": "145.0.7632.6",
+  "metrics": {
+    "viewport": {
+      "width": 320,
+      "height": 740,
+      "dpr": 2.625
+    },
+    "visualViewport": {
+      "width": 320,
+      "height": 740,
+      "scale": 1
+    },
+    "pageWidth": 320,
+    "header": {
+      "x": 0,
+      "y": 0,
+      "width": 320,
+      "height": 195,
+      "scrollWidth": 320,
+      "clientWidth": 320
+    },
+    "rail": {
+      "x": 0,
+      "y": 195,
+      "width": 28,
+      "height": 545,
+      "scrollWidth": 27,
+      "clientWidth": 27
+    },
+    "routePane": {
+      "x": 28,
+      "y": 195,
+      "width": 292,
+      "height": 545,
+      "scrollWidth": 324,
+      "clientWidth": 292
+    },
+    "dialogs": [
+      {
+        "x": 16,
+        "y": 73.25,
+        "width": 288,
+        "height": 593.5,
+        "scrollWidth": 288,
+        "clientWidth": 288
+      }
+    ],
+    "tables": [],
+    "targets": [
+      {
+        "tag": "a",
+        "name": "Kinetix",
+        "x": 12,
+        "y": 8,
+        "width": 121.671875,
+        "height": 32,
+        "scrollWidth": 126,
+        "clientWidth": 122,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "a",
+        "name": "Mobiltest A",
+        "x": 201.734375,
+        "y": 10,
+        "width": 106.265625,
+        "height": 28,
+        "scrollWidth": 111,
+        "clientWidth": 106,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "a",
+        "name": "Drug Table",
+        "x": 12,
+        "y": 48,
+        "width": 85.609375,
+        "height": 31.5,
+        "scrollWidth": 86,
+        "clientWidth": 86,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "a",
+        "name": "Wiki",
+        "x": 99.609375,
+        "y": 48,
+        "width": 43.328125,
+        "height": 31.5,
+        "scrollWidth": 43,
+        "clientWidth": 43,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "a",
+        "name": "References",
+        "x": 144.9375,
+        "y": 48,
+        "width": 88.25,
+        "height": 31.5,
+        "scrollWidth": 88,
+        "clientWidth": 88,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "a",
+        "name": "Bio entities",
+        "x": 12,
+        "y": 81.5,
+        "width": 89.046875,
+        "height": 31.5,
+        "scrollWidth": 89,
+        "clientWidth": 89,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "a",
+        "name": "Detection times",
+        "x": 103.046875,
+        "y": 81.5,
+        "width": 119.4375,
+        "height": 31.5,
+        "scrollWidth": 119,
+        "clientWidth": 119,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "NO",
+        "x": 226.640625,
+        "y": 119,
+        "width": 34.421875,
+        "height": 36,
+        "scrollWidth": 34,
+        "clientWidth": 34,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "a",
+        "name": "Sign in",
+        "x": 267.0625,
+        "y": 129,
+        "width": 40.9375,
+        "height": 16,
+        "scrollWidth": 41,
+        "clientWidth": 41,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "a",
+        "name": "Overview",
+        "x": 12,
+        "y": 164,
+        "width": 76.5,
+        "height": 30,
+        "scrollWidth": 77,
+        "clientWidth": 77,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "a",
+        "name": "Pharmacodynamics",
+        "x": 90.5,
+        "y": 164,
+        "width": 137.453125,
+        "height": 30,
+        "scrollWidth": 137,
+        "clientWidth": 137,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "a",
+        "name": "Pharmacokinetics",
+        "x": 229.953125,
+        "y": 164,
+        "width": 126.0625,
+        "height": 30,
+        "scrollWidth": 126,
+        "clientWidth": 126,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "Open drug table sidebar",
+        "x": 0,
+        "y": 195,
+        "width": 27,
+        "height": 545,
+        "scrollWidth": 26,
+        "clientWidth": 26,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "1 source values",
+        "x": 215,
+        "y": 316,
+        "width": 20,
+        "height": 20,
+        "scrollWidth": 20,
+        "clientWidth": 20,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "Add to comparison",
+        "x": 237,
+        "y": 316,
+        "width": 20,
+        "height": 20,
+        "scrollWidth": 20,
+        "clientWidth": 20,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "",
+        "x": 259,
+        "y": 316,
+        "width": 20,
+        "height": 20,
+        "scrollWidth": 20,
+        "clientWidth": 20,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "2–4 h",
+        "x": 92.0625,
+        "y": 336,
+        "width": 38.140625,
+        "height": 20,
+        "scrollWidth": 38,
+        "clientWidth": 38,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "Add to comparison",
+        "x": 215,
+        "y": 364,
+        "width": 20,
+        "height": 20,
+        "scrollWidth": 20,
+        "clientWidth": 20,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "",
+        "x": 237,
+        "y": 364,
+        "width": 20,
+        "height": 20,
+        "scrollWidth": 20,
+        "clientWidth": 20,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "",
+        "x": 259,
+        "y": 364,
+        "width": 20,
+        "height": 20,
+        "scrollWidth": 20,
+        "clientWidth": 20,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "Add to comparison",
+        "x": 215,
+        "y": 412,
+        "width": 20,
+        "height": 20,
+        "scrollWidth": 20,
+        "clientWidth": 20,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "",
+        "x": 237,
+        "y": 412,
+        "width": 20,
+        "height": 20,
+        "scrollWidth": 20,
+        "clientWidth": 20,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "",
+        "x": 259,
+        "y": 412,
+        "width": 20,
+        "height": 20,
+        "scrollWidth": 20,
+        "clientWidth": 20,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "Add to comparison",
+        "x": 215,
+        "y": 460,
+        "width": 20,
+        "height": 20,
+        "scrollWidth": 20,
+        "clientWidth": 20,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "",
+        "x": 237,
+        "y": 460,
+        "width": 20,
+        "height": 20,
+        "scrollWidth": 20,
+        "clientWidth": 20,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "",
+        "x": 259,
+        "y": 460,
+        "width": 20,
+        "height": 20,
+        "scrollWidth": 20,
+        "clientWidth": 20,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "Add to comparison",
+        "x": 215,
+        "y": 508,
+        "width": 20,
+        "height": 20,
+        "scrollWidth": 20,
+        "clientWidth": 20,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "",
+        "x": 237,
+        "y": 508,
+        "width": 20,
+        "height": 20,
+        "scrollWidth": 20,
+        "clientWidth": 20,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "",
+        "x": 259,
+        "y": 508,
+        "width": 20,
+        "height": 20,
+        "scrollWidth": 20,
+        "clientWidth": 20,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "Add to comparison",
+        "x": 215,
+        "y": 562,
+        "width": 20,
+        "height": 20,
+        "scrollWidth": 20,
+        "clientWidth": 20,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "",
+        "x": 237,
+        "y": 562,
+        "width": 20,
+        "height": 20,
+        "scrollWidth": 20,
+        "clientWidth": 20,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "",
+        "x": 259,
+        "y": 562,
+        "width": 20,
+        "height": 20,
+        "scrollWidth": 20,
+        "clientWidth": 20,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "Add to comparison",
+        "x": 215,
+        "y": 616,
+        "width": 20,
+        "height": 20,
+        "scrollWidth": 20,
+        "clientWidth": 20,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "",
+        "x": 237,
+        "y": 616,
+        "width": 20,
+        "height": 20,
+        "scrollWidth": 20,
+        "clientWidth": 20,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "",
+        "x": 259,
+        "y": 616,
+        "width": 20,
+        "height": 20,
+        "scrollWidth": 20,
+        "clientWidth": 20,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "Add to comparison",
+        "x": 215,
+        "y": 670,
+        "width": 20,
+        "height": 20,
+        "scrollWidth": 20,
+        "clientWidth": 20,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "",
+        "x": 237,
+        "y": 670,
+        "width": 20,
+        "height": 20,
+        "scrollWidth": 20,
+        "clientWidth": 20,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "",
+        "x": 259,
+        "y": 670,
+        "width": 20,
+        "height": 20,
+        "scrollWidth": 20,
+        "clientWidth": 20,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "Add to comparison",
+        "x": 215,
+        "y": 730,
+        "width": 20,
+        "height": 20,
+        "scrollWidth": 20,
+        "clientWidth": 20,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "",
+        "x": 237,
+        "y": 730,
+        "width": 20,
+        "height": 20,
+        "scrollWidth": 20,
+        "clientWidth": 20,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "",
+        "x": 259,
+        "y": 730,
+        "width": 20,
+        "height": 20,
+        "scrollWidth": 20,
+        "clientWidth": 20,
+        "below44": true,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "Open drug basket",
+        "x": 248,
+        "y": 604,
+        "width": 56,
+        "height": 56,
+        "scrollWidth": 56,
+        "clientWidth": 56,
+        "below44": false,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "Open unit converter",
+        "x": 248,
+        "y": 668,
+        "width": 56,
+        "height": 56,
+        "scrollWidth": 56,
+        "clientWidth": 56,
+        "below44": false,
+        "centerObscured": true
+      },
+      {
+        "tag": "button",
+        "name": "Close",
+        "x": 215.859375,
+        "y": 97.25,
+        "width": 64.140625,
+        "height": 36,
+        "scrollWidth": 62,
+        "clientWidth": 62,
+        "below44": true,
+        "centerObscured": false
+      },
+      {
+        "tag": "button",
+        "name": "Stacked view",
+        "x": 189.359375,
+        "y": 221.25,
+        "width": 90.640625,
+        "height": 22.5,
+        "scrollWidth": 89,
+        "clientWidth": 89,
+        "below44": true,
+        "centerObscured": false
+      },
+      {
+        "tag": "a",
+        "name": "Synthetic mobile audit reference — not scientific evidence",
+        "x": 40,
+        "y": 346.75,
+        "width": 236,
+        "height": 30,
+        "scrollWidth": 0,
+        "clientWidth": 0,
+        "below44": true,
+        "centerObscured": true
+      }
+    ],
+    "timing": {
+      "navigation": [
+        {
+          "name": "http://localhost:3000/wiki/mobile-a/pharmacokinetics?param=halfLife",
+          "entryType": "navigation",
+          "startTime": 0,
+          "duration": 89.39999999850988,
+          "initiatorType": "navigation",
+          "deliveryType": "",
+          "nextHopProtocol": "http/1.1",
+          "renderBlockingStatus": "non-blocking",
+          "contentEncoding": "gzip",
+          "workerStart": 0,
+          "workerRouterEvaluationStart": 0,
+          "workerCacheLookupStart": 0,
+          "workerMatchedSourceType": "",
+          "workerFinalSourceType": "",
+          "redirectStart": 0,
+          "redirectEnd": 0,
+          "fetchStart": 0,
+          "domainLookupStart": 0,
+          "domainLookupEnd": 0,
+          "connectStart": 0,
+          "secureConnectionStart": 0,
+          "connectEnd": 0,
+          "requestStart": 2.300000000745058,
+          "responseStart": 13.699999999254942,
+          "firstInterimResponseStart": 0,
+          "finalResponseHeadersStart": 13.699999999254942,
+          "responseEnd": 15,
+          "transferSize": 1153,
+          "encodedBodySize": 853,
+          "decodedBodySize": 2596,
+          "responseStatus": 200,
+          "serverTiming": [],
+          "unloadEventStart": 15.899999998509884,
+          "unloadEventEnd": 15.899999998509884,
+          "domInteractive": 21.399999998509884,
+          "domContentLoadedEventStart": 89.30000000074506,
+          "domContentLoadedEventEnd": 89.30000000074506,
+          "domComplete": 89.39999999850988,
+          "loadEventStart": 89.39999999850988,
+          "loadEventEnd": 89.39999999850988,
+          "type": "reload",
+          "redirectCount": 0,
+          "activationStart": 0,
+          "criticalCHRestart": 0,
+          "notRestoredReasons": null,
+          "confidence": {
+            "randomizedTriggerRate": 0.4994798,
+            "value": "high"
+          }
+        }
+      ],
+      "paints": [
+        {
+          "name": "first-paint",
+          "entryType": "paint",
+          "startTime": 44,
+          "duration": 0,
+          "paintTime": 43.100000001490116,
+          "presentationTime": 44
+        },
+        {
+          "name": "first-contentful-paint",
+          "entryType": "paint",
+          "startTime": 144,
+          "duration": 0,
+          "paintTime": 127.39999999850988,
+          "presentationTime": 144
+        }
+      ]
+    },
+    "scripts": [
+      {
+        "path": "/assets/index-adYBVV6X.js",
+        "transferBytes": 118615,
+        "decodedBytes": 373502
+      },
+      {
+        "path": "/assets/defineProperty-BbfpZ9Tg.js",
+        "transferBytes": 1007,
+        "decodedBytes": 707
+      },
+      {
+        "path": "/assets/rolldown-runtime-QTnfLwEv.js",
+        "transferBytes": 994,
+        "decodedBytes": 694
+      },
+      {
+        "path": "/assets/i18n-vendor-L1A-PF-H.js",
+        "transferBytes": 23053,
+        "decodedBytes": 69407
+      },
+      {
+        "path": "/assets/react-vendor-CtZuJlND.js",
+        "transferBytes": 58044,
+        "decodedBytes": 176352
+      },
+      {
+        "path": "/assets/utils-BQ-T13Sn.js",
+        "transferBytes": 7297,
+        "decodedBytes": 20676
+      },
+      {
+        "path": "/assets/components-DLZRlAKf.js",
+        "transferBytes": 12099,
+        "decodedBytes": 68628
+      },
+      {
+        "path": "/assets/createLucideIcon-CYa1WFUN.js",
+        "transferBytes": 1252,
+        "decodedBytes": 952
+      },
+      {
+        "path": "/assets/react-BYtbIe97.js",
+        "transferBytes": 995,
+        "decodedBytes": 695
+      },
+      {
+        "path": "/assets/rangeUtils-0EsdB18Y.js",
+        "transferBytes": 1954,
+        "decodedBytes": 4328
+      },
+      {
+        "path": "/assets/matrixDisplay-B-FpTODa.js",
+        "transferBytes": 829,
+        "decodedBytes": 1131
+      },
+      {
+        "path": "/assets/unitConversion-CmqYwOlf.js",
+        "transferBytes": 1087,
+        "decodedBytes": 1728
+      },
+      {
+        "path": "/assets/appStore-BGnSJxhO.js",
+        "transferBytes": 4291,
+        "decodedBytes": 11058
+      },
+      {
+        "path": "/assets/drugParameters-DeUjPetw.js",
+        "transferBytes": 57100,
+        "decodedBytes": 369788
+      },
+      {
+        "path": "/assets/drugNames-wrsw6S6Z.js",
+        "transferBytes": 1094,
+        "decodedBytes": 2138
+      },
+      {
+        "path": "/assets/drugSearch-XGuaMtP6.js",
+        "transferBytes": 706,
+        "decodedBytes": 406
+      },
+      {
+        "path": "/assets/drugApi-msN0S6U5.js",
+        "transferBytes": 2871,
+        "decodedBytes": 8102
+      },
+      {
+        "path": "/assets/en-BJxNJWcY.js",
+        "transferBytes": 72137,
+        "decodedBytes": 220380
+      },
+      {
+        "path": "/assets/WikiLayout-BwQHDvft.js",
+        "transferBytes": 542,
+        "decodedBytes": 242
+      },
+      {
+        "path": "/assets/WikiPage-Dpe4cYE0.js",
+        "transferBytes": 6171,
+        "decodedBytes": 16566
+      },
+      {
+        "path": "/assets/WikiRenderer-DnK5t-Jd.js",
+        "transferBytes": 83115,
+        "decodedBytes": 273650
+      },
+      {
+        "path": "/assets/bibliography-ChEhjiwX.js",
+        "transferBytes": 673,
+        "decodedBytes": 373
+      },
+      {
+        "path": "/assets/DrugUnitScope-DzOQSb6j.js",
+        "transferBytes": 1435,
+        "decodedBytes": 2247
+      },
+      {
+        "path": "/assets/concentrationText-1-jW4Dr8.js",
+        "transferBytes": 1594,
+        "decodedBytes": 2939
+      },
+      {
+        "path": "/assets/inlineRefs-B6S8AG_1.js",
+        "transferBytes": 912,
+        "decodedBytes": 1267
+      },
+      {
+        "path": "/assets/monographContent-DoaUc43l.js",
+        "transferBytes": 2780,
+        "decodedBytes": 6517
+      },
+      {
+        "path": "/assets/useDrugBibliography-DhYq6AHW.js",
+        "transferBytes": 963,
+        "decodedBytes": 1133
+      },
+      {
+        "path": "/assets/DrugMonographSidebar-Ow7-ToYh.js",
+        "transferBytes": 31423,
+        "decodedBytes": 127028
+      },
+      {
+        "path": "/assets/UserBadge-ChJ_nsSH.js",
+        "transferBytes": 1119,
+        "decodedBytes": 1591
+      },
+      {
+        "path": "/assets/check-eJ9rIqam.js",
+        "transferBytes": 424,
+        "decodedBytes": 124
+      },
+      {
+        "path": "/assets/PendingEditCard-BkMOkKvR.js",
+        "transferBytes": 17637,
+        "decodedBytes": 72114
+      },
+      {
+        "path": "/assets/renderMarkdown-CSbDCle1.js",
+        "transferBytes": 23892,
+        "decodedBytes": 70637
+      },
+      {
+        "path": "/assets/circle-check-D3ivXjOA.js",
+        "transferBytes": 477,
+        "decodedBytes": 177
+      },
+      {
+        "path": "/assets/external-link-BRbTZXXO.js",
+        "transferBytes": 550,
+        "decodedBytes": 250
+      },
+      {
+        "path": "/assets/eye-BDdevalo.js",
+        "transferBytes": 556,
+        "decodedBytes": 256
+      },
+      {
+        "path": "/assets/pencil-BlIgMFJG.js",
+        "transferBytes": 576,
+        "decodedBytes": 276
+      },
+      {
+        "path": "/assets/parameterEntries-CkI-gD-q.js",
+        "transferBytes": 3931,
+        "decodedBytes": 9087
+      },
+      {
+        "path": "/assets/routeLabels-BKUK25Kd.js",
+        "transferBytes": 1512,
+        "decodedBytes": 3644
+      },
+      {
+        "path": "/assets/triangle-alert-BkAEHoUF.js",
+        "transferBytes": 564,
+        "decodedBytes": 264
+      },
+      {
+        "path": "/assets/CaseCrossLinks-CYN5sd6I.js",
+        "transferBytes": 989,
+        "decodedBytes": 1836
+      },
+      {
+        "path": "/assets/learnContent-CtjLwKNU.js",
+        "transferBytes": 909,
+        "decodedBytes": 1173
+      },
+      {
+        "path": "/assets/UnitTooltip-Bl46T983.js",
+        "transferBytes": 2016,
+        "decodedBytes": 3947
+      },
+      {
+        "path": "/assets/modal-overlay-Bb2Skl-p.js",
+        "transferBytes": 1180,
+        "decodedBytes": 1715
+      },
+      {
+        "path": "/assets/disputesApi-DWYh9Hsr.js",
+        "transferBytes": 1203,
+        "decodedBytes": 903
+      },
+      {
+        "path": "/assets/metabolism-BDIvaE8L.js",
+        "transferBytes": 977,
+        "decodedBytes": 1394
+      },
+      {
+        "path": "/assets/receptorInteractions-oGS4r4lR.js",
+        "transferBytes": 797,
+        "decodedBytes": 2265
+      },
+      {
+        "path": "/assets/referenceApi-CMh12v1H.js",
+        "transferBytes": 1203,
+        "decodedBytes": 1841
+      },
+      {
+        "path": "/assets/history-BGHqSfSU.js",
+        "transferBytes": 537,
+        "decodedBytes": 237
+      },
+      {
+        "path": "/assets/MethodCodeBadge-1g-POYZS.js",
+        "transferBytes": 833,
+        "decodedBytes": 533
+      },
+      {
+        "path": "/assets/methodMeta-CyC6id-j.js",
+        "transferBytes": 1144,
+        "decodedBytes": 844
+      },
+      {
+        "path": "/assets/ParameterSourcesDialog-kDgzEyzi.js",
+        "transferBytes": 10900,
+        "decodedBytes": 37223
+      },
+      {
+        "path": "/assets/ReferenceInput-CzzeEKfY.js",
+        "transferBytes": 1922,
+        "decodedBytes": 4797
+      },
+      {
+        "path": "/assets/parameterEntriesApi-BtTGlR4s.js",
+        "transferBytes": 917,
+        "decodedBytes": 1596
+      },
+      {
+        "path": "/assets/drugCoverageAreas-BGPrkzuO.js",
+        "transferBytes": 1167,
+        "decodedBytes": 867
+      },
+      {
+        "path": "/assets/pmConcentrationsApi-Bov859wX.js",
+        "transferBytes": 1215,
+        "decodedBytes": 915
+      },
+      {
+        "path": "/assets/EntityTargetLigands-Ceo7TuL4.js",
+        "transferBytes": 6541,
+        "decodedBytes": 19661
+      },
+      {
+        "path": "/assets/arrow-up-Czq1FtSv.js",
+        "transferBytes": 752,
+        "decodedBytes": 452
+      },
+      {
+        "path": "/assets/bioEntitiesApi-Mq-zsyth.js",
+        "transferBytes": 960,
+        "decodedBytes": 1898
+      },
+      {
+        "path": "/assets/pdComparison-DeQ43XEz.js",
+        "transferBytes": 1604,
+        "decodedBytes": 2703
+      }
+    ]
+  },
+  "accessibility": {
+    "engine": {
+      "name": "axe-core",
+      "version": "4.11.3"
+    },
+    "violations": [
+      {
+        "id": "definition-list",
+        "impact": "serious",
+        "help": "<dl> elements must only directly contain properly-ordered <dt> and <dd> groups, <script>, <template> or <div> elements",
+        "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/definition-list?application=playwright",
+        "nodes": [
+          {
+            "target": [
+              ".grid"
+            ],
+            "failureSummary": "Fix all of the following:\n  dl element has direct children that are not allowed: div > div"
+          }
+        ]
+      },
+      {
+        "id": "dlitem",
+        "impact": "serious",
+        "help": "<dt> and <dd> elements must be contained by a <dl>",
+        "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/dlitem?application=playwright",
+        "nodes": [
+          {
+            "target": [
+              ".group:nth-child(1) > .justify-between.gap-1.flex > dt"
+            ],
+            "failureSummary": "Fix any of the following:\n  Description list item does not have a <dl> parent element"
+          },
+          {
+            "target": [
+              ".group:nth-child(2) > .justify-between.gap-1.flex > dt"
+            ],
+            "failureSummary": "Fix any of the following:\n  Description list item does not have a <dl> parent element"
+          },
+          {
+            "target": [
+              ".group:nth-child(3) > .justify-between.gap-1.flex > dt"
+            ],
+            "failureSummary": "Fix any of the following:\n  Description list item does not have a <dl> parent element"
+          },
+          {
+            "target": [
+              ".group:nth-child(4) > .justify-between.gap-1.flex > dt"
+            ],
+            "failureSummary": "Fix any of the following:\n  Description list item does not have a <dl> parent element"
+          },
+          {
+            "target": [
+              ".group:nth-child(5) > .justify-between.gap-1.flex > dt"
+            ],
+            "failureSummary": "Fix any of the following:\n  Description list item does not have a <dl> parent element"
+          },
+          {
+            "target": [
+              ".group:nth-child(6) > .justify-between.gap-1.flex > dt"
+            ],
+            "failureSummary": "Fix any of the following:\n  Description list item does not have a <dl> parent element"
+          },
+          {
+            "target": [
+              ".group:nth-child(7) > .justify-between.gap-1.flex > dt"
+            ],
+            "failureSummary": "Fix any of the following:\n  Description list item does not have a <dl> parent element"
+          },
+          {
+            "target": [
+              ".group:nth-child(8) > .justify-between.gap-1.flex > dt"
+            ],
+            "failureSummary": "Fix any of the following:\n  Description list item does not have a <dl> parent element"
+          },
+          {
+            "target": [
+              ".group:nth-child(9) > .justify-between.gap-1.flex > dt"
+            ],
+            "failureSummary": "Fix any of the following:\n  Description list item does not have a <dl> parent element"
+          },
+          {
+            "target": [
+              ".group:nth-child(10) > .justify-between.gap-1.flex > dt"
+            ],
+            "failureSummary": "Fix any of the following:\n  Description list item does not have a <dl> parent element"
+          },
+          {
+            "target": [
+              ".group:nth-child(11) > .justify-between.gap-1.flex > dt"
+            ],
+            "failureSummary": "Fix any of the following:\n  Description list item does not have a <dl> parent element"
+          },
+          {
+            "target": [
+              ".group:nth-child(12) > .justify-between.gap-1.flex > dt"
+            ],
+            "failureSummary": "Fix any of the following:\n  Description list item does not have a <dl> parent element"
+          }
+        ]
+      },
+      {
+        "id": "target-size",
+        "impact": "serious",
+        "help": "All touch targets must be 24px large, or leave sufficient space",
+        "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/target-size?application=playwright",
+        "nodes": [
+          {
+            "target": [
+              "button[title=\"1 source values\"]"
+            ],
+            "failureSummary": "Fix any of the following:\n  Target has insufficient size (20px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 20px instead of at least 24px."
+          },
+          {
+            "target": [
+              "div[data-testid=\"parameter-actions-halfLife\"] > .w-5[title=\"Add to comparison\"][aria-label=\"Add to comparison\"]"
+            ],
+            "failureSummary": "Fix any of the following:\n  Target has insufficient size (20px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 20px instead of at least 24px."
+          },
+          {
+            "target": [
+              "div[data-testid=\"parameter-actions-halfLife\"] > .w-5.p-0[title=\"History\"]"
+            ],
+            "failureSummary": "Fix any of the following:\n  Target has insufficient size (20px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 20px instead of at least 24px."
+          },
+          {
+            "target": [
+              ".group:nth-child(2) > .justify-between.gap-1.flex > .hover-actions.opacity-0.transition-opacity > .w-5[title=\"Add to comparison\"][aria-label=\"Add to comparison\"]"
+            ],
+            "failureSummary": "Fix any of the following:\n  Target has insufficient size (20px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 20px instead of at least 24px."
+          },
+          {
+            "target": [
+              ".group:nth-child(2) > .justify-between.gap-1.flex > .hover-actions.opacity-0.transition-opacity > .w-5.p-0[title=\"History\"]"
+            ],
+            "failureSummary": "Fix any of the following:\n  Target has insufficient size (20px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 20px instead of at least 24px."
+          },
+          {
+            "target": [
+              ".group:nth-child(2) > .justify-between.gap-1.flex > .hover-actions.opacity-0.transition-opacity > .w-5.p-0[title=\"Discussion\"]"
+            ],
+            "failureSummary": "Fix any of the following:\n  Target has insufficient size (20px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 20px instead of at least 24px."
+          },
+          {
+            "target": [
+              ".group:nth-child(3) > .justify-between.gap-1.flex > .hover-actions.opacity-0.transition-opacity > .w-5[title=\"Add to comparison\"][aria-label=\"Add to comparison\"]"
+            ],
+            "failureSummary": "Fix any of the following:\n  Target has insufficient size (20px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 20px instead of at least 24px."
+          },
+          {
+            "target": [
+              ".group:nth-child(3) > .justify-between.gap-1.flex > .hover-actions.opacity-0.transition-opacity > .w-5.p-0[title=\"History\"]"
+            ],
+            "failureSummary": "Fix any of the following:\n  Target has insufficient size (20px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 20px instead of at least 24px."
+          },
+          {
+            "target": [
+              ".group:nth-child(3) > .justify-between.gap-1.flex > .hover-actions.opacity-0.transition-opacity > .w-5.p-0[title=\"Discussion\"]"
+            ],
+            "failureSummary": "Fix any of the following:\n  Target has insufficient size (20px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 20px instead of at least 24px."
+          },
+          {
+            "target": [
+              ".group:nth-child(4) > .justify-between.gap-1.flex > .hover-actions.opacity-0.transition-opacity > .w-5[title=\"Add to comparison\"][aria-label=\"Add to comparison\"]"
+            ],
+            "failureSummary": "Fix any of the following:\n  Target has insufficient size (20px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 20px instead of at least 24px."
+          },
+          {
+            "target": [
+              ".group:nth-child(4) > .justify-between.gap-1.flex > .hover-actions.opacity-0.transition-opacity > .w-5.p-0[title=\"History\"]"
+            ],
+            "failureSummary": "Fix any of the following:\n  Target has insufficient size (20px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 20px instead of at least 24px."
+          },
+          {
+            "target": [
+              ".group:nth-child(4) > .justify-between.gap-1.flex > .hover-actions.opacity-0.transition-opacity > .w-5.p-0[title=\"Discussion\"]"
+            ],
+            "failureSummary": "Fix any of the following:\n  Target has insufficient size (20px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 20px instead of at least 24px."
+          },
+          {
+            "target": [
+              ".group:nth-child(5) > .justify-between.gap-1.flex > .hover-actions.opacity-0.transition-opacity > .w-5[title=\"Add to comparison\"][aria-label=\"Add to comparison\"]"
+            ],
+            "failureSummary": "Fix any of the following:\n  Target has insufficient size (20px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 20px instead of at least 24px."
+          },
+          {
+            "target": [
+              ".group:nth-child(5) > .justify-between.gap-1.flex > .hover-actions.opacity-0.transition-opacity > .w-5.p-0[title=\"History\"]"
+            ],
+            "failureSummary": "Fix any of the following:\n  Target has insufficient size (20px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 20px instead of at least 24px."
+          },
+          {
+            "target": [
+              ".group:nth-child(5) > .justify-between.gap-1.flex > .hover-actions.opacity-0.transition-opacity > .w-5.p-0[title=\"Discussion\"]"
+            ],
+            "failureSummary": "Fix any of the following:\n  Target has insufficient size (20px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 20px instead of at least 24px."
+          },
+          {
+            "target": [
+              "div[data-testid=\"parameter-actions-tmax\"] > .w-5[title=\"Add to comparison\"][aria-label=\"Add to comparison\"]"
+            ],
+            "failureSummary": "Fix any of the following:\n  Target has insufficient size (20px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 20px instead of at least 24px."
+          },
+          {
+            "target": [
+              "div[data-testid=\"parameter-actions-tmax\"] > .w-5.p-0[title=\"History\"]"
+            ],
+            "failureSummary": "Fix any of the following:\n  Target has insufficient size (20px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 20px instead of at least 24px."
+          },
+          {
+            "target": [
+              "div[data-testid=\"parameter-actions-tmax\"] > .w-5.p-0[title=\"Discussion\"]"
+            ],
+            "failureSummary": "Fix any of the following:\n  Target has insufficient size (20px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 20px instead of at least 24px."
+          },
+          {
+            "target": [
+              "div[data-testid=\"parameter-actions-clearance\"] > .w-5[title=\"Add to comparison\"][aria-label=\"Add to comparison\"]"
+            ],
+            "failureSummary": "Fix any of the following:\n  Target has insufficient size (20px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 20px instead of at least 24px."
+          },
+          {
+            "target": [
+              "div[data-testid=\"parameter-actions-clearance\"] > .w-5.p-0[title=\"History\"]"
+            ],
+            "failureSummary": "Fix any of the following:\n  Target has insufficient size (20px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 20px instead of at least 24px."
+          },
+          {
+            "target": [
+              "div[data-testid=\"parameter-actions-clearance\"] > .w-5.p-0[title=\"Discussion\"]"
+            ],
+            "failureSummary": "Fix any of the following:\n  Target has insufficient size (20px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 20px instead of at least 24px."
+          },
+          {
+            "target": [
+              "div[data-testid=\"parameter-actions-vmax\"] > .w-5[title=\"Add to comparison\"][aria-label=\"Add to comparison\"]"
+            ],
+            "failureSummary": "Fix any of the following:\n  Target has insufficient size (20px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 20px instead of at least 24px."
+          },
+          {
+            "target": [
+              "div[data-testid=\"parameter-actions-vmax\"] > .w-5.p-0[title=\"History\"]"
+            ],
+            "failureSummary": "Fix any of the following:\n  Target has insufficient size (20px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 20px instead of at least 24px."
+          },
+          {
+            "target": [
+              "div[data-testid=\"parameter-actions-vmax\"] > .w-5.p-0[title=\"Discussion\"]"
+            ],
+            "failureSummary": "Fix any of the following:\n  Target has insufficient size (20px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 20px instead of at least 24px."
+          },
+          {
+            "target": [
+              "div[data-testid=\"parameter-actions-km\"] > .w-5[title=\"Add to comparison\"][aria-label=\"Add to comparison\"]"
+            ],
+            "failureSummary": "Fix any of the following:\n  Target has insufficient size (20px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 20px instead of at least 24px."
+          },
+          {
+            "target": [
+              "div[data-testid=\"parameter-actions-km\"] > .w-5.p-0[title=\"History\"]"
+            ],
+            "failureSummary": "Fix any of the following:\n  Target has insufficient size (20px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 20px instead of at least 24px."
+          },
+          {
+            "target": [
+              "div[data-testid=\"parameter-actions-km\"] > .w-5.p-0[title=\"Discussion\"]"
+            ],
+            "failureSummary": "Fix any of the following:\n  Target has insufficient size (20px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 20px instead of at least 24px."
+          }
+        ]
+      }
+    ],
+    "incomplete": [
+      {
+        "id": "color-contrast",
+        "nodeCount": 23
+      }
+    ]
+  }
+}
