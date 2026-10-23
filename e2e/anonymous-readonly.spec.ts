@@ -31,7 +31,7 @@ test.describe('Anonymous read-only routes', () => {
   ]) {
     test('anonymous user can open ' + path, async ({ page }) => {
       await page.goto(path);
-      await expect(page.locator('main').first()).toBeVisible();
+      await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
       await expect(page).toHaveURL(new RegExp(path.replaceAll('/', '\\/') + '$'));
       await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible();
     });
