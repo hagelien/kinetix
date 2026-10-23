@@ -210,7 +210,7 @@ test("M00 Norwegian monograph at 200 percent text scale", async ({
   await captureAudit(page, testInfo, "monograph-norwegian-text-200");
 });
 
-test("M00 comparison retains units and ranges through resize", async ({
+test("M00 comparison retains units, ranges and missing values through resize", async ({
   page,
 }, testInfo) => {
   await page.addInitScript((drugs) => {
@@ -242,6 +242,22 @@ test("M00 comparison retains units and ranges through resize", async ({
   await page
     .getByRole("button", { name: "Collapse drug table", exact: true })
     .click();
+  const toxicSection = page.locator("main section").filter({
+    has: page.getByRole("heading", {
+      name: "Toxic concentration range",
+      exact: true,
+    }),
+  });
+  const toxicRows = toxicSection.locator("tbody tr");
+  await expect(toxicRows).toHaveCount(2);
+  // Establish the expected scientific display before using it as a resize
+  // baseline: a copied value, absent row or missing unit must fail here.
+  await expect(
+    toxicRows.filter({ hasText: /^mobiltest A/i }).getByRole("cell"),
+  ).toHaveText([/^mobiltest A$/i, "0.8–1.2 mg/L", "1 mg/L", "1x"]);
+  await expect(
+    toxicRows.filter({ hasText: /^mobiltest B/i }).getByRole("cell"),
+  ).toHaveText([/^mobiltest B$/i, "Unavailable", "-", "-"]);
   const values = await page.locator("main table").allTextContents();
   expect(values.join(" ")).toContain("2–4");
   await captureAudit(page, testInfo, "comparison-collapsed-rail");
