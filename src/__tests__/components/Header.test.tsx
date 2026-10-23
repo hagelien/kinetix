@@ -387,4 +387,43 @@ describe('Header', () => {
     expect(navLabels(table)).toEqual(navLabels(wiki));
     expect(navLabels(refs)).toEqual(navLabels(wiki));
   });
+
+  it('shows public navigation to anonymous readers without granting restricted links', () => {
+    useAuthStore.setState({
+      user: null,
+      isAuthenticated: false,
+      isLoading: false,
+      permissionOverrides: {},
+      hiddenNavItems: [],
+      hiddenNavItemsLoaded: true,
+    });
+    renderHeader('/');
+
+    for (const name of [
+      'nav.drugTable',
+      'nav.wiki',
+      'nav.references',
+      'nav.entities',
+      'nav.detection',
+    ]) {
+      expect(screen.getByRole('link', { name })).toBeTruthy();
+    }
+    expect(screen.queryByRole('link', { name: 'nav.methods' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'nav.pattern' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'nav.signIn' })).toBeTruthy();
+  });
+
+  it('does not reveal anonymous nav links before the visibility policy loads', () => {
+    useAuthStore.setState({
+      user: null,
+      isAuthenticated: false,
+      isLoading: false,
+      hiddenNavItemsLoaded: false,
+      hiddenNavItems: [],
+    });
+    renderHeader('/');
+    expect(screen.queryByRole('link', { name: 'nav.wiki' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'nav.drugTable' })).toBeTruthy();
+  });
+
 });

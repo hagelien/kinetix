@@ -172,9 +172,9 @@ function withRouteFallback(element: ReactNode) {
   );
 }
 
-// #310: routes that require any authenticated session. Anonymous visitors
-// are redirected to /login. The drug table at "/" and citation reference
-// detail pages stay public so source links do not dead-end at login.
+// Only personal, editing, review and restricted routes require a session.
+// Published reference browsing and client-side read-only tools are public;
+// their API handlers independently enforce publication and data access.
 function withAuthRequired(element: ReactNode) {
   return <AuthGuard>{withRouteFallback(element)}</AuthGuard>;
 }
@@ -216,15 +216,12 @@ export function AppRouter() {
       <Route element={<RootLayout />}>
         <Route path="/" element={withRouteFallback(<App />)} />
         <Route path="/modeling" element={withAuthRequired(<ModelingPage />)} />
-        {/* "How the simulator works" — the behind-the-scenes account of the
-            modelling module's premises, assumptions, constraints and known
-            weaknesses, written for a pharmacologist reviewing whether a curve may
-            be relied on. Kept lazy: it pulls the markdown document and the registry
-            inventory, which nobody should pay for until they open it. Same auth as
-            /modeling — it describes that workspace. */}
+        {/* Public read-only documentation for the simulation engine's premises,
+            assumptions and limitations. The modeling case workspace itself
+            stays session-gated until its save/personal APIs are split out. */}
         <Route
           path="/modeling/how-it-works"
-          element={withAuthRequired(<SimulatorMechanicsPage />)}
+          element={withRouteFallback(<SimulatorMechanicsPage />)}
         />
         {/* Linked from the primary nav (Header) as "Metabolite profile".
             Kept lazy: the pattern engine reads the whole embedded catalog for
@@ -251,16 +248,16 @@ export function AppRouter() {
         <Route path="/kinelab" element={<ModeRedirect mode="kinelab" />} />
         <Route
           path="/comparison"
-          element={withAuthRequired(<ComparisonPage />)}
+          element={withRouteFallback(<ComparisonPage />)}
         />
         <Route path="/methods" element={withAuthRequired(<MethodsPage />)} />
-        <Route path="/entities" element={withAuthRequired(<EntitiesPage />)} />
+        <Route path="/entities" element={withRouteFallback(<EntitiesPage />)} />
         {/* Detection times ("påvisningstider"): one substance, every matrix.
             `?drug=<id>` is the whole state, so a looked-up substance is a
             link someone can paste into a case note. */}
         <Route
           path="/detection-times"
-          element={withAuthRequired(<DetectionTimesPage />)}
+          element={withRouteFallback(<DetectionTimesPage />)}
         />
         <Route path="/learn" element={withAuthRequired(<SourceLibraryPage />)} />
         <Route path="/learn/map" element={withAuthRequired(<TopicMapPage />)} />
@@ -281,18 +278,18 @@ export function AppRouter() {
           path="/methods/:id"
           element={withAuthRequired(<MethodDetailPage />)}
         />
-        <Route path="/wiki" element={withAuthRequired(<WikiLayout />)}>
+        <Route path="/wiki" element={withRouteFallback(<WikiLayout />)}>
           <Route index element={withRouteFallback(<WikiHome />)} />
-          <Route path="new" element={withRouteFallback(<WikiNew />)} />
+          <Route path="new" element={withAuthRequired(<WikiNew />)} />
           {/* `:tab` is a drug monograph's sub-page (pharmacokinetics,
               postmortem, …). One optional-segment route, so moving between
               tabs never remounts the page. Static siblings (`:slug/edit`,
               `:slug/history`, `drug/…`, `entity/…`) outrank it. */}
           <Route path=":slug/:tab?" element={withRouteFallback(<WikiPage />)} />
-          <Route path=":slug/edit" element={withRouteFallback(<WikiEdit />)} />
+          <Route path=":slug/edit" element={withAuthRequired(<WikiEdit />)} />
           <Route
             path=":slug/history"
-            element={withRouteFallback(<WikiHistory />)}
+            element={withAuthRequired(<WikiHistory />)}
           />
           <Route
             path="drug/:drugId"

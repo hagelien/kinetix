@@ -113,9 +113,9 @@ export function Header() {
   // a stale active drug from the previous page must not lend it its slug.
   const isUnwrittenDrugPreview = DRUG_PREVIEW_PATH_RE.test(location.pathname);
 
-  // #310: only the drug table is reachable anonymously. Hide nav links to
-  // gated routes so unauthenticated visitors don't click into a redirect
-  // loop; they can still reach those pages by URL after signing in.
+  // Published browsing routes are open anonymously; the navigation must
+  // expose those links as well. Restricted methods and provisional pattern
+  // views still obey feature grants and the server-side access policy.
   //
   // Capability gates (methods, pattern) decide whether a link is reachable
   // AT ALL for this user and run first, unconditionally — #1240's
@@ -140,7 +140,7 @@ export function Header() {
   // just the ones this session's stale [] happens to omit) until the list
   // has settled, one way or the other.
   const availableItems =
-    isAuthenticated && hiddenNavItemsLoaded
+    hiddenNavItemsLoaded
       ? NAV_ITEM_DEFS.filter((item) => {
           if (item.id === 'methods') {
             return canAccessAnalyticalMethods(user, permissionOverrides);
