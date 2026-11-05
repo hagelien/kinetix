@@ -11,6 +11,8 @@
 
 import type {
   PatternFeatureResult,
+  PatternMatrix,
+  PatternMeasurandMode,
   PatternNumericInterval,
   PatternResultStatus,
   PatternWarning,
@@ -257,6 +259,17 @@ export interface ObservationRowVM {
   pubchemCid: number;
   slug?: string;
   specimenLabel: string;
+  /** Stable specimen identity, so two equally labelled samples never share an axis. */
+  specimenId?: string;
+  hasSpecimenLabel?: boolean;
+  matrix?: PatternMatrix;
+  measurandMode?: PatternMeasurandMode;
+  postmortem?: boolean;
+  hydrolysis?: string;
+  /** Explicit alternate mass bases require separate conversion before comparison. */
+  reportedAsDifferentSubstance?: boolean;
+  /** A urine concentration divided by this specimen's measured creatinine. */
+  creatinineNormalized?: { value: number; unit: string; valueText?: string };
   value?: number;
   /** The precision the source reported, where it differs from the number's. */
   reportedDecimals?: number;
@@ -702,6 +715,14 @@ export function buildRatioProfile(input: BuildProfileInput): RatioProfileViewMod
         observation.value === undefined
           ? undefined
           : formatForEditing(observation.value, locale, observation.reportedDecimals),
+      creatinineNormalized: observation.creatinineNormalized
+        ? {
+            ...observation.creatinineNormalized,
+            valueText: new Intl.NumberFormat(locale, {
+              maximumSignificantDigits: 4,
+            }).format(observation.creatinineNormalized.value),
+          }
+        : undefined,
       limit: observation.limit
         ? {
             ...observation.limit,

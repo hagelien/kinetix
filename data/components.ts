@@ -860,6 +860,33 @@ export const embeddedComponents: RawComponent[] = [
     },
     lethalRange: { median: 461, unit: 'mg/kg', note: 'LD50 - auto-extracted' }
   },
+  // Chemical identity and molecular weights only, checked against PubChem
+  // 2026-11-05. These entries enable mass↔molar conversion for intact
+  // glucuronides; they do not supply a concentration reference or PK model.
+  // https://pubchem.ncbi.nlm.nih.gov/compound/5484731
+  {
+    name: 'Morfin-3-glukuronid',
+    nameEn: 'Morphine-3-glucuronide',
+    slug: 'morphine-3-glucuronide',
+    pubchemCid: 5484731,
+    molecularWeight: 461.5,
+  },
+  // https://pubchem.ncbi.nlm.nih.gov/compound/5360621
+  {
+    name: 'Morfin-6-glukuronid',
+    nameEn: 'Morphine-6-glucuronide',
+    slug: 'morphine-6-glucuronide',
+    pubchemCid: 5360621,
+    molecularWeight: 461.5,
+  },
+  // https://pubchem.ncbi.nlm.nih.gov/compound/5489029
+  {
+    name: 'Kodein-6-glukuronid',
+    nameEn: 'Codeine-6-glucuronide',
+    slug: 'codeine-6-glucuronide',
+    pubchemCid: 5489029,
+    molecularWeight: 475.5,
+  },
   {
     name: 'N-desmetyldiazepam',
     nameEn: 'Nordazepam (N-desmethyldiazepam; Nordiazepam)',

@@ -25,8 +25,9 @@ import {
   type LineageEnzymes,
 } from './lineageEnzymes.js';
 import { evaluateSignals } from './evaluateSignals.js';
-import { buildRatioProfile, type RatioProfileViewModel } from './profileModel.js';
+import { buildRatioProfile, type RatioProfileViewModel, type BuildProfileInput } from './profileModel.js';
 import { resolveObservations } from './resolveObservations.js';
+import { concentrationPerCreatinine } from './urineNormalization.js';
 import type { PatternSignalDefinition, PatternSpecimenMetric } from './signals.js';
 import { evaluateSourceAmbiguity, type MetabolismGraph } from './sourceAmbiguity.js';
 import {
@@ -130,6 +131,90 @@ function establishesPresence(observation: PatternObservation): boolean {
     default:
       return false;
   }
+}
+
+/** Measurements remain available when the remote metabolism graph cannot load. */
+function measurementInputs(
+  caseData: PatternCaseData,
+  modules: PatternSubstanceModule[],
+): Pick<BuildProfileInput, 'observations' | 'specimenMetrics'> {
+  const analyteLabels = new Map(
+    modules.flatMap((module) => module.analytes.map((analyte) => [analyte.analyte.pubchemCid, analyte.labelKey])),
+  );
+  return {
+    observations: caseData.observations.map((observation) => ({
+      id: observation.id,
+      labelKey: analyteLabels.get(observation.analyte.pubchemCid) ?? '',
+      pubchemCid: observation.analyte.pubchemCid,
+      slug: observation.analyte.slug,
+      specimenId: observation.specimenId,
+      hasSpecimenLabel: Boolean(caseData.specimens.find((s) => s.id === observation.specimenId)?.label?.trim()),
+      matrix: caseData.specimens.find((s) => s.id === observation.specimenId)?.matrix,
+      measurandMode: observation.assay?.measurandMode ?? 'unknown',
+      postmortem: caseData.context.postmortem || Boolean(caseData.specimens.find((s) => s.id === observation.specimenId)?.postmortem),
+      hydrolysis: caseData.context.fields?.hydro,
+      reportedAsDifferentSubstance: observation.assay?.reportedAsDrugId !== undefined,
+
+      creatinineNormalized: observation.qualifier === 'quantified'
+        ? concentrationPerCreatinine(
+            observation.value,
+            observation.unit,
+            caseData.specimens.find((s) => s.id === observation.specimenId),
+          )
+        : undefined,
+      specimenLabel:
+        caseData.specimens.find((s) => s.id === observation.specimenId)?.label ??
+        observation.specimenId,
+      // Only for a quantified result. The type permits a censored observation
+      // to carry a `value` and an import can produce one, but the engine reads
+      // the limit rather than the value for a censored qualifier — so a model
+      // carrying that number invites the view to show it, and a number the
+      // arithmetic ignores is worse than no number: it hides the qualifier and
+      // the threshold that are the actual result.
+      value: observation.qualifier === 'quantified' ? observation.value : undefined,
+      reportedDecimals:
+        observation.qualifier === 'quantified' ? observation.reportedDecimals : undefined,
+      unit: observation.unit,
+      qualifier: observation.qualifier,
+      limit: observation.limitRef
+        ? {
+            label: observation.limitRef.label,
+            value: observation.limitRef.value,
+            unit: observation.limitRef.unit,
+            reportedDecimals: observation.limitRef.reportedDecimals,
+          }
+        : undefined,
+    })),
+    // The measurement every normalised value on screen is computed from. The
+    // method line already discloses the reference it is corrected *to*; without
+    // this the reader could check neither the correction nor the specimen value
+    // behind it.
+    specimenMetrics: caseData.specimens.flatMap((specimen) =>
+      typeof specimen.urine?.creatinineMmolL === 'number'
+        ? [
+            {
+              specimenId: specimen.id,
+              specimenLabel: specimen.label ?? specimen.id,
+              labelKey: 'pattern.profile.observations.creatinine',
+              value: specimen.urine.creatinineMmolL,
+              unit: 'mmol/L',
+            },
+          ]
+        : [],
+    ),
+  };
+}
+
+export function buildProfileMeasurements(
+  caseData: PatternCaseData,
+  modules: PatternSubstanceModule[],
+  locale = 'nb-NO',
+): Pick<RatioProfileViewModel, 'observations' | 'specimenMetrics'> {
+  const model = buildRatioProfile({
+    ...measurementInputs(caseData, modules),
+    modules: [], features: [], results: [], contextFields: [], selectedContext: {}, locale,
+  });
+  return { observations: model.observations, specimenMetrics: model.specimenMetrics };
 }
 
 export function buildProfileFromCase(input: BuildFromCaseInput): RatioProfileViewModel {
@@ -267,9 +352,7 @@ export function buildProfileFromCase(input: BuildFromCaseInput): RatioProfileVie
     }),
   }));
 
-  const analyteLabels = new Map(
-    modules.flatMap((m) => m.analytes.map((a) => [a.analyte.pubchemCid, a.labelKey])),
-  );
+
 
   // The substances that could actually have fed this profile: the assumed
   // parent and everything the walk reached from it. `resolveStatus` decides
@@ -306,51 +389,7 @@ export function buildProfileFromCase(input: BuildFromCaseInput): RatioProfileVie
   };
 
   return buildRatioProfile({
-    observations: edited.observations.map((observation) => ({
-      id: observation.id,
-      labelKey: analyteLabels.get(observation.analyte.pubchemCid) ?? '',
-      pubchemCid: observation.analyte.pubchemCid,
-      slug: observation.analyte.slug,
-      specimenLabel:
-        edited.specimens.find((s) => s.id === observation.specimenId)?.label ??
-        observation.specimenId,
-      // Only for a quantified result. The type permits a censored observation
-      // to carry a `value` and an import can produce one, but the engine reads
-      // the limit rather than the value for a censored qualifier — so a model
-      // carrying that number invites the view to show it, and a number the
-      // arithmetic ignores is worse than no number: it hides the qualifier and
-      // the threshold that are the actual result.
-      value: observation.qualifier === 'quantified' ? observation.value : undefined,
-      reportedDecimals:
-        observation.qualifier === 'quantified' ? observation.reportedDecimals : undefined,
-      unit: observation.unit,
-      qualifier: observation.qualifier,
-      limit: observation.limitRef
-        ? {
-            label: observation.limitRef.label,
-            value: observation.limitRef.value,
-            unit: observation.limitRef.unit,
-            reportedDecimals: observation.limitRef.reportedDecimals,
-          }
-        : undefined,
-    })),
-    // The measurement every normalised value on screen is computed from. The
-    // method line already discloses the reference it is corrected *to*; without
-    // this the reader could check neither the correction nor the specimen value
-    // behind it.
-    specimenMetrics: edited.specimens.flatMap((specimen) =>
-      typeof specimen.urine?.creatinineMmolL === 'number'
-        ? [
-            {
-              specimenId: specimen.id,
-              specimenLabel: specimen.label ?? specimen.id,
-              labelKey: 'pattern.profile.observations.creatinine',
-              value: specimen.urine.creatinineMmolL,
-              unit: 'mmol/L',
-            },
-          ]
-        : [],
-    ),
+    ...measurementInputs(edited, modules),
     modules,
     features,
     results,

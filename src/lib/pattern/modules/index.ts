@@ -10,13 +10,22 @@
 import { BENZODIAZEPINE_MODULE } from './benzodiazepines.js';
 import { COCAINE_MODULE } from './cocaine.js';
 import { METHADONE_MODULE } from './methadone.js';
+import { CODEINE, MORPHINE, MORPHINE_CODEINE_MODULE } from './morphineCodeine.js';
 import type { PatternSubstanceModule } from '../substanceModules.js';
 
 export const PATTERN_MODULES: readonly PatternSubstanceModule[] = [
   BENZODIAZEPINE_MODULE,
   COCAINE_MODULE,
   METHADONE_MODULE,
+  MORPHINE_CODEINE_MODULE,
 ];
+
+/** Entry shortcuts, with labels resolved from the same module analytes. */
+export const featuredPatternSubstances = [
+  BENZODIAZEPINE_MODULE.assumedParent,
+  MORPHINE,
+  CODEINE,
+] as const;
 
 export function patternModuleById(id: string): PatternSubstanceModule | undefined {
   return PATTERN_MODULES.find((module) => module.id === id);

@@ -4136,7 +4136,8 @@
       "module": {
         "benzodiazepines": "Benzodiazepiner (diazepam)",
         "cocaine": "Kokain",
-        "methadone": "Metadon (EDDP)"
+        "methadone": "Metadon (EDDP)",
+        "morphineCodeine": "Morfin og kodein"
       },
       "analyte": {
         "diazepam": {
@@ -4170,6 +4171,26 @@
         "eddp": {
           "label": "EDDP",
           "short": "EDDP"
+        },
+        "morphine": {
+          "label": "Morfin",
+          "short": "Morfin"
+        },
+        "codeine": {
+          "label": "Kodein",
+          "short": "Kodein"
+        },
+        "m3g": {
+          "label": "Morfin-3-glukuronid",
+          "short": "M3G"
+        },
+        "m6g": {
+          "label": "Morfin-6-glukuronid",
+          "short": "M6G"
+        },
+        "c6g": {
+          "label": "Kodein-6-glukuronid",
+          "short": "C6G"
         }
       },
       "feature": {
@@ -4479,6 +4500,42 @@
         "badAddress": "«{{caseId}}» er ikke et saksnummer.",
         "toPicker": "Gå til lagrede saker",
         "confirmDiscard": "Saken har endringer som ikke er lagret. Forkast dem?"
+      },
+      "guided": {
+        "intro": "Velg stoff og medium, legg inn målingene og sammenlign med publiserte studiedata.",
+        "caseActions": "Saksnavn og lagring",
+        "compare": "Se målinger og studiekurver",
+        "advanced": "Flere prøver og analyseopplysninger",
+        "ratioDetails": "Forholdstall og faglig vurdering"
+      },
+      "comparison": {
+        "title": "Dine målinger",
+        "subtitle": "Konsentrasjon per stoff i den valgte prøven.",
+        "raw": "Målte verdier",
+        "normalized": "Per mmol kreatinin",
+        "normalizationHint": "Urinverdiene er delt på målt kreatinin og vises per mmol kreatinin.",
+        "noStudy": "Ingen sammenlignbar studiekurve tilgjengelig",
+        "noStudyHint": "For disse målingene vises bare dine verdier. De angir ikke forventet nivå eller tid siden inntak.",
+        "empty": "Skriv inn minst én målt konsentrasjon for å se profilen.",
+        "axis": "Konsentrasjon ({{unit}})",
+        "point": "{{name}}: {{value}} {{unit}}",
+        "legend": "Din måling",
+        "unplotted": "Uten kvantifisert verdi",
+        "sources": "Kilder og sammenligningsgrunnlag",
+        "study": {
+          "title": "Sammenlign med observerte studieforløp",
+          "design": "{{count}} deltakere · én peroral dose {{substance}}, {{dose}} mg · urin uten hydrolyse",
+          "mean": "Observert gjennomsnitt",
+          "measurement": "Din måling: {{value}} {{unit}}",
+          "chartLabel": "{{name}}: observerte studiegjennomsnitt over tid, sammenlignet med målt {{value}} {{unit}} ved ukjent tid siden inntak.",
+          "timeAxis": "Timer etter studiedosen",
+          "point": "{{time}} t: gjennomsnitt {{mean}}, SD {{sd}} {{unit}}",
+          "limitations": "Punktene er studiens gjennomsnitt; linjene forbinder måletidspunktene. Dette er ikke et normalområde eller en individuell forventningskurve. Den stiplede linjen viser din konsentrasjon ved ukjent tid siden inntak; krysningspunkter kan ikke tidfeste inntaket.",
+          "sourceTable": "Tall fra tabell {{table}}. SD er standardavvik mellom studiedeltakere, ikke et prediksjonsintervall. Studien oppgir ikke kreatininjusterte verdier.",
+          "tableCaption": "Observerte studiekonsentrasjoner for {{name}}",
+          "hours": "Timer",
+          "noNormalizedStudy": "Studiekurvene er ikke kreatininnormalisert. Velg «Målte verdier» for å se eventuelle sammenlignbare rådata."
+        }
       }
     },
     "editor": {
@@ -4621,6 +4678,28 @@
         "invalid": "Ikke et tall",
         "ambiguous": "Tvetydig — bruk desimaltegn"
       }
+    },
+    "guided": {
+      "title": "Legg inn metabolittprofil",
+      "substance": "Velg stoff",
+      "search": "Søk etter stoff eller metabolitt",
+      "medium": "Velg medium",
+      "selectMedium": "Velg medium …",
+      "specimen": "Aktiv prøve",
+      "values": "Skriv inn målte verdier",
+      "optionalValues": "Fyll ut stoffene som er analysert. Tomme felt regnes ikke som null. Oppgi målt form for sammenligning med studier.",
+      "creatinine": "Kreatinin i urin",
+      "creatinineHint": "Valgfritt. Urinkonsentrasjonene deles på målt kreatinin og vises per mmol kreatinin. Forholdstall mellom stoffer i samme prøve er uendret.",
+      "startHint": "Velg et stoff og et medium for å få opp relevante stoffer, forløpere og metabolitter.",
+      "measuredForm": "Målt form",
+      "formFor": "Målt form – {{name}}",
+      "valueFor": "Verdi – {{name}}",
+      "unitFor": "Enhet – {{name}}",
+      "censoredHint": "Resultattype og grense kan endres under avanserte prøveopplysninger.",
+      "loading": "Henter relaterte stoffer …",
+      "catalogUnavailable": "Fikk ikke hentet flere koblinger fra katalogen. Stoffene i den valgte profilen er fortsatt tilgjengelige.",
+      "positive": "Verdien må være større enn null.",
+      "nonnegative": "Konsentrasjonen kan ikke være negativ."
     }
   },
   "forensicConc": {

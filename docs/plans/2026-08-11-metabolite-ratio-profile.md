@@ -1,5 +1,35 @@
 # Metabolite ratio profile — implementation plan
 
+## Guided entry update — 2026-11-05
+
+The primary page now follows substance search → specimen medium → analyte values →
+optional urinary creatinine → concentration and study comparison. Diazepam and the
+morphine/codeine family are the featured entry points. Multi-specimen editing,
+filing and the existing ratio interpretation remain available in disclosures.
+The original ratio-first visual handoff below no longer defines the page layout.
+
+`GuidedCaseEntry` writes the existing case schema; `buildProfileMeasurements`
+feeds `ProfileComparison` independently of remote metabolism-graph availability.
+Empty fields are missing measurements, never zero. The main concentration graph
+normalizes urine by dividing by that specimen's measured creatinine and labels
+values per mmol creatinine; the existing advanced cross-specimen ratio engine
+retains its separately stated standard-creatinine reference.
+
+`studyCurves.ts` holds observed timepoints with provenance, assay/matrix context,
+dose, sample size and dispersion. The first two series are Wang et al. 2022,
+Table 4 (DOI 10.1007/s40268-021-00375-y): raw urine after a single 5 mg oral dose,
+not a population reference interval or individual prediction. The entered
+concentration is a horizontal line because intake time is unknown. Normalized,
+postmortem, hydrolyzed or unspecified assay results are not overlaid as compatible
+study observations. Unsupported combinations explicitly retain a data gap;
+provisional ratio bands are never used to manufacture concentration curves.
+
+The morphine/codeine module currently supplies the five requested analytes and
+catalog identities only. It declares no reference bands, thresholds or clinical
+signals. Its study-curve gap remains explicit until numerical series can be
+verified from primary full text.
+
+
 **Status:** Proposed for review. Three open questions decided by the owner on 2026-08-12 —
 §13.3 (published reference sources only), §13.4 (raw and normalised both shown, neither
 asserted) and §13.7 (two completeness markers, per drug and direction).

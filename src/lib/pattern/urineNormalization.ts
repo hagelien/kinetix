@@ -42,3 +42,37 @@ export function normalizationApplies(
   if (denominatorSpecimenId === undefined) return false;
   return numeratorSpecimenId !== denominatorSpecimenId;
 }
+
+/**
+ * Analyte amount per mmol of measured creatinine, distinct from a concentration
+ * standardized to a reference creatinine. Unit volume must cancel explicitly;
+ * an unfamiliar unit is left unnormalized rather than guessed.
+ */
+export function concentrationPerCreatinine(
+  value: number | undefined,
+  unit: string | undefined,
+  specimen: PatternSpecimen | undefined,
+): { value: number; unit: string } | undefined {
+  const creatinine = specimen?.urine?.creatinineMmolL;
+  if (
+    specimen?.matrix !== 'urine' ||
+    value === undefined || !Number.isFinite(value) || value < 0 ||
+    creatinine === undefined || !Number.isFinite(creatinine) || creatinine <= 0 ||
+    !unit
+  ) return undefined;
+
+  // The coefficient is identical for these equivalent numerator/volume pairs.
+  const units: Record<string, string> = {
+    'nmol/L': 'nmol/mmol', 'µmol/L': 'µmol/mmol', 'umol/L': 'µmol/mmol',
+    'μmol/L': 'µmol/mmol', 'mmol/L': 'mmol/mmol', 'pmol/L': 'pmol/mmol',
+    'ng/mL': 'µg/mmol', 'µg/L': 'µg/mmol', 'ug/L': 'µg/mmol',
+    'μg/L': 'µg/mmol', 'mg/L': 'mg/mmol', 'µg/mL': 'mg/mmol',
+    'ug/mL': 'mg/mmol', 'μg/mL': 'mg/mmol', 'ng/L': 'ng/mmol',
+    'g/L': 'g/mmol', 'mg/mL': 'g/mmol',
+  };
+  const normalizedUnit = Object.prototype.hasOwnProperty.call(units, unit) ? units[unit] : undefined;
+  const normalizedValue = value / creatinine;
+  return normalizedUnit && Number.isFinite(normalizedValue)
+    ? { value: normalizedValue, unit: normalizedUnit }
+    : undefined;
+}
