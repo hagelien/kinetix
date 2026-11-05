@@ -4,8 +4,12 @@
 
 The primary page now follows substance search → specimen medium → analyte values →
 optional urinary creatinine → concentration and study comparison. Diazepam and the
-morphine/codeine family are the featured entry points. Multi-specimen editing,
-filing and the existing ratio interpretation remain available in disclosures.
+morphine/codeine family are the featured entry points. Two specimens of the
+selected medium appear together in the primary editor, each with its own
+concentrations and urinary creatinine. Assay metadata, filing and ratio
+interpretation remain available in disclosures. The routine urine panel for
+the diazepam family suggests its metabolites; previously recorded parent-drug
+results are preserved and remain editable.
 The original ratio-first visual handoff below no longer defines the page layout.
 
 `GuidedCaseEntry` writes the existing case schema; `buildProfileMeasurements`
@@ -14,6 +18,10 @@ Empty fields are missing measurements, never zero. The main concentration graph
 normalizes urine by dividing by that specimen's measured creatinine and labels
 values per mmol creatinine; the existing advanced cross-specimen ratio engine
 retains its separately stated standard-creatinine reference.
+The measured-series graph shows both specimens without requiring a known assay
+form or a matching study. Collection intervals use the case's existing time
+origin; unknown intervals use categorical specimen positions. Missing results
+are gaps, not zeroes, and incompatible assay forms do not share connecting lines.
 
 `studyCurves.ts` holds observed timepoints with provenance, assay/matrix context,
 dose, sample size and dispersion. The first two series are Wang et al. 2022,

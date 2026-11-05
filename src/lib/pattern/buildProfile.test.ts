@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { buildProfileFromCase } from './buildProfile.js';
+import { buildProfileFromCase, buildProfileMeasurements } from './buildProfile.js';
 import { BENZODIAZEPINE_GRAPH, DIAZEPAM_FIXTURE_CASE } from './fixtures.js';
 import { BENZODIAZEPINE_MODULE } from './modules/benzodiazepines.js';
 import { COCAINE_MODULE } from './modules/cocaine.js';
@@ -17,6 +17,37 @@ function build(caseData: PatternCaseData, overrides?: Record<string, string>, lo
     locale,
   });
 }
+
+describe('serial measurement projection without a remote graph', () => {
+  it('keeps collection times, specimen identity and creatinine specific to each sample', () => {
+    const caseData: PatternCaseData = {
+      ...DIAZEPAM_FIXTURE_CASE,
+      context: { ...DIAZEPAM_FIXTURE_CASE.context, timeOrigin: 'declared_exposure' },
+      specimens: [
+        { id: 'u1', matrix: 'urine', relativeTimeHours: 12, urine: { creatinineMmolL: 4 } },
+        { id: 'u2', matrix: 'urine', relativeTimeHours: 60, urine: { creatinineMmolL: 2 } },
+      ],
+      observations: [
+        { id: 'a', specimenId: 'u1', analyte: { pubchemCid: 2997 }, value: 2, unit: 'µmol/L', qualifier: 'quantified' },
+        { id: 'b', specimenId: 'u2', analyte: { pubchemCid: 2997 }, value: 1.5, unit: 'µmol/L', qualifier: 'quantified' },
+      ],
+    };
+    const model = buildProfileMeasurements(caseData, [BENZODIAZEPINE_MODULE]);
+    expect(model.observations.map((row) => [row.specimenIndex, row.relativeTimeHours, row.creatinineNormalized?.value]))
+      .toEqual([[1, 12, 0.5], [2, 60, 0.75]]);
+    expect(model.observations.map((row) => row.measurandMode)).toEqual(['unknown', 'unknown']);
+    expect(caseData.context.timeOrigin).toBe('declared_exposure');
+  });
+
+  it('only flags a reported mass basis that differs from the analyte', () => {
+    const base = DIAZEPAM_FIXTURE_CASE.observations[0]!;
+    const observations = [base.analyte.pubchemCid, 999999].map((reportedAsDrugId, index) => ({
+      ...base, id: `mass-${index}`, assay: { ...base.assay, reportedAsDrugId },
+    }));
+    expect(buildProfileMeasurements({ ...DIAZEPAM_FIXTURE_CASE, observations }, [BENZODIAZEPINE_MODULE])
+      .observations.map((row) => row.reportedAsDifferentSubstance)).toEqual([false, true]);
+  });
+});
 
 describe('buildProfileFromCase', () => {
   it('formats values in the language the reader is using', () => {

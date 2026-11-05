@@ -148,12 +148,16 @@ function measurementInputs(
       pubchemCid: observation.analyte.pubchemCid,
       slug: observation.analyte.slug,
       specimenId: observation.specimenId,
+      specimenIndex: caseData.specimens.findIndex((s) => s.id === observation.specimenId) + 1,
+      relativeTimeHours: caseData.specimens.find((s) => s.id === observation.specimenId)?.relativeTimeHours,
       hasSpecimenLabel: Boolean(caseData.specimens.find((s) => s.id === observation.specimenId)?.label?.trim()),
       matrix: caseData.specimens.find((s) => s.id === observation.specimenId)?.matrix,
       measurandMode: observation.assay?.measurandMode ?? 'unknown',
       postmortem: caseData.context.postmortem || Boolean(caseData.specimens.find((s) => s.id === observation.specimenId)?.postmortem),
       hydrolysis: caseData.context.fields?.hydro,
-      reportedAsDifferentSubstance: observation.assay?.reportedAsDrugId !== undefined,
+      reportedAsDifferentSubstance: observation.assay?.reportedAsDrugId !== undefined &&
+        observation.assay.reportedAsDrugId !== observation.analyte.pubchemCid,
+      reportedAsDrugId: observation.assay?.reportedAsDrugId,
 
       creatinineNormalized: observation.qualifier === 'quantified'
         ? concentrationPerCreatinine(

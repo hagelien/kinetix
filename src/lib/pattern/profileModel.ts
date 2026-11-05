@@ -261,6 +261,10 @@ export interface ObservationRowVM {
   specimenLabel: string;
   /** Stable specimen identity, so two equally labelled samples never share an axis. */
   specimenId?: string;
+  /** One-based position in the case's specimen list, including empty samples. */
+  specimenIndex?: number;
+  /** Collection time on the case's declared time axis; not time since intake. */
+  relativeTimeHours?: number;
   hasSpecimenLabel?: boolean;
   matrix?: PatternMatrix;
   measurandMode?: PatternMeasurandMode;
@@ -268,6 +272,8 @@ export interface ObservationRowVM {
   hydrolysis?: string;
   /** Explicit alternate mass bases require separate conversion before comparison. */
   reportedAsDifferentSubstance?: boolean;
+  /** Explicit reported mass-basis identity; distinct bases cannot form one series. */
+  reportedAsDrugId?: number;
   /** A urine concentration divided by this specimen's measured creatinine. */
   creatinineNormalized?: { value: number; unit: string; valueText?: string };
   value?: number;

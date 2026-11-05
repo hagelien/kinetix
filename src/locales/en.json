@@ -4502,20 +4502,20 @@
         "confirmDiscard": "The case has unsaved changes. Discard them?"
       },
       "guided": {
-        "intro": "Choose a substance and specimen, enter measurements and compare with published study data.",
+        "intro": "Choose a substance and medium. Enter both samples and view their measured profile.",
         "caseActions": "Case name and saving",
-        "compare": "View measurements and study curves",
-        "advanced": "Additional specimens and assay details",
+        "compare": "Compare samples",
+        "advanced": "Advanced assay details",
         "ratioDetails": "Ratios and interpretation"
       },
       "comparison": {
         "title": "Your measurements",
-        "subtitle": "Concentration by substance in the selected specimen.",
+        "subtitle": "Compare samples with or without creatinine adjustment.",
         "raw": "Measured values",
         "normalized": "Per mmol creatinine",
         "normalizationHint": "Urine concentrations are divided by measured creatinine and shown per mmol creatinine.",
-        "noStudy": "No comparable study curve available",
-        "noStudyHint": "Only your values are shown for these measurements. They do not indicate an expected concentration or time since intake.",
+        "noStudy": "No compatible study curve for your selections",
+        "noStudyHint": "Study curves require matching medium, measured form and normalization. The graph above shows your samples.",
         "empty": "Enter at least one measured concentration to see the profile.",
         "axis": "Concentration ({{unit}})",
         "point": "{{name}}: {{value}} {{unit}}",
@@ -4535,7 +4535,19 @@
           "tableCaption": "Observed study concentrations for {{name}}",
           "hours": "Hours",
           "noNormalizedStudy": "Study curves are not creatinine-normalized. Select “Measured values” to see any comparable raw data."
-        }
+        },
+        "seriesTitle": "Measured profile",
+        "sample": "Sample {{number}}",
+        "timeAxis": "Hours from the first displayed sample",
+        "sampleAxis": "Samples (no time axis)",
+        "concentration": "Concentration",
+        "normalizationMissing": "Enter creatinine for each urine sample to compare normalized values.",
+        "nextSample": "Enter sample results to see the points in the graph.",
+        "measuredOnly": "Lines connect your measurements.",
+        "referenceDetails": "Study curves and sources",
+        "graphLabel": "Measured concentrations in {{count}} samples, {{unit}}",
+        "pointSeries": "{{name}}, {{sample}}: {{value}} {{unit}}",
+        "missing": "Not measured"
       }
     },
     "editor": {
@@ -4687,7 +4699,7 @@
       "selectMedium": "Choose a medium …",
       "specimen": "Active specimen",
       "values": "Enter measured values",
-      "optionalValues": "Fill in the substances that were analysed. Blank fields are not treated as zero. Specify the measured form for comparison with studies.",
+      "optionalValues": "Enter the substances that were analysed. Blank fields are not treated as zero.",
       "creatinine": "Urine creatinine",
       "creatinineHint": "Optional. Urine concentrations are divided by measured creatinine and shown per mmol creatinine. Ratios between substances in the same specimen are unchanged.",
       "startHint": "Choose a substance and a medium to see relevant substances, precursors and metabolites.",
@@ -4699,7 +4711,18 @@
       "loading": "Loading related substances …",
       "catalogUnavailable": "Could not load additional catalog relationships. The substances in the selected profile are still available.",
       "positive": "The value must be greater than zero.",
-      "nonnegative": "The concentration cannot be negative."
+      "nonnegative": "The concentration cannot be negative.",
+      "sampleNumber": "Sample {{number}}",
+      "newUnitFor": "Unit for new values – {{name}}",
+      "newUnitHint": "Applies to empty fields. Recorded values keep their unit.",
+      "firstBaseline": "First sample · 0 hours",
+      "firstSampleTime": "First sample: hours from {{origin}}",
+      "hoursAfterFirst": "Hours after the first sample",
+      "firstTimeNeeded": "Enter the first sample time to place the interval on the case timeline.",
+      "twoSamplesHint": "Enter one or both samples. Blank fields are not zero.",
+      "analysisSettings": "Measured forms and units",
+      "assayHint": "Specify the assay basis if known. Unknown remains unknown in study comparisons.",
+      "settingsFor": "Assay settings for sample {{number}}"
     }
   },
   "forensicConc": {

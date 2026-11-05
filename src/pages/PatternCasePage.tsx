@@ -42,7 +42,8 @@ import { usePatternCaseStore } from "@/stores/patternCaseStore";
  * loud instead of appearing silently.
  *
  * The guided path keeps entry and published concentration curves first;
- * multi-specimen editing and ratio interpretation remain available as details.
+ * repeated samples share the simple editor and graph; method metadata and
+ * ratio interpretation remain available as details.
  */
 /** One page of the picker. The endpoint reports no total, so a full page is
  * the only signal that another may exist. */
@@ -477,11 +478,7 @@ export function PatternCasePage() {
           >
             <div className="mb-5 flex items-center gap-3">
               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
-                {data.specimens.find(
-                  (specimen) => specimen.id === activeSpecimenId,
-                )?.matrix === "urine"
-                  ? "5"
-                  : "4"}
+                4
               </span>
               <h2
                 id="pattern-comparison-title"
@@ -497,7 +494,8 @@ export function PatternCasePage() {
             ) : (
               <ProfileComparison
                 model={comparisonModel}
-                specimenId={activeSpecimenId}
+                specimens={data.specimens}
+                matrix={data.specimens.find((sample) => sample.id === activeSpecimenId)?.matrix}
               />
             )}
           </section>
