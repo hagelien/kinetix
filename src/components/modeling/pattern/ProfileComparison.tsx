@@ -136,6 +136,13 @@ export function ProfileComparison({ model, specimens, matrix, specimenId }: Prop
     : row.slug ?? t('pattern.profile.sourceAmbiguity.unnamedSubstance', { cid: row.pubchemCid });
   const sampleName = (sample: SampleSlot) => sample.label?.trim() || t('pattern.profile.comparison.sample', { number: sample.index });
   const nonNumeric = observations.filter((row) => row.qualifier !== 'quantified');
+  const multipleMatrices = new Set(observations.map((row) => row.matrix)).size > 1;
+  const specimenOf = (row: ObservationRowVM) => {
+    const sample = sampleSlots(observations, selectedSpecimens, row.matrix)
+      .find((slot) => slot.id === (row.specimenId ?? row.specimenLabel));
+    const label = sample ? sampleName(sample) : row.specimenLabel;
+    return multipleMatrices && row.matrix ? `${label} · ${t(`pattern.editor.matrix.${row.matrix}`)}` : label;
+  };
 
   return (
     <section className="space-y-4" aria-label={t('pattern.profile.comparison.seriesTitle')}>
@@ -246,9 +253,11 @@ export function ProfileComparison({ model, specimens, matrix, specimenId }: Prop
         );
       })}
       {normalized && <p className="text-xs text-[hsl(var(--muted-foreground))]">{t('pattern.profile.comparison.normalizationHint')}</p>}
-      {nonNumeric.length > 0 && <p className="text-xs text-[hsl(var(--muted-foreground))]">
-        {nonNumeric.map((row) => `${nameOf(row)}: ${t(`pattern.profile.qualifier.${row.qualifier}`)}${row.limit ? ` ${row.limit.valueText} ${row.limit.unit}` : ''}`).join(' · ')}
-      </p>}
+      {nonNumeric.length > 0 && <ul aria-label={t('pattern.profile.comparison.unplotted')} className="space-y-1 text-xs text-[hsl(var(--muted-foreground))]">
+        {nonNumeric.map((row) => <li key={row.id}>
+          {`${specimenOf(row)} · ${nameOf(row)}: ${t(`pattern.profile.qualifier.${row.qualifier}`)}${row.limit ? ` ${row.limit.valueText} ${row.limit.unit}` : ''}`}
+        </li>)}
+      </ul>}
       {hasMeasurements && comparisons.length === 0 && <p className="text-xs text-[hsl(var(--muted-foreground))]">{t('pattern.profile.comparison.noStudyHint')}</p>}
       {comparisons.length > 0 && <details className="border-t border-[hsl(var(--border))] pt-3">
         <summary className="cursor-pointer text-sm font-medium">{t('pattern.profile.comparison.referenceDetails')}</summary>

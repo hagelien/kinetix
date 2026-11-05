@@ -65,6 +65,55 @@ describe('ProfileComparison', () => {
     expect(screen.getByText(/pattern.profile.qualifier.below_limit 5 ng\/mL/)).toBeInTheDocument();
   });
 
+  it('attributes censored results by specimen identity even when observations are reversed', () => {
+    const below: ObservationRowVM = {
+      ...measurement, qualifier: 'below_limit', value: undefined,
+      limit: { label: 'LOQ', value: 5, valueText: '5', unit: 'ng/mL' },
+    };
+    const above: ObservationRowVM = {
+      ...second, qualifier: 'above_limit', value: undefined,
+      limit: { label: 'ULOQ', value: 20, valueText: '20', unit: 'ng/mL' },
+    };
+    render(<ProfileComparison matrix="urine" specimens={[
+      // Numbering is local to the selected medium, not the whole case.
+      { id: 'blood-first', matrix: 'whole_blood' }, ...samples,
+    ]} model={modelOf(above, below)} />);
+
+    const results = within(screen.getByRole('list', {
+      name: 'pattern.profile.comparison.unplotted',
+    })).getAllByRole('listitem');
+    expect(results).toHaveLength(2);
+    expect(results[0]).toHaveTextContent('pattern.profile.comparison.sample 2');
+    expect(results[0]).toHaveTextContent('diazepam: pattern.profile.qualifier.above_limit 20 ng/mL');
+    expect(results[0]).not.toHaveTextContent('pattern.profile.comparison.sample 1');
+    expect(results[1]).toHaveTextContent('pattern.profile.comparison.sample 1');
+    expect(results[1]).toHaveTextContent('diazepam: pattern.profile.qualifier.below_limit 5 ng/mL');
+    expect(results[1]).not.toHaveTextContent('pattern.profile.comparison.sample 2');
+    expect(screen.queryAllByRole('img', { name: /pointSeries/ })).toHaveLength(0);
+  });
+
+  it('keeps custom specimen labels attached to their own non-detects and limits', () => {
+    render(<ProfileComparison matrix="urine" specimens={[
+      { ...samples[0]!, label: 'Morgenurin' },
+      { ...samples[1]!, label: 'Kontrollurin' },
+    ]} model={modelOf(
+      { ...second, qualifier: 'not_detected', value: undefined,
+        limit: { label: 'LOD', value: 2, valueText: '2', unit: 'nmol/L' } },
+      { ...measurement, qualifier: 'detected_not_quantified', value: undefined,
+        limit: { label: 'LOQ', value: 7, valueText: '7', unit: 'nmol/L' } },
+    )} />);
+
+    const results = within(screen.getByRole('list', {
+      name: 'pattern.profile.comparison.unplotted',
+    })).getAllByRole('listitem');
+    expect(results[0]).toHaveTextContent('Kontrollurin');
+    expect(results[0]).toHaveTextContent('diazepam: pattern.profile.qualifier.not_detected 2 nmol/L');
+    expect(results[0]).not.toHaveTextContent('Morgenurin');
+    expect(results[1]).toHaveTextContent('Morgenurin');
+    expect(results[1]).toHaveTextContent('diazepam: pattern.profile.qualifier.detected_not_quantified 7 nmol/L');
+    expect(results[1]).not.toHaveTextContent('Kontrollurin');
+  });
+
   it('keeps zero as a measured point', () => {
     render(<ProfileComparison model={modelOf({ ...measurement, value: 0, valueText: '0', matrix: 'plasma' })} />);
     expect(screen.getByRole('img', { name: /pointSeries.*0 nmol\/L/ })).toBeInTheDocument();
