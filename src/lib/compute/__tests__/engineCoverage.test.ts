@@ -36,8 +36,9 @@ describe('computeEngineCoverage', () => {
     // These exact numbers document today's catalog. Changing them should be a
     // conscious act tied to a data edit, not a silent drift.
     //
-    // They last moved when 16 auto-extracted `volumeOfDistribution` values in
-    // absolute litres were removed from the fixture (migration 0117): the
+    // The data-complete tiers last moved when 16 auto-extracted
+    // `volumeOfDistribution` values in absolute litres were removed from the
+    // fixture (migration 0117): the
     // parameter is declared `L/kg`, and `hasFirstOrderEngineData` asks only
     // whether a Vd is PRESENT, so all 16 counted as data-complete on a number
     // no reviewer had seen. Graded against the curated `L/kg` values the live
@@ -52,12 +53,30 @@ describe('computeEngineCoverage', () => {
     // summary, which is a weaker claim honestly labelled rather than an
     // unreviewed one presented as the catalog's, and the pair goes back into
     // the curation gap queue. firstOrder 72→57, ivOnly 17→16,
-    // fallbackOnly 81→97, engineReady 90→74.
+    // fallbackOnly 81→97, engineReady 90→74. The metabolite-profile catalog
+    // subsequently added M3G, M6G and C6G identities and molecular weights,
+    // without PK priors: fallbackOnly 97→100, engineReady unchanged.
     expect(cov.firstOrder.length).toBe(57);
     expect(cov.ivOnly.length).toBe(16);
     expect(cov.zeroOrder.length).toBe(1);
-    expect(cov.fallbackOnly.length).toBe(97);
+    expect(cov.fallbackOnly.length).toBe(100);
     expect(cov.engineReady).toBe(74);
+  });
+
+  it('keeps identity-only glucuronides outside the data-complete engine tiers', () => {
+    const glucuronideCids = new Set([5484731, 5360621, 5489029]);
+    const glucuronides = embeddedComponents.filter((component) =>
+      glucuronideCids.has(component.pubchemCid),
+    );
+    expect(glucuronides).toHaveLength(3);
+
+    const coverage = computeEngineCoverage(glucuronides);
+    expect(coverage.fallbackOnly.map((entry) => entry.slug).sort()).toEqual([
+      'codeine-6-glucuronide',
+      'morphine-3-glucuronide',
+      'morphine-6-glucuronide',
+    ]);
+    expect(coverage.engineReady).toBe(0);
   });
 
   it('routes ethanol to the zero-order (Widmark) branch', () => {
