@@ -5,7 +5,7 @@
  * what makes a filed case findable again, and a save that does not put it there
  * leaves the curator on a page that looks like a draft of work already stored.
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
@@ -69,6 +69,7 @@ beforeEach(() => {
     sentUrls.push(url);
     const body = (): unknown => {
       if (url.startsWith('/api/metabolism-graph')) return { graph: { nodes: [], edges: [] } };
+      if (url.startsWith('/api/drugs?cid=')) return { drug: { metabolism: { precursors: [], metabolites: [] } } };
       if (url.includes('kind=pattern-case')) return { cases: [STORED] };
       if (init?.method === 'POST' || init?.method === 'PUT') {
         posted.push(JSON.parse(String(init.body)));
@@ -119,7 +120,75 @@ function renderAt(path: string) {
   );
 }
 
+async function enterTwoUrineSamples() {
+  fireEvent.click(screen.getByRole('button', { name: 'Diazepam' }));
+  await waitFor(() => expect(screen.queryByText('Henter relaterte stoffer …')).toBeNull());
+  fireEvent.change(screen.getByLabelText('Velg medium'), { target: { value: 'urine' } });
+
+  const first = screen.getByRole('region', { name: 'Prøve 1' });
+  const second = screen.getByRole('region', { name: 'Prøve 2' });
+  for (const [card, nordazepam, oxazepam, creatinine] of [
+    [first, '200', '400', '2'],
+    [second, '300', '600', '6'],
+  ] as const) {
+    fireEvent.change(within(card).getByRole('combobox'), { target: { value: 'nmol/L' } });
+    for (const [name, value] of [
+      ['Verdi – N-desmetyldiazepam', nordazepam],
+      ['Verdi – Oksazepam', oxazepam],
+      ['Kreatinin (mmol/L)', creatinine],
+    ]) {
+      const input = within(card).getByRole('textbox', { name });
+      expect(input.closest('details')).toBeNull();
+      fireEvent.change(input, { target: { value } });
+    }
+  }
+}
+
 describe('the pattern case route', () => {
+  it('compares both urine samples with their own creatinine without opening advanced details', async () => {
+    renderAt('/modeling/pattern');
+    await enterTwoUrineSamples();
+
+    const advanced = screen.getByText('Avanserte analyseopplysninger').closest('details');
+    expect(advanced?.open).toBe(false);
+    const graph = screen.getByRole('img', { name: 'Målte konsentrasjoner i 2 prøver, nmol/L' });
+    expect(graph.tagName.toLowerCase()).toBe('svg');
+    const rawFigure = within(graph.closest('figure')!);
+    expect(rawFigure.getByRole('img', { name: 'N-desmetyldiazepam, Prøve 1: 200 nmol/L' })).toBeTruthy();
+    expect(rawFigure.getByRole('img', { name: 'N-desmetyldiazepam, Prøve 2: 300 nmol/L' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Per mmol kreatinin' }));
+    const normalized = screen.getByRole('img', { name: 'Målte konsentrasjoner i 2 prøver, nmol/mmol' });
+    // Raw concentrations rise, but the second sample's higher creatinine
+    // reverses that direction. Reusing sample one's denominator would hide it.
+    for (const label of [
+      'N-desmetyldiazepam, Prøve 1: 100 nmol/mmol',
+      'N-desmetyldiazepam, Prøve 2: 50 nmol/mmol',
+      'Oksazepam, Prøve 1: 200 nmol/mmol',
+      'Oksazepam, Prøve 2: 100 nmol/mmol',
+    ]) expect(within(normalized.closest('figure')!).getByRole('img', { name: label })).toBeTruthy();
+    expect(advanced?.open).toBe(false);
+  });
+
+  it('keeps the two-sample measurement graph usable when the remote metabolism graph fails', async () => {
+    const respond = globalThis.fetch;
+    vi.stubGlobal('fetch', (url: string, init?: RequestInit) =>
+      url.startsWith('/api/metabolism-graph')
+        ? Promise.reject(new Error('network'))
+        : respond(url, init),
+    );
+    renderAt('/modeling/pattern');
+    await enterTwoUrineSamples();
+
+    await waitFor(() => expect(screen.getByText(/Fikk ikke hentet metabolismegrafen/)).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Per mmol kreatinin' }));
+    const graph = screen.getByRole('img', { name: 'Målte konsentrasjoner i 2 prøver, nmol/mmol' });
+    const figure = within(graph.closest('figure')!);
+    expect(figure.getByRole('img', { name: 'N-desmetyldiazepam, Prøve 1: 100 nmol/mmol' })).toBeTruthy();
+    expect(figure.getByRole('img', { name: 'N-desmetyldiazepam, Prøve 2: 50 nmol/mmol' })).toBeTruthy();
+    expect(screen.queryByText('Metabolittprofil — vurdering')).toBeNull();
+  });
+
   it('opens the case the address names', async () => {
     renderAt('/modeling/pattern/7');
 

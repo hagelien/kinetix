@@ -8,7 +8,7 @@ import { fetchDrugByCid } from '@/lib/drugApi';
 import { resolveDrugName } from '@/lib/drugNames';
 import { parseLocaleNumberDetailed } from '@/lib/parseNumber';
 import { formatForEditing, formatMeasured, reportedDecimalsOf } from '@/lib/pattern/format';
-import { featuredPatternSubstances } from '@/lib/pattern/modules';
+import { featuredPatternSubstances, guidedPatternAnalytes } from '@/lib/pattern/modules';
 import type { PatternSubstanceModule } from '@/lib/pattern/substanceModules';
 import { getAvailableConcentrationUnits } from '@/lib/unitConversion';
 import type { DrugComponent } from '@/types';
@@ -18,6 +18,7 @@ import type {
   PatternMatrix,
   PatternMeasurandMode,
   PatternObservation,
+  PatternSpecimen,
 } from '@/types/patternCase';
 
 interface Props {
@@ -54,7 +55,9 @@ export function GuidedCaseEntry({ caseData, modules, onChange, onDraftProblem, o
   const locale = language === 'en' ? 'en-GB' : 'nb-NO';
   const [selected, setSelected] = useState<EntryAnalyte | null>(null);
   const [related, setRelated] = useState<EntryAnalyte[]>([]);
-  const [activeId, setActiveId] = useState<string>();
+  const [activeMatrix, setActiveMatrix] = useState<PatternMatrix>();
+  const [sampleUnits, setSampleUnits] = useState<Record<string, string>>({});
+  const [rowSettings, setRowSettings] = useState<Record<string, { unit?: string; mode?: PatternMeasurandMode }>>({});
   const [loading, setLoading] = useState(false);
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [badDrafts, setBadDrafts] = useState<ReadonlySet<string>>(new Set());
@@ -67,7 +70,14 @@ export function GuidedCaseEntry({ caseData, modules, onChange, onDraftProblem, o
   const latest = useRef(caseData);
   latest.current = caseData;
   const searchId = useId();
-  const specimen = caseData.specimens.find((item) => item.id === activeId) ?? caseData.specimens[0];
+  const matrix = activeMatrix ?? caseData.specimens[0]?.matrix;
+  const specimens = caseData.specimens.filter((item) => item.matrix === matrix);
+  // The second input card is available on reopened one-sample cases too. It is
+  // only written to the case when edited, so merely opening a saved case is read-only.
+  const shownSpecimens: PatternSpecimen[] = specimens.length === 1
+    ? [...specimens, { id: freshId('sample', caseData.specimens), matrix: specimens[0]!.matrix }]
+    : specimens;
+  const firstSpecimen = shownSpecimens[0];
 
   const names = useMemo(() => {
     const result = new Map<number, EntryAnalyte>();
@@ -89,7 +99,7 @@ export function GuidedCaseEntry({ caseData, modules, onChange, onDraftProblem, o
     });
   }, []);
   useEffect(() => onDraftProblem?.(badDrafts.size > 0), [badDrafts, onDraftProblem]);
-  useEffect(() => onSpecimenChange?.(specimen?.id), [specimen?.id, onSpecimenChange]);
+  useEffect(() => onSpecimenChange?.(firstSpecimen?.id), [firstSpecimen?.id, onSpecimenChange]);
   useEffect(() => () => { sequence.current += 1; }, []);
 
   // A reopened case is useful immediately, before any optional catalog read.
@@ -148,25 +158,35 @@ export function GuidedCaseEntry({ caseData, modules, onChange, onDraftProblem, o
     for (const item of module.analytes) candidates.set(item.analyte.pubchemCid, names.get(item.analyte.pubchemCid)!);
   }
   for (const item of related) if (!candidates.has(item.ref.pubchemCid)) candidates.set(item.ref.pubchemCid, item);
-  const specimenObservations = caseData.observations.filter((item) => item.specimenId === specimen?.id);
-  for (const observation of specimenObservations) {
-    if (!candidates.has(observation.analyte.pubchemCid)) candidates.set(observation.analyte.pubchemCid, names.get(observation.analyte.pubchemCid) ?? {
-      ref: observation.analyte,
-      label: observation.analyte.slug ?? t('pattern.editor.observations.analyteUnknown', { cid: observation.analyte.pubchemCid }),
-    });
+  const panelCids = selected ? guidedPatternAnalytes(selected.ref.pubchemCid, matrix) : undefined;
+  const panel = panelCids
+    ? panelCids.flatMap((cid) => candidates.get(cid) ?? names.get(cid) ?? [])
+    : [...candidates.values()];
+
+  function selectMatrix(nextMatrix: PatternMatrix) {
+    const current = latest.current;
+    const matching = current.specimens.filter((item) => item.matrix === nextMatrix);
+    const nextSpecimens = [...current.specimens];
+    while (matching.length < 2) {
+      const next: PatternSpecimen = { id: freshId('sample', nextSpecimens), matrix: nextMatrix };
+      if (nextSpecimens.length === 0 && current.context.timeOrigin === 'first_specimen_collection') next.relativeTimeHours = 0;
+      matching.push(next);
+      nextSpecimens.push(next);
+    }
+    if (nextSpecimens.length !== current.specimens.length) onChange({ ...current, specimens: nextSpecimens });
+    setActiveMatrix(nextMatrix);
   }
 
-  function selectMatrix(matrix: PatternMatrix) {
-    // Another medium is another specimen. Existing measurements keep their matrix.
-    const existing = caseData.specimens.find((item) => item.matrix === matrix);
-    if (existing) { setActiveId(existing.id); return; }
-    const id = freshId('sample', caseData.specimens);
-    onChange({ ...caseData, specimens: [...caseData.specimens, { id, matrix }] });
-    setActiveId(id);
+  function specimenListWith(current: PatternCaseData, specimen: PatternSpecimen) {
+    return current.specimens.some((item) => item.id === specimen.id) ? current.specimens : [...current.specimens, specimen];
   }
 
-  function updateObservation(rowKey: string, analyte: EntryAnalyte, existing: PatternObservation | undefined, next: Partial<PatternObservation> | null) {
-    if (!specimen) return;
+  function patchSpecimen(specimen: PatternSpecimen, patch: Partial<PatternSpecimen>) {
+    const current = latest.current;
+    onChange({ ...current, specimens: specimenListWith(current, specimen).map((item) => item.id === specimen.id ? { ...item, ...patch } : item) });
+  }
+
+  function updateObservation(specimen: PatternSpecimen, rowKey: string, analyte: EntryAnalyte, existing: PatternObservation | undefined, next: Partial<PatternObservation> | null) {
     const current = latest.current;
     if (next === null) {
       setSlots((previous) => ({ ...previous, [rowKey]: { specimenId: specimen.id, cid: analyte.ref.pubchemCid } }));
@@ -177,13 +197,56 @@ export function GuidedCaseEntry({ caseData, modules, onChange, onDraftProblem, o
       const id = next.id && !current.observations.some((item) => item.id === next.id)
         ? next.id : freshId('obs', current.observations);
       setSlots((previous) => ({ ...previous, [rowKey]: { specimenId: specimen.id, cid: analyte.ref.pubchemCid, observationId: id } }));
-      onChange({ ...current, observations: [...current.observations, {
+      onChange({ ...current, specimens: specimenListWith(current, specimen), observations: [...current.observations, {
         qualifier: 'quantified', unit: 'µmol/L', ...next,
         id, specimenId: specimen.id,
         analyte: next.analyte?.pubchemCid === analyte.ref.pubchemCid ? next.analyte : analyte.ref,
       }] });
     }
   }
+
+  const cards = shownSpecimens.map((specimen) => {
+    const observations = caseData.observations.filter((item) => item.specimenId === specimen.id);
+    const cardAnalytes = new Map(panel.map((item) => [item.ref.pubchemCid, item]));
+    // A narrower input panel never hides measurements already in the case.
+    for (const observation of observations) if (!cardAnalytes.has(observation.analyte.pubchemCid)) {
+      cardAnalytes.set(observation.analyte.pubchemCid, names.get(observation.analyte.pubchemCid) ?? {
+        ref: observation.analyte,
+        label: observation.analyte.slug ?? t('pattern.editor.observations.analyteUnknown', { cid: observation.analyte.pubchemCid }),
+      });
+    }
+    // Clearing a recorded out-of-panel result must not unmount its input before
+    // the replacement can be typed, or its retained assay metadata would be lost.
+    for (const slot of Object.values(slots)) {
+      if (slot.specimenId !== specimen.id || slot.observationId || cardAnalytes.has(slot.cid)) continue;
+      cardAnalytes.set(slot.cid, names.get(slot.cid) ?? candidates.get(slot.cid) ?? {
+        ref: { pubchemCid: slot.cid },
+        label: t('pattern.editor.observations.analyteUnknown', { cid: slot.cid }),
+      });
+    }
+    const rows = [...cardAnalytes.values()].flatMap((analyte) => {
+      const existing = observations.filter((item) => item.analyte.pubchemCid === analyte.ref.pubchemCid);
+      const result: Array<{ key: string; analyte: EntryAnalyte; observation?: PatternObservation }> = existing.map((observation) => ({
+        key: Object.entries(slots).find(([, slot]) => slot.specimenId === specimen.id && slot.observationId === observation.id)?.[0]
+          ?? `${specimen.id}:obs:${observation.id}`,
+        analyte, observation,
+      }));
+      for (const [key, slot] of Object.entries(slots)) {
+        if (slot.specimenId === specimen.id && slot.cid === analyte.ref.pubchemCid && !slot.observationId) result.push({ key, analyte });
+      }
+      if (!result.length) result.push({ key: `${specimen.id}:blank:${analyte.ref.pubchemCid}`, analyte });
+      for (const row of result) if (!rowOrder.current.has(row.key)) rowOrder.current.set(row.key, rowOrder.current.size);
+      return result.sort((a, b) => rowOrder.current.get(a.key)! - rowOrder.current.get(b.key)!);
+    });
+    return { specimen, rows };
+  });
+
+  const rowUnit = (key: string, specimen: PatternSpecimen, observation?: PatternObservation) =>
+    observation?.unit ?? rowSettings[key]?.unit ?? sampleUnits[specimen.id] ?? 'µmol/L';
+  const rowMode = (key: string, observation?: PatternObservation): PatternMeasurandMode =>
+    observation?.assay?.measurandMode ?? rowSettings[key]?.mode ?? 'unknown';
+  const changeSettings = (key: string, patch: { unit?: string; mode?: PatternMeasurandMode }) =>
+    setRowSettings((previous) => ({ ...previous, [key]: { ...previous[key], ...patch } }));
 
   return (
     <section className="space-y-6 rounded-2xl border bg-card p-4 sm:p-6" aria-label={t('pattern.guided.title')}>
@@ -205,53 +268,92 @@ export function GuidedCaseEntry({ caseData, modules, onChange, onDraftProblem, o
           {lookupError && <p className="text-xs text-muted-foreground" role="status">{lookupError}</p>}
         </Step>
         <Step number={2} title={t('pattern.guided.medium')}>
-          <Select aria-label={t('pattern.guided.medium')} value={specimen?.matrix ?? ''} disabled={!selected || badDrafts.size > 0}
+          <Select aria-label={t('pattern.guided.medium')} value={matrix ?? ''} disabled={!selected || badDrafts.size > 0}
             options={[{ value: '', label: t('pattern.guided.selectMedium') }, ...MATRICES.map((matrix) => ({ value: matrix, label: t(`pattern.editor.matrix.${matrix}`) }))]}
             onChange={(event) => { if (event.target.value) selectMatrix(event.target.value as PatternMatrix); }} />
-          {caseData.specimens.length > 1 && <label className="block space-y-1 text-xs text-muted-foreground">
-            <span>{t('pattern.guided.specimen')}</span>
-            <Select value={specimen?.id ?? ''} disabled={badDrafts.size > 0} onChange={(event) => setActiveId(event.target.value)}
-              options={caseData.specimens.map((item) => ({ value: item.id, label: `${item.label ?? item.id} · ${t(`pattern.editor.matrix.${item.matrix}`)}` }))} />
-          </label>}
+
         </Step>
       </div>
 
-      {selected && specimen ? <>
+      {selected && firstSpecimen ? <>
         <Step number={3} title={t('pattern.guided.values')}>
-          <p className="text-xs text-muted-foreground">{t('pattern.guided.optionalValues')}</p>
-          <div className="divide-y rounded-xl border px-3 sm:px-4">
-            <div aria-hidden="true" className="hidden grid-cols-[minmax(130px,1.2fr)_minmax(90px,0.65fr)_minmax(90px,0.6fr)_minmax(140px,1fr)] gap-3 py-2 text-xs text-muted-foreground md:grid">
-              <span>{t('pattern.editor.observations.analyte')}</span><span>{t('pattern.editor.observations.value')}</span>
-              <span>{t('pattern.editor.observations.unit')}</span><span>{t('pattern.guided.measuredForm')}</span>
-            </div>
-            {[...candidates.values()].flatMap((analyte) => {
-              const existing = specimenObservations.filter((item) => item.analyte.pubchemCid === analyte.ref.pubchemCid);
-              const rows: Array<{ key: string; observation?: PatternObservation }> = existing.map((observation) => ({
-                key: Object.entries(slots).find(([, slot]) => slot.specimenId === specimen.id && slot.observationId === observation.id)?.[0]
-                  ?? `${specimen.id}:obs:${observation.id}`,
-                observation,
-              }));
-              for (const [key, slot] of Object.entries(slots)) {
-                if (slot.specimenId === specimen.id && slot.cid === analyte.ref.pubchemCid && !slot.observationId) rows.push({ key });
-              }
-              if (!rows.length) rows.push({ key: `${specimen.id}:blank:${analyte.ref.pubchemCid}` });
-              for (const row of rows) if (!rowOrder.current.has(row.key)) rowOrder.current.set(row.key, rowOrder.current.size);
-              return rows.sort((a, b) => rowOrder.current.get(a.key)! - rowOrder.current.get(b.key)!).map(({ key, observation }) => (
-                <ConcentrationRow key={key} analyte={analyte} observation={observation}
-                  locale={locale} onDraftProblem={noteDraft} onChange={(next) => updateObservation(key, analyte, observation, next)} />
-              ));
+          <p className="text-xs text-muted-foreground">{t('pattern.guided.twoSamplesHint')}</p>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {cards.map(({ specimen, rows }, sampleIndex) => {
+              const sampleName = t('pattern.guided.sampleNumber', { number: sampleIndex + 1 });
+              const interval = specimen.relativeTimeHours === undefined || firstSpecimen.relativeTimeHours === undefined
+                ? undefined : specimen.relativeTimeHours - firstSpecimen.relativeTimeHours;
+              return <section key={specimen.id} aria-label={sampleName} className="min-w-0 rounded-xl border bg-background/40 p-3 sm:p-4">
+                <header className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div><h3 className="text-sm font-semibold">{sampleName}</h3>
+                    {specimen.label && <p className="text-xs text-muted-foreground">{specimen.label}</p>}
+                  </div>
+                  <Select className="h-8 w-28 text-xs" aria-label={t('pattern.guided.newUnitFor', { name: sampleName })}
+                    title={t('pattern.guided.newUnitHint')} value={sampleUnits[specimen.id] ?? 'µmol/L'}
+                    options={getAvailableConcentrationUnits(true).map((unit) => ({ value: unit, label: unit }))}
+                    onChange={(event) => setSampleUnits((previous) => ({ ...previous, [specimen.id]: event.target.value }))} />
+                </header>
+                <div className="mb-3 lg:min-h-[68px]">
+                  {sampleIndex === 0 ? (
+                    specimen.relativeTimeHours === 0 && caseData.context.timeOrigin === 'first_specimen_collection'
+                      ? <p className="py-2 text-xs text-muted-foreground">{t('pattern.guided.firstBaseline')}</p>
+                      : <DraftNumber label={t('pattern.guided.firstSampleTime', { origin: t(`pattern.editor.context.timeOriginOption.${caseData.context.timeOrigin}`) })}
+                        value={specimen.relativeTimeHours} locale={locale} allowNegative onDraftProblem={noteDraft}
+                        onValue={(value) => patchSpecimen(specimen, { relativeTimeHours: value })} />
+                  ) : <>
+                    <DraftNumber label={t('pattern.guided.hoursAfterFirst')} value={interval} locale={locale}
+                      disabled={firstSpecimen.relativeTimeHours === undefined} onDraftProblem={noteDraft}
+                      onValue={(value) => patchSpecimen(specimen, { relativeTimeHours: value === undefined || firstSpecimen.relativeTimeHours === undefined ? undefined : firstSpecimen.relativeTimeHours + value })} />
+                    {firstSpecimen.relativeTimeHours === undefined && <p className="mt-1 text-xs text-muted-foreground">{t('pattern.guided.firstTimeNeeded')}</p>}
+                  </>}
+                </div>
+                <div className="divide-y">
+                  {rows.map(({ key, analyte, observation }) => <ConcentrationRow key={key} analyte={analyte} observation={observation}
+                    unit={rowUnit(key, specimen, observation)} mode={rowMode(key, observation)}
+                    onRememberSettings={(settings) => changeSettings(key, settings)}
+                    locale={locale} onDraftProblem={noteDraft} onChange={(next) => updateObservation(specimen, key, analyte, observation, next)} />)}
+                </div>
+                {specimen.matrix === 'urine' && <div className="mt-3 border-t pt-3">
+                  <DraftNumber label={t('pattern.editor.specimens.creatinine')} value={specimen.urine?.creatinineMmolL} locale={locale}
+                    positive suffix="mmol/L" onDraftProblem={noteDraft}
+                    onValue={(value) => patchSpecimen(specimen, { urine: { ...specimen.urine, creatinineMmolL: value } })} />
+                </div>}
+              </section>;
             })}
           </div>
+          {matrix === 'urine' && <p className="text-xs text-muted-foreground">{t('pattern.guided.creatinineHint')}</p>}
         </Step>
-        {specimen.matrix === 'urine' && <Step number={4} title={t('pattern.guided.creatinine')}>
-          <div className="grid gap-3 sm:grid-cols-[minmax(0,220px)_1fr] sm:items-center">
-            <DraftNumber label={t('pattern.editor.specimens.creatinine')} value={specimen.urine?.creatinineMmolL} locale={locale}
-              positive onDraftProblem={noteDraft} onValue={(value) => onChange({ ...caseData,
-                specimens: caseData.specimens.map((item) => item.id === specimen.id ? { ...item, urine: { ...item.urine, creatinineMmolL: value } } : item),
-              })} />
-            <p className="text-xs text-muted-foreground">{t('pattern.guided.creatinineHint', { reference: formatMeasured(caseData.normalization.creatinineReferenceMmolL, locale) })}</p>
+        <details className="border-t pt-3">
+          <summary className="cursor-pointer text-xs text-muted-foreground">{t('pattern.guided.analysisSettings')}</summary>
+          <p className="my-3 text-xs text-muted-foreground">{t('pattern.guided.assayHint')}</p>
+          <div className="grid gap-5 lg:grid-cols-2">
+            {cards.map(({ specimen, rows }, sampleIndex) => <section key={specimen.id} aria-label={t('pattern.guided.settingsFor', { number: sampleIndex + 1 })}>
+              <h3 className="mb-2 text-sm font-medium">{t('pattern.guided.sampleNumber', { number: sampleIndex + 1 })}</h3>
+              <div className="space-y-2">{rows.map(({ key, analyte, observation }) => {
+                const unit = rowUnit(key, specimen, observation);
+                const units: string[] = getAvailableConcentrationUnits(true);
+                if (!units.includes(unit)) units.push(unit);
+                return <div key={key} className="grid grid-cols-[minmax(0,1fr)_minmax(100px,1fr)_90px] items-center gap-2">
+                  <span className="text-xs">{analyte.label}</span>
+                  <Select className="h-8 text-xs" aria-label={t('pattern.guided.formFor', { name: analyte.label })}
+                    value={rowMode(key, observation)} options={MODES.map((value) => ({ value, label: t(`pattern.editor.observations.measurand.${value}`) }))}
+                    onChange={(event) => {
+                      const mode = event.target.value as PatternMeasurandMode;
+                      changeSettings(key, { mode });
+                      if (observation) updateObservation(specimen, key, analyte, observation, { assay: { ...observation.assay, measurandMode: mode } });
+                    }} />
+                  <Select className="h-8 text-xs" aria-label={t('pattern.guided.unitFor', { name: analyte.label })} value={unit}
+                    disabled={!!observation && observation.qualifier !== 'quantified'}
+                    options={units.map((value) => ({ value, label: value }))}
+                    onChange={(event) => {
+                      changeSettings(key, { unit: event.target.value });
+                      if (observation) updateObservation(specimen, key, analyte, observation, { unit: event.target.value });
+                    }} />
+                </div>;
+              })}</div>
+            </section>)}
           </div>
-        </Step>}
+        </details>
       </> : <p className="rounded-xl bg-muted/40 p-4 text-sm text-muted-foreground">{t('pattern.guided.startHint')}</p>}
     </section>
   );
@@ -263,56 +365,34 @@ function Step({ number, title, children }: { number: number; title: string; chil
   </h2>{children}</div>;
 }
 
-function ConcentrationRow({ analyte, observation, locale, onChange, onDraftProblem }: {
+function ConcentrationRow({ analyte, observation, locale, unit, mode, onRememberSettings, onChange, onDraftProblem }: {
   analyte: EntryAnalyte; observation?: PatternObservation; locale: string;
+  unit: string; mode: PatternMeasurandMode;
+  onRememberSettings: (settings: { unit: string; mode: PatternMeasurandMode }) => void;
   onChange: (patch: Partial<PatternObservation> | null) => void;
   onDraftProblem: (id: string, problem: boolean) => void;
 }) {
   const { t } = useTranslation();
-  const [draftUnit, setDraftUnit] = useState('µmol/L');
-  const [draftMode, setDraftMode] = useState<PatternMeasurandMode>('unknown');
   const retained = useRef<PatternObservation>();
-  const unit = observation?.unit ?? draftUnit;
-  const mode = observation?.assay?.measurandMode ?? draftMode;
-  const units: string[] = getAvailableConcentrationUnits(true);
-  if (!units.includes(unit)) units.push(unit);
   const censored = observation && observation.qualifier !== 'quantified';
-
-  return <div className="grid grid-cols-2 items-center gap-2 py-2.5 md:grid-cols-[minmax(130px,1.2fr)_minmax(90px,0.65fr)_minmax(90px,0.6fr)_minmax(140px,1fr)] md:gap-3">
-    <p className="col-span-2 text-sm font-medium md:col-span-1">{analyte.label}</p>
-    {censored ? <div className="space-y-1 text-sm">
+  return <div className="grid grid-cols-[minmax(0,1fr)_minmax(120px,1fr)] items-center gap-3 py-2">
+    <p className="text-sm">{analyte.label}</p>
+    {censored ? <div className="space-y-1 text-xs">
       <p>{t(`pattern.editor.qualifier.${observation.qualifier}`)} {observation.limitRef ? `${formatMeasured(observation.limitRef.value, locale, observation.limitRef.reportedDecimals)} ${observation.limitRef.unit}` : ''}</p>
-      <p className="text-xs text-muted-foreground">{t('pattern.guided.censoredHint')}</p>
+      <p className="text-muted-foreground">{t('pattern.guided.censoredHint')}</p>
     </div> : <DraftNumber hideLabel label={t('pattern.guided.valueFor', { name: analyte.label })} value={observation?.value}
-      decimals={observation?.reportedDecimals} locale={locale} onDraftProblem={onDraftProblem} onValue={(value, reportedDecimals) => {
+      decimals={observation?.reportedDecimals} locale={locale} suffix={unit} onDraftProblem={onDraftProblem} onValue={(value, reportedDecimals) => {
         if (value === undefined) {
-          setDraftUnit(unit); setDraftMode(mode);
+          onRememberSettings({ unit, mode });
           if (observation) retained.current = observation;
           if (observation) onChange(null);
         } else onChange({ ...(observation ? {} : retained.current), value, reportedDecimals, unit, assay: { ...(observation?.assay ?? retained.current?.assay), measurandMode: mode } });
       }} />}
-    {!censored && <label className="block text-xs text-muted-foreground"><span className="sr-only">{t('pattern.editor.observations.unit')}</span>
-      <Select aria-label={t('pattern.guided.unitFor', { name: analyte.label })} value={unit}
-        options={units.map((value) => ({ value, label: value }))} onChange={(event) => {
-          setDraftUnit(event.target.value);
-          if (observation) onChange({ unit: event.target.value });
-        }} />
-    </label>}
-    <label className="col-span-2 block text-xs text-muted-foreground md:col-span-1">
-      <span className="md:sr-only">{t('pattern.guided.measuredForm')}</span>
-      <Select aria-label={t('pattern.guided.formFor', { name: analyte.label })} className="h-10 text-xs" value={mode}
-        options={MODES.map((value) => ({ value, label: t(`pattern.editor.observations.measurand.${value}`) }))}
-        onChange={(event) => {
-          const value = event.target.value as PatternMeasurandMode;
-          setDraftMode(value);
-          if (observation) onChange({ assay: { ...observation.assay, measurandMode: value } });
-        }} />
-    </label>
   </div>;
 }
 
-function DraftNumber({ label, value, decimals, locale, positive = false, hideLabel = false, onValue, onDraftProblem }: {
-  label: string; value?: number; decimals?: number; locale: string; positive?: boolean; hideLabel?: boolean;
+function DraftNumber({ label, value, decimals, locale, positive = false, hideLabel = false, allowNegative = false, disabled = false, suffix, onValue, onDraftProblem }: {
+  label: string; value?: number; decimals?: number; locale: string; positive?: boolean; hideLabel?: boolean; allowNegative?: boolean; disabled?: boolean; suffix?: string;
   onValue: (value: number | undefined, decimals?: number) => void;
   onDraftProblem: (id: string, problem: boolean) => void;
 }) {
@@ -324,7 +404,7 @@ function DraftNumber({ label, value, decimals, locale, positive = false, hideLab
   const shown = value === undefined ? '' : formatForEditing(value, locale, decimals);
   return <div className="space-y-1 text-xs text-muted-foreground">
     <label htmlFor={id} className={hideLabel ? 'sr-only' : undefined}>{label}</label>
-    <Input id={id} inputMode="decimal" value={draft ?? shown} placeholder="—" aria-invalid={problem !== null}
+    <div className="relative"><Input id={id} disabled={disabled} className={suffix ? 'pr-16' : undefined} inputMode="decimal" value={draft ?? shown} placeholder="—" aria-invalid={problem !== null}
       aria-describedby={problem ? `${id}-problem` : undefined}
       onChange={(event) => {
         const raw = event.target.value;
@@ -333,11 +413,13 @@ function DraftNumber({ label, value, decimals, locale, positive = false, hideLab
           setProblem(null); onDraftProblem(id, false); onValue(undefined); return;
         }
         const parsed = parseLocaleNumberDetailed(raw);
-        const failure = !parsed.ok ? parsed.reason : positive && parsed.value <= 0 ? 'positive' : parsed.value < 0 ? 'nonnegative' : null;
+        const failure = !parsed.ok ? parsed.reason : positive && parsed.value <= 0 ? 'positive' : !allowNegative && parsed.value < 0 ? 'nonnegative' : null;
         setProblem(failure); onDraftProblem(id, failure !== null);
         if (parsed.ok && !failure) onValue(parsed.value, reportedDecimalsOf(raw));
       }}
       onBlur={() => { if (!problem) setDraft(null); }} />
+      {suffix && <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-[10px] text-muted-foreground">{suffix}</span>}
+    </div>
     {problem && <p id={`${id}-problem`} role="alert" className="text-destructive">{t(problem === 'invalid' || problem === 'ambiguous' ? `pattern.editor.number.${problem}` : `pattern.guided.${problem}`)}</p>}
   </div>;
 }

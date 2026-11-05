@@ -12,6 +12,7 @@ import { COCAINE_MODULE } from './cocaine.js';
 import { METHADONE_MODULE } from './methadone.js';
 import { CODEINE, MORPHINE, MORPHINE_CODEINE_MODULE } from './morphineCodeine.js';
 import type { PatternSubstanceModule } from '../substanceModules.js';
+import type { PatternMatrix } from '../../../types/patternCase.js';
 
 export const PATTERN_MODULES: readonly PatternSubstanceModule[] = [
   BENZODIAZEPINE_MODULE,
@@ -26,6 +27,19 @@ export const featuredPatternSubstances = [
   MORPHINE,
   CODEINE,
 ] as const;
+
+/**
+ * Routine entry panels are presentation defaults, not analytical exclusions.
+ * Existing observations outside the panel must remain available to the editor.
+ */
+export function guidedPatternAnalytes(selectedCid: number, matrix?: PatternMatrix): readonly number[] | undefined {
+  if (matrix === 'urine' && BENZODIAZEPINE_MODULE.analytes.some((item) => item.analyte.pubchemCid === selectedCid)) {
+    return BENZODIAZEPINE_MODULE.analytes
+      .filter((item) => item.analyte.pubchemCid !== BENZODIAZEPINE_MODULE.assumedParent.pubchemCid)
+      .map((item) => item.analyte.pubchemCid);
+  }
+  return undefined;
+}
 
 export function patternModuleById(id: string): PatternSubstanceModule | undefined {
   return PATTERN_MODULES.find((module) => module.id === id);

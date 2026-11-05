@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { ProfileComparison } from './ProfileComparison';
+import { ProfileComparison, measurementGroups } from './ProfileComparison';
 import { studyComparisons } from './StudyCurveComparison';
 import { buildProfileMeasurements } from '../../../lib/pattern/buildProfile';
 import { DIAZEPAM_FIXTURE_CASE } from '../../../lib/pattern/fixtures';
@@ -23,54 +23,112 @@ const measurement: ObservationRowVM = {
 };
 const modelOf = (...observations: ObservationRowVM[]) => ({ observations, specimenMetrics: [] });
 
+const samples = [
+  { id: 'urine-1', matrix: 'urine' as const, relativeTimeHours: 0 },
+  { id: 'urine-2', matrix: 'urine' as const, relativeTimeHours: 24 },
+];
+const second = { ...measurement, id: 'value-2', specimenId: 'urine-2', value: 0.5, valueText: '0,5' };
+
 describe('ProfileComparison', () => {
-  it('uses actual specimen identity and unit to separate axes, and limits the selected specimen', () => {
-    const { container, rerender } = render(<ProfileComparison model={modelOf(
-      measurement,
-      { ...measurement, id: 'value-2', specimenId: 'urine-2', value: 10, valueText: '10' },
-      { ...measurement, id: 'value-3', unit: 'ng/mL' },
+  it('always plots both measured samples even with unknown assay and no eligible study', () => {
+    render(<ProfileComparison matrix="urine" specimens={samples} model={modelOf(
+      { ...measurement, measurandMode: 'unknown' }, { ...second, measurandMode: 'unknown' },
     )} />);
-    // Three measured panels, followed by one supported study per observation.
-    expect(container.querySelectorAll('figure')).toHaveLength(6);
-    rerender(<ProfileComparison specimenId="urine-2" model={modelOf(
-      measurement, { ...measurement, id: 'value-2', specimenId: 'urine-2', value: 10, valueText: '10' },
-    )} />);
-    expect(container.querySelectorAll('figure')).toHaveLength(2);
+    const graph = screen.getByRole('img', { name: 'pattern.profile.comparison.graphLabel 2 nmol/L' });
+    expect(graph.querySelectorAll('line')).toHaveLength(1);
+    expect(screen.getAllByRole('img', { name: /pointSeries/ })).toHaveLength(2);
+    expect(screen.queryByText('pattern.profile.comparison.referenceDetails')).toBeNull();
+    expect(screen.getByText('1 → 0,5 nmol/L')).toBeVisible();
   });
 
-  it('never draws a reporting threshold as a measured point', () => {
-    render(<ProfileComparison model={modelOf({
+  it('converts compatible units onto one axis while keeping different matrices separate', () => {
+    const groups = measurementGroups([
+      measurement, { ...second, unit: 'µmol/L', value: 0.001 },
+      { ...measurement, id: 'blood', specimenId: 'blood', matrix: 'whole_blood' },
+    ], false);
+    expect(groups).toHaveLength(2);
+    expect(groups[0]?.series[0]?.points.map((point) => point.value)).toEqual([1, 1]);
+    expect(groups[0]?.unit).toBe('nmol/L');
+    const { rerender } = render(<ProfileComparison matrix="urine" specimens={samples} model={modelOf(measurement, second)} />);
+    expect(screen.getByRole('img', { name: /graphLabel 2 nmol/ })).toBeInTheDocument();
+    rerender(<ProfileComparison specimenId="urine-2" model={modelOf(measurement, second)} />);
+    expect(screen.getByRole('img', { name: /graphLabel 1 nmol/ })).toBeInTheDocument();
+  });
+
+  it('retains a useful scaffold but never draws a reporting threshold as a measured point', () => {
+    render(<ProfileComparison matrix="urine" specimens={samples} model={modelOf({
       ...measurement, qualifier: 'below_limit', value: undefined,
       limit: { label: 'LOQ', value: 5, valueText: '5', unit: 'ng/mL' },
     })} />);
-    expect(screen.queryAllByRole('img')).toHaveLength(0);
+    expect(screen.getByRole('img', { name: /graphLabel 2/ })).toBeInTheDocument();
+    expect(screen.queryAllByRole('img', { name: /pointSeries/ })).toHaveLength(0);
     expect(screen.getByText(/pattern.profile.qualifier.below_limit 5 ng\/mL/)).toBeInTheDocument();
   });
 
-  it('keeps zero as a measured point and does not replace it with a missing value', () => {
+  it('keeps zero as a measured point', () => {
     render(<ProfileComparison model={modelOf({ ...measurement, value: 0, valueText: '0', matrix: 'plasma' })} />);
-    expect(screen.getByRole('img').getAttribute('aria-label')).toContain('0 nmol/L');
-    expect(screen.getByText('0 nmol/L')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: /pointSeries.*0 nmol\/L/ })).toBeInTheDocument();
+    expect(screen.getAllByText('0 nmol/L').some((node) => !node.closest('.sr-only'))).toBe(true);
   });
 
-  it('changes units on normalization and withholds unnormalized study comparisons', () => {
-    render(<ProfileComparison model={modelOf({
-      ...measurement, creatinineNormalized: { value: 0.1, valueText: '0,1', unit: 'nmol/mmol' },
-    })} />);
-    expect(screen.getByRole('img', { name: /study.chartLabel/ })).toBeInTheDocument();
+  it('normalizes both samples using their own creatinine, with visible numbers', () => {
+    render(<ProfileComparison matrix="urine" specimens={samples} model={modelOf(
+      { ...measurement, creatinineNormalized: { value: 0.1, valueText: '0,1', unit: 'nmol/mmol' } },
+      { ...second, creatinineNormalized: { value: 0.025, valueText: '0,025', unit: 'nmol/mmol' } },
+    )} />);
     fireEvent.click(screen.getByRole('button', { name: 'pattern.profile.comparison.normalized' }));
-    expect(screen.queryByRole('img', { name: /study.chartLabel/ })).toBeNull();
-    expect(screen.getByText('0,1 nmol/mmol')).toBeInTheDocument();
-    expect(screen.getByText('pattern.profile.comparison.study.noNormalizedStudy')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: /graphLabel 2 nmol\/mmol/ })).toBeInTheDocument();
+    expect(screen.getByText('0,1 → 0,025 nmol/mmol')).toBeVisible();
+    expect(screen.queryByText('pattern.profile.comparison.referenceDetails')).toBeNull();
   });
 
-  it('shows exact source observations and SD separately from the mean line', () => {
+  it('refuses partial normalization and returns to raw if one sample loses its creatinine', () => {
+    const corrected = { ...measurement, creatinineNormalized: { value: 0.1, valueText: '0,1', unit: 'nmol/mmol' } };
+    const correctedSecond = { ...second, creatinineNormalized: { value: 0.025, valueText: '0,025', unit: 'nmol/mmol' } };
+    const { rerender } = render(<ProfileComparison matrix="urine" specimens={samples} model={modelOf(corrected, correctedSecond)} />);
+    fireEvent.click(screen.getByRole('button', { name: 'pattern.profile.comparison.normalized' }));
+    rerender(<ProfileComparison matrix="urine" specimens={samples} model={modelOf(corrected, second)} />);
+    expect(screen.getByRole('button', { name: 'pattern.profile.comparison.normalized' })).toBeDisabled();
+    expect(screen.getByRole('img', { name: /graphLabel 2 nmol\/L/ })).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: /graphLabel.*nmol\/mmol/ })).toBeNull();
+  });
+
+  it('does not bridge an absent middle sample or a differing reported form', () => {
+    const third = { ...second, id: 'value-3', specimenId: 'urine-3' };
+    const threeSamples = [...samples, { id: 'urine-3', matrix: 'urine' as const, relativeTimeHours: 48 }];
+    const { rerender } = render(<ProfileComparison matrix="urine" specimens={threeSamples} model={modelOf(measurement, third)} />);
+    expect(screen.getByRole('img', { name: /graphLabel 3/ }).querySelectorAll('line')).toHaveLength(0);
+    rerender(<ProfileComparison matrix="urine" specimens={samples} model={modelOf(measurement, { ...second, measurandMode: 'total_after_hydrolysis' })} />);
+    expect(screen.getByRole('img', { name: /graphLabel 2/ }).querySelectorAll('line')).toHaveLength(0);
+  });
+
+  it('distinguishes alternate reported mass bases in repeated measurements', () => {
+    const groups = measurementGroups([
+      { ...measurement, reportedAsDifferentSubstance: true, reportedAsDrugId: 1 },
+      { ...second, reportedAsDifferentSubstance: true, reportedAsDrugId: 2 },
+    ], false, samples);
+    expect(groups[0]?.series).toHaveLength(2);
+  });
+
+  it('uses true unequal time intervals, and categorical spacing when timing is unknown', () => {
+    const threeSamples = [samples[0]!, { ...samples[1]!, relativeTimeHours: 2 }, { id: 'urine-3', matrix: 'urine' as const, relativeTimeHours: 10 }];
+    const rows = modelOf(measurement, second, { ...second, id: 'value-3', specimenId: 'urine-3' });
+    const { rerender } = render(<ProfileComparison matrix="urine" specimens={threeSamples} model={rows} />);
+    const line = screen.getByRole('img', { name: /graphLabel 3/ }).querySelector('line')!;
+    expect(Number(line.getAttribute('x2'))).toBeCloseTo(24.8);
+    rerender(<ProfileComparison matrix="urine" specimens={threeSamples.map((sample) => ({ ...sample, relativeTimeHours: undefined }))} model={rows} />);
+    expect(screen.getByRole('img', { name: /graphLabel 3/ }).querySelector('line')).toHaveAttribute('x2', '50');
+    expect(screen.getByText('pattern.profile.comparison.sampleAxis')).toBeVisible();
+  });
+
+  it('keeps study means, SD and provenance in a separate expandable reference section', () => {
     const { container } = render(<ProfileComparison model={modelOf(measurement)} />);
+    expect(screen.getByRole('img', { name: /study.chartLabel/ })).not.toBeVisible();
+    fireEvent.click(screen.getByText('pattern.profile.comparison.referenceDetails'));
     const chart = screen.getByRole('img', { name: /study.chartLabel/ });
     expect(chart.querySelectorAll('circle')).toHaveLength(11);
     expect(chart.querySelector('line[stroke-dasharray]')).toBeInTheDocument();
-    expect(screen.getByRole('link')).toHaveAttribute('href', 'https://doi.org/10.1007/s40268-021-00375-y');
-    const sourceDetails = container.querySelector('details')!;
+    const sourceDetails = container.querySelector<HTMLDetailsElement>('details details')!;
     expect(within(sourceDetails).getByText('2,3')).toBeInTheDocument();
     expect(within(sourceDetails).getByText('1,36')).toBeInTheDocument();
     expect(screen.getByText('pattern.profile.comparison.study.limitations')).toBeInTheDocument();

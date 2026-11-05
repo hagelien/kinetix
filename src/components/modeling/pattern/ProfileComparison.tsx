@@ -1,185 +1,262 @@
-/** Measured concentrations, with no reference curve invented from ratio placeholders. */
+/** Actual repeated measurements stay visible independently of study eligibility. */
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-
 import type { ObservationRowVM, RatioProfileViewModel } from '../../../lib/pattern/profileModel';
+import { catalogMolecularWeight } from '../../../lib/pattern/catalogAnalytes';
+import { convertConcentration, isConcentrationUnit, normalizeUnit } from '../../../lib/unitConversion';
+import type { PatternMatrix, PatternSpecimen } from '../../../types/patternCase';
 import { StudyCurveComparison, studyComparisons } from './StudyCurveComparison';
 
 interface Props {
   model: Pick<RatioProfileViewModel, 'observations' | 'specimenMetrics'>;
+  specimens?: readonly PatternSpecimen[];
+  matrix?: PatternMatrix;
   specimenId?: string;
 }
 
-interface PlotGroup {
+interface SampleSlot {
+  id: string;
+  index: number;
+  label?: string;
+  time?: number;
+}
+interface SeriesPoint {
+  sampleId: string;
+  observation: ObservationRowVM;
+  value: number;
+}
+interface MeasurementSeries {
   key: string;
-  specimenLabel: string;
+  observation: ObservationRowVM;
+  points: SeriesPoint[];
+}
+interface MeasurementGroup {
+  key: string;
+  matrix?: PatternMatrix;
   unit: string;
-  normalized: boolean;
-  rows: Array<{ observation: ObservationRowVM; value: number; valueText: string }>;
+  conversionUnit: string;
+  samples: SampleSlot[];
+  series: MeasurementSeries[];
 }
 
-/** Specimen identity and units are both part of the axis, never just a label. */
-function groupMeasurements(observations: ObservationRowVM[], normalized: boolean): PlotGroup[] {
-  const groups = new Map<string, PlotGroup>();
-  for (const observation of observations) {
-    if (
-      observation.qualifier !== 'quantified' || observation.value === undefined ||
-      !Number.isFinite(observation.value) || observation.value < 0 || !observation.unit
-    ) continue;
-    const corrected = normalized ? observation.creatinineNormalized : undefined;
-    const unit = corrected?.unit ?? observation.unit;
-    const key = JSON.stringify([
-      observation.specimenId ?? observation.specimenLabel,
-      observation.matrix,
-      unit,
-      Boolean(corrected),
-    ]);
-    let group = groups.get(key);
-    if (!group) {
-      group = {
-        key, unit, specimenLabel: observation.specimenLabel,
-        normalized: Boolean(corrected), rows: [],
-      };
-      groups.set(key, group);
-    }
-    group.rows.push({
-      observation,
-      value: corrected?.value ?? observation.value,
-      valueText: corrected?.valueText ?? observation.valueText ?? String(observation.value),
+const COLORS = ['#2563eb', '#c2410c', '#047857', '#9333ea', '#be185d', '#0e7490'];
+
+function isQuantified(row: ObservationRowVM): row is ObservationRowVM & { value: number; unit: string } {
+  return row.qualifier === 'quantified' && row.value !== undefined &&
+    Number.isFinite(row.value) && row.value >= 0 && Boolean(row.unit);
+}
+
+function sampleSlots(rows: ObservationRowVM[], specimens: readonly PatternSpecimen[] | undefined, matrix?: PatternMatrix): SampleSlot[] {
+  if (specimens) return specimens.filter((sample) => sample.matrix === matrix).map((sample, index) =>
+    ({ id: sample.id, index: index + 1, label: sample.label, time: sample.relativeTimeHours }));
+  const slots = new Map<string, SampleSlot>();
+  for (const row of rows) {
+    if (row.matrix !== matrix) continue;
+    const id = row.specimenId ?? row.specimenLabel;
+    if (!slots.has(id)) slots.set(id, {
+      id, index: row.specimenIndex ?? slots.size + 1,
+      label: row.hasSpecimenLabel ? row.specimenLabel : undefined,
+      time: row.relativeTimeHours,
     });
   }
-  return [...groups.values()];
+  return [...slots.values()];
 }
 
-export function ProfileComparison({ model, specimenId }: Props) {
+/** Group compatible quantities; normalize all urine results or none. No zero-filling. */
+export function measurementGroups(
+  rows: ObservationRowVM[], normalized: boolean, specimens?: readonly PatternSpecimen[], matrix?: PatternMatrix,
+): MeasurementGroup[] {
+  const groups: MeasurementGroup[] = [];
+  for (const row of rows.filter(isQuantified)) {
+    const corrected = normalized && row.matrix === 'urine' ? row.creatinineNormalized : undefined;
+    if (normalized && row.matrix === 'urine' && !corrected) continue;
+    const value = corrected?.value ?? row.value;
+    const unit = normalizeUnit(corrected?.unit ?? row.unit);
+    // Dividing both sides by mmol creatinine preserves concentration-unit factors.
+    const conversionUnit = corrected ? unit.replace(/\/mmol$/, '/L') : unit;
+    let plottedValue = value;
+    let group = groups.find((candidate) => {
+      if (candidate.matrix !== row.matrix) return false;
+      if (candidate.unit === unit) return true;
+      if (!isConcentrationUnit(conversionUnit) || !isConcentrationUnit(candidate.conversionUnit)) return false;
+      try {
+        const converted = convertConcentration(
+          value, conversionUnit, candidate.conversionUnit,
+          row.reportedAsDifferentSubstance ? undefined : catalogMolecularWeight(row),
+        );
+        if (!Number.isFinite(converted) || converted < 0) return false;
+        plottedValue = converted;
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    if (!group) {
+      group = {
+        key: JSON.stringify([row.matrix, unit]), matrix: row.matrix, unit, conversionUnit,
+        samples: sampleSlots(rows, specimens, row.matrix), series: [],
+      };
+      groups.push(group);
+    }
+    // Different reported forms are separate series even when they name one analyte.
+    const massBasis = row.reportedAsDrugId ?? (row.reportedAsDifferentSubstance ? row.id : null);
+    const key = JSON.stringify([row.pubchemCid, row.measurandMode ?? 'unknown', massBasis]);
+    let series = group.series.find((candidate) => candidate.key === key);
+    if (!series) {
+      series = { key, observation: row, points: [] };
+      group.series.push(series);
+    }
+    series.points.push({ sampleId: row.specimenId ?? row.specimenLabel, observation: row, value: plottedValue });
+  }
+  if (groups.length === 0) groups.push({
+    key: 'empty', matrix, unit: '', conversionUnit: '', series: [],
+    samples: sampleSlots(rows, specimens, matrix),
+  });
+  return groups;
+}
+
+export function ProfileComparison({ model, specimens, matrix, specimenId }: Props) {
   const { t, i18n } = useTranslation();
   const [normalize, setNormalize] = useState(false);
-  const observations = model.observations.filter((row) => !specimenId || row.specimenId === specimenId);
-  const hasNormalized = observations.some((row) => row.creatinineNormalized !== undefined);
-  const groups = groupMeasurements(observations, normalize);
-  const nonNumeric = observations.filter((row) => row.qualifier !== 'quantified');
-  const comparisons = studyComparisons(observations, normalize && hasNormalized);
+  const observations = model.observations.filter((row) =>
+    (!specimenId || row.specimenId === specimenId) && (!matrix || row.matrix === matrix));
+  const selectedSpecimens = specimenId ? specimens?.filter((sample) => sample.id === specimenId) : specimens;
+  const urineMeasurements = observations.filter((row) => row.matrix === 'urine' && isQuantified(row));
+  const canNormalize = urineMeasurements.length > 0 && urineMeasurements.every((row) =>
+    row.creatinineNormalized !== undefined && Number.isFinite(row.creatinineNormalized.value) && row.creatinineNormalized.value >= 0);
+  const normalized = normalize && canNormalize;
+  const groups = measurementGroups(observations, normalized, selectedSpecimens, matrix);
+  const comparisons = studyComparisons(observations, normalized);
   const comparedIds = new Set(comparisons.map((comparison) => comparison.observation.id));
-  const unmatched = observations.filter((row) => row.value !== undefined && !comparedIds.has(row.id));
+  const unmatched = observations.filter((row) => isQuantified(row) && !comparedIds.has(row.id));
+  const hasMeasurements = observations.some(isQuantified);
   const locale = i18n.language?.startsWith('en') ? 'en-GB' : 'nb-NO';
-  const numberFormat = new Intl.NumberFormat(locale, { maximumSignificantDigits: 3 });
-  const specimenOf = (row: ObservationRowVM) => row.hasSpecimenLabel === false && row.matrix
-    ? t(`pattern.editor.matrix.${row.matrix}`) : row.specimenLabel;
-  const nameOf = (row: ObservationRowVM) => row.labelKey
-    ? t(row.labelKey)
+  const format = (value: number) => new Intl.NumberFormat(locale, { maximumSignificantDigits: 4 }).format(value);
+  const nameOf = (row: ObservationRowVM) => row.labelKey ? t(row.labelKey)
     : row.slug ?? t('pattern.profile.sourceAmbiguity.unnamedSubstance', { cid: row.pubchemCid });
+  const sampleName = (sample: SampleSlot) => sample.label?.trim() || t('pattern.profile.comparison.sample', { number: sample.index });
+  const nonNumeric = observations.filter((row) => row.qualifier !== 'quantified');
 
   return (
-    <section className="space-y-6" aria-label={t('pattern.profile.comparison.title')}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">{t('pattern.profile.comparison.title')}</h2>
-          <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
-            {t('pattern.profile.comparison.subtitle')}
-          </p>
-        </div>
-        {hasNormalized && (
+    <section className="space-y-4" aria-label={t('pattern.profile.comparison.seriesTitle')}>
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        <h2 className="sr-only">{t('pattern.profile.comparison.seriesTitle')}</h2>
+        {(matrix === 'urine' || urineMeasurements.length > 0) && (
           <div className="inline-flex rounded-lg border border-[hsl(var(--border))] p-1">
             {[false, true].map((value) => (
-              <button
-                key={String(value)} type="button" aria-pressed={normalize === value}
-                onClick={() => setNormalize(value)}
-                className={`rounded-md px-3 py-1.5 text-xs font-medium ${normalize === value
+              <button key={String(value)} type="button" aria-pressed={normalized === value}
+                disabled={value && !canNormalize} onClick={() => setNormalize(value)}
+                className={`rounded-md px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 ${normalized === value
                   ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]'
-                  : 'text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))]'}`}
-              >
+                  : 'text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))]'}`}>
                 {t(`pattern.profile.comparison.${value ? 'normalized' : 'raw'}`)}
               </button>
             ))}
           </div>
         )}
       </div>
-
-      {groups.length === 0 && (
-        <p className="rounded-xl border border-dashed border-[hsl(var(--border))] px-5 py-10 text-center text-sm text-[hsl(var(--muted-foreground))]">
-          {t('pattern.profile.comparison.empty')}
-        </p>
+      {urineMeasurements.length > 0 && !canNormalize && (
+        <p className="text-xs text-[hsl(var(--muted-foreground))]">{t('pattern.profile.comparison.normalizationMissing')}</p>
       )}
-
       {groups.map((group) => {
-        // A linear scale includes zero. Keep the largest value off the rim and
-        // never manufacture a reference distribution from these measurements.
-        const max = Math.max(...group.rows.map((row) => row.value));
-        const ceiling = max > 0 ? max : 1;
-        const ticks = [0, ceiling / 2, ceiling];
+        const slots = group.samples.length > 0 ? group.samples : [{ id: 'empty-1', index: 1 }, { id: 'empty-2', index: 2 }];
+        const timed = slots.length > 1 && slots.every((sample) => sample.time !== undefined && Number.isFinite(sample.time));
+        const firstTime = timed ? Math.min(...slots.map((sample) => sample.time!)) : 0;
+        const lastTime = timed ? Math.max(...slots.map((sample) => sample.time!)) : 0;
+        const timeSpan = lastTime - firstTime;
+        const hasTimeSpan = timed && timeSpan > 0;
+        const points = group.series.flatMap((series) => series.points);
+        const maximum = Math.max(...points.map((point) => point.value), 0);
+        const ceiling = maximum > 0 ? maximum : 1;
+        const x = (sample: SampleSlot) => hasTimeSpan
+          ? 8 + 84 * (sample.time! - firstTime) / timeSpan
+          : slots.length > 1 ? 8 + 84 * slots.findIndex((slot) => slot.id === sample.id) / (slots.length - 1) : 50;
+        const y = (value: number) => 92 - value / ceiling * 80;
+        const orderedSlots = hasTimeSpan ? [...slots].sort((a, b) => a.time! - b.time!) : slots;
         return (
-          <figure key={group.key} className="space-y-4 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-4 sm:p-5">
-            <figcaption className="flex flex-wrap items-baseline justify-between gap-2">
-              <span className="text-sm font-medium">{specimenOf(group.rows[0]!.observation)}</span>
-              <span className="text-xs text-[hsl(var(--muted-foreground))]">
-                {t('pattern.profile.comparison.axis', { unit: group.unit })}
-              </span>
+          <figure key={group.key} className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-4 sm:p-5">
+            <figcaption className="mb-4 flex flex-wrap items-center justify-between gap-2 text-xs text-[hsl(var(--muted-foreground))]">
+              <span>{group.unit ? t('pattern.profile.comparison.axis', { unit: group.unit }) : t('pattern.profile.comparison.concentration')}</span>
+              {groups.length > 1 && group.matrix && <span>{t(`pattern.editor.matrix.${group.matrix}`)}</span>}
             </figcaption>
-            <div className="space-y-4">
-              {group.rows.map(({ observation, value, valueText }) => (
-                <div key={observation.id} className="grid min-w-0 gap-2 sm:grid-cols-[minmax(120px,180px)_1fr] sm:items-center sm:gap-5">
-                  <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-2 text-sm sm:block">
-                    <span className="break-words">{nameOf(observation)}</span>
-                    <span className="block font-medium tabular-nums text-[hsl(var(--primary))]">{valueText} {group.unit}</span>
-                  </div>
-                  <div
-                    role="img"
-                    aria-label={t('pattern.profile.comparison.point', { name: nameOf(observation), value: valueText, unit: group.unit })}
-                    className="relative mx-2 h-7"
-                  >
-                    {ticks.map((tick, i) => (
-                      <span key={i} aria-hidden="true" className="absolute inset-y-0 border-l border-[hsl(var(--border))]" style={{ left: `${(tick / ceiling) * 100}%` }} />
-                    ))}
-                    <span aria-hidden="true" className="absolute left-0 top-1/2 h-0.5 -translate-y-1/2 bg-[hsl(var(--primary))]/30" style={{ width: `${(value / ceiling) * 100}%` }} />
-                    <span aria-hidden="true" className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[hsl(var(--card))] bg-[hsl(var(--primary))] ring-1 ring-[hsl(var(--primary))]" style={{ left: `${(value / ceiling) * 100}%` }} />
-                  </div>
+            <div className="relative ml-10 mr-2 h-56 sm:h-64">
+              {[0, 0.5, 1].map((fraction) => (
+                <div key={fraction} className="absolute inset-x-0 border-t border-[hsl(var(--border))]" style={{ top: `${y(fraction * ceiling)}%` }}>
+                  {points.length > 0 && <span className="absolute -left-2 -translate-x-full -translate-y-1/2 text-[11px] tabular-nums text-[hsl(var(--muted-foreground))]">{format(fraction * ceiling)}</span>}
                 </div>
               ))}
-              <div className="grid gap-2 sm:grid-cols-[minmax(120px,180px)_1fr] sm:gap-5" aria-hidden="true">
-                <div className="hidden sm:block" />
-                <div className="relative mx-2 h-4 text-[11px] tabular-nums text-[hsl(var(--muted-foreground))]">
-                  {ticks.map((tick, i) => (
-                    <span key={i} className={`absolute ${i === 0 ? '' : i === 2 ? '-translate-x-full' : '-translate-x-1/2'}`} style={{ left: `${(tick / ceiling) * 100}%` }}>
-                      {numberFormat.format(tick)}
-                    </span>
-                  ))}
-                </div>
-              </div>
+              <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 h-full w-full overflow-visible" role="img"
+                aria-label={t('pattern.profile.comparison.graphLabel', { count: slots.length, unit: group.unit })}>
+                {group.series.map((series, seriesIndex) => {
+                  // Each absent sample breaks a segment. A missing middle sample is not zero
+                  // and must never be bridged by a line through unmeasured data.
+                  return orderedSlots.slice(1).flatMap((sample, slotIndex) => {
+                    const previous = orderedSlots[slotIndex]!;
+                    const from = series.points.filter((point) => point.sampleId === previous.id);
+                    const to = series.points.filter((point) => point.sampleId === sample.id);
+                    if (from.length !== 1 || to.length !== 1) return [];
+                    return [<line key={`${series.key}-${sample.id}`} x1={x(previous)} y1={y(from[0]!.value)} x2={x(sample)} y2={y(to[0]!.value)}
+                      stroke={COLORS[seriesIndex % COLORS.length]} strokeWidth={2} vectorEffect="non-scaling-stroke" />];
+                  });
+                })}
+              </svg>
+              {group.series.flatMap((series, seriesIndex) => series.points.map((point) => {
+                const slot = slots.find((sample) => sample.id === point.sampleId);
+                if (!slot) return null;
+                const label = t('pattern.profile.comparison.pointSeries', {
+                  name: nameOf(point.observation), sample: sampleName(slot), value: format(point.value), unit: group.unit,
+                });
+                return <span key={point.observation.id} role="img" aria-label={label} title={label}
+                  className="absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[hsl(var(--card))] ring-1"
+                  style={{ left: `${x(slot)}%`, top: `${y(point.value)}%`, backgroundColor: COLORS[seriesIndex % COLORS.length], color: COLORS[seriesIndex % COLORS.length] }} />;
+              }))}
+              {points.length === 0 && <p className="absolute inset-x-4 top-1/3 text-center text-sm text-[hsl(var(--muted-foreground))]">{t('pattern.profile.comparison.nextSample')}</p>}
             </div>
-            {group.normalized && (
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">{t('pattern.profile.comparison.normalizationHint')}</p>
-            )}
+            <div className="relative mb-3 ml-10 mr-2 h-10 text-center text-xs text-[hsl(var(--muted-foreground))]">
+              {slots.map((slot) => <span key={slot.id} className="absolute top-1 -translate-x-1/2" style={{ left: `${x(slot)}%` }}>
+                <span className="block whitespace-nowrap">{sampleName(slot)}</span>
+                {hasTimeSpan && <span className="block tabular-nums">{format(slot.time! - firstTime)} h</span>}
+              </span>)}
+            </div>
+            <p className="text-center text-[11px] text-[hsl(var(--muted-foreground))]">{t(`pattern.profile.comparison.${hasTimeSpan ? 'timeAxis' : 'sampleAxis'}`)}</p>
+            {group.series.length > 0 && <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs">
+              {group.series.map((series, index) => <span key={series.key} className="flex items-center gap-2">
+                <span aria-hidden="true" className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
+                <span>
+                  <span className="block font-medium">{nameOf(series.observation)}
+                    {group.series.filter((candidate) => candidate.observation.pubchemCid === series.observation.pubchemCid).length > 1 &&
+                      <span className="ml-1 font-normal text-[hsl(var(--muted-foreground))]">({t(`pattern.editor.observations.measurand.${series.observation.measurandMode ?? 'unknown'}`)})</span>}
+                  </span>
+                  <span className="block tabular-nums text-[hsl(var(--muted-foreground))]">
+                    {slots.map((slot) => {
+                      const values = series.points.filter((point) => point.sampleId === slot.id);
+                      return values.length ? values.map((point) => format(point.value)).join(', ') : '—';
+                    }).join(' → ')} {group.unit}
+                  </span>
+                </span>
+              </span>)}
+            </div>}
+            <div className="sr-only"><table><caption>{t('pattern.profile.comparison.seriesTitle')}</caption>
+              <thead><tr><th>{t('pattern.editor.observations.analyte')}</th>{slots.map((slot) => <th key={slot.id}>{sampleName(slot)}</th>)}</tr></thead>
+              <tbody>{group.series.map((series) => <tr key={series.key}><th>{nameOf(series.observation)}</th>{slots.map((slot) => <td key={slot.id}>
+                {series.points.filter((point) => point.sampleId === slot.id).map((point) => `${format(point.value)} ${group.unit}`).join(', ') || t('pattern.profile.comparison.missing')}
+              </td>)}</tr>)}</tbody>
+            </table></div>
           </figure>
         );
       })}
-
-      {nonNumeric.length > 0 && (
-        <div className="space-y-1 text-sm">
-          <h3 className="font-medium">{t('pattern.profile.comparison.unplotted')}</h3>
-          {nonNumeric.map((row) => (
-            <p key={row.id} className="text-[hsl(var(--muted-foreground))]">
-              {nameOf(row)} · {specimenOf(row)}: {t(`pattern.profile.qualifier.${row.qualifier}`)}
-              {row.limit ? ` ${row.limit.valueText} ${row.limit.unit}` : ''}
-            </p>
-          ))}
-        </div>
-      )}
-
-      {comparisons.length > 0 && (
-        <section className="space-y-4" aria-label={t('pattern.profile.comparison.study.title')}>
-          <h2 className="text-lg font-semibold">{t('pattern.profile.comparison.study.title')}</h2>
+      {normalized && <p className="text-xs text-[hsl(var(--muted-foreground))]">{t('pattern.profile.comparison.normalizationHint')}</p>}
+      {nonNumeric.length > 0 && <p className="text-xs text-[hsl(var(--muted-foreground))]">
+        {nonNumeric.map((row) => `${nameOf(row)}: ${t(`pattern.profile.qualifier.${row.qualifier}`)}${row.limit ? ` ${row.limit.valueText} ${row.limit.unit}` : ''}`).join(' · ')}
+      </p>}
+      {hasMeasurements && comparisons.length === 0 && <p className="text-xs text-[hsl(var(--muted-foreground))]">{t('pattern.profile.comparison.noStudyHint')}</p>}
+      {comparisons.length > 0 && <details className="border-t border-[hsl(var(--border))] pt-3">
+        <summary className="cursor-pointer text-sm font-medium">{t('pattern.profile.comparison.referenceDetails')}</summary>
+        <div className="mt-4 space-y-4">
           {comparisons.map((comparison) => <StudyCurveComparison key={`${comparison.observation.id}-${comparison.curve.id}`} comparison={comparison} />)}
-        </section>
-      )}
-
-      {groups.length > 0 && (comparisons.length === 0 || unmatched.length > 0) && (
-        <div className="rounded-lg bg-[hsl(var(--muted))]/50 px-4 py-3">
-          <h3 className="text-sm font-medium">{t('pattern.profile.comparison.noStudy')}</h3>
-          <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">{t('pattern.profile.comparison.noStudyHint')}</p>
-          {unmatched.length > 0 && <p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">{unmatched.map(nameOf).join(', ')}</p>}
-          {normalize && hasNormalized && <p className="mt-2 text-xs">{t('pattern.profile.comparison.study.noNormalizedStudy')}</p>}
+          {unmatched.length > 0 && <p className="text-xs text-[hsl(var(--muted-foreground))]">{t('pattern.profile.comparison.noStudyHint')} {unmatched.map(nameOf).join(', ')}</p>}
         </div>
-      )}
+      </details>}
     </section>
   );
 }

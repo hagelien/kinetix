@@ -4502,20 +4502,20 @@
         "confirmDiscard": "Saken har endringer som ikke er lagret. Forkast dem?"
       },
       "guided": {
-        "intro": "Velg stoff og medium, legg inn målingene og sammenlign med publiserte studiedata.",
+        "intro": "Velg stoff og medium. Legg inn begge prøvene og se utviklingen i grafen.",
         "caseActions": "Saksnavn og lagring",
-        "compare": "Se målinger og studiekurver",
-        "advanced": "Flere prøver og analyseopplysninger",
+        "compare": "Sammenlign prøvene",
+        "advanced": "Avanserte analyseopplysninger",
         "ratioDetails": "Forholdstall og faglig vurdering"
       },
       "comparison": {
         "title": "Dine målinger",
-        "subtitle": "Konsentrasjon per stoff i den valgte prøven.",
+        "subtitle": "Sammenlign prøvene med eller uten kreatininjustering.",
         "raw": "Målte verdier",
         "normalized": "Per mmol kreatinin",
         "normalizationHint": "Urinverdiene er delt på målt kreatinin og vises per mmol kreatinin.",
-        "noStudy": "Ingen sammenlignbar studiekurve tilgjengelig",
-        "noStudyHint": "For disse målingene vises bare dine verdier. De angir ikke forventet nivå eller tid siden inntak.",
+        "noStudy": "Ingen sammenlignbar studiekurve for valgene dine",
+        "noStudyHint": "Studiekurver krever samme medium, målt form og normalisering. Grafen over viser dine prøver.",
         "empty": "Skriv inn minst én målt konsentrasjon for å se profilen.",
         "axis": "Konsentrasjon ({{unit}})",
         "point": "{{name}}: {{value}} {{unit}}",
@@ -4535,7 +4535,19 @@
           "tableCaption": "Observerte studiekonsentrasjoner for {{name}}",
           "hours": "Timer",
           "noNormalizedStudy": "Studiekurvene er ikke kreatininnormalisert. Velg «Målte verdier» for å se eventuelle sammenlignbare rådata."
-        }
+        },
+        "seriesTitle": "Målt forløp",
+        "sample": "Prøve {{number}}",
+        "timeAxis": "Timer fra første viste prøve",
+        "sampleAxis": "Prøver (uten tidsakse)",
+        "concentration": "Konsentrasjon",
+        "normalizationMissing": "Fyll inn kreatinin i hver urinprøve for å sammenligne normaliserte verdier.",
+        "nextSample": "Skriv inn prøvesvarene for å se punktene i grafen.",
+        "measuredOnly": "Linjene forbinder dine målinger.",
+        "referenceDetails": "Studiekurver og kilder",
+        "graphLabel": "Målte konsentrasjoner i {{count}} prøver, {{unit}}",
+        "pointSeries": "{{name}}, {{sample}}: {{value}} {{unit}}",
+        "missing": "Ikke målt"
       }
     },
     "editor": {
@@ -4687,7 +4699,7 @@
       "selectMedium": "Velg medium …",
       "specimen": "Aktiv prøve",
       "values": "Skriv inn målte verdier",
-      "optionalValues": "Fyll ut stoffene som er analysert. Tomme felt regnes ikke som null. Oppgi målt form for sammenligning med studier.",
+      "optionalValues": "Fyll ut det som er analysert. Tomme felt regnes ikke som null.",
       "creatinine": "Kreatinin i urin",
       "creatinineHint": "Valgfritt. Urinkonsentrasjonene deles på målt kreatinin og vises per mmol kreatinin. Forholdstall mellom stoffer i samme prøve er uendret.",
       "startHint": "Velg et stoff og et medium for å få opp relevante stoffer, forløpere og metabolitter.",
@@ -4699,7 +4711,18 @@
       "loading": "Henter relaterte stoffer …",
       "catalogUnavailable": "Fikk ikke hentet flere koblinger fra katalogen. Stoffene i den valgte profilen er fortsatt tilgjengelige.",
       "positive": "Verdien må være større enn null.",
-      "nonnegative": "Konsentrasjonen kan ikke være negativ."
+      "nonnegative": "Konsentrasjonen kan ikke være negativ.",
+      "sampleNumber": "Prøve {{number}}",
+      "newUnitFor": "Enhet for nye verdier – {{name}}",
+      "newUnitHint": "Gjelder tomme felt. Lagrede verdier beholder sin enhet.",
+      "firstBaseline": "Første prøve · 0 timer",
+      "firstSampleTime": "Første prøve: timer fra {{origin}}",
+      "hoursAfterFirst": "Timer etter første prøve",
+      "firstTimeNeeded": "Angi tidspunkt for første prøve for å plassere intervallet på sakens tidsakse.",
+      "twoSamplesHint": "Fyll inn én eller begge prøver. Tomme felt er ikke null.",
+      "analysisSettings": "Målt form og enheter",
+      "assayHint": "Angi analysemåten hvis den er kjent. Ukjent beholdes som ukjent ved studiesammenligning.",
+      "settingsFor": "Analyseinnstillinger for prøve {{number}}"
     }
   },
   "forensicConc": {
