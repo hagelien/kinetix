@@ -4136,7 +4136,8 @@
       "module": {
         "benzodiazepines": "Benzodiazepines (diazepam)",
         "cocaine": "Cocaine",
-        "methadone": "Methadone (EDDP)"
+        "methadone": "Methadone (EDDP)",
+        "morphineCodeine": "Morphine and codeine"
       },
       "analyte": {
         "diazepam": {
@@ -4170,6 +4171,26 @@
         "eddp": {
           "label": "EDDP",
           "short": "EDDP"
+        },
+        "morphine": {
+          "label": "Morphine",
+          "short": "Morphine"
+        },
+        "codeine": {
+          "label": "Codeine",
+          "short": "Codeine"
+        },
+        "m3g": {
+          "label": "Morphine-3-glucuronide",
+          "short": "M3G"
+        },
+        "m6g": {
+          "label": "Morphine-6-glucuronide",
+          "short": "M6G"
+        },
+        "c6g": {
+          "label": "Codeine-6-glucuronide",
+          "short": "C6G"
         }
       },
       "feature": {
@@ -4479,6 +4500,42 @@
         "badAddress": "“{{caseId}}” is not a case number.",
         "toPicker": "Go to saved cases",
         "confirmDiscard": "The case has unsaved changes. Discard them?"
+      },
+      "guided": {
+        "intro": "Choose a substance and specimen, enter measurements and compare with published study data.",
+        "caseActions": "Case name and saving",
+        "compare": "View measurements and study curves",
+        "advanced": "Additional specimens and assay details",
+        "ratioDetails": "Ratios and interpretation"
+      },
+      "comparison": {
+        "title": "Your measurements",
+        "subtitle": "Concentration by substance in the selected specimen.",
+        "raw": "Measured values",
+        "normalized": "Per mmol creatinine",
+        "normalizationHint": "Urine concentrations are divided by measured creatinine and shown per mmol creatinine.",
+        "noStudy": "No comparable study curve available",
+        "noStudyHint": "Only your values are shown for these measurements. They do not indicate an expected concentration or time since intake.",
+        "empty": "Enter at least one measured concentration to see the profile.",
+        "axis": "Concentration ({{unit}})",
+        "point": "{{name}}: {{value}} {{unit}}",
+        "legend": "Your measurement",
+        "unplotted": "Without a quantified value",
+        "sources": "Sources and comparison basis",
+        "study": {
+          "title": "Compare with observed study profiles",
+          "design": "{{count}} participants · one oral dose of {{substance}}, {{dose}} mg · urine without hydrolysis",
+          "mean": "Observed mean",
+          "measurement": "Your measurement: {{value}} {{unit}}",
+          "chartLabel": "{{name}}: observed study means over time compared with measured {{value}} {{unit}} at an unknown time since intake.",
+          "timeAxis": "Hours after the study dose",
+          "point": "{{time}} h: mean {{mean}}, SD {{sd}} {{unit}}",
+          "limitations": "Points are study means; lines connect the sampling times. This is not a normal range or an individual prediction curve. The dashed line shows your concentration at an unknown time since intake; intersections cannot establish when intake occurred.",
+          "sourceTable": "Values from Table {{table}}. SD is the standard deviation between study participants, not a prediction interval. The study does not report creatinine-adjusted values.",
+          "tableCaption": "Observed study concentrations for {{name}}",
+          "hours": "Hours",
+          "noNormalizedStudy": "Study curves are not creatinine-normalized. Select “Measured values” to see any comparable raw data."
+        }
       }
     },
     "editor": {
@@ -4621,6 +4678,28 @@
         "invalid": "Not a number",
         "ambiguous": "Ambiguous — use a decimal separator"
       }
+    },
+    "guided": {
+      "title": "Enter a metabolite profile",
+      "substance": "Choose a substance",
+      "search": "Search for a substance or metabolite",
+      "medium": "Choose a medium",
+      "selectMedium": "Choose a medium …",
+      "specimen": "Active specimen",
+      "values": "Enter measured values",
+      "optionalValues": "Fill in the substances that were analysed. Blank fields are not treated as zero. Specify the measured form for comparison with studies.",
+      "creatinine": "Urine creatinine",
+      "creatinineHint": "Optional. Urine concentrations are divided by measured creatinine and shown per mmol creatinine. Ratios between substances in the same specimen are unchanged.",
+      "startHint": "Choose a substance and a medium to see relevant substances, precursors and metabolites.",
+      "measuredForm": "Measured form",
+      "formFor": "Measured form – {{name}}",
+      "valueFor": "Value – {{name}}",
+      "unitFor": "Unit – {{name}}",
+      "censoredHint": "Edit the result type and limit in advanced specimen details.",
+      "loading": "Loading related substances …",
+      "catalogUnavailable": "Could not load additional catalog relationships. The substances in the selected profile are still available.",
+      "positive": "The value must be greater than zero.",
+      "nonnegative": "The concentration cannot be negative."
     }
   },
   "forensicConc": {
